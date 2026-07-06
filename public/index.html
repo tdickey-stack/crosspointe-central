@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#f4f4f5">
+    <title>CrossPointe Central</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <script>
+      (function() {
+        var theme = "light";
+
+        try {
+          var storedTheme = localStorage.getItem("central-theme-override-v2");
+
+          if (storedTheme === "light" || storedTheme === "dark") {
+            theme = storedTheme;
+          } else if (
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ) {
+            theme = "dark";
+          }
+        } catch (error) {
+        }
+
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.style.colorScheme = theme;
+
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) {
+          meta.setAttribute(
+            "content",
+            theme === "dark" ? "#18181b" : "#f4f4f5"
+          );
+        }
+      }());
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap"
+      rel="stylesheet"
+    >
+    <script>
+      (function() {
+        function loadAdminScript_(src) {
+          return new Promise(function(resolve, reject) {
+            var script = document.createElement("script");
+            script.src = src;
+            script.async = false;
+            script.onload = function() {
+              resolve();
+            };
+            script.onerror = function() {
+              reject(new Error("Failed to load " + src));
+            };
+            document.head.appendChild(script);
+          });
+        }
+
+        var isAdminRoute = /^\/admin(?:\/|$)/.test(window.location.pathname);
+        var bootMode = isAdminRoute ? "admin" : "public";
+
+        window.CENTRAL_BOOT_MODE = bootMode;
+        document.documentElement.setAttribute("data-app-route", bootMode);
+
+        if (!isAdminRoute) {
+          return;
+        }
+
+        var adminStyle = document.createElement("link");
+        adminStyle.rel = "stylesheet";
+        adminStyle.href = "/admin.css";
+        document.head.appendChild(adminStyle);
+
+        loadAdminScript_("/__/firebase/11.10.0/firebase-app-compat.js")
+            .then(function() {
+              return loadAdminScript_(
+                  "/__/firebase/11.10.0/firebase-auth-compat.js",
+              );
+            })
+            .then(function() {
+              return loadAdminScript_(
+                  "/__/firebase/11.10.0/firebase-firestore-compat.js",
+              );
+            })
+            .then(function() {
+              return loadAdminScript_("/__/firebase/init.js");
+            })
+            .then(function() {
+              return loadAdminScript_("/admin.js");
+            })
+            .catch(function(error) {
+              console.error(error);
+            });
+      }());
+    </script>
+    <script async defer src="https://accounts.google.com/gsi/client"></script>
+    <link rel="stylesheet" href="/styles.css">
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <div
+      id="central-loader"
+      class="central-loader"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="central-loader-door central-loader-door-left"></div>
+      <div class="central-loader-door central-loader-door-right"></div>
+
+      <div class="central-loader-content">
+        <div class="central-loader-badge">CrossPointe Central</div>
+
+        <div class="central-loader-ring">
+          <div class="central-loader-orbit" aria-hidden="true">
+            <span class="central-loader-dot central-loader-dot-1"></span>
+            <span class="central-loader-dot central-loader-dot-2"></span>
+            <span class="central-loader-dot central-loader-dot-3"></span>
+            <span class="central-loader-dot central-loader-dot-4"></span>
+            <span class="central-loader-dot central-loader-dot-5"></span>
+            <span class="central-loader-dot central-loader-dot-6"></span>
+          </div>
+          <div class="central-loader-ring-core">
+            <div class="central-loader-logo">
+              <img
+                src="/loader-icon.svg"
+                alt=""
+                class="central-loader-logo-mark"
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="central-loader-copy">
+          <p class="central-loader-kicker">Opening Your Hub</p>
+          <h1 id="central-loader-title">Loading CrossPointe Central...</h1>
+          <p id="central-loader-detail">
+            Pulling in the latest Sunday details, events, and resources.
+          </p>
+        </div>
+
+        <div class="central-loader-progress">
+          <div id="central-loader-percent" class="central-loader-percent">
+            0%
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <main id="app"></main>
+  </body>
+</html>

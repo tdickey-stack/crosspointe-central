@@ -1,0 +1,197 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/loader-lab.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/app.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/styles.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/youversion-reader.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/youversion-reader.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/admin.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/admin.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/favicon.svg",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0, must-revalidate"
+          }
+        ]
+      }
+    ],
+    "redirects": [
+      {
+        "source": "/terms",
+        "destination": "https://docs.google.com/document/d/e/2PACX-1vQaEqAZCeDPa6JQ81jx6O6cpKdEzRibYVlCZjDW_baScTCvdLKHJCTMJTcXJ9dAe1wfxzn5wcJ_iUUR/pub",
+        "type": 302
+      },
+      {
+        "source": "/terms/",
+        "destination": "https://docs.google.com/document/d/e/2PACX-1vQaEqAZCeDPa6JQ81jx6O6cpKdEzRibYVlCZjDW_baScTCvdLKHJCTMJTcXJ9dAe1wfxzn5wcJ_iUUR/pub",
+        "type": 302
+      },
+      {
+        "source": "/privacy",
+        "destination": "https://docs.google.com/document/d/e/2PACX-1vQm2GRDE1T6kutZeo9mVgl8zsC0AKLPqJ2JxKg3-LjUbgbOkL938nSvkpHYID7WhyhEopUMv4OrvmWs/pub",
+        "type": 302
+      },
+      {
+        "source": "/privacy/",
+        "destination": "https://docs.google.com/document/d/e/2PACX-1vQm2GRDE1T6kutZeo9mVgl8zsC0AKLPqJ2JxKg3-LjUbgbOkL938nSvkpHYID7WhyhEopUMv4OrvmWs/pub",
+        "type": 302
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/api/central-data",
+        "function": "centralData"
+      },
+      {
+        "source": "/api/admin/bootstrap-first-user",
+        "function": "bootstrapFirstAdminUser"
+      },
+      {
+        "source": "/api/admin/publish-preview-content",
+        "function": "publishPreviewContent"
+      },
+      {
+        "source": "/api/admin/submit-change-request",
+        "function": "submitChangeRequest"
+      },
+      {
+        "source": "/api/admin/review-change-request",
+        "function": "reviewChangeRequest"
+      },
+      {
+        "source": "/api/admin/list-users",
+        "function": "listAdminUsers"
+      },
+      {
+        "source": "/api/admin/upsert-user",
+        "function": "upsertAdminUser"
+      },
+      {
+        "source": "/api/admin/claim-invite",
+        "function": "claimAdminInvite"
+      },
+      {
+        "source": "/api/serve-needs/share-interest",
+        "function": "shareServeNeedInterest"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "functions": {
+      "port": 5001
+    },
+    "hosting": {
+      "port": 5005
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    },
+    "singleProjectMode": true
+  },
+  "auth": {
+    "providers": {}
+  }
+}

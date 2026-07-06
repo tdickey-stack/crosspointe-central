@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#f4f4f5">
+    <title>Central Loader Lab</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <script>
+      (function() {
+        var theme = "light";
+
+        try {
+          var storedTheme = localStorage.getItem("central-theme-override-v2");
+
+          if (storedTheme === "light" || storedTheme === "dark") {
+            theme = storedTheme;
+          } else if (
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ) {
+            theme = "dark";
+          }
+        } catch (error) {
+        }
+
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.style.colorScheme = theme;
+
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) {
+          meta.setAttribute(
+            "content",
+            theme === "dark" ? "#18181b" : "#f4f4f5"
+          );
+        }
+      }());
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+      body.loader-lab-page {
+        min-height: 100vh;
+        background: #0f0f10;
+      }
+
+      .loader-lab-preview .content {
+        padding-bottom: 140px;
+      }
+
+      .loader-lab-panel {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        z-index: 2300;
+        width: min(560px, calc(100% - 24px));
+        transform: translateX(-50%);
+        background: rgba(17, 17, 20, 0.88);
+        color: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 22px;
+        padding: 18px;
+        box-shadow: 0 22px 55px rgba(0, 0, 0, 0.34);
+        backdrop-filter: blur(14px);
+      }
+
+      .loader-lab-panel h2 {
+        margin: 0;
+        font-size: 1.2rem;
+        letter-spacing: -0.03em;
+      }
+
+      .loader-lab-panel p {
+        margin: 8px 0 0;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 0.92rem;
+        line-height: 1.55;
+      }
+
+      .loader-lab-controls {
+        display: grid;
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .loader-lab-row {
+        display: grid;
+        gap: 10px;
+      }
+
+      .loader-lab-row label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 0.84rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .loader-lab-row output {
+        color: rgba(239, 59, 45, 0.98);
+      }
+
+      .loader-lab-range {
+        width: 100%;
+        accent-color: #ef3b2d;
+      }
+
+      .loader-lab-buttons {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .loader-lab-buttons button {
+        min-height: 42px;
+        border: 0;
+        border-radius: 999px;
+        padding: 0 12px;
+        background: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+        font: inherit;
+        font-size: 0.84rem;
+        font-weight: 800;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease;
+      }
+
+      .loader-lab-buttons button:hover {
+        transform: translateY(-2px);
+        background: rgba(239, 59, 45, 0.92);
+      }
+
+      .loader-lab-buttons .active {
+        background: #ef3b2d;
+      }
+
+      .loader-lab-note {
+        color: rgba(255, 255, 255, 0.56);
+        font-size: 0.78rem;
+      }
+
+      @media screen and (max-width: 640px) {
+        .loader-lab-panel {
+          bottom: 12px;
+          width: calc(100% - 16px);
+          border-radius: 18px;
+          padding: 16px;
+        }
+
+        .loader-lab-buttons {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body class="loader-lab-page">
+    <div class="loader-lab-preview">
+      <div class="central">
+        <header class="hero">
+          <div class="wrap">
+            <div class="eyebrow">
+              <span class="eyebrow-dot"></span>
+              CrossPointe Central
+            </div>
+
+            <div class="hero-grid">
+              <div>
+                <h1>Your hub for everything happening at CrossPointe</h1>
+                <p>
+                  Loader Lab lets you tweak the Central opening sequence without
+                  refreshing the whole app every time.
+                </p>
+
+                <div class="hero-actions">
+                  <a class="btn btn-primary" href="/loader-lab.html">Loader Lab</a>
+                  <a class="btn btn-secondary" href="/">Back To Central</a>
+                </div>
+              </div>
+
+              <div class="countdown-card">
+                <small>Preview Mode</small>
+                <strong>Reveal Background</strong>
+                <p>
+                  Use this page to judge the door timing, orbit dots, logo
+                  saturation, and overall feel of the opening animation.
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div class="content">
+          <div class="wrap">
+            <section class="banner">
+              <h2>Loader Testing Playground</h2>
+              <p>
+                The actual app is not loading here. This page just gives the
+                loader something realistic to reveal behind the doors.
+              </p>
+            </section>
+
+            <section class="section">
+              <div class="section-head">
+                <div>
+                  <div class="section-kicker">Preview</div>
+                  <h2 class="section-title">What’s Behind The Doors</h2>
+                </div>
+              </div>
+
+              <div class="grid three">
+                <article class="card">
+                  <div class="meta">Realistic Background</div>
+                  <h3>See The Reveal</h3>
+                  <p>
+                    This lets you watch the loader open over something that
+                    looks like Central instead of a blank page.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <div class="meta">Dot Orbit</div>
+                  <h3>Fine-Tune The Electrons</h3>
+                  <p>
+                    Adjust the six-dot orbit size in CSS and refresh this page
+                    until it feels just right.
+                  </p>
+                </article>
+
+                <article class="card">
+                  <div class="meta">Animation</div>
+                  <h3>Dial In The Doors</h3>
+                  <p>
+                    Use the control buttons below to hold the doors closed,
+                    open, or fully hidden while you tweak the motion.
+                  </p>
+                </article>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="central-loader"
+      class="central-loader"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="central-loader-door central-loader-door-left"></div>
+      <div class="central-loader-door central-loader-door-right"></div>
+
+      <div class="central-loader-content">
+        <div class="central-loader-badge">CrossPointe Central</div>
+
+        <div class="central-loader-ring">
+          <div class="central-loader-orbit" aria-hidden="true">
+            <span class="central-loader-dot central-loader-dot-1"></span>
+            <span class="central-loader-dot central-loader-dot-2"></span>
+            <span class="central-loader-dot central-loader-dot-3"></span>
+            <span class="central-loader-dot central-loader-dot-4"></span>
+            <span class="central-loader-dot central-loader-dot-5"></span>
+            <span class="central-loader-dot central-loader-dot-6"></span>
+          </div>
+          <div class="central-loader-ring-core">
+            <div class="central-loader-logo">
+              <img
+                src="/loader-icon.svg"
+                alt=""
+                class="central-loader-logo-mark"
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="central-loader-copy">
+          <p class="central-loader-kicker">Opening Your Hub</p>
+          <h1 id="central-loader-title">Loading CrossPointe Central...</h1>
+          <p id="central-loader-detail">
+            Pulling in the latest Sunday details, events, and resources.
+          </p>
+        </div>
+
+        <div class="central-loader-progress">
+          <div id="central-loader-percent" class="central-loader-percent">
+            64%
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="loader-lab-panel">
+      <h2>Loader Lab</h2>
+      <p>
+        Scrub the progress, hold the doors open, or hide the loader completely
+        while you tune the animation.
+      </p>
+
+      <div class="loader-lab-controls">
+        <div class="loader-lab-row">
+          <label for="loader-progress">
+            Progress
+            <output id="loader-progress-output" for="loader-progress">64%</output>
+          </label>
+          <input
+            id="loader-progress"
+            class="loader-lab-range"
+            type="range"
+            min="0"
+            max="100"
+            value="64"
+          >
+        </div>
+
+        <div class="loader-lab-buttons">
+          <button id="loader-state-closed" class="active" type="button">
+            Closed
+          </button>
+          <button id="loader-state-collapse" type="button">
+            Focus Logo
+          </button>
+          <button id="loader-state-open" type="button">
+            Open Doors
+          </button>
+          <button id="loader-state-hidden" type="button">
+            Hide Loader
+          </button>
+          <button id="loader-state-reset" type="button">
+            Reset
+          </button>
+        </div>
+
+        <div class="loader-lab-note">
+          Tip: make CSS tweaks, deploy hosting, then refresh this page instead
+          of waiting for the whole Central app flow every time.
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        var loader = document.getElementById("central-loader");
+        var slider = document.getElementById("loader-progress");
+        var output = document.getElementById("loader-progress-output");
+        var percent = document.getElementById("central-loader-percent");
+        var closedButton = document.getElementById("loader-state-closed");
+        var collapseButton = document.getElementById("loader-state-collapse");
+        var openButton = document.getElementById("loader-state-open");
+        var hiddenButton = document.getElementById("loader-state-hidden");
+        var resetButton = document.getElementById("loader-state-reset");
+        var sequenceTimeout = 0;
+        var allButtons = [
+          closedButton,
+          collapseButton,
+          openButton,
+          hiddenButton,
+        ];
+
+        function clearSequenceTimeout() {
+          if (!sequenceTimeout) return;
+          clearTimeout(sequenceTimeout);
+          sequenceTimeout = 0;
+        }
+
+        function setActiveButton(button) {
+          allButtons.forEach(function(item) {
+            item.classList.toggle("active", item === button);
+          });
+        }
+
+        function getVisibleDotCount(progress) {
+          var clamped = Math.max(0, Math.min(100, Number(progress) || 0));
+          var visibleCount = Math.floor(((clamped / 100) * 6) + 0.0001);
+
+          if (clamped >= 99.95) {
+            visibleCount = 6;
+          }
+
+          return Math.max(0, Math.min(6, visibleCount));
+        }
+
+        function syncDots(progress) {
+          var visibleCount = getVisibleDotCount(progress);
+          var orbit = loader.querySelector(".central-loader-orbit");
+          var dots = loader.querySelectorAll(".central-loader-dot");
+
+          if (orbit) {
+            orbit.setAttribute("data-dot-count", String(visibleCount));
+          }
+
+          dots.forEach(function(dot, index) {
+            dot.classList.toggle("is-visible", index < visibleCount);
+          });
+        }
+
+        function setProgress(value) {
+          var next = Math.max(0, Math.min(100, Number(value) || 0));
+          var progressValue = next.toFixed(2) + "%";
+          var progressRatio = (next / 100).toFixed(3);
+          var progressText = Math.round(next) + "%";
+
+          loader.style.setProperty("--central-loader-progress", progressValue);
+          loader.style.setProperty("--central-loader-progress-ratio", progressRatio);
+          slider.value = String(next);
+          output.textContent = progressText;
+          percent.textContent = progressText;
+          syncDots(next);
+        }
+
+        function setClosedState() {
+          clearSequenceTimeout();
+          loader.classList.remove("is-hidden", "is-revealing", "is-collapsing");
+          setActiveButton(closedButton);
+        }
+
+        function setCollapseState() {
+          clearSequenceTimeout();
+          loader.classList.remove("is-hidden");
+          loader.classList.remove("is-revealing");
+          loader.classList.add("is-collapsing");
+          setActiveButton(collapseButton);
+        }
+
+        function setOpenState() {
+          setCollapseState();
+          sequenceTimeout = window.setTimeout(function() {
+            loader.classList.add("is-revealing");
+            sequenceTimeout = 0;
+          }, 680);
+          setActiveButton(openButton);
+        }
+
+        function setHiddenState() {
+          clearSequenceTimeout();
+          loader.classList.add("is-hidden");
+          loader.classList.remove("is-revealing", "is-collapsing");
+          setActiveButton(hiddenButton);
+        }
+
+        slider.addEventListener("input", function(event) {
+          setProgress(event.target.value);
+        });
+
+        closedButton.addEventListener("click", setClosedState);
+        collapseButton.addEventListener("click", setCollapseState);
+        openButton.addEventListener("click", setOpenState);
+        hiddenButton.addEventListener("click", setHiddenState);
+        resetButton.addEventListener("click", function() {
+          setProgress(64);
+          setClosedState();
+        });
+
+        setProgress(slider.value);
+        setClosedState();
+      })();
+    </script>
+  </body>
+</html>

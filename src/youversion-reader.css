@@ -1,0 +1,121 @@
+.yv-reader-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 6px;
+}
+
+.yv-reader-copy {
+  margin: 0;
+  color: var(--cp-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.yv-reader-frame [data-yv-sdk] > main > h1 {
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.yv-reader-frame [data-yv-sdk] > main > h1 > span:first-child {
+  max-width: 100%;
+  line-height: 1 !important;
+  letter-spacing: normal;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: ellipsis;
+}
+
+.yv-reader-frame [data-yv-sdk] > main > h1 > span:last-child {
+  line-height: 0.92 !important;
+}
+
+.yv-reader-host {
+  display: flex;
+  flex: 1;
+  min-height: 92px;
+  border: 1px solid var(--cp-border);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--cp-surface-elevated);
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.yv-reader-frame {
+  flex: 1;
+  min-height: 92px;
+  max-height: 600px;
+}
+
+.yv-reader-frame > * {
+  height: 100%;
+  min-height: 100%;
+}
+
+.yv-reader-fallback {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 92px;
+  padding: 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: 18px;
+  background: var(--cp-input-bg);
+  color: var(--cp-muted);
+  line-height: 1.6;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.yv-reader-fallback p {
+  margin: 0;
+}
+
+.yv-reader-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 92px;
+  color: var(--cp-muted);
+  text-align: center;
+}
+
+@media screen and (max-width: 900px) {
+  .yv-reader-frame [data-yv-sdk] > main > h1 > span:first-child {
+    font-size: 1rem !important;
+  }
+
+  .yv-reader-frame [data-yv-sdk] > main > h1 > span:last-child {
+    font-size: 1.55rem !important;
+  }
+
+  .yv-reader-host,
+  .yv-reader-frame {
+    min-height: 180px;
+  }
+}
+
+@media screen and (max-width: 560px) {
+  .yv-reader-frame [data-yv-sdk] > main > h1 > span:first-child {
+    font-size: 0.92rem !important;
+  }
+
+  .yv-reader-frame [data-yv-sdk] > main > h1 > span:last-child {
+    font-size: 1.35rem !important;
+  }
+
+  .yv-reader-host,
+  .yv-reader-frame {
+    min-height: 260px;
+  }
+}

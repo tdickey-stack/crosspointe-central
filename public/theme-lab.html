@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#f4f4f5">
+    <title>Central Theme Lab</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <script>
+      (function() {
+        var queryTheme = new URLSearchParams(window.location.search).get("theme");
+        var theme = "light";
+
+        try {
+          if (queryTheme === "light" || queryTheme === "dark") {
+            theme = queryTheme;
+          } else if (
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ) {
+            theme = "dark";
+          }
+        } catch (error) {
+        }
+
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.style.colorScheme = theme;
+
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) {
+          meta.setAttribute(
+            "content",
+            theme === "dark" ? "#18181b" : "#f4f4f5"
+          );
+        }
+      }());
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+      body.theme-lab-page {
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top, rgba(239, 59, 45, 0.08), transparent 28rem),
+          var(--cp-bg);
+      }
+
+      .theme-lab-bar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        padding: 16px 16px 0;
+      }
+
+      .theme-lab-panel {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        padding: 16px 18px;
+        border: 1px solid var(--cp-border);
+        border-radius: 24px;
+        background: color-mix(in srgb, var(--cp-surface) 84%, transparent);
+        box-shadow: var(--cp-shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .theme-lab-topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .theme-lab-title {
+        display: grid;
+        gap: 6px;
+      }
+
+      .theme-lab-title h1 {
+        font-size: clamp(1.5rem, 3vw, 2.4rem);
+        line-height: 1;
+        letter-spacing: -0.05em;
+      }
+
+      .theme-lab-title p {
+        margin: 0;
+        color: var(--cp-muted);
+        line-height: 1.55;
+      }
+
+      .theme-lab-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .theme-lab-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 999px;
+        border: 1px solid var(--cp-border);
+        background: var(--cp-surface);
+        color: var(--cp-text-strong);
+        font-weight: 800;
+        transition:
+          transform 0.2s ease,
+          background 0.2s ease,
+          border-color 0.2s ease;
+      }
+
+      .theme-lab-link:hover {
+        transform: translateY(-2px);
+        border-color: var(--cp-chip-border);
+        background: var(--cp-chip-bg-hover);
+      }
+
+      .theme-lab-link.is-active {
+        border-color: var(--cp-chip-border-active);
+        background: var(--cp-chip-bg-active);
+        color: var(--cp-red);
+      }
+
+      .theme-lab-stack {
+        display: grid;
+        gap: 28px;
+        padding: 24px 0 56px;
+      }
+
+      .theme-lab-caption {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto -8px;
+        color: var(--cp-muted);
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .theme-lab-caption-row {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto -8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .theme-lab-caption-row .theme-lab-caption {
+        width: auto;
+        margin: 0;
+      }
+
+      .theme-lab-status-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .theme-lab-status-btn {
+        appearance: none;
+        min-height: 40px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: color-mix(in srgb, var(--cp-surface) 76%, transparent);
+        color: var(--cp-white);
+        font: inherit;
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition:
+          transform 0.2s ease,
+          background 0.2s ease,
+          border-color 0.2s ease,
+          color 0.2s ease;
+      }
+
+      .theme-lab-status-btn:hover {
+        transform: translateY(-2px);
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .theme-lab-status-btn.is-active {
+        border-color: rgba(239, 59, 45, 0.34);
+        background: rgba(239, 59, 45, 0.18);
+        color: #ffffff;
+      }
+
+      .theme-lab-shell {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        border-radius: 28px;
+        overflow: clip;
+        box-shadow: var(--cp-shadow);
+      }
+
+      .theme-lab-shell .central {
+        min-height: auto;
+      }
+
+      @media screen and (max-width: 900px) {
+        .theme-lab-bar {
+          padding: 12px 12px 0;
+        }
+
+        .theme-lab-panel {
+          padding: 14px;
+          border-radius: 20px;
+        }
+
+        .theme-lab-shell,
+        .theme-lab-caption {
+          width: calc(100% - 24px);
+        }
+
+        .theme-lab-caption-row {
+          width: calc(100% - 24px);
+        }
+
+        .theme-lab-status-controls {
+          width: 100%;
+          justify-content: flex-start;
+        }
+      }
+
+      @media screen and (max-width: 640px) {
+        .theme-lab-status-controls {
+          display: grid;
+          grid-template-columns: 1fr;
+          width: 100%;
+        }
+
+        .theme-lab-status-btn {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+    </style>
+  </head>
+  <body class="theme-lab-page">
+    <div class="theme-lab-bar">
+      <div class="theme-lab-panel">
+        <div class="theme-lab-topline">
+          <div class="theme-lab-title">
+            <h1>Central Theme Lab</h1>
+            <p>
+              Use this preview page to tune the dark mode visuals without
+              waiting on live data.
+            </p>
+          </div>
+
+          <div class="theme-lab-actions">
+            <a class="theme-lab-link" data-theme-link="light" href="/theme-lab.html?theme=light">Light</a>
+            <a class="theme-lab-link" data-theme-link="dark" href="/theme-lab.html?theme=dark">Dark</a>
+            <a class="theme-lab-link" href="/loader-lab.html">Loader Lab</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <main class="theme-lab-stack">
+      <div class="theme-lab-caption">Homepage Preview</div>
+      <div class="theme-lab-shell">
+        <div class="central">
+          <header class="hero">
+            <div class="wrap">
+              <div class="hero-topbar">
+                <div class="eyebrow">
+                  <span class="eyebrow-dot"></span>
+                  CrossPointe Central
+                </div>
+
+                <button
+                  type="button"
+                  class="theme-toggle"
+                  id="theme-lab-toggle-home"
+                >
+                  <span class="theme-toggle-copy">
+                    <strong>Dark Mode</strong>
+                    <small id="theme-lab-toggle-home-status">Off</small>
+                  </span>
+                  <span class="theme-toggle-switch" aria-hidden="true">
+                    <span class="theme-toggle-thumb"></span>
+                  </span>
+                </button>
+              </div>
+
+              <div class="hero-grid">
+                <div>
+                  <h1>Your hub for everything CrossPointe</h1>
+                  <p>
+                    This preview uses the real app classes so you can judge the
+                    homepage surfaces, chips, buttons, and typography in both
+                    themes.
+                  </p>
+
+                  <div class="hero-actions">
+                    <a class="btn btn-primary" href="#">Open Church Center</a>
+                    <a class="btn btn-secondary" href="#">Watch Live</a>
+                  </div>
+                </div>
+
+                <div class="countdown-card">
+                  <small>Next Up</small>
+                  <strong>Sunday Worship</strong>
+                  <div class="countdown-ticker">
+                    <div class="count-unit">
+                      <span class="count-number">02</span>
+                      <span class="count-label">Days</span>
+                    </div>
+                    <div class="count-unit">
+                      <span class="count-number">11</span>
+                      <span class="count-label">Hours</span>
+                    </div>
+                    <div class="count-unit">
+                      <span class="count-number">38</span>
+                      <span class="count-label">Min</span>
+                    </div>
+                    <div class="count-unit">
+                      <span class="count-number">14</span>
+                      <span class="count-label">Sec</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <div class="content">
+            <div class="wrap">
+              <section class="banner">
+                <h2>Dark Mode Is Ready To Tune</h2>
+                <p>
+                  Cards, quick links, modal surfaces, and buttons now inherit
+                  shared semantic colors instead of hard-coded light values.
+                </p>
+              </section>
+
+              <section class="section">
+                <div class="section-head">
+                  <div>
+                    <div class="section-kicker">Preview</div>
+                    <h2 class="section-title">Shared Components</h2>
+                  </div>
+                </div>
+
+                <div class="grid three">
+                  <article class="card featured">
+                    <div class="meta">Homepage</div>
+                    <h3>Surface Cards</h3>
+                    <p>
+                      Primary content cards stay bright enough to read, while
+                      still feeling at home in dark mode.
+                    </p>
+                    <a class="btn" href="#">See More</a>
+                  </article>
+
+                  <article class="card">
+                    <div class="meta">Navigation</div>
+                    <h3>Buttons + Pills</h3>
+                    <p>
+                      Action buttons and chips keep the same CrossPointe accent
+                      instead of becoming generic grayscale UI.
+                    </p>
+                    <a class="btn" href="#">Open Link</a>
+                  </article>
+
+                  <article class="card">
+                    <div class="meta">Links</div>
+                    <h3>Quick Access</h3>
+                    <p>
+                      The quick links and support surfaces follow the same
+                      semantic background and border system.
+                    </p>
+                    <a class="btn" href="#">Preview</a>
+                  </article>
+                </div>
+
+                <div class="quick-links" style="margin-top: 18px;">
+                  <a href="#">Prayer Request</a>
+                  <a href="#">Give Online</a>
+                  <a href="#">Upcoming Events</a>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="theme-lab-caption-row">
+        <div class="theme-lab-caption">Sunday Mode Preview</div>
+
+        <div
+          class="theme-lab-status-controls"
+          role="group"
+          aria-label="Sunday status preview"
+        >
+          <button
+            type="button"
+            class="theme-lab-status-btn"
+            data-status-option="live"
+          >
+            Live Now
+          </button>
+          <button
+            type="button"
+            class="theme-lab-status-btn"
+            data-status-option="starting"
+          >
+            Starting Soon
+          </button>
+          <button
+            type="button"
+            class="theme-lab-status-btn"
+            data-status-option="closed"
+          >
+            See You Next Week
+          </button>
+        </div>
+      </div>
+      <div class="theme-lab-shell">
+        <div class="central sunday-experience">
+          <header class="sunday-hero">
+            <div class="wrap">
+              <div class="sunday-badge-row">
+                <span class="eyebrow">
+                  <span class="eyebrow-dot"></span>
+                  Sunday Morning
+                </span>
+
+                <div class="sunday-badge-actions">
+                  <button
+                    type="button"
+                    class="theme-toggle"
+                    id="theme-lab-toggle-sunday"
+                  >
+                    <span class="theme-toggle-copy">
+                      <strong>Dark Mode</strong>
+                      <small id="theme-lab-toggle-sunday-status">Off</small>
+                    </span>
+                    <span class="theme-toggle-switch" aria-hidden="true">
+                      <span class="theme-toggle-thumb"></span>
+                    </span>
+                  </button>
+
+                  <span
+                    class="sunday-status-pill live"
+                    id="theme-lab-service-pill"
+                  >
+                    Live Now
+                  </span>
+                </div>
+              </div>
+
+              <h1>Everything you need for this morning.</h1>
+              <p>
+                The Sunday experience keeps the darker hero, but now the notes,
+                Scripture tools, and action cards adapt underneath it.
+              </p>
+
+              <div class="hero-actions">
+                <a class="btn btn-primary" href="#preview-sermon-notes">Take Notes</a>
+                <a class="btn btn-secondary" href="#">Watch Live</a>
+              </div>
+
+              <div class="sunday-status-grid">
+                <article class="sunday-status-card">
+                  <small>Status</small>
+                  <strong>Central Is Ready</strong>
+                  <span>Dark mode stays readable without changing the hero mood.</span>
+                </article>
+
+                <article class="sunday-status-card">
+                  <small>Speaker</small>
+                  <strong>Pastor Calvin</strong>
+                  <span>Summer In The Psalms</span>
+                </article>
+
+                <article class="sunday-status-card">
+                  <small>Scripture</small>
+                  <strong>Psalm 27</strong>
+                  <span>Sunday, July 5</span>
+                </article>
+              </div>
+            </div>
+          </header>
+
+          <div class="content sunday-content">
+            <div class="wrap">
+              <section class="section">
+                <div class="section-head">
+                  <div>
+                    <div class="section-kicker">Quick Actions</div>
+                    <h2 class="section-title">Tap And Go</h2>
+                  </div>
+                </div>
+
+                <div class="sunday-actions-grid">
+                  <a class="sunday-action" href="#"><strong>Watch Live</strong><span>Open stream now</span></a>
+                  <a class="sunday-action" href="#"><strong>Sermon Notes</strong><span>Jump to the notes section</span></a>
+                  <a class="sunday-action" href="#"><strong>Prayer Request</strong><span>Share a need with the team</span></a>
+                </div>
+              </section>
+
+              <section class="section" id="preview-sermon-notes">
+                <div class="section-head">
+                  <div>
+                    <div class="section-kicker">One-Tap Study</div>
+                    <h2 class="section-title">Scripture + Sermon Notes</h2>
+                  </div>
+                </div>
+
+                <div class="grid two sunday-notes-scripture-grid">
+                  <article class="card sunday-scripture-card">
+                    <div class="section-kicker">Powered by YouVersion</div>
+                    <h3 class="sunday-card-title">Bible Reader</h3>
+                    <p class="sunday-scripture-copy">
+                      The YouVersion embed now receives the same light or dark
+                      theme value as the rest of the page.
+                    </p>
+                    <div class="sunday-scripture-reference">Psalm 27</div>
+                    <div class="sunday-scripture-content">
+                      <p><sup>1</sup> The Lord is my light and my salvation; whom shall I fear?</p>
+                      <p><sup>2</sup> Though an army encamp against me, my heart shall not fear.</p>
+                    </div>
+                  </article>
+
+                  <article class="card sunday-notes-card">
+                    <h3 class="sunday-card-title">Sermon Notes</h3>
+                    <p class="sunday-notes-copy">
+                      Toolbar controls, input fields, and support buttons follow
+                      the active theme so this area feels cohesive during worship.
+                    </p>
+
+                    <div class="sunday-prompt-row">
+                      <span class="sunday-prompt-chip">What stands out?</span>
+                      <span class="sunday-prompt-chip">What do I need to obey?</span>
+                      <span class="sunday-prompt-chip">Who can I encourage?</span>
+                    </div>
+
+                    <div class="sunday-notes-toolbar" aria-label="Notes formatting">
+                      <button type="button" class="notes-format-btn"><strong>Bold</strong></button>
+                      <button type="button" class="notes-format-btn"><em>Italic</em></button>
+                      <button type="button" class="notes-format-btn active" aria-pressed="true">Bullets</button>
+                      <button type="button" class="notes-format-btn">Numbered</button>
+                    </div>
+
+                    <div class="sunday-notes-input" contenteditable="false">
+                      God is inviting me to trust His presence instead of my own control.
+                    </div>
+
+                    <div class="sunday-notes-tools">
+                      <button type="button" class="see-more-btn">Save to My Google Docs</button>
+                      <button type="button" class="see-more-btn">Copy Notes</button>
+                      <button type="button" class="see-more-btn sunday-clear-btn">Clear Notes</button>
+                      <span class="sunday-notes-status">Saved on this device</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+      <script>
+      (function() {
+        var queryParams = new URLSearchParams(window.location.search);
+        var theme = document.documentElement.getAttribute("data-theme") || "light";
+        var serviceStatus = queryParams.get("status") || "live";
+        var toggleIds = [
+          ["theme-lab-toggle-home", "theme-lab-toggle-home-status"],
+          ["theme-lab-toggle-sunday", "theme-lab-toggle-sunday-status"],
+        ];
+        var servicePill = document.getElementById("theme-lab-service-pill");
+        var serviceStatusConfig = {
+          live: {
+            className: "live",
+            label: "Live Now",
+          },
+          starting: {
+            className: "starting",
+            label: "Service Starting Soon",
+          },
+          closed: {
+            className: "closed",
+            label: "See You Next Week",
+          },
+        };
+
+        if (!serviceStatusConfig[serviceStatus]) {
+          serviceStatus = "live";
+        }
+
+        function syncPreviewUrl_() {
+          var url = new URL(window.location.href);
+
+          url.searchParams.set("theme", theme);
+          url.searchParams.set("status", serviceStatus);
+          url.hash = "";
+          window.history.replaceState({}, "", url.toString());
+        }
+
+        function syncTheme() {
+          document.documentElement.setAttribute("data-theme", theme);
+          document.documentElement.style.colorScheme = theme;
+          document.body.setAttribute("data-theme", theme);
+
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) {
+            meta.setAttribute(
+              "content",
+              theme === "dark" ? "#18181b" : "#f4f4f5"
+            );
+          }
+
+          toggleIds.forEach(function(pair) {
+            var button = document.getElementById(pair[0]);
+            var status = document.getElementById(pair[1]);
+            if (!button || !status) return;
+
+            button.setAttribute("data-theme-state", theme);
+            button.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+            button.setAttribute(
+              "aria-label",
+              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            );
+            status.textContent = theme === "dark" ? "On" : "Off";
+          });
+
+          document.querySelectorAll("[data-theme-link]").forEach(function(link) {
+            var themeLink = link.getAttribute("data-theme-link");
+            if (themeLink) {
+              link.setAttribute(
+                "href",
+                "/theme-lab.html?theme=" + encodeURIComponent(themeLink) +
+                "&status=" + encodeURIComponent(serviceStatus)
+              );
+            }
+
+            link.classList.toggle(
+              "is-active",
+              link.getAttribute("data-theme-link") === theme
+            );
+          });
+        }
+
+        function syncServiceStatus() {
+          var serviceConfig = serviceStatusConfig[serviceStatus] || serviceStatusConfig.live;
+
+          if (servicePill) {
+            servicePill.classList.remove("live", "starting", "closed");
+            servicePill.classList.add(serviceConfig.className);
+            servicePill.textContent = serviceConfig.label;
+          }
+
+          document.querySelectorAll("[data-status-option]").forEach(function(button) {
+            var isActive = button.getAttribute("data-status-option") === serviceStatus;
+
+            button.classList.toggle("is-active", isActive);
+            button.setAttribute("aria-pressed", isActive ? "true" : "false");
+          });
+        }
+
+        toggleIds.forEach(function(pair) {
+          var button = document.getElementById(pair[0]);
+          if (!button) return;
+
+          button.addEventListener("click", function() {
+            theme = theme === "dark" ? "light" : "dark";
+            syncTheme();
+            syncPreviewUrl_();
+          });
+        });
+
+        document.querySelectorAll("[data-status-option]").forEach(function(button) {
+          button.addEventListener("click", function() {
+            var nextStatus = button.getAttribute("data-status-option");
+            if (!serviceStatusConfig[nextStatus]) return;
+
+            serviceStatus = nextStatus;
+            syncServiceStatus();
+            syncTheme();
+            syncPreviewUrl_();
+          });
+        });
+
+        syncTheme();
+        syncServiceStatus();
+      }());
+    </script>
+  </body>
+</html>

@@ -1,0 +1,190 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDocPath() {
+      return /databases/$(database)/documents/centralAdmin/root/users/$(request.auth.uid);
+    }
+
+    function hasUserDoc() {
+      return isSignedIn() && exists(userDocPath());
+    }
+
+    function currentUser() {
+      return get(userDocPath());
+    }
+
+    function isActiveAdminUser() {
+      return hasUserDoc() && currentUser().data.active == true;
+    }
+
+    function hasAdminSectionAccess() {
+      return isActiveAdminUser() && (
+        isAdminLevel(currentUser().data.pageAccess.users) ||
+        isAdminLevel(currentUser().data.pageAccess.roles) ||
+        isAdminLevel(currentUser().data.pageAccess.changeRequests) ||
+        isAdminLevel(currentUser().data.pageAccess.settings)
+      );
+    }
+
+    function isAdminLevel(permission) {
+      return permission == "approve" || permission == "admin";
+    }
+
+    function isEditorLevel(permission) {
+      return permission == "edit" ||
+        permission == "approve" ||
+        permission == "admin";
+    }
+
+    function hasAnySectionAccess(permission) {
+      return permission == "view" ||
+        permission == "propose" ||
+        permission == "edit" ||
+        permission == "approve" ||
+        permission == "admin";
+    }
+
+    function contentSectionPermission(section) {
+      return section == "quickLinks" ?
+        currentUser().data.pageAccess.quickLinks :
+        section == "campaigns" ?
+          currentUser().data.pageAccess.campaigns != null ?
+            currentUser().data.pageAccess.campaigns :
+            currentUser().data.pageAccess.settings :
+        section == "nextSteps" ?
+          currentUser().data.pageAccess.nextSteps != null ?
+            currentUser().data.pageAccess.nextSteps :
+            currentUser().data.pageAccess.settings :
+        section == "resources" ?
+          currentUser().data.pageAccess.resources != null ?
+            currentUser().data.pageAccess.resources :
+            currentUser().data.pageAccess.settings :
+        section == "serveNeeds" ?
+          currentUser().data.pageAccess.serveNeeds != null ?
+            currentUser().data.pageAccess.serveNeeds :
+            currentUser().data.pageAccess.settings :
+        section == "roomRules" ?
+          currentUser().data.pageAccess.roomRules != null ?
+            currentUser().data.pageAccess.roomRules :
+            currentUser().data.pageAccess.settings :
+        section == "statusBanner" ?
+          currentUser().data.pageAccess.statusBanner :
+          section == "events" ?
+            currentUser().data.pageAccess.events :
+            "none";
+    }
+
+    function canEditContentSection(section) {
+      return isActiveAdminUser() &&
+        isEditorLevel(contentSectionPermission(section));
+    }
+
+    function canReadContentSection(section) {
+      return isActiveAdminUser() &&
+        hasAnySectionAccess(contentSectionPermission(section));
+    }
+
+    function publicAppDocPermission(documentId) {
+      return documentId == "settings" ?
+        currentUser().data.pageAccess.hub != null ?
+          currentUser().data.pageAccess.hub :
+          currentUser().data.pageAccess.settings :
+        documentId == "sundaySettings" ?
+          currentUser().data.pageAccess.hub != null ?
+            currentUser().data.pageAccess.hub :
+            currentUser().data.pageAccess.sundaySettings != null ?
+              currentUser().data.pageAccess.sundaySettings :
+              currentUser().data.pageAccess.settings :
+        documentId == "thisSunday" ?
+          currentUser().data.pageAccess.thisSunday != null ?
+            currentUser().data.pageAccess.thisSunday :
+            currentUser().data.pageAccess.settings :
+          "none";
+    }
+
+    function canEditPublicAppDoc(documentId) {
+      return isActiveAdminUser() &&
+        isEditorLevel(publicAppDocPermission(documentId));
+    }
+
+    function canReadPublicAppDoc(documentId) {
+      return isActiveAdminUser() &&
+        hasAnySectionAccess(publicAppDocPermission(documentId));
+    }
+
+    // Public content is readable by clients, but never writable from the browser.
+    match /centralApp/root/public/{documentId} {
+      allow read: if true;
+      allow create, update: if false;
+      allow delete: if false;
+    }
+
+    match /centralContent/{section}/items/{itemId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    match /centralContent/{section}/meta/{documentId} {
+      allow read: if canReadContentSection(section);
+      allow create, update, delete: if false;
+    }
+
+    match /centralAppDraft/root/public/{documentId} {
+      allow read: if canReadPublicAppDoc(documentId);
+      allow create, update: if canEditPublicAppDoc(documentId);
+      allow delete: if false;
+    }
+
+    match /centralContentDraft/{section}/items/{itemId} {
+      allow read: if canReadContentSection(section);
+      allow create, update, delete: if canEditContentSection(section);
+    }
+
+    match /centralContentDraft/{section}/meta/{documentId} {
+      allow read: if canReadContentSection(section);
+      allow create, update, delete: if canEditContentSection(section);
+    }
+
+    // Admin users can read only their own user record directly from the client.
+    // Creating or editing admin records should happen in the console or through
+    // privileged server code until the approval workflow exists.
+    match /centralAdmin/root/users/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /centralAdmin/root/pages/{pageId} {
+      allow read: if isActiveAdminUser();
+      allow write: if false;
+    }
+
+    match /centralAdmin/root/roles/{roleId} {
+      allow read: if hasAdminSectionAccess();
+      allow write: if false;
+    }
+
+    match /centralAdmin/root/changeRequests/{requestId} {
+      allow read: if isActiveAdminUser();
+      allow write: if false;
+    }
+
+    match /centralAdmin/root/auditLog/{logId} {
+      allow read: if hasAdminSectionAccess();
+      allow write: if false;
+    }
+
+    match /centralAdmin/root/public/{documentId} {
+      allow read: if isActiveAdminUser();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

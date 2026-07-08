@@ -1,6 +1,7 @@
 {
   "name": "crosspointe-central-web",
   "private": true,
+  "packageManager": "pnpm@11.7.0",
   "scripts": {
     "build:youversion": "node scripts/build-youversion-reader.mjs",
     "check:syntax": "node --check public/app.js && node --check public/admin.js && node --check functions/index.js",

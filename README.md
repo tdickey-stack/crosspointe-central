@@ -81,6 +81,10 @@ The workflow expects these GitHub repository secrets:
 - `FIREBASE_FUNCTIONS_ENV`
   The full multi-line contents of `functions/.env`.
 
+Detailed setup steps live in:
+
+- `docs/github-actions-firebase-setup.md`
+
 ## Recommended GitHub Setup
 
 1. Create a GitHub repository, preferably named `crosspointe-central`.

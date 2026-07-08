@@ -10,13 +10,11 @@ signed in.
 3. Click `Send Invite`.
 4. Central writes a pending invite document to:
    `centralAdmin/root/invites/{inviteId}`
-5. Central also writes an email document to:
-   `mail/{mailId}`
-6. The Firebase Trigger Email extension sends the invite email from
+5. Central sends the invite email directly through the Gmail API from
    `central@crosspointe.tv`.
-7. The recipient opens the link, signs in with that same Google account, and
+6. The recipient opens the link, signs in with that same Google account, and
    the invite is claimed.
-8. On claim, Central creates or updates the actual admin user document at:
+7. On claim, Central creates or updates the actual admin user document at:
    `centralAdmin/root/users/{uid}`
 
 ## Invite Link

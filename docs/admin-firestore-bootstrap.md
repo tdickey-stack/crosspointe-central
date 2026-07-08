@@ -292,5 +292,5 @@ Public interest submissions are stored separately at:
 - `centralServeNeeds/root/interests/{submissionId}`
 
 Those submissions now attempt to email the ministry leader automatically when
-the Firebase Trigger Email extension is installed and configured. See
-`docs/serve-needs-email.md` for the current setup notes.
+the Gmail API is configured in Functions. See `docs/serve-needs-email.md` for
+the current setup notes.

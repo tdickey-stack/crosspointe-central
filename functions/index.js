@@ -66,6 +66,14 @@ const CENTRAL_MAIL_COLLECTION_PATH =
   process.env.CENTRAL_MAIL_COLLECTION_PATH || "mail";
 const CENTRAL_GOOGLE_WEB_CLIENT_ID =
   trimEnvString_(process.env.CENTRAL_GOOGLE_WEB_CLIENT_ID) || "";
+const CENTRAL_GMAIL_CLIENT_ID =
+  trimEnvString_(process.env.CENTRAL_GMAIL_CLIENT_ID) || "";
+const CENTRAL_GMAIL_CLIENT_SECRET =
+  trimEnvString_(process.env.CENTRAL_GMAIL_CLIENT_SECRET) || "";
+const CENTRAL_GMAIL_REFRESH_TOKEN =
+  trimEnvString_(process.env.CENTRAL_GMAIL_REFRESH_TOKEN) || "";
+const CENTRAL_GMAIL_SENDER_EMAIL =
+  trimEnvString_(process.env.CENTRAL_GMAIL_SENDER_EMAIL) || "";
 const CENTRAL_ADMIN_URL =
   trimEnvString_(process.env.CENTRAL_ADMIN_URL) || "";
 const CENTRAL_ADMIN_INVITE_TTL_DAYS = parsePositiveInt_(
@@ -1368,7 +1376,7 @@ exports.shareServeNeedInterest = onRequest(
           message: "Your interest was shared successfully.",
           need: String(serveNeedData.need || "").trim(),
           ministry: String(serveNeedData.ministry || "").trim(),
-          notificationStatus: "queued",
+          notificationStatus: "sent",
         });
       } catch (error) {
         console.error("Serve Need interest submit failed.", error);
@@ -1480,32 +1488,23 @@ async function queueServeNeedInterestNotification_(interestId, interestData) {
     timeStyle: "short",
     timeZone: PCO_TIMEZONE,
   });
-  const mailRef = firestore
-      .collection(CENTRAL_MAIL_COLLECTION_PATH)
-      .doc();
-  const mailPayload = {
+  const sendResult = await sendCentralEmail_({
     to: to,
-    message: {
-      subject: subject,
-      text: buildServeNeedInterestEmailText_(interestData, submittedAt),
-      html: buildServeNeedInterestEmailHtml_(interestData, submittedAt),
-    },
-  };
-
-  if (replyToAddresses.length) {
-    mailPayload.replyTo = replyToAddresses[0];
-  }
-
-  await mailRef.set(mailPayload);
+    replyTo: replyToAddresses.length ? replyToAddresses[0] : "",
+    subject: subject,
+    text: buildServeNeedInterestEmailText_(interestData, submittedAt),
+    html: buildServeNeedInterestEmailHtml_(interestData, submittedAt),
+  });
 
   await firestore
       .collection(CENTRAL_SERVE_NEEDS_INTERESTS_COLLECTION_PATH)
       .doc(interestId)
       .set({
-        notificationStatus: "queued",
+        notificationStatus: "sent",
         notificationAttempts: 1,
-        notificationMailDocId: mailRef.id,
-        notificationQueuedAt: admin.firestore.FieldValue.serverTimestamp(),
+        notificationProvider: "gmail-api",
+        notificationMessageId: String(sendResult && sendResult.id || "").trim(),
+        notificationSentAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, {merge: true});
 }
@@ -1518,22 +1517,21 @@ function buildServeNeedInterestEmailText_(interestData, submittedAt) {
     "Serve Opportunity",
     "Need: " + String(interest.serveNeedNeed || "").trim(),
     "Ministry: " + String(interest.serveNeedMinistry || "").trim(),
-    "Priority: " + String(interest.serveNeedPriority || "").trim(),
-    "Button Text: " + String(interest.serveNeedButtonText || "").trim(),
     "",
     "Person Interested",
     "Name: " + String(interest.name || "").trim(),
     "Email: " + String(interest.email || "").trim(),
     "Phone: " + (String(interest.phone || "").trim() || "Not provided"),
     "Preferred Contact Method: " +
-      String(interest.preferredContactMethod || "").trim(),
+      formatServeNeedPreferredContactMethod_(
+          interest.preferredContactMethod,
+      ),
     "",
     "Additional Notes",
     String(interest.additionalNotes || "").trim() || "None",
     "",
     "Submitted",
     submittedAt,
-    "Source Host: " + String(interest.sourceHost || "").trim(),
   ];
 
   return lines.join("\n");
@@ -1553,8 +1551,6 @@ function buildServeNeedInterestEmailHtml_(interestData, submittedAt) {
         rows: [
           ["Need", String(interest.serveNeedNeed || "").trim()],
           ["Ministry", String(interest.serveNeedMinistry || "").trim()],
-          ["Priority", String(interest.serveNeedPriority || "").trim()],
-          ["Button Text", String(interest.serveNeedButtonText || "").trim()],
         ],
       },
       {
@@ -1565,7 +1561,9 @@ function buildServeNeedInterestEmailHtml_(interestData, submittedAt) {
           ["Phone", String(interest.phone || "").trim() || "Not provided"],
           [
             "Preferred Contact Method",
-            String(interest.preferredContactMethod || "").trim(),
+            formatServeNeedPreferredContactMethod_(
+                interest.preferredContactMethod,
+            ),
           ],
         ],
       },
@@ -1577,13 +1575,26 @@ function buildServeNeedInterestEmailHtml_(interestData, submittedAt) {
         title: "Submitted",
         rows: [
           ["Time", submittedAt],
-          ["Source Host", String(interest.sourceHost || "").trim()],
         ],
       },
     ],
     footerText:
       "Reply directly to this email to contact the person who submitted the form.",
   });
+}
+
+function formatServeNeedPreferredContactMethod_(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+
+  if (normalizedValue === "text") {
+    return "Text";
+  }
+
+  if (normalizedValue === "email") {
+    return "E-Mail";
+  }
+
+  return String(value || "").trim();
 }
 
 async function queueCentralAdminInviteNotification_(inviteData) {
@@ -1594,26 +1605,243 @@ async function queueCentralAdminInviteNotification_(inviteData) {
   }
 
   const subject = "You're Invited: CrossPointe Central Admin";
-  const mailRef = firestore
-      .collection(CENTRAL_MAIL_COLLECTION_PATH)
-      .doc();
   const messageText = buildCentralAdminInviteEmailText_(inviteData);
   const messageHtml = buildCentralAdminInviteEmailHtml_(inviteData);
-  const mailPayload = {
+  const sendResult = await sendCentralEmail_({
     to: to,
-    message: {
-      subject: subject,
-      text: messageText,
-      html: messageHtml,
-    },
-  };
+    replyTo: looksLikeEmailAddress_(inviteData && inviteData.invitedByEmail) ?
+      String(inviteData.invitedByEmail || "").trim() :
+      "",
+    subject: subject,
+    text: messageText,
+    html: messageHtml,
+  });
+  return String(sendResult && sendResult.id || "").trim();
+}
 
-  if (looksLikeEmailAddress_(inviteData && inviteData.invitedByEmail)) {
-    mailPayload.replyTo = String(inviteData.invitedByEmail || "").trim();
+async function sendCentralEmail_(options) {
+  const config = options && typeof options === "object" ? options : {};
+  const to = String(config.to || "").trim();
+  const subject = String(config.subject || "").trim();
+  const text = String(config.text || "").trim();
+  const html = String(config.html || "").trim();
+  const replyTo = String(config.replyTo || "").trim();
+  const gmailConfig = getCentralGmailConfig_();
+
+  if (!looksLikeEmailAddress_(to)) {
+    throw new Error("Central email delivery needs a valid recipient.");
   }
 
-  await mailRef.set(mailPayload);
-  return mailRef.id;
+  if (!subject) {
+    throw new Error("Central email delivery needs a subject.");
+  }
+
+  if (!text && !html) {
+    throw new Error("Central email delivery needs text or HTML content.");
+  }
+
+  const accessToken = await fetchCentralGmailAccessToken_(gmailConfig);
+  const rawMessage = buildCentralGmailRawMessage_({
+    fromName: CENTRAL_EMAIL_BRAND_NAME,
+    fromEmail: gmailConfig.senderEmail,
+    to: to,
+    replyTo: replyTo,
+    subject: subject,
+    text: text,
+    html: html,
+  });
+  const gmailResponse = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          raw: rawMessage,
+        }),
+      },
+  );
+
+  if (!gmailResponse.ok) {
+    const errorBody = await safeReadJsonResponse_(gmailResponse);
+    const gmailMessage = String(
+        errorBody &&
+        errorBody.error &&
+        (errorBody.error.message || errorBody.error.status) ||
+        gmailResponse.statusText ||
+        "Unknown Gmail API failure.",
+    ).trim();
+    const error = new Error(
+        "Gmail API send failed (" +
+        String(gmailResponse.status) +
+        "): " +
+        gmailMessage,
+    );
+    error.code = "gmail-send-failed";
+    error.status = gmailResponse.status;
+    throw error;
+  }
+
+  const responseBody = await safeReadJsonResponse_(gmailResponse);
+  return {
+    id: String(responseBody && responseBody.id || "").trim(),
+    threadId: String(responseBody && responseBody.threadId || "").trim(),
+  };
+}
+
+function getCentralGmailConfig_() {
+  if (!CENTRAL_GMAIL_CLIENT_ID ||
+    !CENTRAL_GMAIL_CLIENT_SECRET ||
+    !CENTRAL_GMAIL_REFRESH_TOKEN ||
+    !CENTRAL_GMAIL_SENDER_EMAIL) {
+    const error = new Error(
+        "Central Gmail API is not configured yet. Add the client ID, " +
+        "client secret, refresh token, and sender email to functions/.env.",
+    );
+    error.code = "gmail-config-missing";
+    throw error;
+  }
+
+  if (!looksLikeEmailAddress_(CENTRAL_GMAIL_SENDER_EMAIL)) {
+    const error = new Error("Central Gmail sender email is invalid.");
+    error.code = "gmail-config-invalid";
+    throw error;
+  }
+
+  return {
+    clientId: CENTRAL_GMAIL_CLIENT_ID,
+    clientSecret: CENTRAL_GMAIL_CLIENT_SECRET,
+    refreshToken: CENTRAL_GMAIL_REFRESH_TOKEN,
+    senderEmail: CENTRAL_GMAIL_SENDER_EMAIL,
+  };
+}
+
+async function fetchCentralGmailAccessToken_(gmailConfig) {
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      client_id: String(gmailConfig.clientId || "").trim(),
+      client_secret: String(gmailConfig.clientSecret || "").trim(),
+      refresh_token: String(gmailConfig.refreshToken || "").trim(),
+      grant_type: "refresh_token",
+    }),
+  });
+
+  const tokenBody = await safeReadJsonResponse_(tokenResponse);
+
+  if (!tokenResponse.ok) {
+    const tokenMessage = String(
+        tokenBody &&
+        (tokenBody.error_description || tokenBody.error) ||
+        tokenResponse.statusText ||
+        "Unknown token exchange failure.",
+    ).trim();
+    const error = new Error(
+        "Gmail OAuth token exchange failed (" +
+        String(tokenResponse.status) +
+        "): " +
+        tokenMessage,
+    );
+    error.code = "gmail-token-failed";
+    error.status = tokenResponse.status;
+    throw error;
+  }
+
+  const accessToken = String(tokenBody && tokenBody.access_token || "").trim();
+
+  if (!accessToken) {
+    const error = new Error(
+        "Gmail OAuth token exchange completed without an access token.",
+    );
+    error.code = "gmail-token-missing";
+    throw error;
+  }
+
+  return accessToken;
+}
+
+function buildCentralGmailRawMessage_(options) {
+  const config = options && typeof options === "object" ? options : {};
+  const boundary = "central-" + crypto.randomBytes(12).toString("hex");
+  const headers = [
+    "From: " + buildCentralMailboxHeader_(
+        config.fromName,
+        config.fromEmail,
+    ),
+    "To: " + String(config.to || "").trim(),
+    config.replyTo ?
+      "Reply-To: " + String(config.replyTo || "").trim() :
+      "",
+    "Subject: " + encodeMimeHeaderValue_(String(config.subject || "").trim()),
+    "MIME-Version: 1.0",
+    "Content-Type: multipart/alternative; boundary=\"" + boundary + "\"",
+  ].filter(Boolean);
+  const parts = [
+    "--" + boundary,
+    "Content-Type: text/plain; charset=\"UTF-8\"",
+    "Content-Transfer-Encoding: base64",
+    "",
+    splitMimeBase64Lines_(Buffer.from(String(config.text || ""), "utf8")
+        .toString("base64")),
+    "--" + boundary,
+    "Content-Type: text/html; charset=\"UTF-8\"",
+    "Content-Transfer-Encoding: base64",
+    "",
+    splitMimeBase64Lines_(Buffer.from(String(config.html || ""), "utf8")
+        .toString("base64")),
+    "--" + boundary + "--",
+    "",
+  ];
+  const mimeMessage = headers.concat([""], parts).join("\r\n");
+
+  return Buffer.from(mimeMessage, "utf8")
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
+}
+
+function buildCentralMailboxHeader_(displayName, email) {
+  const safeEmail = String(email || "").trim();
+  const safeName = String(displayName || "").trim();
+
+  if (!safeName) {
+    return safeEmail;
+  }
+
+  return "\"" +
+    safeName.replace(/["\\]/g, "\\$&") +
+    "\" <" +
+    safeEmail +
+    ">";
+}
+
+function encodeMimeHeaderValue_(value) {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  return "=?UTF-8?B?" + Buffer.from(text, "utf8").toString("base64") + "?=";
+}
+
+function splitMimeBase64Lines_(value) {
+  const matches = String(value || "").match(/.{1,76}/g);
+  return matches ? matches.join("\r\n") : "";
+}
+
+async function safeReadJsonResponse_(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    return {};
+  }
 }
 
 function buildCentralAdminInviteEmailText_(inviteData) {
@@ -4196,8 +4424,10 @@ async function upsertPendingAdminInvite_(
     });
 
     await inviteRef.set({
-      lastMailDocId: mailDocId,
-      lastMailStatus: "queued",
+      lastMailMessageId: mailDocId,
+      lastMailStatus: "sent",
+      lastMailDocId: admin.firestore.FieldValue.delete(),
+      lastMailError: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, {merge: true});
   } catch (error) {

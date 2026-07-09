@@ -1,8 +1,9 @@
-const {setGlobalOptions} = require("firebase-functions/v2");
-const {onRequest} = require("firebase-functions/v2/https");
-const {onDocumentWritten} = require("firebase-functions/v2/firestore");
-const admin = require("firebase-admin");
-const crypto = require("crypto");
+import crypto from "node:crypto";
+
+import admin from "firebase-admin";
+import {setGlobalOptions} from "firebase-functions/v2";
+import {onDocumentWritten} from "firebase-functions/v2/firestore";
+import {onRequest} from "firebase-functions/v2/https";
 
 setGlobalOptions({maxInstances: 10});
 admin.initializeApp();
@@ -368,7 +369,7 @@ const YOUVERSION_BOOK_KEYS = Object.keys(YOUVERSION_BOOK_LOOKUP).sort(
     (a, b) => b.length - a.length,
 );
 
-exports.centralData = onRequest(
+export const centralData = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -418,7 +419,7 @@ exports.centralData = onRequest(
     },
 );
 
-exports.sundayScripture = onRequest(
+export const sundayScripture = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -554,7 +555,7 @@ exports.sundayScripture = onRequest(
     },
 );
 
-exports.bootstrapFirstAdminUser = onRequest(
+export const bootstrapFirstAdminUser = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -619,7 +620,7 @@ exports.bootstrapFirstAdminUser = onRequest(
     },
 );
 
-exports.listAdminUsers = onRequest(
+export const listAdminUsers = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -700,7 +701,7 @@ exports.listAdminUsers = onRequest(
     },
 );
 
-exports.upsertAdminUser = onRequest(
+export const upsertAdminUser = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -761,7 +762,7 @@ exports.upsertAdminUser = onRequest(
     },
 );
 
-exports.deleteAdminUser = onRequest(
+export const deleteAdminUser = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -818,7 +819,7 @@ exports.deleteAdminUser = onRequest(
     },
 );
 
-exports.claimAdminInvite = onRequest(
+export const claimAdminInvite = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -874,7 +875,7 @@ exports.claimAdminInvite = onRequest(
     },
 );
 
-exports.publishPreviewContent = onRequest(
+export const publishPreviewContent = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -979,7 +980,7 @@ exports.publishPreviewContent = onRequest(
     },
 );
 
-exports.submitChangeRequest = onRequest(
+export const submitChangeRequest = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -1103,7 +1104,7 @@ exports.submitChangeRequest = onRequest(
     },
 );
 
-exports.reviewChangeRequest = onRequest(
+export const reviewChangeRequest = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -1229,7 +1230,7 @@ exports.reviewChangeRequest = onRequest(
     },
 );
 
-exports.shareServeNeedInterest = onRequest(
+export const shareServeNeedInterest = onRequest(
     {
       region: "us-central1",
       cors: true,
@@ -1445,7 +1446,7 @@ exports.shareServeNeedInterest = onRequest(
     },
 );
 
-exports.syncServeNeedInterestNotificationStatus = onDocumentWritten(
+export const syncServeNeedInterestNotificationStatus = onDocumentWritten(
     {
       region: "us-central1",
       document: CENTRAL_MAIL_COLLECTION_PATH + "/{mailId}",

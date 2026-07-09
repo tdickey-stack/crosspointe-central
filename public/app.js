@@ -2689,7 +2689,7 @@ function insertPlainTextIntoSundayNotes_(input, text) {
 function syncSundayNotesSaveButton_(data) {
   if (!document.getElementById("save-notes-doc-btn")) return;
 
-  clearSavedDocLink_();
+  setSundayNotesGoogleDocsControlsVisible_(false);
 
   var googleDocsConfig = getGoogleNotesConfig_(data);
 
@@ -2698,20 +2698,14 @@ function syncSundayNotesSaveButton_(data) {
   }
 
   if (!googleDocsConfig.enabled) {
-    setSundayNotesSaveButtonVisibility_(false);
     return;
   }
 
   if (!googleDocsConfig.clientId) {
-    setSundayNotesSaveButtonVisibility_(false);
-    setSundayNotesStatus(
-        "Google Docs saving needs a Google Web Client ID before it can be used.",
-        true,
-    );
     return;
   }
 
-  setSundayNotesSaveButtonVisibility_(true);
+  setSundayNotesGoogleDocsControlsVisible_(true);
 
   if (googleNotesClientReady && googleNotesTokenClient) {
     setSundayNotesSaveButtonState("Save to My Google Docs", false);
@@ -3085,6 +3079,14 @@ function setSundayNotesSaveButtonVisibility_(visible) {
   if (!buttonEl) return;
 
   buttonEl.hidden = !visible;
+}
+
+function setSundayNotesGoogleDocsControlsVisible_(visible) {
+  setSundayNotesSaveButtonVisibility_(visible);
+
+  if (!visible) {
+    clearSavedDocLink_();
+  }
 }
 
 function setSavedDocLink_(docUrl) {
@@ -3673,15 +3675,10 @@ async function saveSundayNotesToMyGoogleDocs() {
   }
 
   if (!googleDocsConfig.enabled) {
-    setSundayNotesStatus("Google Docs saving is turned off right now.", true);
     return;
   }
 
   if (!googleDocsConfig.clientId) {
-    setSundayNotesStatus(
-        "Google Docs saving needs a Google Web Client ID before it can be used.",
-        true,
-    );
     return;
   }
 

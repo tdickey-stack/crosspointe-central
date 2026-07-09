@@ -761,6 +761,63 @@ exports.upsertAdminUser = onRequest(
     },
 );
 
+exports.deleteAdminUser = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    async (request, response) => {
+      if (request.method !== "POST") {
+        response.status(405).json({
+          error: "Method not allowed.",
+        });
+        return;
+      }
+
+      const idToken = getBearerToken_(request.headers.authorization);
+      if (!idToken) {
+        response.status(401).json({
+          error: "Missing Firebase ID token. Sign in again and retry.",
+        });
+        return;
+      }
+
+      let decodedToken = null;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+      } catch (error) {
+        response.status(401).json({
+          error: "Your Firebase sign-in expired. Sign in again and retry.",
+        });
+        return;
+      }
+
+      try {
+        const manager = await verifyAdminUserManagerAccess_(decodedToken);
+        const deleteResult = await deleteAdminUserRecord_(
+            manager,
+            request.body && typeof request.body === "object" ?
+              request.body :
+              {},
+        );
+
+        response.set("Cache-Control", "no-store");
+        response.status(200).json({
+          ok: true,
+          uid: deleteResult.uid || "",
+          inviteId: deleteResult.inviteId || "",
+          recordType: deleteResult.recordType || "user",
+          message: deleteResult.message,
+        });
+      } catch (error) {
+        response.status(getAdminUserManagementStatusCode_(error)).json({
+          error: getAdminUserManagementErrorMessage_(error),
+          code: error && error.code ? error.code : "",
+        });
+      }
+    },
+);
+
 exports.claimAdminInvite = onRequest(
     {
       region: "us-central1",
@@ -4521,6 +4578,85 @@ async function upsertPendingAdminInvite_(
   };
 }
 
+async function deleteAdminUserRecord_(manager, requestBody) {
+  const payload = requestBody && typeof requestBody === "object" ?
+    requestBody :
+    {};
+  const requestedRecordType = String(payload.recordType || "user")
+      .trim()
+      .toLowerCase();
+  const requestedInviteId = String(payload.inviteId || "").trim();
+  const requestedUid = String(payload.uid || "").trim();
+  const requestedEmail = normalizeAdminEmail_(payload.email);
+
+  if (requestedRecordType === "invite" || requestedInviteId) {
+    if (!requestedInviteId) {
+      throw createAdminUserManagementError_(
+          "missing-admin-user-target",
+          "Choose an admin invite before deleting it.",
+      );
+    }
+
+    const inviteRef = firestore.doc(getCentralAdminInviteDocPath_(requestedInviteId));
+    const inviteSnapshot = await inviteRef.get();
+
+    if (!inviteSnapshot.exists) {
+      throw createAdminUserManagementError_(
+          "admin-invite-missing",
+          "That admin invite could not be found.",
+      );
+    }
+
+    await inviteRef.delete();
+
+    return {
+      uid: "",
+      inviteId: requestedInviteId,
+      recordType: "invite",
+      message: "Admin invite deleted.",
+    };
+  }
+
+  let userSnapshot = null;
+
+  if (requestedUid) {
+    userSnapshot = await firestore
+        .doc(getCentralAdminUserDocPath_(requestedUid))
+        .get();
+  } else if (requestedEmail) {
+    userSnapshot = await findAdminUserSnapshotByEmail_(requestedEmail);
+  }
+
+  if (!userSnapshot || !userSnapshot.exists) {
+    throw createAdminUserManagementError_(
+        "admin-user-missing",
+        "That admin user could not be found.",
+    );
+  }
+
+  const targetUid = String(
+      userSnapshot.get("uid") ||
+      userSnapshot.id ||
+      "",
+  ).trim();
+
+  if (manager && manager.uid && manager.uid === targetUid) {
+    throw createAdminUserManagementError_(
+        "self-delete-forbidden",
+        "Do not delete your current admin account from this screen.",
+    );
+  }
+
+  await userSnapshot.ref.delete();
+
+  return {
+    uid: targetUid,
+    inviteId: "",
+    recordType: "user",
+    message: "Admin user deleted.",
+  };
+}
+
 async function claimAdminInvite_(decodedToken, requestBody) {
   const payload = requestBody && typeof requestBody === "object" ?
     requestBody :
@@ -4823,6 +4959,7 @@ function getAdminUserManagementStatusCode_(error) {
     error.code === "admin-user-resolve-failed" ||
     error.code === "invalid-admin-email" ||
     error.code === "self-disable-forbidden" ||
+    error.code === "self-delete-forbidden" ||
     error.code === "self-demote-forbidden" ||
     error.code === "admin-invite-required" ||
     error.code === "admin-invite-token-invalid") {
@@ -4833,7 +4970,8 @@ function getAdminUserManagementStatusCode_(error) {
     return 403;
   }
 
-  if (error.code === "admin-invite-missing") {
+  if (error.code === "admin-invite-missing" ||
+    error.code === "admin-user-missing") {
     return 404;
   }
 

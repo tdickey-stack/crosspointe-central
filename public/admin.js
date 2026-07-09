@@ -22,6 +22,7 @@
   var REVIEW_CHANGE_REQUEST_ENDPOINT = "/api/admin/review-change-request";
   var LIST_ADMIN_USERS_ENDPOINT = "/api/admin/list-users";
   var UPSERT_ADMIN_USER_ENDPOINT = "/api/admin/upsert-user";
+  var DELETE_ADMIN_USER_ENDPOINT = "/api/admin/delete-user";
   var CLAIM_ADMIN_INVITE_ENDPOINT = "/api/admin/claim-invite";
   var PUBLISHED_CAMPAIGNS_COLLECTION_PATH = "centralContent/campaigns/items";
   var PUBLISHED_CAMPAIGNS_META_DOC_PATH = "centralContent/campaigns/meta/state";
@@ -1270,6 +1271,15 @@
       if (action === "edit-admin-user") {
         event.preventDefault();
         startEditingAdminUser_(
+            button.getAttribute("data-admin-doc-id") || "",
+            button.getAttribute("data-admin-record-type") || "user",
+        );
+        return;
+      }
+
+      if (action === "delete-admin-user") {
+        event.preventDefault();
+        deleteAdminUser_(
             button.getAttribute("data-admin-doc-id") || "",
             button.getAttribute("data-admin-record-type") || "user",
         );
@@ -4167,6 +4177,9 @@
       }),
       "</div>",
       renderAdminNote_(
+          "This toggle only enables the feature. Central still needs a Google Web Client ID here or a backend CENTRAL_GOOGLE_WEB_CLIENT_ID value before note saving can work.",
+      ),
+      renderAdminNote_(
           "Leave the client ID blank if you want Central to keep using the existing backend value. Turn this off anytime you need to temporarily hide Google Docs saving.",
       ),
       "<div class=\"central-admin-action-row\">",
@@ -4429,6 +4442,12 @@
       ].join("");
     }
 
+    var isEditingCurrentAdminUser = !!(
+      adminState.user &&
+      adminState.adminUsersEditingUid &&
+      adminState.user.uid === adminState.adminUsersEditingUid
+    );
+
     return [
       "<div class=\"central-admin-item\">",
       "<div class=\"central-admin-item-header\">",
@@ -4509,6 +4528,28 @@
       "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reset-admin-user-form\"",
       adminState.adminUsersSaving ? " disabled" : "",
       ">Reset Form</button>",
+      (adminState.adminUsersEditingUid || adminState.adminUsersEditingInviteId) ? [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-admin-user\" data-admin-doc-id=\"",
+        escapeAttr_(
+            adminState.adminUsersEditingInviteId ||
+            adminState.adminUsersEditingUid,
+        ),
+        "\" data-admin-record-type=\"",
+        escapeAttr_(
+            adminState.adminUsersEditingInviteId ?
+              "invite" :
+              "user",
+        ),
+        "\"",
+        adminState.adminUsersSaving || isEditingCurrentAdminUser ? " disabled" : "",
+        ">",
+        escapeHtml_(
+            adminState.adminUsersEditingInviteId ?
+              "Delete Invite" :
+              "Delete User",
+        ),
+        "</button>",
+      ].join("") : "",
       "</div>",
       renderAdminUsersList_(),
       "</div>",
@@ -4525,6 +4566,12 @@
     }
 
     return adminState.adminUsersItems.map(function(userItem) {
+      var isCurrentAdminUser = !!(
+        adminState.user &&
+        userItem.recordType !== "invite" &&
+        userItem.uid === adminState.user.uid
+      );
+
       return [
         "<div class=\"central-admin-list-row\">",
         "<div>",
@@ -4575,6 +4622,15 @@
         escapeHtml_(userItem.recordType === "invite" ?
           "Edit / Resend" :
           "Edit"),
+        "</button>",
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-admin-user\" data-admin-doc-id=\"",
+        escapeAttr_(userItem.recordType === "invite" ? userItem.inviteId : userItem.uid),
+        "\" data-admin-record-type=\"",
+        escapeAttr_(userItem.recordType || "user"),
+        "\"",
+        adminState.adminUsersSaving || isCurrentAdminUser ? " disabled" : "",
+        ">",
+        escapeHtml_(userItem.recordType === "invite" ? "Delete Invite" : "Delete"),
         "</button>",
         "</div>",
         "</div>",
@@ -8460,6 +8516,7 @@
     adminState.adminUsersItems = [];
     adminState.adminUsersDraft = createEmptyAdminUserDraft_();
     adminState.adminUsersEditingUid = "";
+    adminState.adminUsersEditingInviteId = "";
     adminState.adminUsersError = "";
     adminState.adminUsersMessage = "";
   }
@@ -13074,6 +13131,7 @@
 
   function hasPendingAdminUsersChanges_() {
     return !!adminState.adminUsersEditingUid ||
+      !!adminState.adminUsersEditingInviteId ||
       hasAdminUserDraftContent_(adminState.adminUsersDraft);
   }
 
@@ -13878,6 +13936,78 @@
         });
   }
 
+  function deleteAdminUser_(docId, recordType) {
+    var normalizedRecordType = String(recordType || "user").trim() || "user";
+    var targetId = String(docId || "").trim();
+
+    if (!canManageAdminUsers_() || !targetId) {
+      return;
+    }
+
+    var targetItem = adminState.adminUsersItems.find(function(item) {
+      if (normalizedRecordType === "invite") {
+        return item.recordType === "invite" && item.inviteId === targetId;
+      }
+
+      return item.recordType !== "invite" && item.uid === targetId;
+    }) || null;
+    var label = targetItem &&
+      (targetItem.displayName || targetItem.email || targetItem.uid) ?
+      (targetItem.displayName || targetItem.email || targetItem.uid) :
+      (normalizedRecordType === "invite" ? "this admin invite" : "this admin user");
+
+    openDeleteConfirm_({
+      title: normalizedRecordType === "invite" ?
+        "Delete Admin Invite" :
+        "Delete Admin User",
+      message: normalizedRecordType === "invite" ?
+        "Delete the pending admin invite for " + label + "?" :
+        "Delete the admin dashboard access record for " + label + "?",
+      confirmLabel: normalizedRecordType === "invite" ?
+        "Delete Invite" :
+        "Delete User",
+      onConfirm: function() {
+          adminState.adminUsersSaving = true;
+          adminState.adminUsersError = "";
+          adminState.adminUsersMessage = "";
+          renderAdmin_();
+
+          callDeleteAdminUserEndpoint_({
+            uid: normalizedRecordType === "invite" ? "" : targetId,
+            inviteId: normalizedRecordType === "invite" ? targetId : "",
+            email: targetItem && targetItem.email ? targetItem.email : "",
+            recordType: normalizedRecordType,
+          })
+              .then(function(result) {
+                adminState.adminUsersSaving = false;
+                adminState.adminUsersMessage = result && result.message ?
+                  result.message :
+                  (normalizedRecordType === "invite" ?
+                    "Admin invite deleted." :
+                    "Admin user deleted.");
+
+                if (
+                  (normalizedRecordType === "invite" &&
+                    adminState.adminUsersEditingInviteId === targetId) ||
+                  (normalizedRecordType !== "invite" &&
+                    adminState.adminUsersEditingUid === targetId)
+                ) {
+                  resetAdminUsersDraft_();
+                }
+
+                loadAdminUsers_(adminState.adminUsersMessage);
+              })
+              .catch(function(error) {
+                adminState.adminUsersSaving = false;
+                adminState.adminUsersError = error && error.message ?
+                  error.message :
+                  "Unable to delete the admin user.";
+                renderAdmin_();
+              });
+      },
+    });
+  }
+
   function callListAdminUsersEndpoint_() {
     if (!adminState.user) {
       return Promise.reject(new Error("Sign in before loading admin users."));
@@ -13904,6 +14034,26 @@
     return adminState.user.getIdToken()
         .then(function(idToken) {
           return fetch(UPSERT_ADMIN_USER_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(payload || {}),
+          });
+        })
+        .then(parseAdminEndpointResponse_);
+  }
+
+  function callDeleteAdminUserEndpoint_(payload) {
+    if (!adminState.user) {
+      return Promise.reject(new Error("Sign in before deleting admin users."));
+    }
+
+    return adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(DELETE_ADMIN_USER_ENDPOINT, {
             method: "POST",
             headers: {
               Authorization: "Bearer " + idToken,

@@ -2704,6 +2704,10 @@ function syncSundayNotesSaveButton_(data) {
 
   if (!googleDocsConfig.clientId) {
     setSundayNotesSaveButtonVisibility_(false);
+    setSundayNotesStatus(
+        "Google Docs saving needs a Google Web Client ID before it can be used.",
+        true,
+    );
     return;
   }
 
@@ -3674,7 +3678,10 @@ async function saveSundayNotesToMyGoogleDocs() {
   }
 
   if (!googleDocsConfig.clientId) {
-    setSundayNotesStatus("Google Docs saving is not configured yet.", true);
+    setSundayNotesStatus(
+        "Google Docs saving needs a Google Web Client ID before it can be used.",
+        true,
+    );
     return;
   }
 

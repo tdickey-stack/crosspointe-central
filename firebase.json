@@ -159,6 +159,10 @@
         "function": "upsertAdminUser"
       },
       {
+        "source": "/api/admin/delete-user",
+        "function": "deleteAdminUser"
+      },
+      {
         "source": "/api/admin/claim-invite",
         "function": "claimAdminInvite"
       },

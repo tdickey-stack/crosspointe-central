@@ -600,7 +600,7 @@
 }
 
 [data-app-route="admin"] .central-admin-collapsible-section {
-  gap: 12px;
+  gap: 0;
 }
 
 [data-app-route="admin"] .central-admin-collapse-toggle {

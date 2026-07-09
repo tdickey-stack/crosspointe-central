@@ -533,12 +533,14 @@
     deleteConfirmSkip: false,
     deleteConfirmAction: null,
     deleteConfirmSuppressedUntil: getDeleteConfirmSuppressedUntil_(),
+    collapsedSections: getStoredAdminCollapsedSections_(),
     errorMessage: "",
     infoMessage: "Initializing the admin shell.",
   };
   var CURRENT_CENTRAL_DATA_CACHE_TTL_MS = 30 * 1000;
   var DELETE_CONFIRM_SUPPRESSION_MS = 5 * 60 * 1000;
   var DELETE_CONFIRM_STORAGE_KEY = "centralAdminDeleteConfirmSuppressedUntil";
+  var CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY = "centralAdminCollapsedSectionsV1";
   var CENTRAL_ADMIN_WHATS_NEW_SEEN_KEY = "central-admin-whats-new-seen-v1";
   var CENTRAL_ADMIN_REDIRECT_SIGN_IN_KEY = "centralAdminRedirectSignInPending";
   var currentCentralDataCacheValue = null;
@@ -967,6 +969,14 @@
       if (action === "bootstrap-first-admin") {
         event.preventDefault();
         bootstrapFirstAdminUser_();
+        return;
+      }
+
+      if (action === "toggle-section-collapse") {
+        event.preventDefault();
+        toggleAdminSectionCollapsed_(
+            button.getAttribute("data-admin-section-id") || "",
+        );
         return;
       }
 
@@ -2443,6 +2453,93 @@
     }
   }
 
+  function getStoredAdminCollapsedSections_() {
+    if (!window.localStorage) {
+      return {};
+    }
+
+    try {
+      var rawValue = window.localStorage.getItem(
+          CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY,
+      ) || "";
+
+      if (!rawValue) {
+        return {};
+      }
+
+      var parsed = JSON.parse(rawValue);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ?
+        parsed :
+        {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function persistAdminCollapsedSections_() {
+    if (!window.localStorage) {
+      return;
+    }
+
+    try {
+      var sections = adminState.collapsedSections &&
+        typeof adminState.collapsedSections === "object" &&
+        !Array.isArray(adminState.collapsedSections) ?
+        adminState.collapsedSections :
+        {};
+
+      window.localStorage.setItem(
+          CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY,
+          JSON.stringify(sections),
+      );
+    } catch (error) {
+    }
+  }
+
+  function isAdminSectionCollapsed_(sectionId) {
+    if (!sectionId) {
+      return false;
+    }
+
+    return !!(
+      adminState.collapsedSections &&
+      adminState.collapsedSections[sectionId]
+    );
+  }
+
+  function setAdminSectionCollapsedState_(sectionId, isCollapsed) {
+    if (!sectionId) {
+      return;
+    }
+
+    if (!adminState.collapsedSections ||
+      typeof adminState.collapsedSections !== "object" ||
+      Array.isArray(adminState.collapsedSections)) {
+      adminState.collapsedSections = {};
+    }
+
+    if (isCollapsed) {
+      adminState.collapsedSections[sectionId] = true;
+    } else {
+      delete adminState.collapsedSections[sectionId];
+    }
+
+    persistAdminCollapsedSections_();
+  }
+
+  function expandAdminSection_(sectionId) {
+    setAdminSectionCollapsedState_(sectionId, false);
+  }
+
+  function toggleAdminSectionCollapsed_(sectionId) {
+    if (!sectionId) {
+      return;
+    }
+
+    setAdminSectionCollapsedState_(sectionId, !isAdminSectionCollapsed_(sectionId));
+    renderAdmin_();
+  }
+
   function setDeleteConfirmSuppressedUntil_(timestamp) {
     var nextTimestamp = typeof timestamp === "number" &&
       isFinite(timestamp) &&
@@ -3556,11 +3653,10 @@
       adminState.hubSettingsPublishing ||
       adminState.hubLoading;
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>Homepage</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "hub-homepage",
+      title: "Homepage",
+      pillHtml: renderStatusPill_(
           !canEdit ?
             "Read only" :
             (actionConfig.mode === "submit" ?
@@ -3570,7 +3666,7 @@
             "is-warn" :
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
@@ -3690,8 +3786,8 @@
       !canEdit ? " disabled" : "",
       ">Reset Changes</button>",
       "</div>",
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderHubSundayEditor_() {
@@ -3703,11 +3799,10 @@
       adminState.hubSundayPublishing ||
       adminState.hubLoading;
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>Sunday Mode</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "hub-sunday-mode",
+      title: "Sunday Mode",
+      pillHtml: renderStatusPill_(
           !canEdit ?
             "Read only" :
             (actionConfig.mode === "submit" ?
@@ -3717,7 +3812,7 @@
             "is-warn" :
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
@@ -3871,8 +3966,8 @@
       !canEdit ? " disabled" : "",
       ">Reset Changes</button>",
       "</div>",
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderSundayPagePanel_(currentPage) {
@@ -4078,11 +4173,10 @@
       adminState.settingsSundayPublishing ||
       adminState.settingsLoading;
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>Sunday Controls</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "settings-sunday-controls",
+      title: "Sunday Controls",
+      pillHtml: renderStatusPill_(
           !canEdit ?
             "Read only" :
             (actionConfig.mode === "submit" ?
@@ -4092,7 +4186,7 @@
             "is-warn" :
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           canEdit ?
             "These operational Sunday settings control how Sunday mode turns on, plus the livestream destination and Bible translation used by the scripture reader." :
@@ -4195,8 +4289,8 @@
       !canEdit ? " disabled" : "",
       ">Reset Changes</button>",
       "</div>",
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderRoomRulesEditor_() {
@@ -4206,21 +4300,16 @@
     var draft = adminState.roomRulesDraft || createEmptyRoomRuleDraft_();
     var actionDisabled = adminState.roomRulesSaving || adminState.roomRulesPublishing;
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>",
-      escapeHtml_(
-          adminState.roomRulesEditingId ?
-            "Edit Room Rule" :
-            "Add Room Rule",
-      ),
-      "</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "settings-room-rule-form",
+      title: adminState.roomRulesEditingId ?
+        "Edit Room Rule" :
+        "Add Room Rule",
+      pillHtml: renderStatusPill_(
           canEdit ? "Write access" : "Read only",
           canEdit ? "is-safe" : "is-warn",
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
@@ -4291,53 +4380,46 @@
         ">Reset Form</button>",
         "</div>",
       ].join("") : "",
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderRoomRulesWorkingList_() {
     var canEdit = canEditRoomRules_();
 
     if (adminState.roomRulesLoading && !adminState.roomRulesLoaded) {
-      return [
-        "<div class=\"central-admin-item\">",
-        "<div class=\"central-admin-item-header\">",
-        "<strong>Current Room Rules</strong>",
-        renderStatusPill_("Loading", "is-live"),
-        "</div>",
-        renderAdminNote_("Reading the current room rules now."),
-        "</div>",
-      ].join("");
+      return renderCollapsibleAdminSection_({
+        id: "settings-room-rules-list",
+        title: "Current Room Rules",
+        pillHtml: renderStatusPill_("Loading", "is-live"),
+        bodyHtml: renderAdminNote_("Reading the current room rules now."),
+      });
     }
 
     if (!adminState.roomRulesItems.length) {
-      return [
-        "<div class=\"central-admin-item\">",
-        "<div class=\"central-admin-item-header\">",
-        "<strong>Current Room Rules</strong>",
-        renderStatusPill_(
+      return renderCollapsibleAdminSection_({
+        id: "settings-room-rules-list",
+        title: "Current Room Rules",
+        pillHtml: renderStatusPill_(
             adminState.roomRulesError ? "Read failed" : "Empty collection",
             adminState.roomRulesError ? "is-warn" : "is-live",
         ),
-        "</div>",
-        renderAdminNote_(
+        bodyHtml: renderAdminNote_(
             adminState.roomRulesError ?
               "The current room rules could not be read right now." :
               "No room rules are currently published in Firestore. Room details in Central will use their default Planning Center names until you add rules here.",
         ),
-        "</div>",
-      ].join("");
+      });
     }
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>Current Room Rules</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "settings-room-rules-list",
+      title: "Current Room Rules",
+      pillHtml: renderStatusPill_(
           adminState.roomRulesItems.length + " loaded",
           "is-safe",
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           "This is the current published room-rules list.",
       ),
@@ -4379,8 +4461,8 @@
           "</div>",
         ].join("");
       }).join(""),
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderRoomRulesPublishPanel_() {
@@ -4429,17 +4511,14 @@
 
   function renderAdminUsersManager_() {
     if (!canManageAdminUsers_()) {
-      return [
-        "<div class=\"central-admin-item\">",
-        "<div class=\"central-admin-item-header\">",
-        "<strong>Admin Users</strong>",
-        renderStatusPill_("Restricted", "is-warn"),
-        "</div>",
-        renderAdminNote_(
+      return renderCollapsibleAdminSection_({
+        id: "settings-admin-users",
+        title: "Admin Users",
+        pillHtml: renderStatusPill_("Restricted", "is-warn"),
+        bodyHtml: renderAdminNote_(
             "Only users with admin-level access to the Users section can add people or change permission levels.",
         ),
-        "</div>",
-      ].join("");
+      });
     }
 
     var isEditingCurrentAdminUser = !!(
@@ -4448,20 +4527,15 @@
       adminState.user.uid === adminState.adminUsersEditingUid
     );
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>",
-      escapeHtml_(
-          adminState.adminUsersEditingInviteId ?
-            "Edit Admin Invite" :
-            (adminState.adminUsersEditingUid ?
-            "Edit Admin User" :
-            "Add Admin User"),
-      ),
-      "</strong>",
-      renderStatusPill_("Admin only", "is-live"),
-      "</div>",
+    return renderCollapsibleAdminSection_({
+      id: "settings-admin-users",
+      title: adminState.adminUsersEditingInviteId ?
+        "Edit Admin Invite" :
+        (adminState.adminUsersEditingUid ?
+        "Edit Admin User" :
+        "Add Admin User"),
+      pillHtml: renderStatusPill_("Admin only", "is-live"),
+      bodyHtml: [
       renderAdminNote_(
           "Enter an email address to send an admin invite with permissions already attached. If you already know a Firebase UID, you can still add someone directly without the invite flow.",
       ),
@@ -4552,8 +4626,8 @@
       ].join("") : "",
       "</div>",
       renderAdminUsersList_(),
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderAdminUsersList_() {
@@ -4636,6 +4710,45 @@
         "</div>",
       ].join("");
     }).join("");
+  }
+
+  function renderCollapsibleAdminSection_(config) {
+    var sectionId = String(config && config.id || "").trim();
+    var title = String(config && config.title || "").trim() || "Section";
+    var bodyHtml = String(config && config.bodyHtml || "");
+    var pillHtml = String(config && config.pillHtml || "");
+    var bodyId = sectionId ?
+      "central-admin-section-" + sectionId :
+      "";
+    var isCollapsed = isAdminSectionCollapsed_(sectionId);
+
+    return [
+      "<div class=\"central-admin-item central-admin-collapsible-section",
+      isCollapsed ? " is-collapsed" : "",
+      "\">",
+      "<button type=\"button\" class=\"central-admin-collapse-toggle\" data-admin-action=\"toggle-section-collapse\" data-admin-section-id=\"",
+      escapeAttr_(sectionId),
+      "\"",
+      bodyId ? " aria-controls=\"" + escapeAttr_(bodyId) + "\"" : "",
+      " aria-expanded=\"",
+      isCollapsed ? "false" : "true",
+      "\">",
+      "<span class=\"central-admin-collapse-heading\">",
+      "<strong>", escapeHtml_(title), "</strong>",
+      "</span>",
+      "<span class=\"central-admin-collapse-meta\">",
+      pillHtml,
+      "<span class=\"central-admin-collapse-chevron\" aria-hidden=\"true\"></span>",
+      "</span>",
+      "</button>",
+      "<div class=\"central-admin-collapse-body\"",
+      bodyId ? " id=\"" + escapeAttr_(bodyId) + "\"" : "",
+      isCollapsed ? " hidden" : "",
+      ">",
+      bodyHtml,
+      "</div>",
+      "</div>",
+    ].join("");
   }
 
   function renderAdminInputField_(config) {
@@ -11033,6 +11146,7 @@
     }
 
     adminState.roomRulesEditingId = nextItem.id;
+    expandAdminSection_("settings-room-rule-form");
     adminState.roomRulesDraft = {
       match_type: normalizeRoomRuleMatchTypeValue_(nextItem.match_type),
       match_text: nextItem.match_text || "",
@@ -13825,6 +13939,7 @@
       normalizedRecordType === "invite" ? "" : nextItem.uid;
     adminState.adminUsersEditingInviteId =
       normalizedRecordType === "invite" ? nextItem.inviteId : "";
+    expandAdminSection_("settings-admin-users");
     adminState.adminUsersDraft = {
       inviteId: nextItem.inviteId || "",
       uid: nextItem.uid || "",

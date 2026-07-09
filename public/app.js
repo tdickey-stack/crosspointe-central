@@ -26,6 +26,7 @@ var GOOGLE_NOTES_SCOPE = "https://www.googleapis.com/auth/drive.file";
 var GOOGLE_NOTES_INIT_TIMEOUT_MS = 10000;
 var CENTRAL_REFRESH_MS = 1200000;
 var CENTRAL_API_URL = "/api/central-data";
+var CENTRAL_HOSTED_WHATS_NEW_URL = "/content/whats-new.json";
 var SERVE_NEED_INTEREST_ENDPOINT = "/api/serve-needs/share-interest";
 var CENTRAL_CACHE_KEY = "central-data-cache-v2";
 var CENTRAL_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
@@ -78,6 +79,8 @@ var centralLoaderRevealTimeout = 0;
 var centralLoaderHideTimeout = 0;
 var centralLoaderBootStartedAt = 0;
 var centralLoaderVisible = false;
+var centralHostedWhatsNewConfig = null;
+var centralHostedWhatsNewConfigPromise = null;
 var CENTRAL_LOADER_COLLAPSE_MS = 680;
 var CENTRAL_LOADER_DOOR_MS = 1525;
 
@@ -281,6 +284,15 @@ function refreshSundayScriptureTheme_() {
 }
 
 function bootCentral_() {
+  var continueBoot = function() {
+    restoreCentralFromCache_();
+    loadCentralData();
+
+    if (!centralRefreshInterval) {
+      centralRefreshInterval = window.setInterval(loadCentralData, CENTRAL_REFRESH_MS);
+    }
+  };
+
   bindResponsiveListeners_();
   applyResponsiveMode();
   showCentralLoader_();
@@ -289,12 +301,7 @@ function bootCentral_() {
       "Checking saved content and warming up your hub.",
       14,
   );
-  restoreCentralFromCache_();
-  loadCentralData();
-
-  if (!centralRefreshInterval) {
-    centralRefreshInterval = window.setInterval(loadCentralData, CENTRAL_REFRESH_MS);
-  }
+  loadHostedWhatsNewConfig_().then(continueBoot, continueBoot);
 }
 
 function bindResponsiveListeners_() {
@@ -589,7 +596,9 @@ async function loadCentralData() {
       },
     });
 
-    var data = await parseJsonResponse_(response);
+    var data = applyHostedPublicWhatsNewOverride_(
+        await parseJsonResponse_(response),
+    );
     stopCentralLoaderTrickle_();
 
     if (isCentralLoaderVisible_()) {
@@ -639,7 +648,7 @@ function restoreCentralFromCache_(skipIfExpired) {
         "Showing saved content while we refresh the latest details.",
         68,
     );
-    renderCentral(cached.data);
+    renderCentral(applyHostedPublicWhatsNewOverride_(cached.data));
     return true;
   } catch (error) {
     return false;
@@ -662,6 +671,155 @@ async function parseJsonResponse_(response) {
   } catch (error) {
     return {};
   }
+}
+
+function loadHostedWhatsNewConfig_() {
+  if (centralHostedWhatsNewConfigPromise) {
+    return centralHostedWhatsNewConfigPromise;
+  }
+
+  centralHostedWhatsNewConfigPromise = fetch(CENTRAL_HOSTED_WHATS_NEW_URL, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+    },
+  })
+      .then(function(response) {
+        if (!response.ok) {
+          throw new Error("Could not load the hosted what's-new config.");
+        }
+
+        return parseJsonResponse_(response);
+      })
+      .then(function(payload) {
+        centralHostedWhatsNewConfig =
+          payload && typeof payload === "object" ? payload : {};
+        return centralHostedWhatsNewConfig;
+      })
+      .catch(function(error) {
+        console.warn(
+            "Hosted what's-new config unavailable, using Firestore fallback.",
+            error,
+        );
+        centralHostedWhatsNewConfig = null;
+        return null;
+      });
+
+  return centralHostedWhatsNewConfigPromise;
+}
+
+function applyHostedPublicWhatsNewOverride_(data) {
+  var nextData = data && typeof data === "object" ? data : {};
+
+  if (!hasHostedWhatsNewOverride_(centralHostedWhatsNewConfig, "public")) {
+    return nextData;
+  }
+
+  return Object.assign({}, nextData, {
+    whatsNew: normalizeHostedWhatsNewSection_(
+        centralHostedWhatsNewConfig.public,
+    ),
+  });
+}
+
+function hasHostedWhatsNewOverride_(config, key) {
+  var source = config && typeof config === "object" ? config : {};
+  var section = Object.prototype.hasOwnProperty.call(source, key) ?
+    source[key] :
+    null;
+
+  if (!section || typeof section !== "object") {
+    return false;
+  }
+
+  return isTruthyHostedWhatsNewValue_(
+      getHostedWhatsNewValue_(section, [
+        "enabled",
+        "use_hosted",
+        "useHosted",
+      ]),
+  );
+}
+
+function normalizeHostedWhatsNewSection_(source) {
+  var data = source && typeof source === "object" ? source : {};
+
+  return {
+    active: isTruthyHostedWhatsNewValue_(
+        getHostedWhatsNewValue_(data, ["active", "isActive"]),
+    ) ? "TRUE" : "FALSE",
+    force_show: isTruthyHostedWhatsNewValue_(
+        getHostedWhatsNewValue_(data, [
+          "force_show",
+          "forceShow",
+          "force_every_time",
+          "forceEveryTime",
+        ]),
+    ) ? "TRUE" : "FALSE",
+    version: normalizeHostedWhatsNewText_(
+        getHostedWhatsNewValue_(data, [
+          "version",
+          "release",
+          "releaseVersion",
+        ]),
+    ),
+    title: normalizeHostedWhatsNewText_(
+        getHostedWhatsNewValue_(data, ["title", "heading"]),
+    ),
+    message: normalizeHostedWhatsNewText_(
+        getHostedWhatsNewValue_(data, [
+          "message",
+          "body",
+          "content",
+          "markdown",
+        ]),
+    ),
+    button_text: normalizeHostedWhatsNewText_(
+        getHostedWhatsNewValue_(data, [
+          "button_text",
+          "buttonText",
+          "testing_button_text",
+          "testingButtonText",
+          "cta_text",
+          "ctaText",
+        ]),
+    ),
+    source: "Hosted file",
+  };
+}
+
+function getHostedWhatsNewValue_(source, keys) {
+  var data = source && typeof source === "object" ? source : {};
+  var keyList = Array.isArray(keys) ? keys : [];
+  var index;
+  var key;
+
+  for (index = 0; index < keyList.length; index += 1) {
+    key = keyList[index];
+
+    if (Object.prototype.hasOwnProperty.call(data, key) &&
+      data[key] !== undefined &&
+      data[key] !== null) {
+      return data[key];
+    }
+  }
+
+  return "";
+}
+
+function normalizeHostedWhatsNewText_(value) {
+  return String(value || "").trim();
+}
+
+function isTruthyHostedWhatsNewValue_(value) {
+  if (value === true || value === 1) {
+    return true;
+  }
+
+  return ["true", "1", "yes", "on"].indexOf(
+      String(value || "").trim().toLowerCase(),
+  ) !== -1;
 }
 
 function renderCentral(data) {

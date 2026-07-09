@@ -1,0 +1,20 @@
+{
+  "public": {
+    "enabled": false,
+    "active": false,
+    "force_show": false,
+    "version": "2026.07.09",
+    "title": "What's New In Central",
+    "message": "Write the public release notes here with Markdown if you want headings, bullets, or links.",
+    "button_text": "Sounds Good"
+  },
+  "admin": {
+    "enabled": false,
+    "active": false,
+    "force_show": false,
+    "version": "2026.07.09",
+    "title": "What's New In Central Admin",
+    "message": "Write the admin-only release notes here with Markdown if you want headings, bullets, or links.",
+    "button_text": "Sounds Good"
+  }
+}

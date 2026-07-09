@@ -538,6 +538,7 @@
     infoMessage: "Initializing the admin shell.",
   };
   var CURRENT_CENTRAL_DATA_CACHE_TTL_MS = 30 * 1000;
+  var ADMIN_EXPANDABLE_FLOW_DURATION_MS = 1000;
   var DELETE_CONFIRM_SUPPRESSION_MS = 5 * 60 * 1000;
   var DELETE_CONFIRM_STORAGE_KEY = "centralAdminDeleteConfirmSuppressedUntil";
   var CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY = "centralAdminCollapsedSectionsV1";
@@ -2537,7 +2538,207 @@
     }
 
     setAdminSectionCollapsedState_(sectionId, !isAdminSectionCollapsed_(sectionId));
-    renderAdmin_();
+
+    if (!syncAdminCollapsibleSectionUi_(sectionId, true)) {
+      renderAdmin_();
+    }
+  }
+
+  function syncAdminCollapsibleSectionUi_(sectionId, animate) {
+    if (!appEl || !sectionId) {
+      return false;
+    }
+
+    var sectionEl = appEl.querySelector(
+        '[data-admin-collapsible-section="' + escapeSelectorValue_(sectionId) + '"]',
+    );
+    var buttonEl = appEl.querySelector(
+        '[data-admin-action="toggle-section-collapse"][data-admin-section-id="' +
+        escapeSelectorValue_(sectionId) +
+        '"]',
+    );
+    var drawerEl = appEl.querySelector(
+        '[data-admin-collapse-drawer="' + escapeSelectorValue_(sectionId) + '"]',
+    );
+
+    if (!sectionEl || !buttonEl || !drawerEl) {
+      return false;
+    }
+
+    var isCollapsed = isAdminSectionCollapsed_(sectionId);
+    var slots = Array.prototype.slice.call(
+        drawerEl.querySelectorAll(".expandable-slot"),
+    );
+
+    sectionEl.classList.toggle("is-collapsed", isCollapsed);
+    buttonEl.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+
+    if (!animate) {
+      drawerEl.hidden = isCollapsed;
+      drawerEl.setAttribute("aria-hidden", isCollapsed ? "true" : "false");
+      drawerEl.style.height = "";
+      drawerEl.style.opacity = "";
+      drawerEl.style.overflow = "";
+      drawerEl.style.transform = "";
+      drawerEl.style.transition = "";
+      drawerEl.style.willChange = "";
+
+      slots.forEach(function(slot) {
+        slot.classList.remove("expandable-visible");
+        slot.classList.remove("expandable-leave");
+        slot.style.animationDelay = "";
+      });
+
+      return true;
+    }
+
+    if (isCollapsed) {
+      collapseAdminCollapsibleSection_(sectionEl, buttonEl, drawerEl, slots);
+    } else {
+      expandAdminCollapsibleSection_(sectionEl, buttonEl, drawerEl, slots);
+    }
+
+    return true;
+  }
+
+  function expandAdminCollapsibleSection_(sectionEl, buttonEl, drawerEl, slots) {
+    sectionEl.classList.remove("is-collapsed");
+    buttonEl.disabled = true;
+    drawerEl.hidden = false;
+    drawerEl.setAttribute("aria-hidden", "false");
+    drawerEl.style.height = "0px";
+    drawerEl.style.opacity = "0";
+    drawerEl.style.overflow = "hidden";
+    drawerEl.style.transform = "translateY(-8px)";
+    drawerEl.style.willChange = "height, opacity, transform";
+    drawerEl.style.transition = "";
+
+    slots.forEach(function(slot) {
+      slot.classList.remove("expandable-visible");
+      slot.classList.remove("expandable-leave");
+      slot.style.animationDelay = "";
+    });
+
+    var endHeight = drawerEl.scrollHeight;
+
+    slots.forEach(function(slot, index) {
+      slot.style.animationDelay = (index * 90) + "ms";
+      slot.classList.add("expandable-visible");
+
+      var handleAnimationEnd = function(event) {
+        if (event.animationName !== "expandableReveal") return;
+        slot.style.animationDelay = "";
+        slot.removeEventListener("animationend", handleAnimationEnd);
+      };
+
+      slot.addEventListener("animationend", handleAnimationEnd);
+    });
+
+    transitionAdminCollapsibleDrawer_(drawerEl, endHeight, function() {
+      drawerEl.style.height = "";
+      drawerEl.style.overflow = "";
+      drawerEl.style.willChange = "";
+      buttonEl.disabled = false;
+    });
+  }
+
+  function collapseAdminCollapsibleSection_(sectionEl, buttonEl, drawerEl, slots) {
+    sectionEl.classList.add("is-collapsed");
+    buttonEl.disabled = true;
+    drawerEl.hidden = false;
+    drawerEl.setAttribute("aria-hidden", "false");
+    drawerEl.style.height = drawerEl.offsetHeight + "px";
+    drawerEl.style.opacity = "1";
+    drawerEl.style.overflow = "hidden";
+    drawerEl.style.transform = "translateY(0)";
+    drawerEl.style.willChange = "height, opacity, transform";
+    drawerEl.style.transition = "";
+
+    slots.slice().reverse().forEach(function(slot, index) {
+      slot.classList.remove("expandable-visible");
+      slot.classList.remove("expandable-leave");
+      slot.style.animationDelay = (index * 45) + "ms";
+      slot.classList.add("expandable-leave");
+
+      var handleAnimationEnd = function(event) {
+        if (event.animationName !== "expandableHide") return;
+        slot.style.animationDelay = "";
+        slot.removeEventListener("animationend", handleAnimationEnd);
+      };
+
+      slot.addEventListener("animationend", handleAnimationEnd);
+    });
+
+    window.requestAnimationFrame(function() {
+      drawerEl.style.transition =
+        "height " + ADMIN_EXPANDABLE_FLOW_DURATION_MS +
+        "ms cubic-bezier(0.16, 1, 0.3, 1), " +
+        "opacity " + ADMIN_EXPANDABLE_FLOW_DURATION_MS + "ms ease, " +
+        "transform " + ADMIN_EXPANDABLE_FLOW_DURATION_MS + "ms ease";
+      drawerEl.style.height = "0px";
+      drawerEl.style.opacity = "0";
+      drawerEl.style.transform = "translateY(-8px)";
+    });
+
+    window.setTimeout(function() {
+      slots.forEach(function(slot) {
+        slot.classList.remove("expandable-leave");
+        slot.style.animationDelay = "";
+      });
+      drawerEl.hidden = true;
+      drawerEl.setAttribute("aria-hidden", "true");
+      drawerEl.style.height = "";
+      drawerEl.style.opacity = "";
+      drawerEl.style.overflow = "";
+      drawerEl.style.transform = "";
+      drawerEl.style.transition = "";
+      drawerEl.style.willChange = "";
+      buttonEl.disabled = false;
+    }, ADMIN_EXPANDABLE_FLOW_DURATION_MS + 90);
+  }
+
+  function transitionAdminCollapsibleDrawer_(drawerEl, endHeight, onDone) {
+    var finished = false;
+
+    var cleanup = function() {
+      if (finished) return;
+      finished = true;
+      drawerEl.removeEventListener("transitionend", handleTransitionEnd);
+      drawerEl.style.transition = "";
+      drawerEl.style.opacity = "";
+      drawerEl.style.transform = "";
+      if (onDone) onDone();
+    };
+
+    var handleTransitionEnd = function(event) {
+      if (event.target !== drawerEl || event.propertyName !== "height") return;
+      cleanup();
+    };
+
+    drawerEl.addEventListener("transitionend", handleTransitionEnd);
+
+    window.requestAnimationFrame(function() {
+      drawerEl.style.transition =
+        "height " + ADMIN_EXPANDABLE_FLOW_DURATION_MS +
+        "ms cubic-bezier(0.16, 1, 0.3, 1), " +
+        "opacity " + ADMIN_EXPANDABLE_FLOW_DURATION_MS + "ms ease, " +
+        "transform " + ADMIN_EXPANDABLE_FLOW_DURATION_MS + "ms ease";
+      drawerEl.style.height = endHeight + "px";
+      drawerEl.style.opacity = "1";
+      drawerEl.style.transform = "translateY(0)";
+    });
+
+    window.setTimeout(cleanup, ADMIN_EXPANDABLE_FLOW_DURATION_MS + 90);
+  }
+
+  function escapeSelectorValue_(value) {
+    var text = String(value == null ? "" : value);
+
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(text);
+    }
+
+    return text.replace(/["\\]/g, "\\$&");
   }
 
   function setDeleteConfirmSuppressedUntil_(timestamp) {
@@ -4725,6 +4926,8 @@
     return [
       "<div class=\"central-admin-item central-admin-collapsible-section",
       isCollapsed ? " is-collapsed" : "",
+      "\" data-admin-collapsible-section=\"",
+      escapeAttr_(sectionId),
       "\">",
       "<button type=\"button\" class=\"central-admin-collapse-toggle\" data-admin-action=\"toggle-section-collapse\" data-admin-section-id=\"",
       escapeAttr_(sectionId),
@@ -4741,11 +4944,20 @@
       "<span class=\"central-admin-collapse-chevron\" aria-hidden=\"true\"></span>",
       "</span>",
       "</button>",
-      "<div class=\"central-admin-collapse-body\"",
+      "<div class=\"central-admin-collapse-body expandable-drawer\" data-admin-collapse-drawer=\"",
+      escapeAttr_(sectionId),
+      "\"",
       bodyId ? " id=\"" + escapeAttr_(bodyId) + "\"" : "",
+      " aria-hidden=\"",
+      isCollapsed ? "true" : "false",
+      "\"",
       isCollapsed ? " hidden" : "",
       ">",
+      "<div class=\"central-admin-collapse-body-inner expandable-drawer-inner\">",
+      "<div class=\"central-admin-collapse-slot expandable-slot\">",
       bodyHtml,
+      "</div>",
+      "</div>",
       "</div>",
       "</div>",
     ].join("");

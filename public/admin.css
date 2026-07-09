@@ -642,7 +642,7 @@
   border-right: 2px solid rgba(39, 39, 42, 0.58);
   border-bottom: 2px solid rgba(39, 39, 42, 0.58);
   transform: rotate(45deg);
-  transition: transform 0.18s ease, border-color 0.18s ease;
+  transition: transform 1s var(--cp-ease), border-color 1s var(--cp-ease);
 }
 
 [data-app-route="admin"] .central-admin-collapsible-section.is-collapsed .central-admin-collapse-chevron {
@@ -650,6 +650,18 @@
 }
 
 [data-app-route="admin"] .central-admin-collapse-body {
+  overflow: hidden;
+}
+
+[data-app-route="admin"] .central-admin-collapse-body[hidden] {
+  display: none;
+}
+
+[data-app-route="admin"] .central-admin-collapse-body-inner {
+  padding-top: 12px;
+}
+
+[data-app-route="admin"] .central-admin-collapse-slot {
   display: grid;
   gap: 8px;
 }

@@ -1,0 +1,70 @@
+name: Deploy Firebase Hosting
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: firebase-hosting-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-hosting:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore generated YouVersion bundle
+        run: pnpm run build:youversion
+
+      - name: Verify Hosting JavaScript syntax
+        run: node --check public/app.js && node --check public/admin.js
+
+      - name: Validate hosted What's New JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('public/content/whats-new.json', 'utf8'))"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
+
+      - name: Deploy live Hosting
+        if: github.ref == 'refs/heads/main'
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only hosting --non-interactive
+
+      - name: Deploy preview Hosting channel
+        if: github.ref == 'refs/heads/dev'
+        run: ./node_modules/.bin/firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive
+
+  unsupported-branch:
+    if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fail for unsupported branch
+        run: |
+          echo "Run this workflow from the main or dev branch."
+          exit 1

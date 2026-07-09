@@ -2488,9 +2488,19 @@
   }
 
   function getDefaultAdminCollapsedSections_() {
+    var sectionIds = Array.isArray(DEFAULT_ADMIN_COLLAPSED_SECTION_IDS) ?
+      DEFAULT_ADMIN_COLLAPSED_SECTION_IDS :
+      [
+        "hub-homepage",
+        "hub-sunday-mode",
+        "settings-sunday-controls",
+        "settings-room-rule-form",
+        "settings-room-rules-list",
+        "settings-admin-users",
+      ];
     var sections = {};
 
-    DEFAULT_ADMIN_COLLAPSED_SECTION_IDS.forEach(function(sectionId) {
+    sectionIds.forEach(function(sectionId) {
       sections[sectionId] = true;
     });
 

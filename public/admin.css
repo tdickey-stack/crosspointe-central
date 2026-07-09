@@ -599,6 +599,73 @@
   align-items: baseline;
 }
 
+[data-app-route="admin"] .central-admin-collapsible-section {
+  gap: 0;
+}
+
+[data-app-route="admin"] .central-admin-collapse-toggle {
+  appearance: none;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-app-route="admin"] .central-admin-collapse-toggle:focus-visible {
+  outline: none;
+}
+
+[data-app-route="admin"] .central-admin-collapse-heading {
+  min-width: 0;
+  display: grid;
+}
+
+[data-app-route="admin"] .central-admin-collapse-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+[data-app-route="admin"] .central-admin-collapse-chevron {
+  width: 10px;
+  height: 10px;
+  margin-top: -2px;
+  border-right: 2px solid rgba(39, 39, 42, 0.58);
+  border-bottom: 2px solid rgba(39, 39, 42, 0.58);
+  transform: rotate(45deg);
+  transition: transform 1s var(--cp-ease), border-color 1s var(--cp-ease);
+}
+
+[data-app-route="admin"] .central-admin-collapsible-section.is-collapsed .central-admin-collapse-chevron {
+  transform: rotate(-45deg);
+}
+
+[data-app-route="admin"] .central-admin-collapse-body {
+  overflow: hidden;
+}
+
+[data-app-route="admin"] .central-admin-collapse-body[hidden] {
+  display: none;
+}
+
+[data-app-route="admin"] .central-admin-collapse-body-inner {
+  padding-top: 12px;
+}
+
+[data-app-route="admin"] .central-admin-collapse-slot {
+  display: grid;
+  gap: 8px;
+}
+
 [data-app-route="admin"] .central-admin-item strong {
   color: var(--cp-text-strong);
 }
@@ -1366,6 +1433,10 @@
 
 :root[data-theme="dark"][data-app-route="admin"] .central-admin-auth-actions .central-admin-theme-toggle .theme-toggle-copy small {
   color: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-collapse-chevron {
+  border-color: rgba(255, 255, 255, 0.62);
 }
 
 :root[data-theme="dark"][data-app-route="admin"] .central-admin-auth-actions .central-admin-theme-toggle .theme-toggle-switch {

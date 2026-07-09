@@ -533,14 +533,25 @@
     deleteConfirmSkip: false,
     deleteConfirmAction: null,
     deleteConfirmSuppressedUntil: getDeleteConfirmSuppressedUntil_(),
+    collapsedSections: getStoredAdminCollapsedSections_(),
     errorMessage: "",
     infoMessage: "Initializing the admin shell.",
   };
   var CURRENT_CENTRAL_DATA_CACHE_TTL_MS = 30 * 1000;
+  var ADMIN_EXPANDABLE_FLOW_DURATION_MS = 1000;
   var DELETE_CONFIRM_SUPPRESSION_MS = 5 * 60 * 1000;
   var DELETE_CONFIRM_STORAGE_KEY = "centralAdminDeleteConfirmSuppressedUntil";
+  var CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY = "centralAdminCollapsedSectionsV2";
   var CENTRAL_ADMIN_WHATS_NEW_SEEN_KEY = "central-admin-whats-new-seen-v1";
   var CENTRAL_ADMIN_REDIRECT_SIGN_IN_KEY = "centralAdminRedirectSignInPending";
+  var DEFAULT_ADMIN_COLLAPSED_SECTION_IDS = [
+    "hub-homepage",
+    "hub-sunday-mode",
+    "settings-sunday-controls",
+    "settings-room-rule-form",
+    "settings-room-rules-list",
+    "settings-admin-users",
+  ];
   var currentCentralDataCacheValue = null;
   var currentCentralDataCacheFetchedAt = 0;
   var currentCentralDataCachePromise = null;
@@ -967,6 +978,14 @@
       if (action === "bootstrap-first-admin") {
         event.preventDefault();
         bootstrapFirstAdminUser_();
+        return;
+      }
+
+      if (action === "toggle-section-collapse") {
+        event.preventDefault();
+        toggleAdminSectionCollapsed_(
+            button.getAttribute("data-admin-section-id") || "",
+        );
         return;
       }
 
@@ -2443,6 +2462,304 @@
     }
   }
 
+  function getStoredAdminCollapsedSections_() {
+    var defaultSections = getDefaultAdminCollapsedSections_();
+
+    if (!window.localStorage) {
+      return defaultSections;
+    }
+
+    try {
+      var rawValue = window.localStorage.getItem(
+          CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY,
+      ) || "";
+
+      if (!rawValue) {
+        return defaultSections;
+      }
+
+      var parsed = JSON.parse(rawValue);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ?
+        parsed :
+        defaultSections;
+    } catch (error) {
+      return defaultSections;
+    }
+  }
+
+  function getDefaultAdminCollapsedSections_() {
+    var sectionIds = Array.isArray(DEFAULT_ADMIN_COLLAPSED_SECTION_IDS) ?
+      DEFAULT_ADMIN_COLLAPSED_SECTION_IDS :
+      [
+        "hub-homepage",
+        "hub-sunday-mode",
+        "settings-sunday-controls",
+        "settings-room-rule-form",
+        "settings-room-rules-list",
+        "settings-admin-users",
+      ];
+    var sections = {};
+
+    sectionIds.forEach(function(sectionId) {
+      sections[sectionId] = true;
+    });
+
+    return sections;
+  }
+
+  function persistAdminCollapsedSections_() {
+    if (!window.localStorage) {
+      return;
+    }
+
+    try {
+      var sections = adminState.collapsedSections &&
+        typeof adminState.collapsedSections === "object" &&
+        !Array.isArray(adminState.collapsedSections) ?
+        adminState.collapsedSections :
+        {};
+
+      window.localStorage.setItem(
+          CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY,
+          JSON.stringify(sections),
+      );
+    } catch (error) {
+    }
+  }
+
+  function isAdminSectionCollapsed_(sectionId) {
+    if (!sectionId) {
+      return false;
+    }
+
+    return !!(
+      adminState.collapsedSections &&
+      adminState.collapsedSections[sectionId]
+    );
+  }
+
+  function setAdminSectionCollapsedState_(sectionId, isCollapsed) {
+    if (!sectionId) {
+      return;
+    }
+
+    if (!adminState.collapsedSections ||
+      typeof adminState.collapsedSections !== "object" ||
+      Array.isArray(adminState.collapsedSections)) {
+      adminState.collapsedSections = {};
+    }
+
+    if (isCollapsed) {
+      adminState.collapsedSections[sectionId] = true;
+    } else {
+      delete adminState.collapsedSections[sectionId];
+    }
+
+    persistAdminCollapsedSections_();
+  }
+
+  function expandAdminSection_(sectionId) {
+    setAdminSectionCollapsedState_(sectionId, false);
+  }
+
+  function toggleAdminSectionCollapsed_(sectionId) {
+    if (!sectionId) {
+      return;
+    }
+
+    setAdminSectionCollapsedState_(sectionId, !isAdminSectionCollapsed_(sectionId));
+
+    if (!syncAdminCollapsibleSectionUi_(sectionId, true)) {
+      renderAdmin_();
+    }
+  }
+
+  function syncAdminCollapsibleSectionUi_(sectionId, animate) {
+    if (!appEl || !sectionId) {
+      return false;
+    }
+
+    var sectionEl = appEl.querySelector(
+        '[data-admin-collapsible-section="' + escapeSelectorValue_(sectionId) + '"]',
+    );
+    var buttonEl = appEl.querySelector(
+        '[data-admin-action="toggle-section-collapse"][data-admin-section-id="' +
+        escapeSelectorValue_(sectionId) +
+        '"]',
+    );
+    var drawerEl = appEl.querySelector(
+        '[data-admin-collapse-drawer="' + escapeSelectorValue_(sectionId) + '"]',
+    );
+
+    if (!sectionEl || !buttonEl || !drawerEl) {
+      return false;
+    }
+
+    var isCollapsed = isAdminSectionCollapsed_(sectionId);
+    var slots = Array.prototype.slice.call(
+        drawerEl.querySelectorAll(".expandable-slot"),
+    );
+
+    sectionEl.classList.toggle("is-collapsed", isCollapsed);
+    buttonEl.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+
+    if (!animate) {
+      drawerEl.hidden = isCollapsed;
+      drawerEl.setAttribute("aria-hidden", isCollapsed ? "true" : "false");
+      drawerEl.style.height = "";
+      drawerEl.style.opacity = "";
+      drawerEl.style.overflow = "";
+      drawerEl.style.transform = "";
+      drawerEl.style.transition = "";
+      drawerEl.style.willChange = "";
+
+      slots.forEach(function(slot) {
+        slot.classList.remove("expandable-visible");
+        slot.classList.remove("expandable-leave");
+        slot.style.animationDelay = "";
+      });
+
+      return true;
+    }
+
+    if (isCollapsed) {
+      collapseAdminCollapsibleSection_(sectionEl, buttonEl, drawerEl, slots);
+    } else {
+      expandAdminCollapsibleSection_(sectionEl, buttonEl, drawerEl, slots);
+    }
+
+    return true;
+  }
+
+  function expandAdminCollapsibleSection_(sectionEl, buttonEl, drawerEl, slots) {
+    sectionEl.classList.remove("is-collapsed");
+    buttonEl.disabled = true;
+    drawerEl.hidden = false;
+    drawerEl.setAttribute("aria-hidden", "false");
+    drawerEl.style.height = "0px";
+    drawerEl.style.opacity = "0";
+    drawerEl.style.overflow = "hidden";
+    drawerEl.style.transform = "translateY(-8px)";
+    drawerEl.style.willChange = "height, opacity, transform";
+    drawerEl.style.transition = "";
+
+    slots.forEach(function(slot) {
+      slot.classList.remove("expandable-visible");
+      slot.classList.remove("expandable-leave");
+      slot.style.animationDelay = "";
+    });
+
+    var endHeight = drawerEl.scrollHeight;
+
+    slots.forEach(function(slot, index) {
+      slot.style.animationDelay = (index * 90) + "ms";
+      slot.classList.add("expandable-visible");
+
+      var handleAnimationEnd = function(event) {
+        if (event.animationName !== "expandableReveal") return;
+        slot.style.animationDelay = "";
+        slot.removeEventListener("animationend", handleAnimationEnd);
+      };
+
+      slot.addEventListener("animationend", handleAnimationEnd);
+    });
+
+    transitionAdminCollapsibleDrawer_(drawerEl, endHeight, function() {
+      drawerEl.style.height = "";
+      drawerEl.style.overflow = "";
+      drawerEl.style.willChange = "";
+      buttonEl.disabled = false;
+    });
+  }
+
+  function collapseAdminCollapsibleSection_(sectionEl, buttonEl, drawerEl, slots) {
+    sectionEl.classList.add("is-collapsed");
+    buttonEl.disabled = true;
+    drawerEl.hidden = false;
+    drawerEl.setAttribute("aria-hidden", "false");
+    drawerEl.style.height = drawerEl.offsetHeight + "px";
+    drawerEl.style.opacity = "1";
+    drawerEl.style.overflow = "hidden";
+    drawerEl.style.transform = "translateY(0)";
+    drawerEl.style.willChange = "height, opacity, transform";
+    drawerEl.style.transition = "";
+
+    slots.slice().reverse().forEach(function(slot, index) {
+      slot.classList.remove("expandable-visible");
+      slot.classList.remove("expandable-leave");
+      slot.style.animationDelay = (index * 45) + "ms";
+      slot.classList.add("expandable-leave");
+
+      var handleAnimationEnd = function(event) {
+        if (event.animationName !== "expandableHide") return;
+        slot.style.animationDelay = "";
+        slot.removeEventListener("animationend", handleAnimationEnd);
+      };
+
+      slot.addEventListener("animationend", handleAnimationEnd);
+    });
+
+    transitionAdminCollapsibleDrawer_(drawerEl, 0, function() {
+      slots.forEach(function(slot) {
+        slot.classList.remove("expandable-leave");
+        slot.style.animationDelay = "";
+      });
+      drawerEl.hidden = true;
+      drawerEl.setAttribute("aria-hidden", "true");
+      drawerEl.style.height = "";
+      drawerEl.style.opacity = "";
+      drawerEl.style.overflow = "";
+      drawerEl.style.transform = "";
+      drawerEl.style.transition = "";
+      drawerEl.style.willChange = "";
+      buttonEl.disabled = false;
+    });
+  }
+
+  function transitionAdminCollapsibleDrawer_(drawerEl, endHeight, onDone) {
+    var finished = false;
+
+    var cleanup = function() {
+      if (finished) return;
+      finished = true;
+      drawerEl.removeEventListener("transitionend", handleTransitionEnd);
+      drawerEl.style.transition = "";
+      drawerEl.style.opacity = "";
+      drawerEl.style.transform = "";
+      if (onDone) onDone();
+    };
+
+    var handleTransitionEnd = function(event) {
+      if (event.target !== drawerEl || event.propertyName !== "height") return;
+      cleanup();
+    };
+
+    drawerEl.addEventListener("transitionend", handleTransitionEnd);
+
+    window.requestAnimationFrame(function() {
+      drawerEl.style.transition =
+        "height " + ADMIN_EXPANDABLE_FLOW_DURATION_MS +
+        "ms cubic-bezier(0.16, 1, 0.3, 1), " +
+        "opacity " + ADMIN_EXPANDABLE_FLOW_DURATION_MS + "ms ease, " +
+        "transform " + ADMIN_EXPANDABLE_FLOW_DURATION_MS + "ms ease";
+      drawerEl.style.height = endHeight + "px";
+      drawerEl.style.opacity = "1";
+      drawerEl.style.transform = "translateY(0)";
+    });
+
+    window.setTimeout(cleanup, ADMIN_EXPANDABLE_FLOW_DURATION_MS + 90);
+  }
+
+  function escapeSelectorValue_(value) {
+    var text = String(value == null ? "" : value);
+
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(text);
+    }
+
+    return text.replace(/["\\]/g, "\\$&");
+  }
+
   function setDeleteConfirmSuppressedUntil_(timestamp) {
     var nextTimestamp = typeof timestamp === "number" &&
       isFinite(timestamp) &&
@@ -3556,11 +3873,10 @@
       adminState.hubSettingsPublishing ||
       adminState.hubLoading;
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>Homepage</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "hub-homepage",
+      title: "Homepage",
+      pillHtml: renderStatusPill_(
           !canEdit ?
             "Read only" :
             (actionConfig.mode === "submit" ?
@@ -3570,7 +3886,7 @@
             "is-warn" :
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
@@ -3690,8 +4006,8 @@
       !canEdit ? " disabled" : "",
       ">Reset Changes</button>",
       "</div>",
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderHubSundayEditor_() {
@@ -3703,11 +4019,10 @@
       adminState.hubSundayPublishing ||
       adminState.hubLoading;
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>Sunday Mode</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "hub-sunday-mode",
+      title: "Sunday Mode",
+      pillHtml: renderStatusPill_(
           !canEdit ?
             "Read only" :
             (actionConfig.mode === "submit" ?
@@ -3717,7 +4032,7 @@
             "is-warn" :
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
@@ -3871,8 +4186,8 @@
       !canEdit ? " disabled" : "",
       ">Reset Changes</button>",
       "</div>",
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderSundayPagePanel_(currentPage) {
@@ -4078,11 +4393,10 @@
       adminState.settingsSundayPublishing ||
       adminState.settingsLoading;
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>Sunday Controls</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "settings-sunday-controls",
+      title: "Sunday Controls",
+      pillHtml: renderStatusPill_(
           !canEdit ?
             "Read only" :
             (actionConfig.mode === "submit" ?
@@ -4092,7 +4406,7 @@
             "is-warn" :
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           canEdit ?
             "These operational Sunday settings control how Sunday mode turns on, plus the livestream destination and Bible translation used by the scripture reader." :
@@ -4195,8 +4509,8 @@
       !canEdit ? " disabled" : "",
       ">Reset Changes</button>",
       "</div>",
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderRoomRulesEditor_() {
@@ -4206,21 +4520,16 @@
     var draft = adminState.roomRulesDraft || createEmptyRoomRuleDraft_();
     var actionDisabled = adminState.roomRulesSaving || adminState.roomRulesPublishing;
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>",
-      escapeHtml_(
-          adminState.roomRulesEditingId ?
-            "Edit Room Rule" :
-            "Add Room Rule",
-      ),
-      "</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "settings-room-rule-form",
+      title: adminState.roomRulesEditingId ?
+        "Edit Room Rule" :
+        "Add Room Rule",
+      pillHtml: renderStatusPill_(
           canEdit ? "Write access" : "Read only",
           canEdit ? "is-safe" : "is-warn",
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
@@ -4291,53 +4600,46 @@
         ">Reset Form</button>",
         "</div>",
       ].join("") : "",
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderRoomRulesWorkingList_() {
     var canEdit = canEditRoomRules_();
 
     if (adminState.roomRulesLoading && !adminState.roomRulesLoaded) {
-      return [
-        "<div class=\"central-admin-item\">",
-        "<div class=\"central-admin-item-header\">",
-        "<strong>Current Room Rules</strong>",
-        renderStatusPill_("Loading", "is-live"),
-        "</div>",
-        renderAdminNote_("Reading the current room rules now."),
-        "</div>",
-      ].join("");
+      return renderCollapsibleAdminSection_({
+        id: "settings-room-rules-list",
+        title: "Current Room Rules",
+        pillHtml: renderStatusPill_("Loading", "is-live"),
+        bodyHtml: renderAdminNote_("Reading the current room rules now."),
+      });
     }
 
     if (!adminState.roomRulesItems.length) {
-      return [
-        "<div class=\"central-admin-item\">",
-        "<div class=\"central-admin-item-header\">",
-        "<strong>Current Room Rules</strong>",
-        renderStatusPill_(
+      return renderCollapsibleAdminSection_({
+        id: "settings-room-rules-list",
+        title: "Current Room Rules",
+        pillHtml: renderStatusPill_(
             adminState.roomRulesError ? "Read failed" : "Empty collection",
             adminState.roomRulesError ? "is-warn" : "is-live",
         ),
-        "</div>",
-        renderAdminNote_(
+        bodyHtml: renderAdminNote_(
             adminState.roomRulesError ?
               "The current room rules could not be read right now." :
               "No room rules are currently published in Firestore. Room details in Central will use their default Planning Center names until you add rules here.",
         ),
-        "</div>",
-      ].join("");
+      });
     }
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>Current Room Rules</strong>",
-      renderStatusPill_(
+    return renderCollapsibleAdminSection_({
+      id: "settings-room-rules-list",
+      title: "Current Room Rules",
+      pillHtml: renderStatusPill_(
           adminState.roomRulesItems.length + " loaded",
           "is-safe",
       ),
-      "</div>",
+      bodyHtml: [
       renderAdminNote_(
           "This is the current published room-rules list.",
       ),
@@ -4379,8 +4681,8 @@
           "</div>",
         ].join("");
       }).join(""),
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderRoomRulesPublishPanel_() {
@@ -4429,17 +4731,14 @@
 
   function renderAdminUsersManager_() {
     if (!canManageAdminUsers_()) {
-      return [
-        "<div class=\"central-admin-item\">",
-        "<div class=\"central-admin-item-header\">",
-        "<strong>Admin Users</strong>",
-        renderStatusPill_("Restricted", "is-warn"),
-        "</div>",
-        renderAdminNote_(
+      return renderCollapsibleAdminSection_({
+        id: "settings-admin-users",
+        title: "Admin Users",
+        pillHtml: renderStatusPill_("Restricted", "is-warn"),
+        bodyHtml: renderAdminNote_(
             "Only users with admin-level access to the Users section can add people or change permission levels.",
         ),
-        "</div>",
-      ].join("");
+      });
     }
 
     var isEditingCurrentAdminUser = !!(
@@ -4448,20 +4747,15 @@
       adminState.user.uid === adminState.adminUsersEditingUid
     );
 
-    return [
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>",
-      escapeHtml_(
-          adminState.adminUsersEditingInviteId ?
-            "Edit Admin Invite" :
-            (adminState.adminUsersEditingUid ?
-            "Edit Admin User" :
-            "Add Admin User"),
-      ),
-      "</strong>",
-      renderStatusPill_("Admin only", "is-live"),
-      "</div>",
+    return renderCollapsibleAdminSection_({
+      id: "settings-admin-users",
+      title: adminState.adminUsersEditingInviteId ?
+        "Edit Admin Invite" :
+        (adminState.adminUsersEditingUid ?
+        "Edit Admin User" :
+        "Add Admin User"),
+      pillHtml: renderStatusPill_("Admin only", "is-live"),
+      bodyHtml: [
       renderAdminNote_(
           "Enter an email address to send an admin invite with permissions already attached. If you already know a Firebase UID, you can still add someone directly without the invite flow.",
       ),
@@ -4552,8 +4846,8 @@
       ].join("") : "",
       "</div>",
       renderAdminUsersList_(),
-      "</div>",
-    ].join("");
+      ].join(""),
+    });
   }
 
   function renderAdminUsersList_() {
@@ -4636,6 +4930,56 @@
         "</div>",
       ].join("");
     }).join("");
+  }
+
+  function renderCollapsibleAdminSection_(config) {
+    var sectionId = String(config && config.id || "").trim();
+    var title = String(config && config.title || "").trim() || "Section";
+    var bodyHtml = String(config && config.bodyHtml || "");
+    var pillHtml = String(config && config.pillHtml || "");
+    var bodyId = sectionId ?
+      "central-admin-section-" + sectionId :
+      "";
+    var isCollapsed = isAdminSectionCollapsed_(sectionId);
+
+    return [
+      "<div class=\"central-admin-item central-admin-collapsible-section",
+      isCollapsed ? " is-collapsed" : "",
+      "\" data-admin-collapsible-section=\"",
+      escapeAttr_(sectionId),
+      "\">",
+      "<button type=\"button\" class=\"central-admin-collapse-toggle\" data-admin-action=\"toggle-section-collapse\" data-admin-section-id=\"",
+      escapeAttr_(sectionId),
+      "\"",
+      bodyId ? " aria-controls=\"" + escapeAttr_(bodyId) + "\"" : "",
+      " aria-expanded=\"",
+      isCollapsed ? "false" : "true",
+      "\">",
+      "<span class=\"central-admin-collapse-heading\">",
+      "<strong>", escapeHtml_(title), "</strong>",
+      "</span>",
+      "<span class=\"central-admin-collapse-meta\">",
+      pillHtml,
+      "<span class=\"central-admin-collapse-chevron\" aria-hidden=\"true\"></span>",
+      "</span>",
+      "</button>",
+      "<div class=\"central-admin-collapse-body expandable-drawer\" data-admin-collapse-drawer=\"",
+      escapeAttr_(sectionId),
+      "\"",
+      bodyId ? " id=\"" + escapeAttr_(bodyId) + "\"" : "",
+      " aria-hidden=\"",
+      isCollapsed ? "true" : "false",
+      "\"",
+      isCollapsed ? " hidden" : "",
+      ">",
+      "<div class=\"central-admin-collapse-body-inner expandable-drawer-inner\">",
+      "<div class=\"central-admin-collapse-slot expandable-slot\">",
+      bodyHtml,
+      "</div>",
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
   }
 
   function renderAdminInputField_(config) {
@@ -11033,6 +11377,7 @@
     }
 
     adminState.roomRulesEditingId = nextItem.id;
+    expandAdminSection_("settings-room-rule-form");
     adminState.roomRulesDraft = {
       match_type: normalizeRoomRuleMatchTypeValue_(nextItem.match_type),
       match_text: nextItem.match_text || "",
@@ -13825,6 +14170,7 @@
       normalizedRecordType === "invite" ? "" : nextItem.uid;
     adminState.adminUsersEditingInviteId =
       normalizedRecordType === "invite" ? nextItem.inviteId : "";
+    expandAdminSection_("settings-admin-users");
     adminState.adminUsersDraft = {
       inviteId: nextItem.inviteId || "",
       uid: nextItem.uid || "",

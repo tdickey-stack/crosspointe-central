@@ -60,11 +60,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools
-
       - name: Deploy live Firebase project
-        run: firebase deploy --project crosspointe-central --only hosting,functions,firestore --non-interactive
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only hosting,functions,firestore --non-interactive
 
   deploy-preview:
     if: github.ref == 'refs/heads/dev'
@@ -117,8 +114,5 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools
-
       - name: Deploy Firebase preview channel
-        run: firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive
+        run: ./node_modules/.bin/firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive

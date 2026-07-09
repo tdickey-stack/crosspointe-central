@@ -2135,8 +2135,18 @@ async function buildCentralDataPayload_() {
     planningCenterData.setlist :
     [];
 
+  const googleWebClientId = await getCentralGoogleWebClientId_(
+      settings,
+      sundaySettings,
+  );
+  const googleDocsEnabled = getCentralGoogleDocsEnabled_(
+      settings,
+      sundaySettings,
+  );
+
   return {
-    googleWebClientId: await getCentralGoogleWebClientId_(settings),
+    googleWebClientId: googleWebClientId,
+    googleDocsEnabled: googleDocsEnabled,
     settings: settings,
     sundaySettings: sundaySettings,
     banner: statusBannerOverride.shouldOverride ?
@@ -2180,7 +2190,7 @@ async function buildCentralDataPayload_() {
   };
 }
 
-async function getCentralGoogleWebClientId_(settings) {
+async function getCentralGoogleWebClientId_(settings, sundaySettings) {
   const settingsClientId = trimFirestoreStringValue_(
       settings &&
       (
@@ -2193,6 +2203,18 @@ async function getCentralGoogleWebClientId_(settings) {
     return settingsClientId;
   }
 
+  const sundaySettingsClientId = trimFirestoreStringValue_(
+      sundaySettings &&
+      (
+        sundaySettings.googleWebClientId ||
+        sundaySettings.google_web_client_id
+      ),
+  );
+
+  if (sundaySettingsClientId) {
+    return sundaySettingsClientId;
+  }
+
   const metaClientId = await getFirestorePublicMetaGoogleWebClientId_();
 
   if (metaClientId) {
@@ -2200,6 +2222,30 @@ async function getCentralGoogleWebClientId_(settings) {
   }
 
   return CENTRAL_GOOGLE_WEB_CLIENT_ID;
+}
+
+function getCentralGoogleDocsEnabled_(settings, sundaySettings) {
+  const settingsValue = getOptionalBooleanConfigValue_(
+      settings,
+      "googleDocsEnabled",
+      "google_docs_enabled",
+  );
+
+  if (settingsValue !== null) {
+    return settingsValue;
+  }
+
+  const sundaySettingsValue = getOptionalBooleanConfigValue_(
+      sundaySettings,
+      "googleDocsEnabled",
+      "google_docs_enabled",
+  );
+
+  if (sundaySettingsValue !== null) {
+    return sundaySettingsValue;
+  }
+
+  return true;
 }
 
 async function getFirestorePublicMetaGoogleWebClientId_() {
@@ -2312,6 +2358,8 @@ function toCentralSettingsFromFirestoreDoc_(snapshot) {
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "hero_subheading");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "googleWebClientId");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "google_web_client_id");
+  copyBooleanFieldIfPresent_(nextSettings, data, "googleDocsEnabled");
+  copyBooleanFieldIfPresent_(nextSettings, data, "google_docs_enabled");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "primary_button_text");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "primary_button_url");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "secondary_button_text");
@@ -2391,6 +2439,10 @@ function toCentralSundaySettingsFromFirestoreDoc_(snapshot) {
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_scripture_bible_id");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_scripture_title");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_scripture_helper_text");
+  copyTrimmedStringFieldIfPresent_(nextSettings, data, "googleWebClientId");
+  copyTrimmedStringFieldIfPresent_(nextSettings, data, "google_web_client_id");
+  copyBooleanFieldIfPresent_(nextSettings, data, "googleDocsEnabled");
+  copyBooleanFieldIfPresent_(nextSettings, data, "google_docs_enabled");
   copyModuleConfigFieldIfPresent_(
       nextSettings,
       data,
@@ -2454,6 +2506,20 @@ function copyTrimmedStringFieldIfPresent_(target, source, key) {
   }
 
   target[key] = String(source[key] || "").trim();
+}
+
+function copyBooleanFieldIfPresent_(target, source, key) {
+  if (!source || !Object.prototype.hasOwnProperty.call(source, key)) {
+    return;
+  }
+
+  const normalizedValue = normalizeOptionalBooleanConfigValue_(source[key]);
+
+  if (normalizedValue === null) {
+    return;
+  }
+
+  target[key] = normalizedValue;
 }
 
 function copyModuleConfigFieldIfPresent_(target, source, key, definitions) {
@@ -9447,6 +9513,14 @@ function buildPublishedSettingsSundayPayload_(sourceData) {
     sunday_scripture_bible_id: trimFirestoreStringValue_(
         sourceData.sunday_scripture_bible_id,
     ),
+    google_web_client_id: trimFirestoreStringValue_(
+        sourceData.google_web_client_id || sourceData.googleWebClientId,
+    ),
+    google_docs_enabled: normalizeOptionalBooleanConfigValue_(
+        Object.prototype.hasOwnProperty.call(sourceData, "google_docs_enabled") ?
+          sourceData.google_docs_enabled :
+          sourceData.googleDocsEnabled,
+    ) !== false,
   };
 }
 
@@ -9702,6 +9776,54 @@ function formatThisSundayDisplayDate_(value) {
 
 function trimFirestoreStringValue_(value) {
   return String(value || "").trim();
+}
+
+function normalizeOptionalBooleanConfigValue_(value) {
+  if (value === true || value === false) {
+    return value;
+  }
+
+  const normalized = trimFirestoreStringValue_(value).toLowerCase();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized === "true" ||
+    normalized === "1" ||
+    normalized === "yes" ||
+    normalized === "on"
+  ) {
+    return true;
+  }
+
+  if (
+    normalized === "false" ||
+    normalized === "0" ||
+    normalized === "no" ||
+    normalized === "off"
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
+function getOptionalBooleanConfigValue_(source, ...keys) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) {
+      continue;
+    }
+
+    return normalizeOptionalBooleanConfigValue_(source[key]);
+  }
+
+  return null;
 }
 
 function trimEnvString_(value) {

@@ -4150,7 +4150,25 @@
         maxLength: 12,
         disabled: !canEdit,
       }),
+      renderAdminCheckboxField_({
+        label: "Enable Google Docs note saving",
+        field: "settings-sunday.google_docs_enabled",
+        checked: draft.google_docs_enabled,
+        disabled: !canEdit,
+      }),
+      renderAdminInputField_({
+        label: "Google Docs Web Client ID",
+        field: "settings-sunday.google_web_client_id",
+        value: draft.google_web_client_id,
+        placeholder: "1234567890-abc123def456.apps.googleusercontent.com",
+        type: "text",
+        disabled: !canEdit || !draft.google_docs_enabled,
+        wide: true,
+      }),
       "</div>",
+      renderAdminNote_(
+          "Leave the client ID blank if you want Central to keep using the existing backend value. Turn this off anytime you need to temporarily hide Google Docs saving.",
+      ),
       "<div class=\"central-admin-action-row\">",
       "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"publish-settings-sunday\"",
       actionDisabled ? " disabled" : "",
@@ -7261,6 +7279,14 @@
           {key: "sunday_livestream_url", label: "Livestream link"},
           {key: "sunday_livestream_note", label: "Livestream note"},
           {key: "sunday_scripture_bible_id", label: "Bible ID"},
+          {
+            key: "google_docs_enabled",
+            label: "Google Docs note saving",
+            type: "boolean",
+            trueLabel: "Enabled",
+            falseLabel: "Disabled",
+          },
+          {key: "google_web_client_id", label: "Google Docs web client ID"},
         ],
       };
     }
@@ -8285,6 +8311,8 @@
       sunday_livestream_url: "",
       sunday_livestream_note: "",
       sunday_scripture_bible_id: "",
+      google_docs_enabled: true,
+      google_web_client_id: "",
     };
   }
 
@@ -8524,6 +8552,19 @@
 
   function normalizeSettingsSundayData_(data) {
     var source = data || {};
+    var googleDocsEnabled = true;
+
+    if (Object.prototype.hasOwnProperty.call(source, "google_docs_enabled")) {
+      googleDocsEnabled = normalizeAdminBooleanValue_(
+          source.google_docs_enabled,
+          true,
+      );
+    } else if (Object.prototype.hasOwnProperty.call(source, "googleDocsEnabled")) {
+      googleDocsEnabled = normalizeAdminBooleanValue_(
+          source.googleDocsEnabled,
+          true,
+      );
+    }
 
     return {
       sunday_mode_override: normalizeAdminSundayModeOverrideValue_(
@@ -8541,6 +8582,12 @@
       sunday_livestream_url: String(source.sunday_livestream_url || "").trim(),
       sunday_livestream_note: String(source.sunday_livestream_note || "").trim(),
       sunday_scripture_bible_id: String(source.sunday_scripture_bible_id || "").trim(),
+      google_docs_enabled: googleDocsEnabled,
+      google_web_client_id: String(
+          source.google_web_client_id ||
+          source.googleWebClientId ||
+          "",
+      ).trim(),
     };
   }
 
@@ -8758,6 +8805,18 @@
     }
 
     return isAdminTruthyValue_(legacyForceValue) ? "enabled" : "auto";
+  }
+
+  function normalizeAdminBooleanValue_(value, defaultValue) {
+    if (value === true || value === false) {
+      return value;
+    }
+
+    if (value == null || String(value).trim() === "") {
+      return !!defaultValue;
+    }
+
+    return isAdminTruthyValue_(value);
   }
 
   function saveHubSettings_() {

@@ -12,8 +12,10 @@ var sundayNotesSeed = {};
 var googleNotesTokenClient = null;
 var googleNotesAccessToken = "";
 var googleNotesTokenExpiresAt = 0;
+var googleNotesClientId = "";
 var googleIdentityReady = false;
 var googleNotesClientReady = false;
+var googleNotesWarmupPromise = null;
 var responsiveListenersBound = false;
 var googleNotesPendingResolve = null;
 var googleNotesPendingReject = null;
@@ -21,6 +23,7 @@ var sundayNotesLastDocUrl = "";
 var sundayNotesToolbarListenersBound = false;
 
 var GOOGLE_NOTES_SCOPE = "https://www.googleapis.com/auth/drive.file";
+var GOOGLE_NOTES_INIT_TIMEOUT_MS = 10000;
 var CENTRAL_REFRESH_MS = 1200000;
 var CENTRAL_API_URL = "/api/central-data";
 var SERVE_NEED_INTEREST_ENDPOINT = "/api/serve-needs/share-interest";
@@ -2688,13 +2691,107 @@ function syncSundayNotesSaveButton_(data) {
 
   clearSavedDocLink_();
 
-  if (data && data.googleWebClientId) {
-    setSundayNotesSaveButtonState("Preparing Google Docs...", true);
-    warmGoogleNotesAuth_();
-  } else {
-    setSundayNotesSaveButtonState("Save to My Google Docs", true);
-    setSundayNotesStatus("Google Docs saving is not configured yet.", true);
+  var googleDocsConfig = getGoogleNotesConfig_(data);
+
+  if (googleDocsConfig.clientId !== googleNotesClientId) {
+    resetGoogleNotesAuthState_(googleDocsConfig.clientId);
   }
+
+  if (!googleDocsConfig.enabled) {
+    setSundayNotesSaveButtonVisibility_(false);
+    return;
+  }
+
+  if (!googleDocsConfig.clientId) {
+    setSundayNotesSaveButtonVisibility_(false);
+    return;
+  }
+
+  setSundayNotesSaveButtonVisibility_(true);
+
+  if (googleNotesClientReady && googleNotesTokenClient) {
+    setSundayNotesSaveButtonState("Save to My Google Docs", false);
+    return;
+  }
+
+  setSundayNotesSaveButtonState("Preparing Google Docs...", true);
+  warmGoogleNotesAuth_();
+}
+
+function getGoogleNotesConfig_(data) {
+  var sundaySettings = data && data.sundaySettings ? data.sundaySettings : {};
+  var enabled = getGoogleNotesEnabledValue_(data, sundaySettings);
+  var clientId = String(
+      (data && data.googleWebClientId) ||
+      sundaySettings.googleWebClientId ||
+      sundaySettings.google_web_client_id ||
+      "",
+  ).trim();
+
+  return {
+    enabled: enabled,
+    clientId: clientId,
+  };
+}
+
+function getGoogleNotesEnabledValue_(data, sundaySettings) {
+  if (
+    data &&
+    Object.prototype.hasOwnProperty.call(data, "googleDocsEnabled")
+  ) {
+    return normalizeCentralBooleanValue_(data.googleDocsEnabled, true);
+  }
+
+  if (
+    data &&
+    Object.prototype.hasOwnProperty.call(data, "google_docs_enabled")
+  ) {
+    return normalizeCentralBooleanValue_(data.google_docs_enabled, true);
+  }
+
+  if (
+    sundaySettings &&
+    Object.prototype.hasOwnProperty.call(sundaySettings, "googleDocsEnabled")
+  ) {
+    return normalizeCentralBooleanValue_(sundaySettings.googleDocsEnabled, true);
+  }
+
+  if (
+    sundaySettings &&
+    Object.prototype.hasOwnProperty.call(sundaySettings, "google_docs_enabled")
+  ) {
+    return normalizeCentralBooleanValue_(sundaySettings.google_docs_enabled, true);
+  }
+
+  return true;
+}
+
+function normalizeCentralBooleanValue_(value, defaultValue) {
+  if (value === true || value === false) {
+    return value;
+  }
+
+  if (value == null || String(value).trim() === "") {
+    return !!defaultValue;
+  }
+
+  var normalized = String(value).trim().toLowerCase();
+
+  return normalized === "true" ||
+    normalized === "1" ||
+    normalized === "yes" ||
+    normalized === "on";
+}
+
+function resetGoogleNotesAuthState_(nextClientId) {
+  googleNotesTokenClient = null;
+  googleNotesAccessToken = "";
+  googleNotesTokenExpiresAt = 0;
+  googleNotesClientId = String(nextClientId || "").trim();
+  googleNotesClientReady = false;
+  googleNotesWarmupPromise = null;
+  googleNotesPendingResolve = null;
+  googleNotesPendingReject = null;
 }
 
 async function copySundayNotes() {
@@ -2763,11 +2860,28 @@ function setSundayNotesStatus(message, persist) {
 }
 
 function warmGoogleNotesAuth_() {
-  initGoogleTokenClient_().then(function() {
-    googleNotesClientReady = true;
+  if (googleNotesClientReady && googleNotesTokenClient) {
     setSundayNotesSaveButtonState("Save to My Google Docs", false);
+    return Promise.resolve(googleNotesTokenClient);
+  }
+
+  if (googleNotesWarmupPromise) {
+    return googleNotesWarmupPromise;
+  }
+
+  googleNotesWarmupPromise = promiseWithTimeout_(
+      initGoogleTokenClient_(),
+      GOOGLE_NOTES_INIT_TIMEOUT_MS,
+      "Google Sign-In is taking longer than expected. Refresh the page and try again.",
+  ).then(function(tokenClient) {
+    googleNotesClientReady = true;
+    googleNotesWarmupPromise = null;
+    setSundayNotesSaveButtonState("Save to My Google Docs", false);
+    return tokenClient;
   }).catch(function(error) {
     googleNotesClientReady = false;
+    googleNotesTokenClient = null;
+    googleNotesWarmupPromise = null;
     setSundayNotesSaveButtonState("Save to My Google Docs", false);
     setSundayNotesStatus(
         error && error.message ?
@@ -2775,7 +2889,10 @@ function warmGoogleNotesAuth_() {
           "Google Sign-In could not finish loading.",
         true,
     );
+    throw error;
   });
+
+  return googleNotesWarmupPromise;
 }
 
 function ensureGoogleIdentityLoaded() {
@@ -2827,14 +2944,42 @@ function waitForGoogleIdentity_(resolve, reject, tries) {
   }, 250);
 }
 
-async function initGoogleTokenClient_() {
-  if (googleNotesTokenClient) return googleNotesTokenClient;
+function promiseWithTimeout_(promise, timeoutMs, message) {
+  return new Promise(function(resolve, reject) {
+    var settled = false;
+    var timerId = window.setTimeout(function() {
+      if (settled) return;
+      settled = true;
+      reject(new Error(message || "This is taking longer than expected."));
+    }, Math.max(250, Number(timeoutMs) || 0));
 
-  var clientId = String((currentCentralData && currentCentralData.googleWebClientId) || "").trim();
+    Promise.resolve(promise).then(function(value) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timerId);
+      resolve(value);
+    }).catch(function(error) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timerId);
+      reject(error);
+    });
+  });
+}
+
+async function initGoogleTokenClient_() {
+  var googleDocsConfig = getGoogleNotesConfig_(currentCentralData);
+  var clientId = googleDocsConfig.clientId;
 
   if (!clientId) {
     throw new Error("Google Docs saving is not configured yet.");
   }
+
+  if (googleNotesClientId !== clientId) {
+    resetGoogleNotesAuthState_(clientId);
+  }
+
+  if (googleNotesTokenClient) return googleNotesTokenClient;
 
   await ensureGoogleIdentityLoaded();
 
@@ -2929,6 +3074,13 @@ function setSundayNotesSaveButtonState(label, disabled) {
 
   buttonEl.textContent = label;
   buttonEl.disabled = !!disabled;
+}
+
+function setSundayNotesSaveButtonVisibility_(visible) {
+  var buttonEl = document.getElementById("save-notes-doc-btn");
+  if (!buttonEl) return;
+
+  buttonEl.hidden = !visible;
 }
 
 function setSavedDocLink_(docUrl) {
@@ -3509,14 +3661,31 @@ async function saveSundayNotesToMyGoogleDocs() {
 
   var notesText = getSundayNotesPlainText_(notesInput).trim();
   var notesHtml = getSundayNotesEditorHtml_(notesInput);
+  var googleDocsConfig = getGoogleNotesConfig_(currentCentralData);
 
   if (!notesText) {
     setSundayNotesStatus("Add a few notes first, then save to Google Docs.");
     return;
   }
 
+  if (!googleDocsConfig.enabled) {
+    setSundayNotesStatus("Google Docs saving is turned off right now.", true);
+    return;
+  }
+
+  if (!googleDocsConfig.clientId) {
+    setSundayNotesStatus("Google Docs saving is not configured yet.", true);
+    return;
+  }
+
   try {
     setSundayNotesSaveButtonState("Connecting to Google...", true);
+    setSundayNotesStatus("Preparing Google Sign-In...");
+
+    if (!googleNotesClientReady || !googleNotesTokenClient) {
+      await warmGoogleNotesAuth_();
+    }
+
     setSundayNotesStatus("Waiting for Google Sign-In...");
 
     var accessToken = await ensureGoogleNotesAccess();

@@ -541,9 +541,17 @@
   var ADMIN_EXPANDABLE_FLOW_DURATION_MS = 1000;
   var DELETE_CONFIRM_SUPPRESSION_MS = 5 * 60 * 1000;
   var DELETE_CONFIRM_STORAGE_KEY = "centralAdminDeleteConfirmSuppressedUntil";
-  var CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY = "centralAdminCollapsedSectionsV1";
+  var CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY = "centralAdminCollapsedSectionsV2";
   var CENTRAL_ADMIN_WHATS_NEW_SEEN_KEY = "central-admin-whats-new-seen-v1";
   var CENTRAL_ADMIN_REDIRECT_SIGN_IN_KEY = "centralAdminRedirectSignInPending";
+  var DEFAULT_ADMIN_COLLAPSED_SECTION_IDS = [
+    "hub-homepage",
+    "hub-sunday-mode",
+    "settings-sunday-controls",
+    "settings-room-rule-form",
+    "settings-room-rules-list",
+    "settings-admin-users",
+  ];
   var currentCentralDataCacheValue = null;
   var currentCentralDataCacheFetchedAt = 0;
   var currentCentralDataCachePromise = null;
@@ -2455,8 +2463,10 @@
   }
 
   function getStoredAdminCollapsedSections_() {
+    var defaultSections = getDefaultAdminCollapsedSections_();
+
     if (!window.localStorage) {
-      return {};
+      return defaultSections;
     }
 
     try {
@@ -2465,16 +2475,26 @@
       ) || "";
 
       if (!rawValue) {
-        return {};
+        return defaultSections;
       }
 
       var parsed = JSON.parse(rawValue);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ?
         parsed :
-        {};
+        defaultSections;
     } catch (error) {
-      return {};
+      return defaultSections;
     }
+  }
+
+  function getDefaultAdminCollapsedSections_() {
+    var sections = {};
+
+    DEFAULT_ADMIN_COLLAPSED_SECTION_IDS.forEach(function(sectionId) {
+      sections[sectionId] = true;
+    });
+
+    return sections;
   }
 
   function persistAdminCollapsedSections_() {
@@ -2669,18 +2689,7 @@
       slot.addEventListener("animationend", handleAnimationEnd);
     });
 
-    window.requestAnimationFrame(function() {
-      drawerEl.style.transition =
-        "height " + ADMIN_EXPANDABLE_FLOW_DURATION_MS +
-        "ms cubic-bezier(0.16, 1, 0.3, 1), " +
-        "opacity " + ADMIN_EXPANDABLE_FLOW_DURATION_MS + "ms ease, " +
-        "transform " + ADMIN_EXPANDABLE_FLOW_DURATION_MS + "ms ease";
-      drawerEl.style.height = "0px";
-      drawerEl.style.opacity = "0";
-      drawerEl.style.transform = "translateY(-8px)";
-    });
-
-    window.setTimeout(function() {
+    transitionAdminCollapsibleDrawer_(drawerEl, 0, function() {
       slots.forEach(function(slot) {
         slot.classList.remove("expandable-leave");
         slot.style.animationDelay = "";
@@ -2694,7 +2703,7 @@
       drawerEl.style.transition = "";
       drawerEl.style.willChange = "";
       buttonEl.disabled = false;
-    }, ADMIN_EXPANDABLE_FLOW_DURATION_MS + 90);
+    });
   }
 
   function transitionAdminCollapsibleDrawer_(drawerEl, endHeight, onDone) {

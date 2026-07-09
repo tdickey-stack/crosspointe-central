@@ -939,8 +939,7 @@ function renderSundayModeModuleById_(moduleId, data, quickLinks, services, servi
             "</div>",
             "<div id=\"sunday-notes-input\" class=\"sunday-notes-input\" contenteditable=\"true\" spellcheck=\"true\" role=\"textbox\" aria-multiline=\"true\" data-placeholder=\"Write notes, verses, prayer points, and action steps here...\"></div>",
             "<div class=\"sunday-notes-tools\">",
-              "<button type=\"button\" class=\"see-more-btn\" id=\"save-notes-doc-btn\" onclick=\"saveSundayNotesToMyGoogleDocs()\">Save to My Google Docs</button>",
-              "<a class=\"see-more-btn\" id=\"open-notes-doc-link\" href=\"#\" target=\"_blank\" rel=\"noopener\" hidden>Open My Google Doc</a>",
+              renderSundayNotesGoogleDocsControls_(data),
               "<button class=\"see-more-btn\" type=\"button\" onclick=\"copySundayNotes()\">Copy Notes</button>",
               "<button class=\"see-more-btn sunday-clear-btn\" type=\"button\" onclick=\"clearSundayNotes()\">Clear Notes</button>",
               "<span class=\"sunday-notes-status\" id=\"sunday-notes-status\">Saved on this device</span>",
@@ -976,6 +975,19 @@ function renderSundayModeModuleById_(moduleId, data, quickLinks, services, servi
   }
 
   return "";
+}
+
+function renderSundayNotesGoogleDocsControls_(data) {
+  var googleDocsConfig = getGoogleNotesConfig_(data);
+
+  if (!googleDocsConfig.enabled || !googleDocsConfig.clientId) {
+    return "";
+  }
+
+  return [
+    "<button type=\"button\" class=\"see-more-btn\" id=\"save-notes-doc-btn\" onclick=\"saveSundayNotesToMyGoogleDocs()\">Save to My Google Docs</button>",
+    "<a class=\"see-more-btn\" id=\"open-notes-doc-link\" href=\"#\" target=\"_blank\" rel=\"noopener\" hidden>Open My Google Doc</a>",
+  ].join("");
 }
 
 function maybeShowWhatsNew_(data) {

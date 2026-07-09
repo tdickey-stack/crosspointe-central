@@ -16,6 +16,7 @@
     CENTRAL_ADMIN_ROOT_DOC_PATH + "/auditLog";
   var ADMIN_WHATS_NEW_DOC_PATH =
     CENTRAL_ADMIN_PUBLIC_COLLECTION_PATH + "/whatsNew";
+  var HOSTED_WHATS_NEW_CONFIG_URL = "/content/whats-new.json";
   var FIRST_ADMIN_BOOTSTRAP_ENDPOINT = "/api/admin/bootstrap-first-user";
   var PUBLISH_PREVIEW_CONTENT_ENDPOINT = "/api/admin/publish-preview-content";
   var SUBMIT_CHANGE_REQUEST_ENDPOINT = "/api/admin/submit-change-request";
@@ -364,6 +365,7 @@
   ];
   var adminWhatsNewEscapeHandler = null;
   var adminWhatsNewUnsubscribe = null;
+  var hostedWhatsNewConfigPromise = null;
   var adminState = {
     bootMode: window.CENTRAL_BOOT_MODE || "public",
     currentPageId: getCurrentAdminPageId_(),
@@ -14687,6 +14689,26 @@
     adminState.adminWhatsNewDocExists = false;
     adminState.adminWhatsNewData = null;
 
+    loadHostedAdminWhatsNewOverride_().then(function(whatsNew) {
+      if (whatsNew) {
+        adminState.adminWhatsNewLoaded = true;
+        adminState.adminWhatsNewDocExists = true;
+        adminState.adminWhatsNewData = whatsNew;
+        maybeShowAdminWhatsNewModal_(whatsNew);
+        return;
+      }
+
+      subscribeToAdminWhatsNewFromFirestore_();
+    }, function(error) {
+      console.warn(
+          "Hosted admin what's-new config unavailable, using Firestore fallback.",
+          error,
+      );
+      subscribeToAdminWhatsNewFromFirestore_();
+    });
+  }
+
+  function subscribeToAdminWhatsNewFromFirestore_() {
     adminWhatsNewUnsubscribe = adminFirestore
         .doc(ADMIN_WHATS_NEW_DOC_PATH)
         .onSnapshot(function(snapshot) {
@@ -14709,6 +14731,68 @@
           closeAdminWhatsNewModal_();
           console.error("Unable to load admin what's new.", error);
         });
+  }
+
+  function loadHostedAdminWhatsNewOverride_() {
+    return loadHostedWhatsNewConfig_().then(function(config) {
+      var source = config &&
+        typeof config === "object" &&
+        Object.prototype.hasOwnProperty.call(config, "admin") ?
+        config.admin :
+        null;
+
+      if (!source || typeof source !== "object") {
+        return null;
+      }
+
+      if (!isTruthyAdminValue_(getAdminWhatsNewValue_(source, [
+        "enabled",
+        "use_hosted",
+        "useHosted",
+      ]))) {
+        return null;
+      }
+
+      return normalizeAdminWhatsNewData_(source);
+    });
+  }
+
+  function loadHostedWhatsNewConfig_() {
+    if (hostedWhatsNewConfigPromise) {
+      return hostedWhatsNewConfigPromise;
+    }
+
+    hostedWhatsNewConfigPromise = fetch(HOSTED_WHATS_NEW_CONFIG_URL, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+      },
+    })
+        .then(parseHostedWhatsNewResponse_)
+        .catch(function(error) {
+          hostedWhatsNewConfigPromise = null;
+          throw error;
+        });
+
+    return hostedWhatsNewConfigPromise;
+  }
+
+  function parseHostedWhatsNewResponse_(response) {
+    return response.text().then(function(text) {
+      var payload = null;
+
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch (error) {
+      }
+
+      if (!response.ok) {
+        throw new Error("Could not load the hosted what's-new config.");
+      }
+
+      return payload && typeof payload === "object" ? payload : {};
+    });
   }
 
   function normalizeAdminWhatsNewData_(source) {

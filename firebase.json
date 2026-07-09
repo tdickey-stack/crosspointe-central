@@ -132,43 +132,73 @@
     "rewrites": [
       {
         "source": "/api/central-data",
-        "function": "centralData"
+        "function": {
+          "functionId": "centralData",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/admin/bootstrap-first-user",
-        "function": "bootstrapFirstAdminUser"
+        "function": {
+          "functionId": "bootstrapFirstAdminUser",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/admin/publish-preview-content",
-        "function": "publishPreviewContent"
+        "function": {
+          "functionId": "publishPreviewContent",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/admin/submit-change-request",
-        "function": "submitChangeRequest"
+        "function": {
+          "functionId": "submitChangeRequest",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/admin/review-change-request",
-        "function": "reviewChangeRequest"
+        "function": {
+          "functionId": "reviewChangeRequest",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/admin/list-users",
-        "function": "listAdminUsers"
+        "function": {
+          "functionId": "listAdminUsers",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/admin/upsert-user",
-        "function": "upsertAdminUser"
+        "function": {
+          "functionId": "upsertAdminUser",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/admin/delete-user",
-        "function": "deleteAdminUser"
+        "function": {
+          "functionId": "deleteAdminUser",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/admin/claim-invite",
-        "function": "claimAdminInvite"
+        "function": {
+          "functionId": "claimAdminInvite",
+          "pinTag": true
+        }
       },
       {
         "source": "/api/serve-needs/share-interest",
-        "function": "shareServeNeedInterest"
+        "function": {
+          "functionId": "shareServeNeedInterest",
+          "pinTag": true
+        }
       },
       {
         "source": "**",

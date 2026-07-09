@@ -60,11 +60,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools
-
       - name: Deploy live Firebase project
-        run: firebase deploy --project crosspointe-central --only hosting,functions,firestore --non-interactive
+        run: pnpm exec firebase deploy --project crosspointe-central --only hosting,functions,firestore --non-interactive
 
   deploy-preview:
     if: github.ref == 'refs/heads/dev'
@@ -92,33 +89,16 @@ jobs:
       - name: Install web dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Functions dependencies
-        run: npm ci --prefix functions
-
       - name: Restore generated YouVersion bundle
         run: pnpm run build:youversion
 
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
 
-      - name: Write Functions environment file
-        env:
-          FIREBASE_FUNCTIONS_ENV: ${{ secrets.FIREBASE_FUNCTIONS_ENV }}
-          FIREBASE_FUNCTIONS_ENV_DEV: ${{ secrets.FIREBASE_FUNCTIONS_ENV_DEV }}
-        run: |
-          CONTENT="$FIREBASE_FUNCTIONS_ENV"
-          if [ -n "$FIREBASE_FUNCTIONS_ENV_DEV" ]; then
-            CONTENT="$FIREBASE_FUNCTIONS_ENV_DEV"
-          fi
-          printf '%s' "$CONTENT" > functions/.env
-
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools
-
       - name: Deploy Firebase preview channel
-        run: firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive
+        run: pnpm exec firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive

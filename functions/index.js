@@ -271,6 +271,7 @@ const cachedYouVersionPassages = new Map();
 const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
   {key: "settings", label: "Settings"},
+  {key: "integrations", label: "Integrations"},
   {key: "thisSunday", label: "Sunday"},
   {key: "quickLinks", label: "Quick Links"},
   {key: "statusBanner", label: "Status Banner"},
@@ -414,6 +415,44 @@ export const centralData = onRequest(
           error: error && error.message ?
             error.message :
             "Unable to load CrossPointe Central.",
+        });
+      }
+    },
+);
+
+export const centralCalendarEvent = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    (request, response) => {
+      if (request.method !== "GET") {
+        response.status(405).json({
+          error: "Method not allowed.",
+        });
+        return;
+      }
+
+      try {
+        const event = decodeCalendarEventToken_(
+            request.query.event,
+            request.query.signature,
+        );
+        const calendar = buildIcsCalendar_(event);
+        const forceDownload = String(request.query.download || "") === "1";
+
+        response.set("Cache-Control", "public, max-age=300");
+        response.set("Content-Type", "text/calendar; charset=utf-8");
+        response.set("X-Content-Type-Options", "nosniff");
+        response.set(
+            "Content-Disposition",
+            (forceDownload ? "attachment" : "inline") +
+              "; filename=\"" + calendar.filename + "\"",
+        );
+        response.status(200).send(calendar.content);
+      } catch (error) {
+        response.status(400).json({
+          error: "This calendar event link is invalid or has expired.",
         });
       }
     },
@@ -2201,10 +2240,15 @@ async function buildCentralDataPayload_() {
       settings,
       sundaySettings,
   );
+  const calendarIntegrationsEnabled = getCentralCalendarIntegrationsEnabled_(
+      settings,
+      sundaySettings,
+  );
 
   return {
     googleWebClientId: googleWebClientId,
     googleDocsEnabled: googleDocsEnabled,
+    calendarIntegrationsEnabled: calendarIntegrationsEnabled,
     settings: settings,
     sundaySettings: sundaySettings,
     banner: statusBannerOverride.shouldOverride ?
@@ -2297,6 +2341,37 @@ function getCentralGoogleDocsEnabled_(settings, sundaySettings) {
       sundaySettings,
       "googleDocsEnabled",
       "google_docs_enabled",
+  );
+
+  if (sundaySettingsValue !== null) {
+    return sundaySettingsValue;
+  }
+
+  return true;
+}
+
+/**
+ * Resolves whether public calendar controls should be shown.
+ *
+ * @param {Object} settings Published homepage settings.
+ * @param {Object} sundaySettings Published Sunday settings.
+ * @return {boolean} Whether calendar integrations are enabled.
+ */
+function getCentralCalendarIntegrationsEnabled_(settings, sundaySettings) {
+  const settingsValue = getOptionalBooleanConfigValue_(
+      settings,
+      "calendarIntegrationsEnabled",
+      "calendar_integrations_enabled",
+  );
+
+  if (settingsValue !== null) {
+    return settingsValue;
+  }
+
+  const sundaySettingsValue = getOptionalBooleanConfigValue_(
+      sundaySettings,
+      "calendarIntegrationsEnabled",
+      "calendar_integrations_enabled",
   );
 
   if (sundaySettingsValue !== null) {
@@ -2418,6 +2493,16 @@ function toCentralSettingsFromFirestoreDoc_(snapshot) {
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "google_web_client_id");
   copyBooleanFieldIfPresent_(nextSettings, data, "googleDocsEnabled");
   copyBooleanFieldIfPresent_(nextSettings, data, "google_docs_enabled");
+  copyBooleanFieldIfPresent_(
+      nextSettings,
+      data,
+      "calendarIntegrationsEnabled",
+  );
+  copyBooleanFieldIfPresent_(
+      nextSettings,
+      data,
+      "calendar_integrations_enabled",
+  );
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "primary_button_text");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "primary_button_url");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "secondary_button_text");
@@ -2501,6 +2586,16 @@ function toCentralSundaySettingsFromFirestoreDoc_(snapshot) {
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "google_web_client_id");
   copyBooleanFieldIfPresent_(nextSettings, data, "googleDocsEnabled");
   copyBooleanFieldIfPresent_(nextSettings, data, "google_docs_enabled");
+  copyBooleanFieldIfPresent_(
+      nextSettings,
+      data,
+      "calendarIntegrationsEnabled",
+  );
+  copyBooleanFieldIfPresent_(
+      nextSettings,
+      data,
+      "calendar_integrations_enabled",
+  );
   copyModuleConfigFieldIfPresent_(
       nextSettings,
       data,
@@ -3165,26 +3260,49 @@ async function getCentralCalendarEvents_(roomRules) {
             instance.id,
             Array.isArray(roomRules) ? roomRules : [],
         );
+        const endsAt = attrs.published_ends_at || attrs.ends_at || "";
+        const endsDate = new Date(endsAt);
+        const hasValidEndDate = !Number.isNaN(endsDate.getTime());
+        const location = rooms.length ?
+          rooms.join(", ") :
+          cleanLocation_(attrs.location || "");
+        const title = attrs.name || "Untitled Event";
+        const description = attrs.recurrence_description || "";
+        const churchCenterUrl = attrs.church_center_url || "";
 
         return {
           active: "TRUE",
           featured: "FALSE",
-          title: attrs.name || "Untitled Event",
+          title: title,
           date: formatDate_(startsDate, PCO_TIMEZONE),
           time: formatTimeRange_(
               startsDate,
-              attrs.published_ends_at || attrs.ends_at || "",
+              endsAt,
               PCO_TIMEZONE,
           ),
-          location: rooms.length ?
-            rooms.join(", ") :
-            cleanLocation_(attrs.location || ""),
-          description: attrs.recurrence_description || "",
-          button_text: attrs.church_center_url ? "Learn More" : "",
-          button_url: attrs.church_center_url || "",
+          location: location,
+          description: description,
+          button_text: churchCenterUrl ? "Learn More" : "",
+          button_url: churchCenterUrl,
+          calendar_url: buildGoogleCalendarUrl_({
+            title: title,
+            startsAt: startsDate,
+            endsAt: endsAt,
+            location: location,
+            description: description,
+            url: churchCenterUrl,
+          }),
+          calendar_file_url: buildCalendarFileUrl_({
+            title: title,
+            startsAt: startsDate,
+            endsAt: endsAt,
+            location: location,
+            description: description,
+            url: churchCenterUrl,
+          }),
           image_url: "",
-          end_date: attrs.published_ends_at ?
-            formatDate_(new Date(attrs.published_ends_at), PCO_TIMEZONE) :
+          end_date: hasValidEndDate ?
+            formatDate_(endsDate, PCO_TIMEZONE) :
             "",
           sort: 50,
           source: "Planning Center",
@@ -3232,6 +3350,296 @@ function cleanLocation_(location) {
           "CrossPointe Church",
       )
       .trim();
+}
+
+/**
+ * Builds a Google Calendar event-template URL without requiring OAuth.
+ *
+ * @param {Object} event Event details.
+ * @return {string} A Google Calendar URL, or an empty string without a start.
+ */
+function buildGoogleCalendarUrl_(event) {
+  const startsAt = event && event.startsAt instanceof Date ?
+    event.startsAt :
+    new Date(event && event.startsAt);
+
+  if (Number.isNaN(startsAt.getTime())) return "";
+
+  const requestedEnd = new Date(event && event.endsAt);
+  const endsAt = !Number.isNaN(requestedEnd.getTime()) &&
+    requestedEnd.getTime() > startsAt.getTime() ?
+      requestedEnd :
+      new Date(startsAt.getTime() + 60 * 60 * 1000);
+  const details = [
+    String((event && event.description) || "").trim(),
+    event && event.url ? "More information: " + event.url : "",
+  ].filter(Boolean).join("\n\n");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: String((event && event.title) || "CrossPointe Event").trim(),
+    dates: formatGoogleCalendarDate_(startsAt) +
+      "/" + formatGoogleCalendarDate_(endsAt),
+  });
+
+  if (event && event.location) {
+    params.set("location", String(event.location).trim());
+  }
+
+  if (details) {
+    params.set("details", details);
+  }
+
+  return "https://calendar.google.com/calendar/render?" + params.toString();
+}
+
+/**
+ * Formats a date for the Google Calendar event-template dates parameter.
+ *
+ * @param {Date} date Date to format.
+ * @return {string} A compact UTC timestamp.
+ */
+function formatGoogleCalendarDate_(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+/**
+ * Builds a URL for downloading or opening a standards-based calendar event.
+ *
+ * @param {Object} event Event details.
+ * @return {string} A local calendar event URL.
+ */
+function buildCalendarFileUrl_(event) {
+  const startsAt = event && event.startsAt instanceof Date ?
+    event.startsAt :
+    new Date(event && event.startsAt);
+
+  if (Number.isNaN(startsAt.getTime())) return "";
+
+  const requestedEnd = new Date(event && event.endsAt);
+  const endsAt = !Number.isNaN(requestedEnd.getTime()) &&
+    requestedEnd.getTime() > startsAt.getTime() ?
+      requestedEnd :
+      new Date(startsAt.getTime() + 60 * 60 * 1000);
+  const payload = {
+    t: String((event && event.title) || "CrossPointe Event").trim(),
+    s: startsAt.toISOString(),
+    e: endsAt.toISOString(),
+    l: String((event && event.location) || "").trim(),
+    d: String((event && event.description) || "").trim(),
+    u: String((event && event.url) || "").trim(),
+  };
+  const token = Buffer.from(JSON.stringify(payload), "utf8").toString(
+      "base64url",
+  );
+  const signature = signCalendarEventToken_(token);
+
+  if (!signature) return "";
+
+  return "/api/calendar-event.ics?event=" + encodeURIComponent(token) +
+    "&signature=" + encodeURIComponent(signature);
+}
+
+/**
+ * Decodes and validates a public calendar event token.
+ *
+ * @param {unknown} rawToken Encoded event token.
+ * @param {unknown} rawSignature Event token signature.
+ * @return {Object} Validated event details.
+ */
+function decodeCalendarEventToken_(rawToken, rawSignature) {
+  const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
+  const signature = Array.isArray(rawSignature) ?
+    rawSignature[0] :
+    rawSignature;
+  const cleanToken = String(token || "").trim();
+  const cleanSignature = String(signature || "").trim();
+
+  if (
+    !cleanToken ||
+    cleanToken.length > 12000 ||
+    !isValidCalendarEventSignature_(cleanToken, cleanSignature)
+  ) {
+    throw new Error("Invalid calendar event token.");
+  }
+
+  const parsed = JSON.parse(
+      Buffer.from(cleanToken, "base64url").toString("utf8"),
+  );
+  const startsAt = new Date(parsed && parsed.s);
+  const requestedEnd = new Date(parsed && parsed.e);
+
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new Error("Invalid calendar event start.");
+  }
+
+  const endsAt = !Number.isNaN(requestedEnd.getTime()) &&
+    requestedEnd.getTime() > startsAt.getTime() ?
+      requestedEnd :
+      new Date(startsAt.getTime() + 60 * 60 * 1000);
+
+  return {
+    title: String((parsed && parsed.t) || "CrossPointe Event")
+        .trim().slice(0, 240),
+    startsAt: startsAt,
+    endsAt: endsAt,
+    location: String((parsed && parsed.l) || "").trim().slice(0, 500),
+    description: String((parsed && parsed.d) || "").trim().slice(0, 4000),
+    url: String((parsed && parsed.u) || "").trim().slice(0, 2000),
+  };
+}
+
+/**
+ * Signs a public calendar event token with a domain-separated key.
+ *
+ * @param {string} token Encoded event token.
+ * @return {string} URL-safe token signature.
+ */
+function signCalendarEventToken_(token) {
+  if (!PCO_SECRET) return "";
+
+  const signingKey = crypto.createHash("sha256")
+      .update("crosspointe-central-calendar-event\0")
+      .update(PCO_SECRET)
+      .digest();
+
+  return crypto.createHmac("sha256", signingKey)
+      .update(String(token || ""))
+      .digest("base64url");
+}
+
+/**
+ * Verifies a calendar token signature without leaking timing information.
+ *
+ * @param {string} token Encoded event token.
+ * @param {string} signature Provided token signature.
+ * @return {boolean} Whether the signature is valid.
+ */
+function isValidCalendarEventSignature_(token, signature) {
+  const expectedSignature = signCalendarEventToken_(token);
+
+  if (!expectedSignature || !signature) return false;
+
+  const expectedBytes = Buffer.from(expectedSignature, "base64url");
+  const providedBytes = Buffer.from(signature, "base64url");
+
+  return expectedBytes.length === providedBytes.length &&
+    crypto.timingSafeEqual(expectedBytes, providedBytes);
+}
+
+/**
+ * Creates an RFC 5545 calendar payload for a single event.
+ *
+ * @param {Object} event Validated event details.
+ * @return {{content: string, filename: string}} Calendar response details.
+ */
+function buildIcsCalendar_(event) {
+  const details = [
+    event.description,
+    event.url ? "More information: " + event.url : "",
+  ].filter(Boolean).join("\n\n");
+  const uid = crypto.createHash("sha256")
+      .update([
+        event.title,
+        event.startsAt.toISOString(),
+        event.endsAt.toISOString(),
+        event.url,
+      ].join("|"))
+      .digest("hex")
+      .slice(0, 32) + "@central.crosspointe.tv";
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//CrossPointe Central//Events//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    "UID:" + uid,
+    "DTSTAMP:" + formatGoogleCalendarDate_(new Date()),
+    "DTSTART:" + formatGoogleCalendarDate_(event.startsAt),
+    "DTEND:" + formatGoogleCalendarDate_(event.endsAt),
+    "SUMMARY:" + escapeIcsText_(event.title),
+  ];
+
+  if (event.location) {
+    lines.push("LOCATION:" + escapeIcsText_(event.location));
+  }
+
+  if (details) {
+    lines.push("DESCRIPTION:" + escapeIcsText_(details));
+  }
+
+  if (event.url) {
+    lines.push("URL:" + escapeIcsText_(event.url));
+  }
+
+  lines.push("STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR");
+
+  return {
+    content: lines.map(foldIcsLine_).join("\r\n") + "\r\n",
+    filename: buildCalendarFilename_(event.title),
+  };
+}
+
+/**
+ * Escapes text values used in an iCalendar payload.
+ *
+ * @param {unknown} value Value to escape.
+ * @return {string} Escaped iCalendar text.
+ */
+function escapeIcsText_(value) {
+  return String(value || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/\r?\n/g, "\\n")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,");
+}
+
+/**
+ * Folds an iCalendar content line to the RFC 5545 byte limit.
+ *
+ * @param {string} line Calendar content line.
+ * @return {string} Folded content line.
+ */
+function foldIcsLine_(line) {
+  const chunks = [];
+  let chunk = "";
+  let chunkBytes = 0;
+  let limit = 75;
+
+  for (const character of String(line || "")) {
+    const characterBytes = Buffer.byteLength(character, "utf8");
+
+    if (chunk && chunkBytes + characterBytes > limit) {
+      chunks.push(chunk);
+      chunk = "";
+      chunkBytes = 0;
+      limit = 74;
+    }
+
+    chunk += character;
+    chunkBytes += characterBytes;
+  }
+
+  chunks.push(chunk);
+  return chunks.map((value, index) => index ? " " + value : value)
+      .join("\r\n");
+}
+
+/**
+ * Creates a safe calendar filename from an event title.
+ *
+ * @param {string} title Event title.
+ * @return {string} Safe .ics filename.
+ */
+function buildCalendarFilename_(title) {
+  const basename = String(title || "crosspointe-event")
+      .normalize("NFKD")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase()
+      .slice(0, 80) || "crosspointe-event";
+
+  return basename + ".ics";
 }
 
 async function getEventInstanceRooms_(instanceId, roomRules) {
@@ -3642,6 +4050,8 @@ function toTodayItem_(item) {
     description: item.description,
     button_text: item.button_text,
     button_url: item.button_url,
+    calendar_url: item.calendar_url,
+    calendar_file_url: item.calendar_file_url,
     sort: item.sort,
     source: item.source,
     _dateObj: item._dateObj,
@@ -3659,6 +4069,8 @@ function toUpcomingItem_(item) {
     description: item.description,
     button_text: item.button_text,
     button_url: item.button_url,
+    calendar_url: item.calendar_url,
+    calendar_file_url: item.calendar_file_url,
     image_url: item.image_url,
     end_date: item.end_date,
     sort: item.sort,
@@ -4008,6 +4420,7 @@ function normalizePreviewPublishSection_(value) {
     section === "hubSettings" ||
     section === "hubSunday" ||
     section === "settingsSunday" ||
+    section === "integrations" ||
     section === "thisSunday" ||
     section === "campaigns" ||
     section === "nextSteps" ||
@@ -4180,6 +4593,14 @@ function getPreviewPublishPermission_(pageAccess, section) {
 
   if (section === "settingsSunday") {
     return getManagedAdminSectionPermission_(source, "settings");
+  }
+
+  if (section === "integrations") {
+    return getManagedAdminSectionPermission_(
+        source,
+        "integrations",
+        "settings",
+    );
   }
 
   if (section === "thisSunday") {
@@ -4875,7 +5296,11 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
       {};
 
   MANAGED_ADMIN_PAGE_KEYS.forEach((key) => {
-    nextPageAccess[key] = normalizePreviewPermissionValue_(source[key]);
+    const value = key === "integrations" &&
+      !Object.prototype.hasOwnProperty.call(source, key) ?
+      source.settings :
+      source[key];
+    nextPageAccess[key] = normalizePreviewPermissionValue_(value);
   });
 
   return nextPageAccess;
@@ -5232,6 +5657,10 @@ function normalizePreviewSectionPayload_(section, operation, rawPayload) {
 
   if (section === "settingsSunday") {
     return buildPublishedSettingsSundayPayload_(rawPayload || {});
+  }
+
+  if (section === "integrations") {
+    return buildPublishedIntegrationsPayload_(rawPayload || {});
   }
 
   if (section === "thisSunday") {
@@ -5685,6 +6114,15 @@ async function publishPreviewSectionPayload_(
       publishedDocPath: CENTRAL_PUBLIC_SUNDAY_SETTINGS_DOC_PATH,
       payload: payload,
       message: "Sunday controls published.",
+      publisher: publisher,
+    });
+  }
+
+  if (section === "integrations") {
+    return publishPreviewMergedSingletonPayload_({
+      publishedDocPath: CENTRAL_PUBLIC_SUNDAY_SETTINGS_DOC_PATH,
+      payload: payload,
+      message: "Integrations published.",
       publisher: publisher,
     });
   }
@@ -6204,6 +6642,10 @@ function getPreviewSectionLabel_(section) {
     return "Settings";
   }
 
+  if (section === "integrations") {
+    return "Integrations";
+  }
+
   if (section === "thisSunday") {
     return "Sunday";
   }
@@ -6274,6 +6716,10 @@ function buildChangeRequestSummary_(section, operation, payload) {
 
   if (section === "settingsSunday") {
     return "Settings: operational Sunday controls update";
+  }
+
+  if (section === "integrations") {
+    return "Integrations: connected service settings update";
   }
 
   if (section === "thisSunday") {
@@ -9643,6 +10089,17 @@ function buildPublishedSettingsSundayPayload_(sourceData) {
     force_sunday_mode: sundayModeOverride === "enabled",
     sunday_mode_start_time: sundayModeStartTime,
     sunday_mode_end_time: sundayModeEndTime,
+  };
+}
+
+/**
+ * Normalizes the connected-service settings published by the admin.
+ *
+ * @param {Object} sourceData Submitted integration settings.
+ * @return {Object} Normalized Firestore payload.
+ */
+function buildPublishedIntegrationsPayload_(sourceData) {
+  return {
     sunday_livestream_url: trimFirestoreStringValue_(
         sourceData.sunday_livestream_url,
     ),
@@ -9659,6 +10116,14 @@ function buildPublishedSettingsSundayPayload_(sourceData) {
         Object.prototype.hasOwnProperty.call(sourceData, "google_docs_enabled") ?
           sourceData.google_docs_enabled :
           sourceData.googleDocsEnabled,
+    ) !== false,
+    calendar_integrations_enabled: normalizeOptionalBooleanConfigValue_(
+        Object.prototype.hasOwnProperty.call(
+            sourceData,
+            "calendar_integrations_enabled",
+        ) ?
+          sourceData.calendar_integrations_enabled :
+          sourceData.calendarIntegrationsEnabled,
     ) !== false,
   };
 }
@@ -10162,6 +10627,7 @@ function buildFirstAdminPageAccess_() {
   return {
     hub: "admin",
     settings: "admin",
+    integrations: "admin",
     sundaySettings: "admin",
     thisSunday: "admin",
     whatsNew: "admin",

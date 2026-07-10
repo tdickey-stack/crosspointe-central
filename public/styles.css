@@ -974,6 +974,108 @@ h1 {
   color: var(--cp-action-text);
 }
 
+.event-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.event-card .card-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.event-card .card-actions.calendar-only {
+  justify-content: flex-end;
+}
+
+.card.event-card .card-actions .btn {
+  flex: 0 0 auto;
+  width: auto;
+  margin-top: 0;
+}
+
+.card.event-card .event-calendar-btn {
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--cp-border);
+  background: transparent;
+  color: var(--cp-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.card.event-card .event-calendar-btn:hover {
+  background: var(--cp-surface-soft);
+  color: var(--cp-text);
+  transform: translateY(-1px);
+}
+
+.event-calendar-control {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.event-calendar-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 9px);
+  z-index: 30;
+  width: min(260px, calc(100vw - 48px));
+  padding: 7px;
+  border: 1px solid var(--cp-border);
+  border-radius: 15px;
+  background: var(--cp-surface-elevated);
+  box-shadow: var(--cp-shadow);
+}
+
+.event-calendar-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  color: var(--cp-text);
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.event-calendar-option:hover,
+.event-calendar-option:focus-visible {
+  outline: none;
+  background: var(--cp-surface-soft);
+}
+
+.event-calendar-option strong {
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.event-calendar-provider-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.event-calendar-option + .event-calendar-option {
+  border-top: 1px solid var(--cp-border);
+}
+
+.event-calendar-logo {
+  display: block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
 .sunday-card {
   background: var(--cp-dark);
   color: var(--cp-white);

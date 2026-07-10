@@ -143,6 +143,15 @@
       status: "Preview workflow",
     },
     {
+      id: "integrations",
+      label: "Integrations",
+      route: "/admin/integrations",
+      pageAccessKey: "integrations",
+      summary: "Connections and service-specific settings for Google, calendars, Resi, YouVersion, and Planning Center.",
+      collectionPath: PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
+      status: "Preview workflow",
+    },
+    {
       id: "change-requests",
       label: "Change Requests",
       route: "/admin/change-requests",
@@ -282,6 +291,7 @@
   var FIRST_ADMIN_PAGE_ACCESS = {
     hub: "admin",
     settings: "admin",
+    integrations: "admin",
     sundaySettings: "admin",
     thisSunday: "admin",
     whatsNew: "admin",
@@ -481,6 +491,9 @@
     settingsSundayDraft: createEmptySettingsSundayDraft_(),
     settingsSundayError: "",
     settingsSundayMessage: "",
+    integrationsPublishing: false,
+    integrationsError: "",
+    integrationsMessage: "",
     roomRulesLoaded: false,
     roomRulesLoading: false,
     roomRulesSaving: false,
@@ -543,7 +556,9 @@
   var ADMIN_EXPANDABLE_FLOW_DURATION_MS = 1000;
   var DELETE_CONFIRM_SUPPRESSION_MS = 5 * 60 * 1000;
   var DELETE_CONFIRM_STORAGE_KEY = "centralAdminDeleteConfirmSuppressedUntil";
-  var CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY = "centralAdminCollapsedSectionsV2";
+  var CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY = "centralAdminCollapsedSectionsV3";
+  var LEGACY_ADMIN_COLLAPSED_SECTIONS_KEY =
+    "centralAdminCollapsedSectionsV2";
   var CENTRAL_ADMIN_WHATS_NEW_SEEN_KEY = "central-admin-whats-new-seen-v1";
   var CENTRAL_ADMIN_REDIRECT_SIGN_IN_KEY = "centralAdminRedirectSignInPending";
   var DEFAULT_ADMIN_COLLAPSED_SECTION_IDS = [
@@ -553,6 +568,16 @@
     "settings-room-rule-form",
     "settings-room-rules-list",
     "settings-admin-users",
+    "integrations-google-calendar",
+    "integrations-resi",
+    "integrations-youversion",
+    "integrations-planning-center",
+  ];
+  var ADMIN_COLLAPSED_SECTION_MIGRATION_IDS = [
+    "integrations-google-calendar",
+    "integrations-resi",
+    "integrations-youversion",
+    "integrations-planning-center",
   ];
   var currentCentralDataCacheValue = null;
   var currentCentralDataCacheFetchedAt = 0;
@@ -1171,6 +1196,19 @@
       }
 
       if (action === "reset-settings-sunday") {
+        event.preventDefault();
+        resetSettingsSundayDraftFromCurrent_();
+        renderAdmin_();
+        return;
+      }
+
+      if (action === "publish-integrations") {
+        event.preventDefault();
+        publishIntegrationsToPreview_();
+        return;
+      }
+
+      if (action === "reset-integrations") {
         event.preventDefault();
         resetSettingsSundayDraftFromCurrent_();
         renderAdmin_();
@@ -2269,10 +2307,12 @@
             nextValue,
         );
       } else if (field.indexOf("settings-sunday.") === 0) {
-        updateSettingsSundayDraftField_(
-            field.replace("settings-sunday.", ""),
-            nextValue,
-        );
+        var settingsSundayFieldName = field.replace("settings-sunday.", "");
+        updateSettingsSundayDraftField_(settingsSundayFieldName, nextValue);
+        if (settingsSundayFieldName === "google_docs_enabled" ||
+          settingsSundayFieldName === "calendar_integrations_enabled") {
+          renderAdmin_();
+        }
       } else if (field.indexOf("sunday.") === 0) {
         updateSundayDraftField_(
             field.replace("sunday.", ""),
@@ -2466,6 +2506,20 @@
 
   function getStoredAdminCollapsedSections_() {
     var defaultSections = getDefaultAdminCollapsedSections_();
+    var storageKey = CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY ||
+      "centralAdminCollapsedSectionsV3";
+    var legacyStorageKey = LEGACY_ADMIN_COLLAPSED_SECTIONS_KEY ||
+      "centralAdminCollapsedSectionsV2";
+    var migrationSectionIds = Array.isArray(
+        ADMIN_COLLAPSED_SECTION_MIGRATION_IDS,
+    ) ?
+      ADMIN_COLLAPSED_SECTION_MIGRATION_IDS :
+      [
+        "integrations-google-calendar",
+        "integrations-resi",
+        "integrations-youversion",
+        "integrations-planning-center",
+      ];
 
     if (!window.localStorage) {
       return defaultSections;
@@ -2473,10 +2527,30 @@
 
     try {
       var rawValue = window.localStorage.getItem(
-          CENTRAL_ADMIN_COLLAPSED_SECTIONS_KEY,
+          storageKey,
       ) || "";
 
       if (!rawValue) {
+        var legacyRawValue = window.localStorage.getItem(
+            legacyStorageKey,
+        ) || "";
+        var legacySections = legacyRawValue ?
+          JSON.parse(legacyRawValue) :
+          null;
+
+        if (legacySections &&
+          typeof legacySections === "object" &&
+          !Array.isArray(legacySections)) {
+          migrationSectionIds.forEach(function(sectionId) {
+            legacySections[sectionId] = true;
+          });
+          window.localStorage.setItem(
+              storageKey,
+              JSON.stringify(legacySections),
+          );
+          return legacySections;
+        }
+
         return defaultSections;
       }
 
@@ -2499,6 +2573,10 @@
         "settings-room-rule-form",
         "settings-room-rules-list",
         "settings-admin-users",
+        "integrations-google-calendar",
+        "integrations-resi",
+        "integrations-youversion",
+        "integrations-planning-center",
       ];
     var sections = {};
 
@@ -3228,6 +3306,10 @@
 
     if (currentPage.id === "settings") {
       return renderSettingsPagePanel_(currentPage);
+    }
+
+    if (currentPage.id === "integrations") {
+      return renderIntegrationsPagePanel_(currentPage);
     }
 
     if (currentPage.id === "status-banner") {
@@ -4411,7 +4493,7 @@
       bodyHtml: [
       renderAdminNote_(
           canEdit ?
-            "These operational Sunday settings control how Sunday mode turns on, plus the livestream destination and Bible translation used by the scripture reader." :
+            "These operational settings control when Sunday Mode turns on. Service integrations now live on the Integrations page." :
             "Your current permission level does not allow editing Settings.",
       ),
       adminState.settingsSundayMessage ?
@@ -4450,54 +4532,7 @@
         type: "time",
         disabled: !canEdit,
       }),
-      renderAdminInputField_({
-        label: "Livestream URL",
-        field: "settings-sunday.sunday_livestream_url",
-        value: draft.sunday_livestream_url,
-        placeholder: "https://live.crosspointe.tv",
-        type: "text",
-        disabled: !canEdit,
-        wide: true,
-      }),
-      renderAdminTextareaField_({
-        label: "Livestream Note",
-        field: "settings-sunday.sunday_livestream_note",
-        value: draft.sunday_livestream_note,
-        placeholder: "Optional helper text beneath the livestream card.",
-        rows: 3,
-        wide: true,
-        disabled: !canEdit,
-      }),
-      renderAdminInputField_({
-        label: "Bible ID",
-        field: "settings-sunday.sunday_scripture_bible_id",
-        value: draft.sunday_scripture_bible_id,
-        placeholder: "3034",
-        maxLength: 12,
-        disabled: !canEdit,
-      }),
-      renderAdminCheckboxField_({
-        label: "Enable Google Docs note saving",
-        field: "settings-sunday.google_docs_enabled",
-        checked: draft.google_docs_enabled,
-        disabled: !canEdit,
-      }),
-      renderAdminInputField_({
-        label: "Google Docs Web Client ID",
-        field: "settings-sunday.google_web_client_id",
-        value: draft.google_web_client_id,
-        placeholder: "1234567890-abc123def456.apps.googleusercontent.com",
-        type: "text",
-        disabled: !canEdit || !draft.google_docs_enabled,
-        wide: true,
-      }),
       "</div>",
-      renderAdminNote_(
-          "This toggle only enables the feature. Central still needs a Google Web Client ID here or a backend CENTRAL_GOOGLE_WEB_CLIENT_ID value before note saving can work.",
-      ),
-      renderAdminNote_(
-          "Leave the client ID blank if you want Central to keep using the existing backend value. Turn this off anytime you need to temporarily hide Google Docs saving.",
-      ),
       "<div class=\"central-admin-action-row\">",
       "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"publish-settings-sunday\"",
       actionDisabled ? " disabled" : "",
@@ -4512,6 +4547,218 @@
       ">Reset Changes</button>",
       "</div>",
       ].join(""),
+    });
+  }
+
+  function renderIntegrationsPagePanel_(currentPage) {
+    var permission = getPageAccessLevel_("integrations");
+    var canEdit = canEditIntegrations_();
+    var actionConfig = getPrimaryContentActionConfig_(permission);
+    var actionDisabled = !canEdit ||
+      adminState.integrationsPublishing ||
+      adminState.settingsLoading;
+
+    return [
+      "<section class=\"central-admin-panel\">",
+      "<div class=\"central-admin-panel-header\">",
+      "<div>",
+      "<h3>", escapeHtml_(currentPage.label), "</h3>",
+      "<p>", escapeHtml_(currentPage.summary), "</p>",
+      "</div>",
+      renderStatusPill_(currentPage.status, "is-safe"),
+      "</div>",
+      "<div class=\"central-admin-page-body\">",
+      "<div class=\"central-admin-page-meta\">",
+      renderInlineMeta_("Route", currentPage.route),
+      renderInlineMeta_(
+          "Published settings",
+          PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
+      ),
+      renderInlineMeta_(
+          "Public behavior",
+          "Changes take effect after they are published.",
+      ),
+      "</div>",
+      "<div class=\"central-admin-stack\">",
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\">",
+      "<strong>Connected services</strong>",
+      renderStatusPill_(
+          canEdit ? "Ready to configure" : "Read only",
+          canEdit ? "is-live" : "is-warn",
+      ),
+      "</div>",
+      renderAdminNote_(
+          canEdit ?
+            "Manage the services Central connects to. Each section keeps one provider's settings together." :
+            "Your current permission level does not allow editing Integrations.",
+      ),
+      adminState.settingsLoading ?
+        renderAdminNote_("Loading the current integration settings.") :
+        "",
+      adminState.settingsLoadError ?
+        "<p class=\"central-admin-note\">" +
+        escapeHtml_(adminState.settingsLoadError) +
+        "</p>" :
+        "",
+      adminState.integrationsMessage ?
+        renderAdminNote_(adminState.integrationsMessage) :
+        "",
+      adminState.integrationsError ?
+        "<p class=\"central-admin-note\">" +
+        escapeHtml_(adminState.integrationsError) +
+        "</p>" :
+        "",
+      "</div>",
+      renderGoogleCalendarIntegrationSection_(),
+      renderResiIntegrationSection_(),
+      renderYouVersionIntegrationSection_(),
+      renderPlanningCenterIntegrationSection_(),
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"publish-integrations\"",
+      actionDisabled ? " disabled" : "",
+      ">",
+      adminState.integrationsPublishing ?
+        escapeHtml_(getPrimaryContentBusyLabel_(actionConfig)) :
+        escapeHtml_(actionConfig.label),
+      "</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reset-integrations\"",
+      adminState.integrationsPublishing || !canEdit ? " disabled" : "",
+      ">Reset Changes</button>",
+      "</div>",
+      "</div>",
+      "</div>",
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderGoogleCalendarIntegrationSection_() {
+    var draft = adminState.settingsSundayDraft ||
+      createEmptySettingsSundayDraft_();
+    var canEdit = canEditIntegrations_();
+
+    return renderCollapsibleAdminSection_({
+      id: "integrations-google-calendar",
+      title: "Google + Calendar",
+      pillHtml: renderStatusPill_(
+          draft.google_docs_enabled || draft.calendar_integrations_enabled ?
+            "Enabled" :
+            "Disabled",
+          draft.google_docs_enabled || draft.calendar_integrations_enabled ?
+            "is-safe" :
+            "is-warn",
+      ),
+      bodyHtml: [
+        renderAdminCheckboxField_({
+          label: "Enable Google Docs integration",
+          field: "settings-sunday.google_docs_enabled",
+          checked: draft.google_docs_enabled,
+          disabled: !canEdit,
+        }),
+        renderAdminCheckboxField_({
+          label: "Enable calendar integrations",
+          field: "settings-sunday.calendar_integrations_enabled",
+          checked: draft.calendar_integrations_enabled,
+          disabled: !canEdit,
+        }),
+        renderAdminNote_(
+            "Google Docs adds note saving to Sunday Mode. Calendar integrations add Google, Apple, and Outlook options to event cards.",
+        ),
+        "<div class=\"central-admin-form-grid\">",
+        renderAdminInputField_({
+          label: "Google Docs Web Client ID",
+          field: "settings-sunday.google_web_client_id",
+          value: draft.google_web_client_id,
+          placeholder: "1234567890-abc123def456.apps.googleusercontent.com",
+          type: "text",
+          disabled: !canEdit || !draft.google_docs_enabled,
+          wide: true,
+        }),
+        "</div>",
+        renderAdminNote_(
+            "Leave the client ID blank to keep using the existing backend value. Disabling Google Docs does not affect the calendar menu.",
+        ),
+      ].join(""),
+    });
+  }
+
+  function renderResiIntegrationSection_() {
+    var draft = adminState.settingsSundayDraft ||
+      createEmptySettingsSundayDraft_();
+    var canEdit = canEditIntegrations_();
+
+    return renderCollapsibleAdminSection_({
+      id: "integrations-resi",
+      title: "Resi",
+      pillHtml: renderStatusPill_(
+          draft.sunday_livestream_url ? "Configured" : "Not configured",
+          draft.sunday_livestream_url ? "is-safe" : "is-warn",
+      ),
+      bodyHtml: [
+        "<div class=\"central-admin-form-grid\">",
+        renderAdminInputField_({
+          label: "Livestream URL",
+          field: "settings-sunday.sunday_livestream_url",
+          value: draft.sunday_livestream_url,
+          placeholder: "https://live.crosspointe.tv",
+          type: "text",
+          disabled: !canEdit,
+          wide: true,
+        }),
+        renderAdminTextareaField_({
+          label: "Livestream Note",
+          field: "settings-sunday.sunday_livestream_note",
+          value: draft.sunday_livestream_note,
+          placeholder: "Optional helper text beneath the livestream card.",
+          rows: 3,
+          wide: true,
+          disabled: !canEdit,
+        }),
+        "</div>",
+      ].join(""),
+    });
+  }
+
+  function renderYouVersionIntegrationSection_() {
+    var draft = adminState.settingsSundayDraft ||
+      createEmptySettingsSundayDraft_();
+    var canEdit = canEditIntegrations_();
+
+    return renderCollapsibleAdminSection_({
+      id: "integrations-youversion",
+      title: "YouVersion",
+      pillHtml: renderStatusPill_(
+          draft.sunday_scripture_bible_id ? "Configured" : "Using default",
+          draft.sunday_scripture_bible_id ? "is-safe" : "is-live",
+      ),
+      bodyHtml: [
+        "<div class=\"central-admin-form-grid\">",
+        renderAdminInputField_({
+          label: "Bible ID",
+          field: "settings-sunday.sunday_scripture_bible_id",
+          value: draft.sunday_scripture_bible_id,
+          placeholder: "3034",
+          maxLength: 12,
+          disabled: !canEdit,
+        }),
+        "</div>",
+        renderAdminNote_(
+            "This selects the Bible version used by Central's scripture reader.",
+        ),
+      ].join(""),
+    });
+  }
+
+  function renderPlanningCenterIntegrationSection_() {
+    return renderCollapsibleAdminSection_({
+      id: "integrations-planning-center",
+      title: "Planning Center",
+      pillHtml: renderStatusPill_("More settings coming", "is-live"),
+      bodyHtml: renderAdminNote_(
+          "Additional Planning Center controls will live here as the integration grows.",
+      ),
     });
   }
 
@@ -7669,7 +7916,7 @@
 
     if (normalizedSection === "settingsSunday") {
       return {
-        label: "Sunday settings",
+        label: "Sunday controls",
         fields: [
           {
             key: "sunday_mode_override",
@@ -7678,12 +7925,27 @@
           },
           {key: "sunday_mode_start_time", label: "Sunday Mode start"},
           {key: "sunday_mode_end_time", label: "Sunday Mode end"},
+        ],
+      };
+    }
+
+    if (normalizedSection === "integrations") {
+      return {
+        label: "Integration settings",
+        fields: [
           {key: "sunday_livestream_url", label: "Livestream link"},
           {key: "sunday_livestream_note", label: "Livestream note"},
           {key: "sunday_scripture_bible_id", label: "Bible ID"},
           {
             key: "google_docs_enabled",
             label: "Google Docs note saving",
+            type: "boolean",
+            trueLabel: "Enabled",
+            falseLabel: "Disabled",
+          },
+          {
+            key: "calendar_integrations_enabled",
+            label: "Calendar integrations",
             type: "boolean",
             trueLabel: "Enabled",
             falseLabel: "Disabled",
@@ -8225,7 +8487,8 @@
       return;
     }
 
-    if (adminState.currentPageId === "settings") {
+    if (adminState.currentPageId === "settings" ||
+      adminState.currentPageId === "integrations") {
       loadSettingsIfNeeded_();
       return;
     }
@@ -8586,6 +8849,9 @@
                   adminState.settingsSundayMessage = String(
                       nextMessage.sunday || "",
                   ).trim();
+                  adminState.integrationsMessage = String(
+                      nextMessage.integrations || "",
+                  ).trim();
                   adminState.roomRulesMessage = String(
                       nextMessage.roomRules || "",
                   ).trim();
@@ -8626,6 +8892,12 @@
 
   function canEditSettingsSunday_() {
     return canChangeContentWithPermission_(getPageAccessLevel_("settings"));
+  }
+
+  function canEditIntegrations_() {
+    return canChangeContentWithPermission_(
+        getPageAccessLevel_("integrations"),
+    );
   }
 
   function canEditRoomRules_() {
@@ -8714,6 +8986,7 @@
       sunday_livestream_note: "",
       sunday_scripture_bible_id: "",
       google_docs_enabled: true,
+      calendar_integrations_enabled: true,
       google_web_client_id: "",
     };
   }
@@ -8773,6 +9046,9 @@
     );
     adminState.settingsSundayError = "";
     adminState.settingsSundayMessage = "";
+    adminState.integrationsPublishing = false;
+    adminState.integrationsError = "";
+    adminState.integrationsMessage = "";
   }
 
   function resetSundayDraftFromCurrent_() {
@@ -8825,6 +9101,9 @@
     adminState.settingsSundayDraft = createEmptySettingsSundayDraft_();
     adminState.settingsSundayError = "";
     adminState.settingsSundayMessage = "";
+    adminState.integrationsPublishing = false;
+    adminState.integrationsError = "";
+    adminState.integrationsMessage = "";
     resetRoomRulesState_();
     resetAdminUsersState_();
   }
@@ -8881,8 +9160,13 @@
 
   function updateSettingsSundayDraftField_(fieldName, nextValue) {
     adminState.settingsSundayDraft[fieldName] = nextValue;
-    adminState.settingsSundayError = "";
-    adminState.settingsSundayMessage = "";
+    if (adminState.currentPageId === "integrations") {
+      adminState.integrationsError = "";
+      adminState.integrationsMessage = "";
+    } else {
+      adminState.settingsSundayError = "";
+      adminState.settingsSundayMessage = "";
+    }
   }
 
   function updateSundayDraftField_(fieldName, nextValue) {
@@ -8956,6 +9240,7 @@
   function normalizeSettingsSundayData_(data) {
     var source = data || {};
     var googleDocsEnabled = true;
+    var calendarIntegrationsEnabled = true;
 
     if (Object.prototype.hasOwnProperty.call(source, "google_docs_enabled")) {
       googleDocsEnabled = normalizeAdminBooleanValue_(
@@ -8965,6 +9250,24 @@
     } else if (Object.prototype.hasOwnProperty.call(source, "googleDocsEnabled")) {
       googleDocsEnabled = normalizeAdminBooleanValue_(
           source.googleDocsEnabled,
+          true,
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(
+        source,
+        "calendar_integrations_enabled",
+    )) {
+      calendarIntegrationsEnabled = normalizeAdminBooleanValue_(
+          source.calendar_integrations_enabled,
+          true,
+      );
+    } else if (Object.prototype.hasOwnProperty.call(
+        source,
+        "calendarIntegrationsEnabled",
+    )) {
+      calendarIntegrationsEnabled = normalizeAdminBooleanValue_(
+          source.calendarIntegrationsEnabled,
           true,
       );
     }
@@ -8986,6 +9289,7 @@
       sunday_livestream_note: String(source.sunday_livestream_note || "").trim(),
       sunday_scripture_bible_id: String(source.sunday_scripture_bible_id || "").trim(),
       google_docs_enabled: googleDocsEnabled,
+      calendar_integrations_enabled: calendarIntegrationsEnabled,
       google_web_client_id: String(
           source.google_web_client_id ||
           source.googleWebClientId ||
@@ -9034,6 +9338,33 @@
 
   function buildSettingsSundayPayload_() {
     return normalizeSettingsSundayData_(adminState.settingsSundayDraft);
+  }
+
+  function buildSundayControlsPayload_() {
+    var normalized = normalizeSettingsSundayData_(
+        adminState.settingsSundayDraft,
+    );
+
+    return {
+      sunday_mode_override: normalized.sunday_mode_override,
+      sunday_mode_start_time: normalized.sunday_mode_start_time,
+      sunday_mode_end_time: normalized.sunday_mode_end_time,
+    };
+  }
+
+  function buildIntegrationsPayload_() {
+    var normalized = normalizeSettingsSundayData_(
+        adminState.settingsSundayDraft,
+    );
+
+    return {
+      sunday_livestream_url: normalized.sunday_livestream_url,
+      sunday_livestream_note: normalized.sunday_livestream_note,
+      sunday_scripture_bible_id: normalized.sunday_scripture_bible_id,
+      google_docs_enabled: normalized.google_docs_enabled,
+      calendar_integrations_enabled: normalized.calendar_integrations_enabled,
+      google_web_client_id: normalized.google_web_client_id,
+    };
   }
 
   function buildSundayPayload_() {
@@ -9528,7 +9859,7 @@
   function publishSettingsSundayToPreview_() {
     var permission = getPageAccessLevel_("settings");
     var actionConfig = getPrimaryContentActionConfig_(permission);
-    var payload = buildSettingsSundayPayload_();
+    var payload = buildSundayControlsPayload_();
 
     if (!canEditSettingsSunday_()) {
       adminState.settingsSundayError =
@@ -9574,6 +9905,59 @@
             (actionConfig.mode === "submit" ?
               "Unable to submit the Sunday controls for approval." :
               "Unable to publish the Sunday controls to preview.");
+          renderAdmin_();
+        });
+  }
+
+  function publishIntegrationsToPreview_() {
+    var permission = getPageAccessLevel_("integrations");
+    var actionConfig = getPrimaryContentActionConfig_(permission);
+    var payload = buildIntegrationsPayload_();
+
+    if (!canEditIntegrations_()) {
+      adminState.integrationsError =
+        "Your current access level cannot change Integrations.";
+      renderAdmin_();
+      return;
+    }
+
+    adminState.integrationsPublishing = true;
+    adminState.integrationsError = "";
+    adminState.integrationsMessage = "";
+    renderAdmin_();
+
+    runSectionPrimaryAction_({
+      section: "integrations",
+      permission: permission,
+      payload: payload,
+      successMessage: actionConfig.mode === "submit" ?
+        "Integration changes submitted for approval." :
+        "Integrations published.",
+    })
+        .then(function(result) {
+          adminState.integrationsPublishing = false;
+          adminState.integrationsMessage = result && result.message ?
+            result.message :
+            (actionConfig.mode === "submit" ?
+              "Integration changes submitted for approval." :
+              "Integrations published.");
+
+          if (actionConfig.mode === "publish") {
+            loadSettings_({
+              integrations: adminState.integrationsMessage,
+            });
+            return;
+          }
+
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.integrationsPublishing = false;
+          adminState.integrationsError = error && error.message ?
+            error.message :
+            (actionConfig.mode === "submit" ?
+              "Unable to submit the integration changes for approval." :
+              "Unable to publish Integrations.");
           renderAdmin_();
         });
   }
@@ -13415,7 +13799,7 @@
       adminState.nextStepsLoaded = false;
     }
 
-    if (pageId === "settings" &&
+    if ((pageId === "settings" || pageId === "integrations") &&
       !hasPendingSettingsChanges_() &&
       !hasPendingRoomRulesChanges_() &&
       !hasPendingAdminUsersChanges_()) {
@@ -13995,6 +14379,7 @@
     return [
       {key: "hub", label: "Hub"},
       {key: "settings", label: "Settings"},
+      {key: "integrations", label: "Integrations"},
       {key: "thisSunday", label: "Sunday"},
       {key: "quickLinks", label: "Quick Links"},
       {key: "statusBanner", label: "Status Banner"},
@@ -14017,6 +14402,7 @@
     }
 
     if (pageAccessKey === "hub" ||
+      pageAccessKey === "integrations" ||
       pageAccessKey === "resources" ||
       pageAccessKey === "nextSteps" ||
       pageAccessKey === "campaigns" ||
@@ -14039,6 +14425,12 @@
     Object.keys(source).forEach(function(key) {
       nextPageAccess[key] = normalizeAdminPermissionValue_(source[key]);
     });
+
+    if (!Object.prototype.hasOwnProperty.call(source, "integrations")) {
+      nextPageAccess.integrations = normalizeAdminPermissionValue_(
+          source.settings,
+      );
+    }
 
     return nextPageAccess;
   }
@@ -15117,7 +15509,7 @@
       return normalizeAdminPermissionValue_(pageAccess[pageAccessKey]);
     }
 
-    if (pageAccessKey === "hub") {
+    if (pageAccessKey === "hub" || pageAccessKey === "integrations") {
       return normalizeAdminPermissionValue_(pageAccess.settings);
     }
 

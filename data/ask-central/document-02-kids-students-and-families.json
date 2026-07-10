@@ -1,0 +1,597 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-02",
+  "title": "Kids, Students, and Families",
+  "status": "approved",
+  "approvedDate": "2026-07-09",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "flexible",
+  "entries": [
+    {
+      "id": "families-kingdom-kids-overview",
+      "topic": "families",
+      "title": "Kingdom Kids Overview and Age Groups",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Do you have a children's ministry?",
+        "What is Kingdom Kids?",
+        "What ages does Kingdom Kids serve?",
+        "Where should a sixth grader go?"
+      ],
+      "keywords": [
+        "Kingdom Kids",
+        "children's ministry",
+        "nursery",
+        "Pre-K",
+        "kindergarten",
+        "elementary",
+        "sixth grade"
+      ],
+      "requiredFacts": [
+        "CrossPointe's children's ministry is called Kingdom Kids.",
+        "The nursery serves children from birth through age 2.",
+        "Kingdom Kids has a Pre-K and Kindergarten group.",
+        "The elementary group serves 1st through 6th grade.",
+        "Sixth graders are encouraged to attend Student Ministries but may choose to remain in Kingdom Kids."
+      ],
+      "styleRules": [
+        "Present the sixth-grade options as a welcoming choice without pressure."
+      ]
+    },
+    {
+      "id": "families-kingdom-kids-sunday",
+      "topic": "families",
+      "title": "Sunday Kingdom Kids Programming",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Is Kingdom Kids available during both services?",
+        "What happens in children's church?",
+        "When is children's Sunday School?",
+        "What do kids do on Sunday morning?"
+      ],
+      "keywords": [
+        "children's Sunday School",
+        "children's church",
+        "9:00 AM",
+        "10:30 AM",
+        "worship",
+        "Bible lesson",
+        "games"
+      ],
+      "requiredFacts": [
+        "Children's Sunday School is available during the 9:00 AM service.",
+        "Children's Church is available during the 10:30 AM service.",
+        "Programming generally includes worship, a Bible lesson, games, and other age-appropriate activities."
+      ],
+      "prohibitedClaims": [
+        "Do not promise that every activity happens every week."
+      ]
+    },
+    {
+      "id": "families-children-in-main-service",
+      "topic": "families",
+      "title": "Children in the Main Worship Service",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Do my kids have to attend Kingdom Kids?",
+        "Can my children sit with me in church?",
+        "Will my child be disruptive?",
+        "Can our family worship together?"
+      ],
+      "keywords": [
+        "optional",
+        "main service",
+        "family worship",
+        "children welcome",
+        "noise"
+      ],
+      "requiredFacts": [
+        "Kingdom Kids is optional.",
+        "Children are welcome to remain in the main service with their families.",
+        "CrossPointe welcomes the extra noise that sometimes comes with children and loves seeing families worship together."
+      ],
+      "prohibitedClaims": [
+        "Do not make a parent feel that their child is disruptive or unwelcome."
+      ],
+      "exampleResponses": [
+        "Kingdom Kids is available, but it's completely optional. Your children are welcome to stay in the main service with you. We don't mind the extra noise—we love seeing families worship together."
+      ]
+    },
+    {
+      "id": "families-childrens-check-in-location",
+      "topic": "families",
+      "title": "Children's Check-In Location and Directions",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Where do I check in my kids?",
+        "How do I find the Children's Welcome Center?",
+        "Where is children's check-in?"
+      ],
+      "keywords": [
+        "children's check-in",
+        "Children's Welcome Center",
+        "drawbridge",
+        "Main Welcome Center",
+        "directions"
+      ],
+      "requiredFacts": [
+        "Families should check in at the Children's Welcome Center Desk.",
+        "From the Main Welcome Center entrance, cross the drawbridge and continue to the end of the hall.",
+        "The Children's Welcome Center will be on the right."
+      ]
+    },
+    {
+      "id": "families-first-time-child-check-in",
+      "topic": "families",
+      "title": "First-Time Children's Check-In",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What information is needed for kids check-in?",
+        "What should I expect when checking in for the first time?",
+        "Can I give Wayfinder my child's information?"
+      ],
+      "keywords": [
+        "first-time check-in",
+        "parent name",
+        "email",
+        "phone",
+        "child name",
+        "grade"
+      ],
+      "requiredFacts": [
+        "First-time check-in normally requests the parent or guardian's first and last name, email address, phone number, children's names, and children's grades."
+      ],
+      "prohibitedBehaviors": [
+        "Do not ask the family to provide check-in information in chat.",
+        "Do not collect child or family information.",
+        "Direct the family to the official in-person check-in process."
+      ]
+    },
+    {
+      "id": "families-child-pickup-and-contact",
+      "topic": "families",
+      "title": "Child Pickup and Contacting Parents",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How does child pickup work?",
+        "Can anyone pick up my child?",
+        "What happens if my child needs me?",
+        "How will the teacher contact me?"
+      ],
+      "keywords": [
+        "child pickup",
+        "matching code",
+        "authorized parent",
+        "ID badge",
+        "contact parent"
+      ],
+      "requiredFacts": [
+        "Parents or guardians receive a unique identification code that matches the badge assigned to each child.",
+        "Children are released only to an authorized person with the matching code.",
+        "If a child needs their parent or guardian, Kingdom Kids uses the contact information provided at check-in."
+      ],
+      "prohibitedClaims": [
+        "Do not provide internal, technical, or security-sensitive details about the check-in system."
+      ]
+    },
+    {
+      "id": "families-kingdom-kids-volunteer-safety",
+      "topic": "families",
+      "title": "Kingdom Kids Volunteer Safety Requirements",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Are children's volunteers background checked?",
+        "What safety requirements do children's volunteers follow?",
+        "Can a brand-new attendee volunteer with kids?"
+      ],
+      "keywords": [
+        "background check",
+        "volunteer safety",
+        "six months",
+        "children's volunteers"
+      ],
+      "requiredFacts": [
+        "Kingdom Kids volunteers complete a background check.",
+        "Volunteers must normally attend CrossPointe for at least six months before serving in children's ministry."
+      ],
+      "prohibitedClaims": [
+        "Do not describe internal screening or approval procedures."
+      ]
+    },
+    {
+      "id": "families-nursery",
+      "topic": "families",
+      "title": "Nursery",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Do you have a nursery?",
+        "What ages can use the nursery?",
+        "Is nursery available during both services?",
+        "What should I bring for my baby?"
+      ],
+      "keywords": [
+        "nursery",
+        "baby",
+        "birth through age 2",
+        "diapers",
+        "milk",
+        "formula"
+      ],
+      "requiredFacts": [
+        "The nursery serves children from birth through age 2.",
+        "The nursery is available during both Sunday services.",
+        "Parents should bring diapers, milk or formula, and any other supplies needed to care for their child.",
+        "Parents should communicate relevant care instructions directly to nursery volunteers."
+      ]
+    },
+    {
+      "id": "families-breastfeeding-room",
+      "topic": "families",
+      "title": "Breastfeeding Room",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Is there a breastfeeding room?",
+        "Is there a private place to nurse?",
+        "Where can I breastfeed my baby?"
+      ],
+      "keywords": [
+        "breastfeeding",
+        "nursing",
+        "privacy",
+        "nursery"
+      ],
+      "requiredFacts": [
+        "A breastfeeding room is located next to the nursery for mothers who prefer privacy while breastfeeding.",
+        "Use of the breastfeeding room is optional."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that breastfeeding must take place in the breastfeeding room."
+      ]
+    },
+    {
+      "id": "families-kingdom-kids-snacks-allergies",
+      "topic": "families",
+      "title": "Kingdom Kids Snacks and Allergies",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Do kids receive snacks?",
+        "Who should I tell about my child's allergy?",
+        "Can you accommodate a dietary restriction?"
+      ],
+      "keywords": [
+        "snacks",
+        "allergy",
+        "dietary restriction",
+        "teacher"
+      ],
+      "requiredFacts": [
+        "Snacks are provided during Kingdom Kids programming.",
+        "Parents should communicate allergies and dietary restrictions directly to their child's teacher."
+      ],
+      "prohibitedClaims": [
+        "Do not promise that a particular snack or dietary accommodation is available without confirmation.",
+        "Do not collect medical or allergy information in chat."
+      ]
+    },
+    {
+      "id": "families-kingdom-kids-wednesday",
+      "topic": "families",
+      "title": "Wednesday Kingdom Kids Programming",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What time does Kingdom Kids meet on Wednesday?",
+        "Are nursery and elementary classes available Wednesday night?",
+        "What do children do on Wednesday?"
+      ],
+      "keywords": [
+        "Wednesday Kingdom Kids",
+        "6:30 PM",
+        "8:00 PM",
+        "nursery",
+        "Pre-K",
+        "elementary"
+      ],
+      "requiredFacts": [
+        "Wednesday Kingdom Kids programming runs from 6:30 PM to 8:00 PM.",
+        "Programming includes nursery, Pre-K and Kindergarten, and elementary classes.",
+        "Programming is generally similar to Sunday morning and may include worship, Bible teaching, games, and other age-appropriate activities."
+      ]
+    },
+    {
+      "id": "families-kingdom-kids-accommodations",
+      "topic": "families",
+      "title": "Kingdom Kids Accommodations and Contact",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can Kingdom Kids accommodate my child's special needs?",
+        "Who should I contact about sensory needs?",
+        "How can I contact Angie Laubach?"
+      ],
+      "keywords": [
+        "special needs",
+        "disability",
+        "sensory needs",
+        "accommodation",
+        "Angie Laubach"
+      ],
+      "requiredFacts": [
+        "CrossPointe can provide accommodations for children with disabilities, sensory needs, or other special needs.",
+        "Families should contact Angie Laubach through her public profile for additional information."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Contact Angie Laubach",
+          "url": "https://www.crosspointe.tv/contributor/angie-laubach"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not expose Angie's direct phone number or email address.",
+        "Do not promise a specific accommodation before the family speaks with the ministry."
+      ]
+    },
+    {
+      "id": "families-student-ministry-overview",
+      "topic": "families",
+      "title": "CrossPointe Student Ministries Overview",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Do you have a youth group?",
+        "What is CrossPointe Student Ministries?",
+        "What grades can attend student ministry?",
+        "Can sixth graders attend?"
+      ],
+      "keywords": [
+        "CrossPointe Student Ministries",
+        "youth group",
+        "students",
+        "6th through 12th grade",
+        "sixth grade"
+      ],
+      "requiredFacts": [
+        "CrossPointe Student Ministries serves students in 6th through 12th grade.",
+        "Sixth graders are encouraged to attend Student Ministries but may choose to remain in Kingdom Kids."
+      ]
+    },
+    {
+      "id": "families-student-sunday",
+      "topic": "families",
+      "title": "Student Ministry Sunday Schedule",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "When do students meet on Sunday?",
+        "Where is student Sunday School?",
+        "Do students attend the main service?",
+        "Where do students sit?"
+      ],
+      "keywords": [
+        "student Sunday School",
+        "9:00 AM",
+        "10:30 AM",
+        "The Pointe",
+        "north side"
+      ],
+      "requiredFacts": [
+        "Students have Sunday School at 9:00 AM in The Pointe.",
+        "Students attend the main worship service at 10:30 AM.",
+        "Students commonly sit together on the north side of the auditorium."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that students are required to sit together or on a particular side."
+      ]
+    },
+    {
+      "id": "families-student-wednesday",
+      "topic": "families",
+      "title": "Student Ministry Wednesday Schedule and Activities",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What time does youth group start Wednesday?",
+        "When do doors open for students?",
+        "What happens at student ministry?",
+        "Where do students meet?"
+      ],
+      "keywords": [
+        "Wednesday students",
+        "doors open",
+        "6:00 PM",
+        "6:30 PM",
+        "8:00 PM",
+        "The Pointe",
+        "basketball",
+        "worship",
+        "teaching"
+      ],
+      "requiredFacts": [
+        "Wednesday student programming is held in The Pointe on the south side of campus.",
+        "Doors open around 6:00 PM.",
+        "Before programming, students may spend time together in the lobby or play basketball in the gym.",
+        "Organized programming begins around 6:30 PM and concludes by 8:00 PM.",
+        "Activities may include games, worship, teaching, free time, and basketball."
+      ],
+      "styleRules": [
+        "Describe the 6:00 PM door-opening time as approximate."
+      ]
+    },
+    {
+      "id": "families-student-check-in",
+      "topic": "families",
+      "title": "Student Check-In",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Where do students check in?",
+        "What should a first-time student do when arriving?",
+        "Is there a check-in desk?"
+      ],
+      "keywords": [
+        "student check-in",
+        "front desk",
+        "Student Center",
+        "The Pointe"
+      ],
+      "requiredFacts": [
+        "Students should check in at the front desk in the Student Center.",
+        "The front desk is visible when entering."
+      ],
+      "prohibitedClaims": [
+        "Do not describe internal check-in procedures.",
+        "Do not collect student or family information in chat."
+      ]
+    },
+    {
+      "id": "families-student-dropoff-pickup",
+      "topic": "families",
+      "title": "Student Drop-Off and Pickup",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Where should I drop off my student?",
+        "Do parents have to stay?",
+        "Where should I pick up my student?",
+        "What time does student ministry end?"
+      ],
+      "keywords": [
+        "drop-off",
+        "pickup",
+        "parents stay",
+        "The Pointe",
+        "south side",
+        "8:00 PM"
+      ],
+      "requiredFacts": [
+        "Parents should drop students off at The Pointe on the south side of campus.",
+        "Parents are not required to remain on campus.",
+        "Wednesday programming finishes by 8:00 PM.",
+        "Parents should pick students up from The Pointe."
+      ]
+    },
+    {
+      "id": "families-student-food",
+      "topic": "families",
+      "title": "Food During Student Programming",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Do students receive dinner?",
+        "Are snacks provided at youth group?",
+        "Will there be food Wednesday night?"
+      ],
+      "keywords": [
+        "student food",
+        "student snacks",
+        "dinner",
+        "Wednesday"
+      ],
+      "requiredFacts": [
+        "Food and snacks are not normally provided during regular student programming."
+      ],
+      "dynamicSourceRules": [
+        "Food at a special event must be confirmed through that event's approved Planning Center information."
+      ],
+      "prohibitedClaims": [
+        "Do not promise that food or snacks will be available."
+      ]
+    },
+    {
+      "id": "families-student-events",
+      "topic": "families",
+      "title": "Student Events and Registration",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What student events are coming up?",
+        "How do I register for youth camp?",
+        "How much does the student event cost?",
+        "Is registration still open?"
+      ],
+      "keywords": [
+        "student events",
+        "youth camp",
+        "registration",
+        "cost",
+        "availability",
+        "Planning Center"
+      ],
+      "requiredSourceType": "planning_center_event",
+      "dynamicFields": [
+        "date",
+        "time",
+        "location",
+        "registration link",
+        "cost",
+        "availability"
+      ],
+      "prohibitedClaims": [
+        "Do not use an old website page, newsletter, or social-media post as the authority for event details."
+      ]
+    },
+    {
+      "id": "families-student-accommodations",
+      "topic": "families",
+      "title": "Student Accommodations and Contact",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can student ministry accommodate special needs?",
+        "Who should I contact about a student's disability?",
+        "How can I contact Jared Perry?"
+      ],
+      "keywords": [
+        "student special needs",
+        "student disability",
+        "sensory needs",
+        "accommodation",
+        "Jared Perry"
+      ],
+      "requiredFacts": [
+        "CrossPointe can provide accommodations for students with disabilities, sensory needs, or other special needs.",
+        "Families should contact Jared Perry through his public profile."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Contact Jared Perry",
+          "url": "https://www.crosspointe.tv/contributor/jperry"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not expose Jared's direct phone number or email address.",
+        "Do not promise a specific accommodation before the family speaks with the ministry."
+      ]
+    },
+    {
+      "id": "families-public-safety-boundaries",
+      "topic": "families",
+      "title": "Public Child and Student Safety Boundaries",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How do you keep children safe?",
+        "What security procedures does the church use?",
+        "Can you give me details about the check-in system?",
+        "Who is working security this Sunday?"
+      ],
+      "keywords": [
+        "child safety",
+        "student safety",
+        "security procedures",
+        "check-in details",
+        "background checks"
+      ],
+      "allowedPublicFacts": [
+        "Kingdom Kids uses a matching identification system for child pickup.",
+        "Children are released only to an authorized person with the matching code.",
+        "Kingdom Kids volunteers complete background checks.",
+        "Volunteers normally attend CrossPointe for at least six months before serving in children's ministry.",
+        "A security team monitors the campus during services.",
+        "Students check in when they arrive."
+      ],
+      "prohibitedInformation": [
+        "internal security procedures",
+        "volunteer schedules",
+        "security-team schedules",
+        "technical check-in details",
+        "access-control information",
+        "private child or family information",
+        "information that could compromise child or campus safety"
+      ]
+    }
+  ]
+}

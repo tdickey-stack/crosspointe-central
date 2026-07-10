@@ -1,0 +1,498 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-01",
+  "title": "Visiting CrossPointe",
+  "status": "approved",
+  "approvedDate": "2026-07-09",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "flexible",
+  "entries": [
+    {
+      "id": "visiting-sunday-service-times",
+      "topic": "visiting",
+      "title": "Sunday Service Times and Duration",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What time are Sunday services?",
+        "When does church start?",
+        "How long is a service?",
+        "What time will church end?"
+      ],
+      "keywords": [
+        "service times",
+        "Sunday",
+        "9:00 AM",
+        "10:30 AM",
+        "service length",
+        "duration"
+      ],
+      "requiredFacts": [
+        "Normal Sunday services begin at 9:00 AM and 10:30 AM.",
+        "Services typically last 1 hour and 15 minutes to 1 hour and 30 minutes."
+      ],
+      "prohibitedClaims": [
+        "Do not use normal weekly times for a special holiday or event schedule.",
+        "Do not guarantee an exact ending time."
+      ],
+      "dynamicSourceRules": [
+        "Special holiday and event schedules must come from Planning Center or another approved live source."
+      ]
+    },
+    {
+      "id": "visiting-service-order",
+      "topic": "visiting",
+      "title": "What Happens During a Sunday Service",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What should I expect during church?",
+        "What happens in a CrossPointe service?",
+        "What is the order of service?"
+      ],
+      "keywords": [
+        "what to expect",
+        "service order",
+        "worship",
+        "sermon",
+        "announcements",
+        "invitation"
+      ],
+      "requiredFacts": [
+        "A typical service begins with approximately 30 minutes of worship music.",
+        "Announcements follow worship.",
+        "The sermon normally lasts approximately 30 to 45 minutes.",
+        "The service ends with an invitation and dismissal."
+      ]
+    },
+    {
+      "id": "visiting-service-music-styles",
+      "topic": "visiting",
+      "title": "Differences Between Sunday Services",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What is the difference between the two services?",
+        "Which service has modern worship music?",
+        "Which service has Southern Gospel music?",
+        "Is the sermon different at each service?"
+      ],
+      "keywords": [
+        "9:00 service",
+        "10:30 service",
+        "Southern Gospel",
+        "modern worship",
+        "music style",
+        "same sermon"
+      ],
+      "requiredFacts": [
+        "The 9:00 AM service features Southern Gospel-style music.",
+        "The 10:30 AM service features modern praise and worship music.",
+        "The sermon and overall service structure are the same at both services."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that either service is intended for a particular age group or type of person."
+      ]
+    },
+    {
+      "id": "visiting-what-to-wear",
+      "topic": "visiting",
+      "title": "What to Wear",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What should I wear?",
+        "Is there a dress code?",
+        "Do I need to dress up for church?",
+        "Can I wear casual clothes?"
+      ],
+      "keywords": [
+        "dress code",
+        "clothing",
+        "casual",
+        "dress up",
+        "what to wear"
+      ],
+      "requiredFacts": [
+        "CrossPointe is casual.",
+        "People are welcome to come as they are.",
+        "There is no expectation to dress formally.",
+        "Guests will see a variety of clothing styles."
+      ],
+      "exampleResponses": [
+        "CrossPointe is casual, so wear whatever makes you comfortable. You'll see a range of clothing styles, and there's no expectation to dress formally."
+      ]
+    },
+    {
+      "id": "visiting-arrival-time",
+      "topic": "visiting",
+      "title": "When First-Time Guests Should Arrive",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "How early should I arrive?",
+        "When should a first-time visitor get there?",
+        "Do I need extra time for kids check-in?"
+      ],
+      "keywords": [
+        "arrive",
+        "early",
+        "first visit",
+        "kids check-in",
+        "5 to 10 minutes"
+      ],
+      "requiredFacts": [
+        "First-time guests should arrive approximately 5 to 10 minutes early.",
+        "Families checking children in for the first time should especially allow a few extra minutes."
+      ]
+    },
+    {
+      "id": "visiting-guest-parking",
+      "topic": "visiting",
+      "title": "Guest Parking",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Where should guests park?",
+        "Is there visitor parking?",
+        "How do I find guest parking?"
+      ],
+      "keywords": [
+        "parking",
+        "guest parking",
+        "visitor parking",
+        "feather flags"
+      ],
+      "requiredFacts": [
+        "Guest parking spaces are identified by feather flags in the parking lot."
+      ],
+      "prohibitedClaims": [
+        "Do not speculate about which spaces will be available."
+      ]
+    },
+    {
+      "id": "visiting-welcome-center",
+      "topic": "visiting",
+      "title": "Guest Entrance and Welcome Center",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Which entrance should I use?",
+        "Where is the Welcome Center?",
+        "Will someone help me find a seat?",
+        "Where should a first-time guest go?"
+      ],
+      "keywords": [
+        "entrance",
+        "Welcome Center",
+        "greeter",
+        "find a seat",
+        "directions"
+      ],
+      "requiredFacts": [
+        "First-time guests should use the entrance clearly labeled Welcome Center.",
+        "Welcome Center volunteers can greet guests, answer basic questions, help them navigate the campus, help them find a seat, and direct families to children's check-in."
+      ]
+    },
+    {
+      "id": "visiting-campus-map",
+      "topic": "visiting",
+      "title": "Campus Map",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Is there a campus map?",
+        "Where is The Pointe?",
+        "How can I find my way around?"
+      ],
+      "keywords": [
+        "campus map",
+        "buildings",
+        "directions",
+        "campus"
+      ],
+      "requiredFacts": [
+        "CrossPointe provides a public campus map."
+      ],
+      "approvedLinks": [
+        {
+          "label": "CrossPointe Campus Map",
+          "url": "https://www.crosspointe.tv/campus-map"
+        }
+      ]
+    },
+    {
+      "id": "visiting-coffee",
+      "topic": "visiting",
+      "title": "Coffee and Pointe Brew",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Is there coffee?",
+        "Is coffee free?",
+        "Where is Pointe Brew?",
+        "Can I buy a latte?",
+        "Is the coffee shop open before service?"
+      ],
+      "keywords": [
+        "coffee",
+        "Pointe Brew",
+        "latte",
+        "frappe",
+        "refreshments",
+        "Main Building",
+        "The Pointe"
+      ],
+      "requiredFacts": [
+        "Free standard coffee is available in the Main Building.",
+        "Pointe Brew offers paid specialty coffee, lattes, frappes, and other coffee-shop beverages.",
+        "Pointe Brew is located inside The Pointe on the south side of campus.",
+        "Pointe Brew is open before both Sunday services."
+      ],
+      "prohibitedClaims": [
+        "Do not quote prices without an approved current menu.",
+        "Do not promise that a specific drink is available."
+      ]
+    },
+    {
+      "id": "visiting-accessibility",
+      "topic": "visiting",
+      "title": "Campus Accessibility",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Is the church wheelchair accessible?",
+        "Is the campus ADA compliant?",
+        "Do you offer hearing assistance?",
+        "Can you accommodate a particular accessibility need?"
+      ],
+      "keywords": [
+        "accessibility",
+        "wheelchair",
+        "ADA",
+        "accommodation",
+        "accessible"
+      ],
+      "requiredFacts": [
+        "The CrossPointe campus is wheelchair accessible and ADA compliant."
+      ],
+      "requiredActions": [
+        "For an accommodation not specifically documented, provide the general church contact information."
+      ],
+      "prohibitedClaims": [
+        "Do not assume that a specific undocumented accommodation is available."
+      ]
+    },
+    {
+      "id": "visiting-child-check-in-safety",
+      "topic": "visiting",
+      "title": "Children's Check-In and Campus Safety",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How do you keep children safe?",
+        "How does kids check-in work?",
+        "Can anyone pick up my child?",
+        "Does the church have security?"
+      ],
+      "keywords": [
+        "children's check-in",
+        "kids safety",
+        "authorized parent",
+        "security team",
+        "child pickup"
+      ],
+      "requiredFacts": [
+        "CrossPointe Children's Ministry uses a check-in system to help protect children.",
+        "Children are released only to an authorized parent or guardian.",
+        "A security team monitors the campus during services."
+      ],
+      "prohibitedClaims": [
+        "Do not provide internal security procedures.",
+        "Do not provide security-team schedules.",
+        "Do not provide check-in system or access-control details.",
+        "Do not provide information that could compromise campus or child safety."
+      ]
+    },
+    {
+      "id": "visiting-plan-your-visit",
+      "topic": "visiting",
+      "title": "Plan Your Visit",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Can I plan my first visit?",
+        "Is there a first-time guest form?",
+        "What happens after I submit the Plan Your Visit form?",
+        "Do I have to register before visiting?"
+      ],
+      "keywords": [
+        "plan a visit",
+        "Plan Your Visit",
+        "first-time guest form",
+        "visitor form",
+        "prepare for Sunday"
+      ],
+      "requiredFacts": [
+        "After the Plan Your Visit Form is submitted, a CrossPointe staff member will contact the guest to answer questions and help them prepare for Sunday morning.",
+        "Completing the form is helpful but is not required to visit CrossPointe."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Plan Your Visit Form",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/335256"
+        }
+      ]
+    },
+    {
+      "id": "visiting-watch-online",
+      "topic": "visiting",
+      "title": "Watch Sunday Services Online",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Can I watch online?",
+        "Are services livestreamed?",
+        "Where can I watch the church service?",
+        "Is CrossPointe on YouTube?"
+      ],
+      "keywords": [
+        "livestream",
+        "watch online",
+        "church online",
+        "YouTube",
+        "Facebook"
+      ],
+      "requiredFacts": [
+        "Both normal Sunday services are livestreamed."
+      ],
+      "approvedLinks": [
+        {
+          "label": "CrossPointe Church Online",
+          "url": "https://www.crosspointe.tv/church-online"
+        },
+        {
+          "label": "CrossPointe YouTube",
+          "url": "https://www.youtube.com/@CrossPointeChurchOK"
+        },
+        {
+          "label": "CrossPointe Facebook",
+          "url": "https://www.facebook.com/CrossPointe.tv"
+        }
+      ],
+      "dynamicSourceRules": [
+        "Use Planning Center or another approved live source for special service schedules."
+      ]
+    },
+    {
+      "id": "visiting-communion",
+      "topic": "visiting",
+      "title": "Communion",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Who can take communion?",
+        "Do you offer communion every week?",
+        "When does the whole church take communion?",
+        "Do I have to be a member to take communion?"
+      ],
+      "keywords": [
+        "communion",
+        "Lord's Supper",
+        "follower of Jesus",
+        "first Sunday",
+        "weekly communion"
+      ],
+      "requiredFacts": [
+        "Communion is open to any follower of Jesus.",
+        "Communion is available at the sides of the auditorium each week for those who wish to participate.",
+        "The congregation takes communion together on the first Sunday of every month."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that participation is required.",
+        "Do not imply that church membership is required."
+      ]
+    },
+    {
+      "id": "visiting-giving-during-services",
+      "topic": "visiting",
+      "title": "Giving During Services",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Will I be expected to give money?",
+        "Do visitors have to give?",
+        "How much should I give?",
+        "Is giving required to attend?"
+      ],
+      "keywords": [
+        "giving",
+        "offering",
+        "money",
+        "donation",
+        "required"
+      ],
+      "requiredFacts": [
+        "CrossPointe encourages people to give according to what the Lord has placed on their heart.",
+        "Giving is not required in order to attend CrossPointe."
+      ],
+      "styleRules": [
+        "Keep the response short."
+      ],
+      "prohibitedClaims": [
+        "Do not pressure someone to give.",
+        "Do not suggest an amount.",
+        "Do not imply that giving is required to attend.",
+        "Do not discuss anyone's giving history.",
+        "Do not provide tax or financial advice.",
+        "Do not use emotionally manipulative language."
+      ],
+      "exampleResponses": [
+        "Giving is an act of worship, and we encourage people to give according to what the Lord has placed on their heart. There is no requirement to give in order to attend CrossPointe."
+      ]
+    },
+    {
+      "id": "visiting-invitation-response-time",
+      "topic": "visiting",
+      "title": "Invitation and Response Time",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What is the invitation?",
+        "Why do people come forward after the sermon?",
+        "Do I have to go forward?",
+        "When can I come forward to pray?"
+      ],
+      "keywords": [
+        "invitation",
+        "response time",
+        "come forward",
+        "pray",
+        "after sermon"
+      ],
+      "requiredFacts": [
+        "The invitation at the end of the sermon is a time for personal response.",
+        "If someone feels the Lord speaking to them or wants to come forward and pray, the invitation provides an opportunity to do that."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that someone is required to respond publicly."
+      ]
+    },
+    {
+      "id": "visiting-wednesday-nights",
+      "topic": "visiting",
+      "title": "Wednesday-Night Programming",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What happens on Wednesday nights?",
+        "Is there a Wednesday Bible study?",
+        "Do kids and youth meet on Wednesday?",
+        "What is the pastor's Wednesday Bible study like?"
+      ],
+      "keywords": [
+        "Wednesday night",
+        "Bible study",
+        "children's programming",
+        "youth programming",
+        "pastor's class"
+      ],
+      "requiredFacts": [
+        "Wednesday-night programming includes children's programming, youth programming, and the pastor's Wednesday Bible study.",
+        "The pastor's Bible study follows a classroom-style format.",
+        "The pastor's Bible study normally has approximately 60 participants.",
+        "The class studies one book of the Bible at a time."
+      ],
+      "relatedDocumentIds": [
+        "document-02"
+      ]
+    }
+  ]
+}

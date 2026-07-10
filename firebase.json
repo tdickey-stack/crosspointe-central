@@ -166,6 +166,13 @@
         }
       },
       {
+        "source": "/api/admin/wayfinder/generate-answer",
+        "function": {
+          "functionId": "wayfinderGenerateAnswer",
+          "pinTag": true
+        }
+      },
+      {
         "source": "/api/admin/submit-change-request",
         "function": {
           "functionId": "submitChangeRequest",

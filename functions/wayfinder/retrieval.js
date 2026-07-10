@@ -50,7 +50,10 @@ const FIELD_WEIGHTS = [
 
 export function rankWayfinderKnowledge(question, entries, options = {}) {
   const query = normalizeText_(question);
-  const queryTokens = tokenizeWayfinderText(query);
+  const queryTokens = expandQuestionTokens_(
+      query,
+      tokenizeWayfinderText(query),
+  );
   const limit = Math.max(1, Math.min(Number(options.limit) || 5, 10));
   const minimumScore = Math.max(1, Number(options.minimumScore) || 6);
 
@@ -76,6 +79,19 @@ export function rankWayfinderKnowledge(question, entries, options = {}) {
     confidence: getConfidence_(ranked),
     results: ranked,
   };
+}
+
+function expandQuestionTokens_(query, tokens) {
+  const expanded = new Set(tokens);
+  const asksWhenChurchMeets = /\b(?:time|times|when|start|starts|meet|meets)\b/
+      .test(query) && /\b(?:church|service|services)\b/.test(query);
+
+  if (asksWhenChurchMeets) {
+    expanded.add("service");
+    expanded.add("time");
+  }
+
+  return [...expanded];
 }
 
 export function tokenizeWayfinderText(value) {

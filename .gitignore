@@ -69,6 +69,7 @@ node_modules/
 .env.*
 functions/.env
 functions/.env.*
+functions/.secret.local
 !.env.example
 !functions/.env.example
 

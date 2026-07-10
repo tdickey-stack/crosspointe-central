@@ -16,6 +16,7 @@ test("all approved Wayfinder bundles validate", () => {
 });
 
 const retrievalCases = [
+  ["What time is church?", "visiting-sunday-service-times"],
   ["Do I have to dress up for church?", "visiting-what-to-wear"],
   [
     "Can my kids stay with me during worship?",

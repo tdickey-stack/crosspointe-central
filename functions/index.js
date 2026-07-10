@@ -4,7 +4,13 @@ import admin from "firebase-admin";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import {onRequest} from "firebase-functions/v2/https";
+import {defineSecret} from "firebase-functions/params";
 
+import {createWayfinderAnswerHandler} from "./wayfinder/answer.js";
+import {
+  createDeveloperApiWayfinderGenerator,
+  DEFAULT_WAYFINDER_MODEL,
+} from "./wayfinder/gemini.js";
 import {createWayfinderPrototypeHandler} from "./wayfinder/prototype.js";
 
 setGlobalOptions({maxInstances: 10});
@@ -432,6 +438,31 @@ export const wayfinderPrototypeQuery = onRequest(
       firestore: firestore,
       isAllowedAdminEmail: isAllowedCentralAdminEmail_,
       getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
+// Stored in Secret Manager and exposed only to the Wayfinder answer function.
+const WAYFINDER_GEMINI_API_KEY = defineSecret("WAYFINDER_GEMINI_API_KEY");
+const wayfinderGeminiGenerator = createDeveloperApiWayfinderGenerator({
+  getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
+  model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+});
+
+export const wayfinderGenerateAnswer = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderAnswerHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      generateAnswer: wayfinderGeminiGenerator,
+      model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
     }),
 );
 

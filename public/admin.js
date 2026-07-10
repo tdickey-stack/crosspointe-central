@@ -27,6 +27,8 @@
   var CLAIM_ADMIN_INVITE_ENDPOINT = "/api/admin/claim-invite";
   var WAYFINDER_PROTOTYPE_QUERY_ENDPOINT =
     "/api/admin/wayfinder/prototype-query";
+  var WAYFINDER_GENERATE_ANSWER_ENDPOINT =
+    "/api/admin/wayfinder/generate-answer";
   var PUBLISHED_CAMPAIGNS_COLLECTION_PATH = "centralContent/campaigns/items";
   var PUBLISHED_CAMPAIGNS_META_DOC_PATH = "centralContent/campaigns/meta/state";
   var PUBLISHED_NEXT_STEPS_COLLECTION_PATH = "centralContent/nextSteps/items";
@@ -507,8 +509,11 @@
     integrationsMessage: "",
     wayfinderQuestion: "",
     wayfinderQuerying: false,
+    wayfinderGenerating: false,
     wayfinderError: "",
+    wayfinderAnswerError: "",
     wayfinderResult: null,
+    wayfinderAnswerResult: null,
     roomRulesLoaded: false,
     roomRulesLoading: false,
     roomRulesSaving: false,
@@ -1005,6 +1010,12 @@
         return;
       }
 
+      if (action === "local-test-sign-in") {
+        event.preventDefault();
+        signInToLocalAdmin_();
+        return;
+      }
+
       if (action === "toggle-theme") {
         event.preventDefault();
         toggleAdminTheme_();
@@ -1233,6 +1244,12 @@
       if (action === "run-wayfinder-query") {
         event.preventDefault();
         runWayfinderPrototypeQuery_();
+        return;
+      }
+
+      if (action === "generate-wayfinder-answer") {
+        event.preventDefault();
+        generateWayfinderAnswer_();
         return;
       }
 
@@ -2316,6 +2333,7 @@
     if (field === "wayfinder.question") {
       adminState.wayfinderQuestion = String(nextValue || "");
       adminState.wayfinderError = "";
+      adminState.wayfinderAnswerError = "";
       return;
     }
 
@@ -2456,6 +2474,30 @@
       adminState.errorMessage = error && error.message ?
         error.message :
         "Google sign-in was interrupted.";
+      renderAdmin_();
+    });
+  }
+
+  function signInToLocalAdmin_() {
+    if (!adminAuth || !adminState.usingEmulators) {
+      adminState.errorMessage = "Local test sign-in is only available in the emulator.";
+      renderAdmin_();
+      return;
+    }
+
+    adminState.errorMessage = "";
+    adminState.authLoading = true;
+    adminState.infoMessage = "Signing in with the local Wayfinder test account.";
+    renderAdmin_();
+
+    adminAuth.signInWithEmailAndPassword(
+        "tdickey@crosspointe.tv",
+        "WayfinderLocalOnly!2026",
+    ).catch(function(error) {
+      adminState.authLoading = false;
+      adminState.errorMessage = error && error.message ?
+        error.message :
+        "The local test account could not sign in.";
       renderAdmin_();
     });
   }
@@ -4699,13 +4741,13 @@
       "<div class=\"central-admin-page-meta\">",
       renderInlineMeta_("Route", currentPage.route),
       renderInlineMeta_("Access", "Integrations permission"),
-      renderInlineMeta_("Mode", "Retrieval only"),
+      renderInlineMeta_("Mode", "Grounded Gemini prototype"),
       "</div>",
       "<div class=\"wayfinder-lab-notice\">",
       "<span class=\"central-admin-kicker\">Lab mode</span>",
       "<div>",
-      "<strong>This does not talk to Gemini yet.</strong>",
-      "<p>It shows which approved knowledge Wayfinder would receive. Nothing here is public, and no answer is generated.</p>",
+      "<strong>Gemini is now behind the approved knowledge layer.</strong>",
+      "<p>The backend finds approved information first, then gives only that information to Gemini. Fixed safety answers skip Gemini completely.</p>",
       "</div>",
       "</div>",
       hasAccess ? [
@@ -4721,14 +4763,23 @@
           placeholder: "Try: What should I expect on my first visit?",
           rows: 3,
           wide: true,
-          disabled: adminState.wayfinderQuerying,
+          disabled: adminState.wayfinderQuerying ||
+            adminState.wayfinderGenerating,
         }),
         "<div class=\"central-admin-action-row\">",
-        "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"run-wayfinder-query\"",
-        adminState.wayfinderQuerying ? " disabled" : "",
+        "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"generate-wayfinder-answer\"",
+        adminState.wayfinderQuerying || adminState.wayfinderGenerating ?
+          " disabled" : "",
+        ">",
+        adminState.wayfinderGenerating ? "Generating safely..." :
+          "Generate Wayfinder answer",
+        "</button>",
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"run-wayfinder-query\"",
+        adminState.wayfinderQuerying || adminState.wayfinderGenerating ?
+          " disabled" : "",
         ">",
         adminState.wayfinderQuerying ? "Checking knowledge..." :
-          "Test this question",
+          "Check knowledge only",
         "</button>",
         "</div>",
         "<div class=\"wayfinder-lab-examples\" aria-label=\"Example questions\">",
@@ -4736,7 +4787,8 @@
           return [
             "<button type=\"button\" data-admin-action=\"try-wayfinder-question\" data-wayfinder-question=\"",
             escapeAttr_(question), "\"",
-            adminState.wayfinderQuerying ? " disabled" : "",
+            adminState.wayfinderQuerying || adminState.wayfinderGenerating ?
+              " disabled" : "",
             ">", escapeHtml_(question), "</button>",
           ].join("");
         }).join(""),
@@ -4748,6 +4800,13 @@
           "<p>", escapeHtml_(adminState.wayfinderError), "</p>",
           "</div>",
         ].join("") : "",
+        adminState.wayfinderAnswerError ? [
+          "<div class=\"central-admin-item wayfinder-lab-error\" role=\"alert\">",
+          "<strong>Gemini could not produce a verified answer.</strong>",
+          "<p>", escapeHtml_(adminState.wayfinderAnswerError), "</p>",
+          "</div>",
+        ].join("") : "",
+        renderWayfinderGeneratedAnswer_(adminState.wayfinderAnswerResult),
         renderWayfinderPrototypeResult_(result),
       ].join("") : [
         "<div class=\"central-admin-empty\">",
@@ -4758,6 +4817,112 @@
       "</div>",
       "</section>",
     ].join("");
+  }
+
+  function renderWayfinderGeneratedAnswer_(result) {
+    if (adminState.wayfinderGenerating) {
+      return [
+        "<div class=\"central-admin-item wayfinder-lab-loading\" role=\"status\" aria-live=\"polite\">",
+        "<span class=\"wayfinder-lab-spinner\" aria-hidden=\"true\"></span>",
+        "<div>",
+        "<strong>Building a grounded answer</strong>",
+        "<p>The backend is checking approved knowledge and safety rules before Gemini can respond.</p>",
+        "</div>",
+        "</div>",
+      ].join("");
+    }
+
+    if (!result) {
+      return "";
+    }
+
+    var sourceCards = Array.isArray(result.sourceCards) ?
+      result.sourceCards : [];
+    var modelUsed = result.modelUsed === true;
+    var modeLabel = modelUsed ? "Gemini grounded" :
+      getWayfinderPolicyModeLabel_(result.mode);
+
+    return [
+      "<section class=\"central-admin-item wayfinder-lab-answer\" aria-live=\"polite\">",
+      "<div class=\"wayfinder-lab-answer-header\">",
+      "<div>",
+      "<span class=\"central-admin-kicker\">Wayfinder answer</span>",
+      "<h4>", escapeHtml_(modeLabel), "</h4>",
+      "</div>",
+      "<div class=\"wayfinder-lab-summary-pills\">",
+      renderStatusPill_(
+          modelUsed ? String(result.model || "Gemini") : "Gemini skipped",
+          modelUsed ? "is-safe" : "is-warn",
+      ),
+      renderStatusPill_(
+          String(result.confidence || "none") + " confidence",
+          result.confidence === "high" ? "is-safe" : "is-live",
+      ),
+      "</div>",
+      "</div>",
+      "<div class=\"wayfinder-lab-answer-copy\">",
+      renderWayfinderAnswerParagraphs_(result.answer),
+      result.followUpQuestion ? [
+        "<p class=\"wayfinder-lab-follow-up\"><strong>Follow-up:</strong> ",
+        escapeHtml_(result.followUpQuestion), "</p>",
+      ].join("") : "",
+      "</div>",
+      sourceCards.length ? [
+        "<div class=\"wayfinder-lab-source-cards\">",
+        sourceCards.map(renderWayfinderSourceCard_).join(""),
+        "</div>",
+      ].join("") : "",
+      "<p class=\"central-admin-footer-note\">",
+      escapeHtml_(result.notice || "Only approved Wayfinder context was used."),
+      "</p>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderAnswerParagraphs_(answer) {
+    var paragraphs = String(answer || "").split(/\n+/).map(function(value) {
+      return value.trim();
+    }).filter(Boolean);
+
+    return paragraphs.map(function(paragraph) {
+      return "<p>" + escapeHtml_(paragraph) + "</p>";
+    }).join("");
+  }
+
+  function renderWayfinderSourceCard_(source) {
+    var value = source && typeof source === "object" ? source : {};
+    var links = Array.isArray(value.links) ? value.links : [];
+
+    return [
+      "<article class=\"wayfinder-lab-source-card\">",
+      "<span>", escapeHtml_(value.topic || "approved source"), "</span>",
+      "<strong>", escapeHtml_(value.title || value.id || "Approved source"),
+      "</strong>",
+      "<code>", escapeHtml_(value.id || "source"), "</code>",
+      links.length ? [
+        "<div>",
+        links.map(function(link) {
+          var url = String(link && link.url || "").trim();
+          var label = String(link && link.label || "Open source");
+          if (!/^https:\/\//i.test(url)) return "";
+          return [
+            "<a href=\"", escapeAttr_(url),
+            "\" target=\"_blank\" rel=\"noopener noreferrer\">",
+            escapeHtml_(label), "</a>",
+          ].join("");
+        }).join(""),
+        "</div>",
+      ].join("") : "",
+      "</article>",
+    ].join("");
+  }
+
+  function getWayfinderPolicyModeLabel_(mode) {
+    if (mode === "policy-answer") return "Approved policy response";
+    if (mode === "live_source_required") return "Live source required";
+    if (mode === "unknown") return "Safe unknown response";
+    if (mode === "knowledge-fallback") return "Approved knowledge preview";
+    return "Approved fallback response";
   }
 
   function renderWayfinderPrototypeResult_(result) {
@@ -8740,11 +8905,21 @@
     }
 
     if (!adminState.user) {
-      return [
+      var actions = [
         "<button type=\"button\" class=\"is-primary\" data-admin-action=\"sign-in\">",
         "Sign In with Google",
         "</button>",
-      ].join("");
+      ];
+
+      if (adminState.usingEmulators) {
+        actions.push(
+            "<button type=\"button\" class=\"is-secondary\" data-admin-action=\"local-test-sign-in\">",
+            "Use Local Test Account",
+            "</button>",
+        );
+      }
+
+      return actions.join("");
     }
 
     return [
@@ -14461,6 +14636,68 @@
           adminState.wayfinderError = error && error.message ?
             error.message :
             "The Wayfinder prototype is unavailable right now.";
+          renderAdmin_();
+        });
+  }
+
+  function generateWayfinderAnswer_() {
+    var question = String(adminState.wayfinderQuestion || "").trim();
+
+    adminState.wayfinderAnswerError = "";
+
+    if (!adminState.user) {
+      adminState.wayfinderAnswerError =
+        "Sign in with an approved Central admin account first.";
+      renderAdmin_();
+      return;
+    }
+
+    if (!question) {
+      adminState.wayfinderAnswerError =
+        "Enter a question for Wayfinder to answer.";
+      renderAdmin_();
+      return;
+    }
+
+    if (question.length > 500) {
+      adminState.wayfinderAnswerError =
+        "Keep prototype questions to 500 characters or fewer.";
+      renderAdmin_();
+      return;
+    }
+
+    adminState.wayfinderGenerating = true;
+    adminState.wayfinderAnswerResult = null;
+    renderAdmin_();
+
+    adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(WAYFINDER_GENERATE_ANSWER_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({question: question}),
+          });
+        })
+        .then(parseAdminEndpointResponse_)
+        .then(function(result) {
+          adminState.wayfinderGenerating = false;
+          adminState.wayfinderAnswerResult = result || null;
+          if (result && Array.isArray(result.results) &&
+            result.results.length) {
+            adminState.wayfinderResult = result;
+          }
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderGenerating = false;
+          adminState.wayfinderAnswerResult = null;
+          adminState.wayfinderAnswerError = error && error.message ?
+            error.message :
+            "Gemini is unavailable for the Wayfinder lab right now.";
           renderAdmin_();
         });
   }

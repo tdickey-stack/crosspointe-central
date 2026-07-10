@@ -1340,6 +1340,7 @@
 
 [data-app-route="admin"] .wayfinder-lab-notice strong,
 [data-app-route="admin"] .wayfinder-lab-results h4,
+[data-app-route="admin"] .wayfinder-lab-answer h4,
 [data-app-route="admin"] .wayfinder-lab-match h5,
 [data-app-route="admin"] .wayfinder-lab-detail h6 {
   color: var(--cp-text-strong);
@@ -1429,6 +1430,96 @@
   margin-top: 6px;
   font-size: clamp(1.15rem, 2vw, 1.45rem);
   line-height: 1.25;
+}
+
+[data-app-route="admin"] .wayfinder-lab-answer {
+  gap: 16px;
+  padding: 20px;
+  background:
+    linear-gradient(145deg, rgba(239, 59, 45, 0.08), rgba(255, 255, 255, 0.96));
+  border-color: rgba(239, 59, 45, 0.16);
+}
+
+[data-app-route="admin"] .wayfinder-lab-answer-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+[data-app-route="admin"] .wayfinder-lab-answer h4 {
+  margin: 7px 0 0;
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+}
+
+[data-app-route="admin"] .wayfinder-lab-answer-copy {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(39, 39, 42, 0.07);
+}
+
+[data-app-route="admin"] .wayfinder-lab-answer-copy p {
+  color: var(--cp-text-strong);
+  font-size: 0.98rem;
+  line-height: 1.65;
+}
+
+[data-app-route="admin"] .wayfinder-lab-answer-copy .wayfinder-lab-follow-up {
+  color: var(--cp-muted);
+  font-size: 0.88rem;
+}
+
+[data-app-route="admin"] .wayfinder-lab-source-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+[data-app-route="admin"] .wayfinder-lab-source-card {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(39, 39, 42, 0.035);
+  border: 1px solid rgba(39, 39, 42, 0.07);
+}
+
+[data-app-route="admin"] .wayfinder-lab-source-card > span {
+  color: var(--cp-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+[data-app-route="admin"] .wayfinder-lab-source-card > strong {
+  color: var(--cp-text-strong);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+[data-app-route="admin"] .wayfinder-lab-source-card code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--cp-muted);
+  font-size: 0.68rem;
+}
+
+[data-app-route="admin"] .wayfinder-lab-source-card div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+[data-app-route="admin"] .wayfinder-lab-source-card a {
+  color: var(--cp-red);
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
 [data-app-route="admin"] .wayfinder-lab-summary {
@@ -1749,6 +1840,18 @@
   border-color: rgba(239, 59, 45, 0.2);
 }
 
+:root[data-theme="dark"][data-app-route="admin"] .wayfinder-lab-answer {
+  background:
+    linear-gradient(145deg, rgba(239, 59, 45, 0.12), rgba(35, 35, 38, 0.94));
+  border-color: rgba(239, 59, 45, 0.2);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .wayfinder-lab-answer-copy,
+:root[data-theme="dark"][data-app-route="admin"] .wayfinder-lab-source-card {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
 :root[data-theme="dark"][data-app-route="admin"] .central-admin-change-request-item.is-expanded {
   background: rgba(239, 59, 45, 0.14);
   border-color: rgba(239, 59, 45, 0.22);
@@ -1912,6 +2015,15 @@
   [data-app-route="admin"] .wayfinder-lab-summary {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  [data-app-route="admin"] .wayfinder-lab-answer-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  [data-app-route="admin"] .wayfinder-lab-source-cards {
+    grid-template-columns: 1fr;
   }
 
   [data-app-route="admin"] .wayfinder-lab-rank {

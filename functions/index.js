@@ -5,6 +5,8 @@ import {setGlobalOptions} from "firebase-functions/v2";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import {onRequest} from "firebase-functions/v2/https";
 
+import {createWayfinderPrototypeHandler} from "./wayfinder/prototype.js";
+
 setGlobalOptions({maxInstances: 10});
 admin.initializeApp();
 
@@ -418,6 +420,19 @@ export const centralData = onRequest(
         });
       }
     },
+);
+
+export const wayfinderPrototypeQuery = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    createWayfinderPrototypeHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
 );
 
 export const centralCalendarEvent = onRequest(

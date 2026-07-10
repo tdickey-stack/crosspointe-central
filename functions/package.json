@@ -3,6 +3,11 @@
   "description": "Cloud Functions for Firebase",
   "scripts": {
     "lint": "eslint .",
+    "test:wayfinder": "node --test wayfinder/*.test.js",
+    "wayfinder:validate": "node scripts/validate-wayfinder-knowledge.mjs",
+    "wayfinder:query": "node scripts/query-wayfinder-knowledge.mjs",
+    "wayfinder:import:dry-run": "node scripts/import-wayfinder-knowledge.mjs --dry-run",
+    "wayfinder:import:emulator": "node scripts/import-wayfinder-knowledge.mjs --emulator-host=127.0.0.1:8080 --project=crosspointe-central",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",

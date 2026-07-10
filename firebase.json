@@ -159,6 +159,13 @@
         }
       },
       {
+        "source": "/api/admin/wayfinder/prototype-query",
+        "function": {
+          "functionId": "wayfinderPrototypeQuery",
+          "pinTag": true
+        }
+      },
+      {
         "source": "/api/admin/submit-change-request",
         "function": {
           "functionId": "submitChangeRequest",

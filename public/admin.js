@@ -25,6 +25,8 @@
   var UPSERT_ADMIN_USER_ENDPOINT = "/api/admin/upsert-user";
   var DELETE_ADMIN_USER_ENDPOINT = "/api/admin/delete-user";
   var CLAIM_ADMIN_INVITE_ENDPOINT = "/api/admin/claim-invite";
+  var WAYFINDER_PROTOTYPE_QUERY_ENDPOINT =
+    "/api/admin/wayfinder/prototype-query";
   var PUBLISHED_CAMPAIGNS_COLLECTION_PATH = "centralContent/campaigns/items";
   var PUBLISHED_CAMPAIGNS_META_DOC_PATH = "centralContent/campaigns/meta/state";
   var PUBLISHED_NEXT_STEPS_COLLECTION_PATH = "centralContent/nextSteps/items";
@@ -150,6 +152,15 @@
       summary: "Connections and service-specific settings for Google, calendars, Resi, YouVersion, and Planning Center.",
       collectionPath: PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
       status: "Preview workflow",
+    },
+    {
+      id: "wayfinder",
+      label: "Wayfinder Lab",
+      route: "/admin/wayfinder",
+      pageAccessKey: "integrations",
+      summary: "Private testing for Wayfinder's approved knowledge retrieval before Gemini is connected.",
+      collectionPath: "centralAssistantKnowledgeDraft",
+      status: "Private prototype",
     },
     {
       id: "change-requests",
@@ -494,6 +505,10 @@
     integrationsPublishing: false,
     integrationsError: "",
     integrationsMessage: "",
+    wayfinderQuestion: "",
+    wayfinderQuerying: false,
+    wayfinderError: "",
+    wayfinderResult: null,
     roomRulesLoaded: false,
     roomRulesLoading: false,
     roomRulesSaving: false,
@@ -1212,6 +1227,20 @@
         event.preventDefault();
         resetSettingsSundayDraftFromCurrent_();
         renderAdmin_();
+        return;
+      }
+
+      if (action === "run-wayfinder-query") {
+        event.preventDefault();
+        runWayfinderPrototypeQuery_();
+        return;
+      }
+
+      if (action === "try-wayfinder-question") {
+        event.preventDefault();
+        runWayfinderPrototypeQuery_(
+            button.getAttribute("data-wayfinder-question") || "",
+        );
         return;
       }
 
@@ -2284,6 +2313,12 @@
       return;
     }
 
+    if (field === "wayfinder.question") {
+      adminState.wayfinderQuestion = String(nextValue || "");
+      adminState.wayfinderError = "";
+      return;
+    }
+
     if (field.indexOf("quick-link.") !== 0 &&
       field.indexOf("resource.") !== 0 &&
       field.indexOf("campaign.") !== 0 &&
@@ -3310,6 +3345,10 @@
 
     if (currentPage.id === "integrations") {
       return renderIntegrationsPagePanel_(currentPage);
+    }
+
+    if (currentPage.id === "wayfinder") {
+      return renderWayfinderPagePanel_(currentPage);
     }
 
     if (currentPage.id === "status-banner") {
@@ -4632,6 +4671,272 @@
       "</div>",
       "</section>",
     ].join("");
+  }
+
+  function renderWayfinderPagePanel_(currentPage) {
+    var permission = getPageAccessLevel_("integrations");
+    var hasAccess = isActiveAdminUserRecord_() && permission !== "none";
+    var result = adminState.wayfinderResult;
+    var exampleQuestions = [
+      "What time are services?",
+      "Do I have to dress up for church?",
+      "Can my children stay with me during worship?",
+      "How do I get baptized?",
+      "When is the next Starting Pointe?",
+      "What is the address for a home group?",
+    ];
+
+    return [
+      "<section class=\"central-admin-panel wayfinder-lab\">",
+      "<div class=\"central-admin-panel-header\">",
+      "<div>",
+      "<h3>", escapeHtml_(currentPage.label), "</h3>",
+      "<p>", escapeHtml_(currentPage.summary), "</p>",
+      "</div>",
+      renderStatusPill_("Private prototype", "is-warn"),
+      "</div>",
+      "<div class=\"central-admin-page-body\">",
+      "<div class=\"central-admin-page-meta\">",
+      renderInlineMeta_("Route", currentPage.route),
+      renderInlineMeta_("Access", "Integrations permission"),
+      renderInlineMeta_("Mode", "Retrieval only"),
+      "</div>",
+      "<div class=\"wayfinder-lab-notice\">",
+      "<span class=\"central-admin-kicker\">Lab mode</span>",
+      "<div>",
+      "<strong>This does not talk to Gemini yet.</strong>",
+      "<p>It shows which approved knowledge Wayfinder would receive. Nothing here is public, and no answer is generated.</p>",
+      "</div>",
+      "</div>",
+      hasAccess ? [
+        "<div class=\"central-admin-item wayfinder-lab-question\">",
+        "<div class=\"central-admin-item-header\">",
+        "<strong>Ask a test question</strong>",
+        renderStatusPill_("Approved data only", "is-safe"),
+        "</div>",
+        renderAdminTextareaField_({
+          label: "Question",
+          field: "wayfinder.question",
+          value: adminState.wayfinderQuestion,
+          placeholder: "Try: What should I expect on my first visit?",
+          rows: 3,
+          wide: true,
+          disabled: adminState.wayfinderQuerying,
+        }),
+        "<div class=\"central-admin-action-row\">",
+        "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"run-wayfinder-query\"",
+        adminState.wayfinderQuerying ? " disabled" : "",
+        ">",
+        adminState.wayfinderQuerying ? "Checking knowledge..." :
+          "Test this question",
+        "</button>",
+        "</div>",
+        "<div class=\"wayfinder-lab-examples\" aria-label=\"Example questions\">",
+        exampleQuestions.map(function(question) {
+          return [
+            "<button type=\"button\" data-admin-action=\"try-wayfinder-question\" data-wayfinder-question=\"",
+            escapeAttr_(question), "\"",
+            adminState.wayfinderQuerying ? " disabled" : "",
+            ">", escapeHtml_(question), "</button>",
+          ].join("");
+        }).join(""),
+        "</div>",
+        "</div>",
+        adminState.wayfinderError ? [
+          "<div class=\"central-admin-item wayfinder-lab-error\" role=\"alert\">",
+          "<strong>Wayfinder could not run that test.</strong>",
+          "<p>", escapeHtml_(adminState.wayfinderError), "</p>",
+          "</div>",
+        ].join("") : "",
+        renderWayfinderPrototypeResult_(result),
+      ].join("") : [
+        "<div class=\"central-admin-empty\">",
+        "<strong>Private lab access is required.</strong>",
+        "<p>Sign in with an active Central admin account that can access Integrations.</p>",
+        "</div>",
+      ].join(""),
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderPrototypeResult_(result) {
+    if (adminState.wayfinderQuerying) {
+      return [
+        "<div class=\"central-admin-item wayfinder-lab-loading\" role=\"status\" aria-live=\"polite\">",
+        "<span class=\"wayfinder-lab-spinner\" aria-hidden=\"true\"></span>",
+        "<div>",
+        "<strong>Searching approved knowledge</strong>",
+        "<p>Wayfinder is comparing the question with the draft knowledge base.</p>",
+        "</div>",
+        "</div>",
+      ].join("");
+    }
+
+    if (!result) {
+      return [
+        "<div class=\"central-admin-empty wayfinder-lab-empty\">",
+        "<strong>Your retrieval results will appear here.</strong>",
+        "<p>Try your own wording or choose one of the examples above.</p>",
+        "</div>",
+      ].join("");
+    }
+
+    var results = Array.isArray(result.results) ? result.results : [];
+    var confidence = String(result.confidence || "none").toLowerCase();
+    var confidenceTone = confidence === "high" ? "is-safe" :
+      confidence === "none" ? "is-warn" : "is-live";
+
+    return [
+      "<section class=\"wayfinder-lab-results\" aria-live=\"polite\">",
+      "<div class=\"wayfinder-lab-summary\">",
+      "<div>",
+      "<span class=\"central-admin-kicker\">Retrieval report</span>",
+      "<h4>", escapeHtml_(adminState.wayfinderQuestion || result.question),
+      "</h4>",
+      "</div>",
+      "<div class=\"wayfinder-lab-summary-pills\">",
+      renderStatusPill_(confidence + " confidence", confidenceTone),
+      renderStatusPill_(
+          String(result.knowledgeEntryCount || 0) + " entries searched",
+          "",
+      ),
+      "</div>",
+      "</div>",
+      Number(result.knowledgeEntryCount || 0) === 0 ? [
+        "<div class=\"central-admin-empty wayfinder-lab-no-match\">",
+        "<strong>The draft knowledge base is empty.</strong>",
+        "<p>Import the approved Wayfinder bundles into Firestore before testing questions.</p>",
+        "</div>",
+      ].join("") : results.length ? results.map(function(item, index) {
+        return renderWayfinderMatch_(item, index);
+      }).join("") : [
+        "<div class=\"central-admin-empty wayfinder-lab-no-match\">",
+        "<strong>No approved match was found.</strong>",
+        "<p>This is the safe outcome. A future Wayfinder response should say it does not know and offer the approved public contact path.</p>",
+        "</div>",
+      ].join(""),
+      "<p class=\"central-admin-footer-note\">",
+      escapeHtml_(result.notice || "No Gemini response was generated."),
+      "</p>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderMatch_(item, index) {
+    var value = item && typeof item === "object" ? item : {};
+    var matchedTerms = Array.isArray(value.matchedTerms) ?
+      value.matchedTerms : [];
+    var requiredSourceType = String(value.requiredSourceType || "").trim();
+
+    return [
+      "<article class=\"central-admin-item wayfinder-lab-match\">",
+      "<div class=\"wayfinder-lab-match-header\">",
+      "<div class=\"wayfinder-lab-rank\">", String(index + 1), "</div>",
+      "<div class=\"wayfinder-lab-match-title\">",
+      "<span>", escapeHtml_(value.topic || "Approved knowledge"), "</span>",
+      "<h5>", escapeHtml_(value.title || value.id || "Knowledge entry"),
+      "</h5>",
+      "<code>", escapeHtml_(value.id || "unknown-entry"), "</code>",
+      "</div>",
+      "<div class=\"wayfinder-lab-match-score\">",
+      "<strong>", escapeHtml_(String(value.score || 0)), "</strong>",
+      "<span>match score</span>",
+      "</div>",
+      "</div>",
+      matchedTerms.length ? [
+        "<div class=\"wayfinder-lab-terms\"><span>Matched:</span>",
+        matchedTerms.map(function(term) {
+          return "<code>" + escapeHtml_(term) + "</code>";
+        }).join(""),
+        "</div>",
+      ].join("") : "",
+      requiredSourceType ? [
+        "<div class=\"wayfinder-lab-live-source\">",
+        renderStatusPill_("Live source required", "is-warn"),
+        "<p>", escapeHtml_(requiredSourceType), "</p>",
+        "</div>",
+      ].join("") : "",
+      "<div class=\"wayfinder-lab-detail-grid\">",
+      renderWayfinderTextList_("Required facts", value.requiredFacts),
+      renderWayfinderTextList_("Allowed public facts", value.allowedPublicFacts),
+      renderWayfinderTextList_("Required actions", value.requiredActions),
+      renderWayfinderApprovedActions_(value.approvedActions),
+      renderWayfinderApprovedLinks_(value.approvedLinks),
+      renderWayfinderTextList_("Do not claim", value.prohibitedClaims, true),
+      renderWayfinderTextList_(
+          "Do not reveal",
+          value.prohibitedInformation,
+          true,
+      ),
+      "</div>",
+      "<p class=\"wayfinder-lab-mode\">Response mode: <strong>",
+      escapeHtml_(value.responseMode || "flexible"),
+      "</strong></p>",
+      "</article>",
+    ].join("");
+  }
+
+  function renderWayfinderTextList_(title, values, isGuardrail) {
+    var items = Array.isArray(values) ? values.filter(Boolean) : [];
+    if (!items.length) {
+      return "";
+    }
+
+    return [
+      "<section class=\"wayfinder-lab-detail",
+      isGuardrail ? " is-guardrail" : "", "\">",
+      "<h6>", escapeHtml_(title), "</h6>",
+      "<ul>",
+      items.map(function(item) {
+        return "<li>" + escapeHtml_(String(item)) + "</li>";
+      }).join(""),
+      "</ul>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderApprovedLinks_(values) {
+    var links = Array.isArray(values) ? values.filter(Boolean) : [];
+    if (!links.length) {
+      return "";
+    }
+
+    return [
+      "<section class=\"wayfinder-lab-detail\">",
+      "<h6>Approved links</h6>",
+      "<ul>",
+      links.map(function(link) {
+        var url = String(link && link.url || "").trim();
+        var label = String(link && link.label || url || "Approved link");
+        if (!/^https:\/\//i.test(url)) {
+          return "<li>" + escapeHtml_(label) + "</li>";
+        }
+        return [
+          "<li><a href=\"", escapeAttr_(url),
+          "\" target=\"_blank\" rel=\"noopener noreferrer\">",
+          escapeHtml_(label), "</a></li>",
+        ].join("");
+      }).join(""),
+      "</ul>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderApprovedActions_(values) {
+    var actions = Array.isArray(values) ? values.filter(Boolean) : [];
+    if (!actions.length) {
+      return "";
+    }
+
+    return renderWayfinderTextList_(
+        "Approved contact actions",
+        actions.map(function(action) {
+          var label = String(action && action.label || "Contact").trim();
+          var value = String(action && action.value || "").trim();
+          return value ? label + ": " + value : label;
+        }),
+    );
   }
 
   function renderGoogleCalendarIntegrationSection_() {
@@ -14095,6 +14400,68 @@
         .then(function(result) {
           resetCurrentCentralDataCache_();
           return result;
+        });
+  }
+
+  function runWayfinderPrototypeQuery_(questionOverride) {
+    var question = String(
+        typeof questionOverride === "string" && questionOverride.trim() ?
+          questionOverride :
+          adminState.wayfinderQuestion,
+    ).trim();
+
+    adminState.wayfinderQuestion = question;
+    adminState.wayfinderError = "";
+
+    if (!adminState.user) {
+      adminState.wayfinderError =
+        "Sign in with an approved Central admin account first.";
+      renderAdmin_();
+      return;
+    }
+
+    if (!question) {
+      adminState.wayfinderError = "Enter a question for Wayfinder to test.";
+      renderAdmin_();
+      return;
+    }
+
+    if (question.length > 500) {
+      adminState.wayfinderError =
+        "Keep prototype questions to 500 characters or fewer.";
+      renderAdmin_();
+      return;
+    }
+
+    adminState.wayfinderQuerying = true;
+    adminState.wayfinderResult = null;
+    renderAdmin_();
+
+    adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(WAYFINDER_PROTOTYPE_QUERY_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({question: question}),
+          });
+        })
+        .then(parseAdminEndpointResponse_)
+        .then(function(result) {
+          adminState.wayfinderQuerying = false;
+          adminState.wayfinderResult = result || null;
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderQuerying = false;
+          adminState.wayfinderResult = null;
+          adminState.wayfinderError = error && error.message ?
+            error.message :
+            "The Wayfinder prototype is unavailable right now.";
+          renderAdmin_();
         });
   }
 

@@ -97,6 +97,37 @@ The response includes:
 
 The response explicitly states that no Gemini answer was generated.
 
+## Private Wayfinder Lab page
+
+The browser-based lab is available at:
+
+```text
+/admin/wayfinder
+```
+
+It uses the same Firebase sign-in and admin access checks as Central. An active
+admin needs access to the Integrations area. The page sends the test question
+to the private diagnostic endpoint and displays:
+
+- Retrieval confidence and match scores
+- The approved entries selected for the question
+- Required and allowed facts
+- Approved links and contact actions
+- Guardrails and prohibited claims
+- Any requirement to use a live source such as Planning Center
+
+The lab does not call Gemini or generate a guest-facing answer. If the draft
+Firestore collection is empty, run the emulator import command before local
+testing.
+
+For a full local browser test:
+
+1. Start the Firebase Auth, Functions, Firestore, and Hosting emulators.
+2. Import the approved Wayfinder bundles into the Firestore emulator.
+3. Open `http://127.0.0.1:5000/admin/wayfinder`.
+4. Sign in with an active local admin account that has Integrations access.
+5. Ask the same idea with different wording and compare the selected entries.
+
 ## Next prototype milestone
 
 After the retrieval results have been evaluated, the next milestone is a

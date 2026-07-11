@@ -12,7 +12,7 @@ const entries = flattened.entries.map((entry) => entry.data);
 test("all approved Wayfinder bundles validate", () => {
   assert.deepEqual(flattened.errors, []);
   assert.equal(flattened.policies.length, 1);
-  assert.equal(flattened.entries.length, 115);
+  assert.equal(flattened.entries.length, 125);
 });
 
 const retrievalCases = [
@@ -29,6 +29,11 @@ const retrievalCases = [
     "groups-home-address-privacy",
   ],
   ["How do I get baptized?", "next-steps-request-baptism"],
+  ["When is the food pantry open?", "outreach-care-center-overview-and-hours"],
+  ["How often can I use the Care Center?", "outreach-care-center-eligibility-and-id"],
+  ["Can the church help fix my car?", "outreach-cars-overview-and-application"],
+  ["Can CARS replace my tires?", "outreach-cars-repair-scope"],
+  ["What is RFKC?", "outreach-rfk-and-trac-independent-ministries"],
   ["How can I start volunteering?", "serving-get-started"],
   ["Can my teenager volunteer?", "serving-membership-age-and-eligibility"],
   ["Do I need an audition for worship team?", "serving-worship-ministry"],

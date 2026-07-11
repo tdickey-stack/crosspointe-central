@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-09",
+  "title": "Community Outreach and Assistance",
+  "status": "approved",
+  "approvedDate": "2026-07-11",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "guided",
+  "entries": [
+    {
+      "id": "outreach-care-center-overview-and-hours",
+      "topic": "community_assistance",
+      "title": "Care Center Overview and Normal Hours",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What is the Care Center?",
+        "When is the food pantry open?",
+        "What time does the clothes closet open?",
+        "Do I need an appointment for the Care Center?",
+        "Where is the food pantry?"
+      ],
+      "keywords": ["Care Center", "food pantry", "clothes closet", "food assistance", "clothing assistance", "Friday hours"],
+      "requiredFacts": [
+        "The CrossPointe Care Center provides food and clothing at 2601 24th Ave SE, Norman, OK 73071.",
+        "No appointment is required.",
+        "The Food Pantry's normal hours are Fridays from 9:00 AM to 11:30 AM.",
+        "The Clothes Closet's normal hours are Fridays from 9:00 AM to 11:00 AM.",
+        "Both are normally closed on the fifth Friday of a month.",
+        "Holiday, weather, staffing, or temporary closures may change normal hours."
+      ],
+      "requiredActions": [
+        "Describe these as normal hours, not a guarantee that the Care Center is open on a particular date.",
+        "When current-week confirmation matters, suggest contacting the church office until a live operational notice source is available."
+      ],
+      "approvedLinks": [{"label": "Care Center", "url": "https://www.crosspointe.tv/group/care-center"}]
+    },
+    {
+      "id": "outreach-care-center-eligibility-and-id",
+      "topic": "community_assistance",
+      "title": "Care Center Eligibility, Identification, and Visit Frequency",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What do I need to bring to the food pantry?",
+        "How often can I use the Care Center?",
+        "Do I qualify for the clothes closet?",
+        "Do I have to live in Norman to get food?"
+      ],
+      "keywords": ["Care Center eligibility", "photo ID", "current address", "four times a year", "60 days", "residency"],
+      "requiredFacts": [
+        "Visitors should bring a physical photo ID showing their current address.",
+        "There is no known residency or service-area restriction.",
+        "Care Center assistance is limited to no more than four visits in a calendar year and requires at least 60 days between visits; both limits apply.",
+        "The Food Pantry and Clothes Closet use the same rules.",
+        "Care Center staff verify eligibility, and assistance is not guaranteed."
+      ],
+      "prohibitedClaims": [
+        "Do not decide whether someone qualifies.",
+        "Do not ask for ID images or numbers, household details, income or benefit information, hardship details, or previous assistance records."
+      ]
+    },
+    {
+      "id": "outreach-care-center-closed-or-urgent-help",
+      "topic": "community_assistance",
+      "title": "Care Center Closures and Help Outside Normal Hours",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Is the Care Center open this week?",
+        "Where can I get food if the Care Center is closed?",
+        "Can I get emergency food today?",
+        "Who can answer my Care Center question?"
+      ],
+      "keywords": ["closed this week", "emergency food", "outside hours", "other food banks", "holiday closure", "weather closure"],
+      "requiredFacts": [
+        "People may contact the church office for assistance questions and information about other community resources.",
+        "The church may provide referrals to other food banks when the Care Center is closed.",
+        "Any help outside normal hours is handled privately and case by case and must not be advertised or promised."
+      ],
+      "requiredActions": ["Direct the person to the church office without asking why assistance is needed."],
+      "prohibitedClaims": ["Do not claim after-hours food is available or disclose internal exception criteria."],
+      "approvedActions": [
+        {"type": "email", "label": "Email the church office", "value": "info@crosspointe.tv"},
+        {"type": "phone", "label": "Call or text the church office", "value": "405-374-4740"}
+      ]
+    },
+    {
+      "id": "outreach-cars-overview-and-application",
+      "topic": "community_assistance",
+      "title": "CARS Ministry Overview and Application",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can the church help fix my car?",
+        "How do I apply for CARS Ministry?",
+        "When does CARS Ministry work?",
+        "Who is eligible for car repair help?"
+      ],
+      "keywords": ["CARS Ministry", "car repair", "automotive assistance", "vehicle repair application", "mechanic help"],
+      "requiredFacts": [
+        "CARS Ministry is a volunteer-led ministry providing low-cost automotive repair to community members in need.",
+        "It normally operates on the second and fourth Saturday of each month by appointment at CrossPointe.",
+        "CARS is available to anyone, subject to volunteer capacity and repair scope.",
+        "Everyone seeking service or asking service-related questions should begin with the official application.",
+        "Applicants should normally allow approximately one week for a response, which may come from an out-of-state area code.",
+        "An application does not guarantee an appointment or repair."
+      ],
+      "approvedLinks": [{"label": "CARS Ministry application", "url": "https://forms.gle/13UrumiVUXEZCLgj9"}]
+    },
+    {
+      "id": "outreach-cars-costs-and-payment",
+      "topic": "community_assistance",
+      "title": "CARS Ministry Costs and Payment",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Does CARS Ministry charge for repairs?",
+        "How do I pay for car parts?",
+        "Can I bring my own parts?",
+        "Does CARS accept checks?"
+      ],
+      "keywords": ["CARS cost", "free labor", "parts at cost", "CARS donation", "customer supplied parts", "checks"],
+      "requiredFacts": [
+        "CARS Ministry labor is free.",
+        "Customers reimburse the ministry for parts at cost before installation.",
+        "Parts may be paid for in cash or through electronic giving at crosspointe.tv/give by selecting CARS Ministry.",
+        "Checks are not accepted for CARS parts.",
+        "CARS does not install customer-supplied parts for safety and liability reasons."
+      ],
+      "prohibitedClaims": ["Do not estimate costs or promise that a payment, part, or repair has been accepted."],
+      "approvedLinks": [{"label": "Give to CARS Ministry", "url": "https://www.crosspointe.tv/give"}]
+    },
+    {
+      "id": "outreach-cars-repair-scope",
+      "topic": "community_assistance",
+      "title": "Repairs Outside CARS Ministry Scope",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can CARS replace my tires?",
+        "Does CARS provide roadside assistance?",
+        "Can CARS fix my transmission?",
+        "Will CARS come to my house?",
+        "Can CARS repair collision damage?"
+      ],
+      "keywords": ["roadside assistance", "tires", "windshield", "collision", "transmission", "engine repair", "head gasket", "off-site repair", "vehicle loan"],
+      "requiredFacts": [
+        "CARS does not provide roadside assistance, vehicle-loan assistance, mobile or off-site repairs, tire service, windshield service, collision repair, transmission repair, or deep engine repair such as head gaskets.",
+        "Automotive emergencies do not receive priority or create exceptions.",
+        "CARS has limited experienced volunteers and may not be able to serve every vehicle."
+      ],
+      "requiredActions": ["If a repair is outside scope, explain the limitation and direct service questions to the official application."],
+      "prohibitedClaims": ["Do not recommend a commercial repair shop unless an approved referral source is added."],
+      "approvedLinks": [{"label": "CARS Ministry application", "url": "https://forms.gle/13UrumiVUXEZCLgj9"}]
+    },
+    {
+      "id": "outreach-limited-member-financial-assistance",
+      "topic": "community_assistance",
+      "title": "Limited Financial Assistance for Members",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can the church help pay my bill?",
+        "Does CrossPointe provide financial assistance?",
+        "Can the church help with rent or utilities?",
+        "How do I request benevolence assistance?"
+      ],
+      "keywords": ["financial assistance", "benevolence", "bill help", "rent help", "utility help", "money assistance"],
+      "requiredFacts": [
+        "CrossPointe may provide limited direct financial assistance only to CrossPointe members.",
+        "Requests go through the church office, are evaluated individually, and are never guaranteed."
+      ],
+      "requiredActions": ["Direct requests to the church office without asking for hardship details."],
+      "prohibitedClaims": [
+        "Do not list covered expenses or internal eligibility criteria.",
+        "Do not decide membership or eligibility, collect bills or financial details, promise assistance, or describe internal benevolence decisions."
+      ]
+    },
+    {
+      "id": "outreach-rfk-and-trac-independent-ministries",
+      "topic": "community_outreach",
+      "title": "Royal Family Kids Norman and TRAC Norman",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What is Royal Family Kids?",
+        "What is RFKC?",
+        "What is TRAC Norman?",
+        "Does CrossPointe have ministries for foster children?",
+        "How can I volunteer with RFK or TRAC?"
+      ],
+      "keywords": ["Royal Family Kids", "Royal Family Kids Camp", "RFK", "RFKC", "RFK Norman", "TRAC Norman", "Teen Reach Adventure Camp", "foster children", "foster youth"],
+      "requiredFacts": [
+        "Royal Family Kids Norman is a connected but independently operated organization sponsored by CrossPointe that provides camps, clubs, and mentoring for children in foster care.",
+        "RFKC is an acronym for Royal Family Kids Camp.",
+        "TRAC Norman is a connected but independently operated program for foster youth ages 12 through 15.",
+        "Their official websites are authoritative for current eligibility, programs, volunteering, applications, contacts, and donations."
+      ],
+      "prohibitedClaims": ["Do not present either organization as an internal CrossPointe assistance program or provide personal leader contact information."],
+      "approvedLinks": [
+        {"label": "Royal Family Kids Norman", "url": "https://rfknorman.org/"},
+        {"label": "TRAC Norman", "url": "https://tracnorman.org/"}
+      ]
+    },
+    {
+      "id": "outreach-under-one-roof-campaign",
+      "topic": "community_outreach",
+      "title": "Under One Roof Campaign",
+      "responseMode": "flexible",
+      "sampleQuestions": ["What is Under One Roof?", "Is the Under One Roof campaign still happening?", "How much has Under One Roof raised?"],
+      "keywords": ["Under One Roof", "campaign", "fundraising campaign", "shared ministry space"],
+      "requiredFacts": [
+        "Under One Roof is a temporary CrossPointe campaign intended to bring two ministries together in one shared space to better serve the church and community.",
+        "The campaign page is authoritative for current information because the campaign and its details will eventually end or change."
+      ],
+      "prohibitedClaims": ["Do not state fundraising totals, deadlines, construction dates, or completion estimates without an approved live source."],
+      "approvedLinks": [{"label": "Under One Roof", "url": "https://www.crosspointe.tv/under-one-roof"}]
+    },
+    {
+      "id": "outreach-assistance-privacy-and-routing",
+      "topic": "community_assistance",
+      "title": "Assistance Privacy and Safe Routing",
+      "responseMode": "guided",
+      "sampleQuestions": ["Can I tell you why I need help?", "Can I upload my ID here?", "Is my assistance request confidential?"],
+      "keywords": ["assistance privacy", "confidential", "upload ID", "hardship details", "personal information"],
+      "requiredFacts": ["Care Center and CARS requests and records are confidential within the relevant ministry team."],
+      "requiredActions": ["Explain the official process compassionately and provide one useful next step without asking why assistance is needed."],
+      "prohibitedClaims": [
+        "Do not collect IDs, income documents, household information, vehicle identifiers, payment details, or personal hardship details in chat.",
+        "Do not promise eligibility, appointments, repairs, or financial support."
+      ]
+    }
+  ]
+}

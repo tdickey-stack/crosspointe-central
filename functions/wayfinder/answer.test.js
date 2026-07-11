@@ -27,7 +27,7 @@ test("crisis policy skips Gemini", async () => {
   assert.match(response.body.answer, /988/);
 });
 
-test("unknown question uses approved fallback without Gemini", async () => {
+test("CARS transmission question uses approved grounded fallback", async () => {
   let generatorCalls = 0;
   const response = await runHandler_(
       "Can you repair the transmission in my car?",
@@ -38,9 +38,10 @@ test("unknown question uses approved fallback without Gemini", async () => {
   );
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.body.mode, "unknown");
+  assert.equal(response.body.mode, "knowledge-fallback");
   assert.equal(response.body.modelUsed, false);
-  assert.equal(generatorCalls, 0);
+  assert.equal(generatorCalls, 1);
+  assert.match(response.body.answer, /transmission/i);
 });
 
 test("date question waits for live Planning Center data", async () => {

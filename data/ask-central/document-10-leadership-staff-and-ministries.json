@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-10",
+  "title": "Leadership, Staff, and Ministries",
+  "status": "approved",
+  "approvedDate": "2026-07-11",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "guided",
+  "entries": [
+    {
+      "id": "staff-directory-and-titles",
+      "topic": "staff_and_leadership",
+      "title": "CrossPointe Staff Directory and Titles",
+      "responseMode": "flexible",
+      "sampleQuestions": ["Who is on staff?", "Who are the pastors?", "Who is the lead pastor?", "What is Tyler Dickey's title?"],
+      "keywords": ["staff list", "staff directory", "pastors", "Chris Todd", "Mike Lewis", "Jared Perry", "Angie Laubach", "Tyler Dickey", "Bob Usry", "Katelyn Balliett", "Cathy Brown", "Ron Porter", "Lecia Adams", "Riley Baker", "John Gifford"],
+      "requiredFacts": [
+        "CrossPointe's paid staff are Chris Todd, Lead Pastor; Mike Lewis, Worship Pastor; Jared Perry, Student Pastor or Youth Pastor; Angie Laubach, Children's Ministry Director; Tyler Dickey, Creative Director; Bob Usry, Care Pastor; Katelyn Balliett, Elementary Director/Multimedia Specialist; Cathy Brown, Operations Administrator; Ron Porter, Maintenance Director; Lecia Adams, Early Learning Center Director; Riley Baker, Worship Technology Director; and John Gifford, Staff Support Pastor.",
+        "Chris Todd, Mike Lewis, Jared Perry, Bob Usry, and John Gifford may be called pastors.",
+        "Tyler Dickey is ordained, but Pastor is not part of his current title; refer to him as Creative Director."
+      ],
+      "requiredActions": ["Answer only with the people relevant to the question unless the full list is requested."],
+      "approvedLinks": [{"label": "CrossPointe staff", "url": "https://www.crosspointe.tv/staff"}]
+    },
+    {
+      "id": "staff-contact-and-general-pastoral-routing",
+      "topic": "staff_and_leadership",
+      "title": "Contacting Staff and General Pastoral Requests",
+      "responseMode": "guided",
+      "sampleQuestions": ["How do I contact a staff member?", "Can I speak to the pastor?", "How do I reach Chris Todd?", "I need to talk with a pastor"],
+      "keywords": ["contact staff", "speak to pastor", "staff profile", "pastoral request", "email pastor", "call church office"],
+      "requiredFacts": [
+        "Appropriate contact requests should use the contact form on the staff member's public profile.",
+        "If an individual profile is unavailable, use crosspointe.tv/staff or the church office.",
+        "General requests to speak with 'the pastor' should go through the church office so the appropriate pastor can be assigned.",
+        "Pastoral requests may be distributed according to availability and need."
+      ],
+      "prohibitedClaims": ["Do not guarantee a particular pastor, response time, appointment, visit, or outcome."],
+      "approvedLinks": [{"label": "CrossPointe staff", "url": "https://www.crosspointe.tv/staff"}],
+      "approvedActions": [
+        {"type": "email", "label": "Email the church office", "value": "info@crosspointe.tv"},
+        {"type": "phone", "label": "Call or text the church office", "value": "405-374-4740"}
+      ]
+    },
+    {
+      "id": "staff-pastoral-worship-and-students",
+      "topic": "staff_and_leadership",
+      "title": "Lead Pastor, Worship Pastor, and Student Pastor Responsibilities",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who handles baptism questions?", "Who oversees worship?", "Who leads Pointe Groups?", "Who is the student pastor?"],
+      "keywords": ["Chris Todd responsibilities", "Mike Lewis responsibilities", "Jared Perry responsibilities", "baptism pastor", "Worship Pastor", "Pointe Groups pastor", "Student Pastor", "Youth Pastor"],
+      "requiredFacts": [
+        "Chris Todd is Lead Pastor and handles lead-pastor responsibilities, baptism questions, spiritual guidance, short-term pastoral counseling, visitation, and pastoral care, though requests may be assigned to another pastor.",
+        "Mike Lewis is Worship Pastor and oversees Worship Ministry and Pointe Groups.",
+        "Jared Perry is Student Pastor and oversees CrossPointe Student Ministries for grades 6 through 12; Youth Pastor is also an accepted title."
+      ],
+      "prohibitedClaims": ["Do not promise that a particular pastor will personally handle a request."]
+    },
+    {
+      "id": "staff-children-and-elementary-leadership",
+      "topic": "staff_and_leadership",
+      "title": "Children's and Elementary Ministry Leadership",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who leads children's ministry?", "Who oversees Kingdom Kids?", "Who handles elementary curriculum?", "How do I contact Angie Laubach?"],
+      "keywords": ["Angie Laubach", "Katelyn Balliett", "Children's Ministry Director", "Elementary Director", "Kingdom Kids leader", "elementary curriculum"],
+      "requiredFacts": [
+        "Angie Laubach is Children's Ministry Director and oversees all children's ministries, including Kingdom Kids and nursery, preschool, and elementary areas.",
+        "Katelyn Balliett is Elementary Director/Multimedia Specialist and oversees Kingdom Kids elementary Sunday School and Sunday morning curriculum.",
+        "Katelyn also assists the Creative Team with graphic design, social media, and approved multimedia projects."
+      ]
+    },
+    {
+      "id": "staff-creative-and-wayfinder",
+      "topic": "staff_and_leadership",
+      "title": "Creative Ministries and Tyler Dickey",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who oversees the website?", "Who should I contact about Central?", "Who created Wayfinder?", "Who handles social media?"],
+      "keywords": ["Tyler Dickey", "Creative Director", "website error", "CrossPointe Central", "Wayfinder", "social media", "graphic design", "print materials", "promotion"],
+      "requiredFacts": ["Tyler Dickey is Creative Director and oversees the website, social media, CrossPointe Central, Wayfinder, graphic design, print materials, promotion, and communications."],
+      "requiredActions": ["Direct appropriate website, Central, Wayfinder, social-media, or promotional feedback to Tyler's public staff profile."],
+      "prohibitedClaims": ["Do not reveal internal systems, credentials, security details, unpublished plans, or implementation details."]
+    },
+    {
+      "id": "staff-care-pastor-and-funeral-routing",
+      "topic": "staff_and_leadership",
+      "title": "Care Pastor, Funerals, Hospital Visits, and Pastoral Care",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who is the care pastor?", "Who do I call about a funeral?", "Can a pastor visit the hospital?", "How do I request pastoral care?"],
+      "keywords": ["Bob Usry", "Care Pastor", "funeral request", "hospital visit", "pastoral care", "prayer visit"],
+      "requiredFacts": [
+        "Bob Usry is Care Pastor and his public responsibilities include hospital visits, funerals, prayer, and pastoral care.",
+        "All funeral, hospital-visitation, and pastoral-care requests should begin with the church office so they can be assigned and followed up appropriately."
+      ],
+      "prohibitedClaims": ["Do not promise that Bob or another particular pastor will personally handle the request."]
+    },
+    {
+      "id": "staff-office-maintenance-and-elc",
+      "topic": "staff_and_leadership",
+      "title": "Office, Maintenance, and Early Learning Center Leadership",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who runs the church office?", "Who do I tell about a maintenance problem?", "What is the Early Learning Center?", "Who is the ELC director?"],
+      "keywords": ["Cathy Brown", "Operations Administrator", "Ron Porter", "Maintenance Director", "Lecia Adams", "Early Learning Center", "ELC", "Mother's Day Out"],
+      "requiredFacts": [
+        "Cathy Brown is Operations Administrator and receives and routes public office questions and requests.",
+        "Ron Porter is Maintenance Director, but public maintenance and facilities reports should go through the church office.",
+        "Lecia Adams is Early Learning Center Director and oversees the program and its employees.",
+        "The Early Learning Center is a Mother's Day Out program for children ages two and older."
+      ],
+      "requiredActions": ["Keep detailed ELC answers brief until its dedicated knowledge document is approved, and direct enrollment, schedule, cost, availability, policy, or employment questions to the ELC or church office."],
+      "prohibitedClaims": ["Do not provide maintenance access, infrastructure, schedule, or security details."]
+    },
+    {
+      "id": "staff-worship-technology-and-av",
+      "topic": "staff_and_leadership",
+      "title": "Worship Technology, A/V, and Livestream",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who handles the livestream?", "Who should I tell about an audio problem?", "Who leads the Tech Team?", "Who oversees A/V?"],
+      "keywords": ["Riley Baker", "Worship Technology Director", "A/V", "audio video", "livestream problem", "Tech Team", "production"],
+      "requiredFacts": ["Riley Baker is Worship Technology Director, works under Tyler Dickey within Creative Ministries, oversees campus A/V resources, leads the Tech Team, and supports Sunday services and the livestream."],
+      "requiredActions": ["Direct public A/V or livestream problem reports to Riley's public staff profile."],
+      "prohibitedClaims": ["Do not provide credentials, network details, equipment-access instructions, internal production procedures, or security-sensitive information."]
+    },
+    {
+      "id": "staff-support-pastor",
+      "topic": "staff_and_leadership",
+      "title": "Staff Support Pastor",
+      "responseMode": "guided",
+      "sampleQuestions": ["What does the Staff Support Pastor do?", "Who is John Gifford?", "Who cares for the church staff?"],
+      "keywords": ["John Gifford", "Staff Support Pastor", "staff care", "volunteer satisfaction", "staff satisfaction"],
+      "requiredFacts": ["John Gifford is Staff Support Pastor and supports the health, care, and satisfaction of CrossPointe staff and volunteers so those who care for others are also cared for."],
+      "prohibitedClaims": ["Do not describe confidential personnel, complaint, employment, disciplinary, or staff-support matters."]
+    },
+    {
+      "id": "staff-volunteer-ministry-leaders",
+      "topic": "staff_and_leadership",
+      "title": "Volunteer-Led Ministry Leaders",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who leads CARS Ministry?", "Who runs the Care Center?", "Is CARS volunteer led?"],
+      "keywords": ["Joshua Knoettgen", "Johnnie Poiroit", "CARS leader", "Care Center leader", "volunteer-led ministry"],
+      "requiredFacts": [
+        "Care Center and CARS Ministry are volunteer-led ministries.",
+        "Joshua Knoettgen is the current CARS Ministry leader.",
+        "Johnnie Poiroit is the current Care Center ministry leader."
+      ],
+      "requiredActions": ["Mention a leader's name only when specifically asked who leads that ministry; ordinary assistance requests should use Document 09 processes."],
+      "prohibitedClaims": ["Do not use outdated public information naming Sam Crump as the current CARS leader."]
+    },
+    {
+      "id": "staff-public-biographies-and-structure",
+      "topic": "staff_and_leadership",
+      "title": "Public Staff Biographies and Approved Ministry Structure",
+      "responseMode": "flexible",
+      "sampleQuestions": ["How long has Chris been a pastor?", "Where did Mike go to school?", "Who does Riley work under?", "Can Wayfinder tell me about a staff member?"],
+      "keywords": ["staff biography", "staff bio", "ministry experience", "education", "family", "reports to", "ministry structure"],
+      "requiredFacts": [
+        "Wayfinder may use harmless information intentionally published in a staff member's official website biography.",
+        "Approved ministry relationships may be described, but undocumented reporting relationships must not be inferred from titles.",
+        "Further organizational questions should go to the church office."
+      ],
+      "prohibitedClaims": ["Do not infer, search for, or reveal personal information beyond approved public profiles."]
+    },
+    {
+      "id": "staff-private-schedules-and-employment-matters",
+      "topic": "staff_and_leadership",
+      "title": "Private Staff Schedules, Whereabouts, and Employment Matters",
+      "responseMode": "guided",
+      "sampleQuestions": ["Is Chris at church right now?", "What is a staff member's schedule?", "How much does the pastor make?", "Is a staff member being disciplined?", "Where is Riley today?"],
+      "keywords": ["staff schedule", "staff whereabouts", "at church today", "salary", "compensation", "discipline", "performance review", "employment status", "personnel record", "vacation"],
+      "requiredFacts": ["Staff schedules, whereabouts, employment matters, compensation, performance, discipline, personnel records, and private internal responsibilities are not public Wayfinder information."],
+      "requiredActions": ["For an appropriate availability question, direct the person to the church office without confirming a schedule or location."],
+      "prohibitedClaims": ["Do not confirm whether any private personnel or disciplinary matter exists."]
+    }
+  ]
+}

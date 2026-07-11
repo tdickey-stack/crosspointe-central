@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-11",
+  "title": "Events and Calendar Rules",
+  "status": "approved",
+  "approvedDate": "2026-07-11",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "guided",
+  "entries": [
+    {
+      "id": "events-general-upcoming",
+      "topic": "live_events",
+      "title": "General Upcoming Events",
+      "responseMode": "guided",
+      "sampleQuestions": ["What events are coming up?", "What's happening at CrossPointe?", "What can I attend soon?"],
+      "keywords": ["upcoming events", "events coming up", "church calendar", "next events", "Wayfinder Priority"],
+      "requiredSourceType": "planning_center_event",
+      "retrievalRules": [
+        "Search only public events carrying the Central tag from the current time through the next 14 days.",
+        "Return the next three relevant events that have not started.",
+        "Rank events with the Wayfinder Priority tag first, then fill remaining spaces with the next regular Central-tagged events.",
+        "Exclude normal Sunday morning services and normal Wednesday night programming, but allow intentionally published special events, including Sunday evening events.",
+        "List only the next occurrence of a recurring event."
+      ],
+      "requiredFacts": ["Planning Center Calendar is authoritative for current event dates, times, locations, and main event links."],
+      "prohibitedClaims": ["Do not invent an event, date, time, location, registration requirement, cancellation, or schedule change."]
+    },
+    {
+      "id": "events-today",
+      "topic": "live_events",
+      "title": "Events Happening Today",
+      "responseMode": "guided",
+      "sampleQuestions": ["What's happening today?", "Are there any events later today?", "What is going on at church tonight?"],
+      "keywords": ["events today", "happening today", "later today", "tonight", "today at church"],
+      "requiredSourceType": "planning_center_event",
+      "retrievalRules": [
+        "Use America/Chicago time.",
+        "Return all matching Central-tagged public events remaining today, even when there are more than three.",
+        "Exclude events that have already started."
+      ],
+      "prohibitedClaims": ["Do not present an event already in progress as upcoming."]
+    },
+    {
+      "id": "events-named-and-ministry-search",
+      "topic": "live_events",
+      "title": "Named Events and Ministry Event Searches",
+      "responseMode": "guided",
+      "sampleQuestions": ["When is Starting Pointe?", "Are there any kids events?", "What student events are coming up?", "Is VBS scheduled?"],
+      "keywords": ["named event", "Starting Pointe date", "VBS date", "kids events", "student events", "women's events", "men's events", "ministry events"],
+      "requiredSourceType": "planning_center_event",
+      "retrievalRules": [
+        "For a specifically named event, search Central-tagged public events up to six months ahead.",
+        "For ministry searches, use public tags as the strongest category signal, supported by event names, descriptions, and rooms.",
+        "Rooms must not be the only category evidence when a room serves multiple ministries.",
+        "If no result is found, say no matching event is currently posted within the search window rather than claiming the ministry has no activities."
+      ],
+      "prohibitedClaims": ["Do not reuse an old date or infer a traditional annual schedule when no live event is posted."]
+    },
+    {
+      "id": "events-details-registration-and-location",
+      "topic": "live_events",
+      "title": "Event Details, Registration, Links, and Locations",
+      "responseMode": "guided",
+      "sampleQuestions": ["Where is the event?", "Do I need to register?", "How do I sign up for this event?", "What time does the event start?"],
+      "keywords": ["event location", "event room", "event registration", "sign up", "Church Center link", "event time", "Central Time"],
+      "requiredSourceType": "planning_center_event",
+      "dynamicFields": ["event name", "start date", "start time", "end time", "public description", "approved room or location", "main Church Center link"],
+      "retrievalRules": [
+        "Use room names only after Central room-renaming and hiding rules are applied.",
+        "Interpret dates and times in America/Chicago and clarify Central Time when confusion is possible.",
+        "If no room or location is published, say the location has not been posted yet and do not assume the event is on campus.",
+        "Registration information may come only from the main Church Center event link.",
+        "When no main link exists, say registration is generally not required without treating that as an absolute guarantee.",
+        "Provide only the main public event link, not calendar-download, administrative, or API links."
+      ],
+      "prohibitedClaims": ["Do not claim someone is registered, space is available, or a cost, capacity, deadline, waitlist, or refund policy exists unless verified by approved live data."]
+    },
+    {
+      "id": "events-live-source-failure-and-changes",
+      "topic": "live_events",
+      "title": "Event Source Failures, Cancellations, and Last-Minute Changes",
+      "responseMode": "guided",
+      "sampleQuestions": ["Is the event cancelled?", "Did the event location change?", "Why can't you find the event schedule?", "Is this event full?"],
+      "keywords": ["event cancelled", "event postponed", "location changed", "time changed", "event full", "Planning Center unavailable", "cannot verify schedule"],
+      "requiredSourceType": "planning_center_event",
+      "requiredFacts": [
+        "Planning Center is primary for normal event updates.",
+        "A future approved operational notice may override Planning Center for a temporary cancellation, postponement, time change, location change, or capacity notice.",
+        "When live retrieval fails, Wayfinder must not provide unverified dates or times."
+      ],
+      "requiredActions": ["If live data cannot be verified, say so and direct the person to the CrossPointe events page or church office."],
+      "approvedLinks": [{"label": "CrossPointe events", "url": "https://www.crosspointe.tv/events"}],
+      "prohibitedClaims": ["Do not claim an event is cancelled, postponed, full, or relocated without verified Planning Center data or an active approved operational notice."]
+    }
+  ]
+}

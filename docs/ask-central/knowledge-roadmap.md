@@ -12,12 +12,17 @@
 - Document 07 — Prayer, Pastoral Care, and Counseling
 - Document 08 — Beliefs and Church Identity
 - Document 09 — Community Outreach and Assistance
-
-## Planned
-
 - Document 10 — Leadership, Staff, and Ministries
 - Document 11 — Events and Calendar Rules
 - Document 12 — Campus Navigation and Facilities
+
+## Planned
+
+- Document 13 — Early Learning Center
+
+## Document 13 source plan
+
+Document 13 will cover CrossPointe's Early Learning Center in greater depth. It will include the Mother's Day Out program, ages served, schedule, enrollment, tuition or fees, classroom expectations, contact process, closures, and other approved public information. Until that document is completed, Wayfinder should only provide the short approved description from Document 10 and direct detailed questions to the Early Learning Center or church office.
 
 ## Document 12 source plan
 

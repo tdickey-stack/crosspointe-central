@@ -12,7 +12,7 @@ const entries = flattened.entries.map((entry) => entry.data);
 test("all approved Wayfinder bundles validate", () => {
   assert.deepEqual(flattened.errors, []);
   assert.equal(flattened.policies.length, 1);
-  assert.equal(flattened.entries.length, 125);
+  assert.equal(flattened.entries.length, 150);
 });
 
 const retrievalCases = [
@@ -34,6 +34,17 @@ const retrievalCases = [
   ["Can the church help fix my car?", "outreach-cars-overview-and-application"],
   ["Can CARS replace my tires?", "outreach-cars-repair-scope"],
   ["What is RFKC?", "outreach-rfk-and-trac-independent-ministries"],
+  ["Who is the lead pastor?", "staff-pastoral-worship-and-students"],
+  ["Who oversees the website?", "staff-creative-and-wayfinder"],
+  ["Who should I tell about a livestream problem?", "staff-worship-technology-and-av"],
+  ["Who leads CARS Ministry?", "staff-volunteer-ministry-leaders"],
+  ["What events are coming up?", "events-general-upcoming"],
+  ["What's happening today?", "events-today"],
+  ["Are there any women's events?", "events-named-and-ministry-search"],
+  ["Where is the Welcome Center?", "campus-welcome-center-main-building"],
+  ["Where do I check my kids in?", "campus-childrens-center-and-family-arrival"],
+  ["How do I find Pointe Brew?", "campus-the-pointe-navigation"],
+  ["Is Pointe Brew wheelchair accessible?", "campus-parking-and-accessibility"],
   ["How can I start volunteering?", "serving-get-started"],
   ["Can my teenager volunteer?", "serving-membership-age-and-eligibility"],
   ["Do I need an audition for worship team?", "serving-worship-ministry"],

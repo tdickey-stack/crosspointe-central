@@ -1,0 +1,416 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-06",
+  "title": "Giving and Financial Stewardship",
+  "status": "approved",
+  "approvedDate": "2026-07-10",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "guided",
+  "entries": [
+    {
+      "id": "giving-overview-and-tone",
+      "topic": "giving",
+      "title": "Giving Overview and Non-Pressuring Tone",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Do I have to give to attend CrossPointe?",
+        "What does CrossPointe believe about giving?",
+        "How much should I give?",
+        "Does the church require tithing?"
+      ],
+      "keywords": [
+        "giving",
+        "tithe",
+        "tithing",
+        "required",
+        "amount",
+        "percentage",
+        "act of worship"
+      ],
+      "requiredFacts": [
+        "Giving is an act of worship.",
+        "CrossPointe encourages people to give according to what the Lord has placed on their heart.",
+        "Giving is never required to attend CrossPointe."
+      ],
+      "prohibitedClaims": [
+        "Do not pressure someone to give.",
+        "Do not recommend an amount or percentage.",
+        "Do not teach tithing or imply that giving is required to attend, participate, receive ministry, or be accepted by CrossPointe."
+      ]
+    },
+    {
+      "id": "giving-online",
+      "topic": "giving",
+      "title": "Giving Online",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "How can I give online?",
+        "Where is the online giving page?",
+        "Can I donate through the website?",
+        "What is the link to give?"
+      ],
+      "keywords": [
+        "give online",
+        "online giving",
+        "donate online",
+        "giving page",
+        "website"
+      ],
+      "requiredFacts": [
+        "People may give online through CrossPointe's public giving page.",
+        "The CrossPointe giving page is the authoritative public source for current online giving options."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Open CrossPointe's giving page",
+          "url": "https://www.crosspointe.tv/give"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not expose or rely on long payment-provider URLs when the CrossPointe giving page is available.",
+        "Do not discuss payment-processing fees."
+      ]
+    },
+    {
+      "id": "giving-text-and-nfc",
+      "topic": "giving",
+      "title": "Text and NFC Giving",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How do I give by text?",
+        "What number do I text to give?",
+        "What are the NFC tags in the sanctuary?",
+        "Can I tap my phone to give?"
+      ],
+      "keywords": [
+        "text to give",
+        "HEART",
+        "73256",
+        "NFC tag",
+        "tap phone",
+        "sanctuary"
+      ],
+      "requiredFacts": [
+        "People may give by texting HEART followed by the amount they wish to give to 73256.",
+        "First-time text givers receive a link with instructions to enter their payment information.",
+        "NFC tags are available in the sanctuary; someone may tap a tag with a compatible phone and select Give from the available options."
+      ],
+      "prohibitedInformation": [
+        "Payment information",
+        "Bank or card details",
+        "Online giving credentials"
+      ],
+      "prohibitedClaims": [
+        "Do not troubleshoot a person's phone, bank, card, or payment account beyond suggesting another approved method or the church office."
+      ]
+    },
+    {
+      "id": "giving-during-services",
+      "topic": "giving",
+      "title": "Giving During Services",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Can I give cash during church?",
+        "Do you pass an offering plate?",
+        "Can I write a check at church?",
+        "Who should I make a giving check payable to?"
+      ],
+      "keywords": [
+        "offering plate",
+        "cash",
+        "check",
+        "during service",
+        "payable"
+      ],
+      "requiredFacts": [
+        "An offering plate is passed during every service.",
+        "People may give cash or checks through the offering plate.",
+        "Checks should be made payable to CrossPointe Church.",
+        "Anonymous gifts are accepted."
+      ]
+    },
+    {
+      "id": "giving-mail-and-office",
+      "topic": "giving",
+      "title": "Mailing or Dropping Off a Gift",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can I mail a donation?",
+        "Where can I drop off a check?",
+        "What address should I mail my gift to?",
+        "When is the office open for donations?"
+      ],
+      "keywords": [
+        "mail gift",
+        "drop off donation",
+        "church office",
+        "2601 24th Ave SE",
+        "office hours"
+      ],
+      "requiredFacts": [
+        "Gifts may be mailed to CrossPointe Church, 2601 24th Ave SE, Norman, OK 73071.",
+        "Gifts may be dropped off at the church office during normal office hours, Monday through Thursday from 9:00 AM to 4:00 PM, subject to holiday closures.",
+        "Checks should be made payable to CrossPointe Church."
+      ],
+      "approvedActions": [
+        {
+          "type": "address",
+          "label": "Mail or bring a gift to CrossPointe Church",
+          "value": "2601 24th Ave SE, Norman, OK 73071"
+        }
+      ]
+    },
+    {
+      "id": "giving-recurring-and-manage",
+      "topic": "giving",
+      "title": "Recurring Gifts and Manage Online Giving",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can I set up recurring giving?",
+        "How do I cancel a recurring gift?",
+        "How do I change my online donation?",
+        "Where do I manage online giving?"
+      ],
+      "keywords": [
+        "recurring gift",
+        "cancel donation",
+        "change donation",
+        "manage online giving",
+        "automatic giving"
+      ],
+      "requiredFacts": [
+        "People may create recurring online gifts.",
+        "To change or cancel a recurring gift, visit CrossPointe's giving page and select Manage Online Giving.",
+        "If someone has trouble managing a gift, they may contact the church office."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Manage online giving",
+          "url": "https://www.crosspointe.tv/give"
+        }
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "prohibitedInformation": [
+        "Payment information",
+        "Account credentials",
+        "Transaction numbers"
+      ]
+    },
+    {
+      "id": "giving-funds-and-designations",
+      "topic": "giving",
+      "title": "Giving Funds and Designations",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What funds can I give to?",
+        "Can I designate my gift?",
+        "Which fund should I select?",
+        "What happens if a project is fully funded?"
+      ],
+      "keywords": [
+        "giving funds",
+        "designated gift",
+        "fund dropdown",
+        "select fund",
+        "project fully funded"
+      ],
+      "requiredFacts": [
+        "CrossPointe offers many giving funds.",
+        "The current online giving portal dropdown is the authoritative source for available fund choices.",
+        "Questions about designated-gift policies, unavailable funds, completed projects, or how a particular gift may be used should be directed to the church office."
+      ],
+      "approvedLinks": [
+        {
+          "label": "View current giving options",
+          "url": "https://www.crosspointe.tv/give"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not guess which fund someone should select or provide an older list of funds."
+      ],
+      "prohibitedInformation": [
+        "Internal financial policies"
+      ]
+    },
+    {
+      "id": "giving-unusual-gifts-refunds-and-corrections",
+      "topic": "giving",
+      "title": "Unusual Gifts, Refunds, and Corrections",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can I donate shares or property?",
+        "Can I give a vehicle to the church?",
+        "Can I get a donation refund?",
+        "My gift went to the wrong fund. What should I do?"
+      ],
+      "keywords": [
+        "securities donation",
+        "property donation",
+        "vehicle donation",
+        "estate gift",
+        "refund",
+        "wrong fund",
+        "correction"
+      ],
+      "requiredFacts": [
+        "Questions about stocks, property, vehicles, estate gifts, or other non-cash gifts should be directed to the church office.",
+        "Refund requests and gifts believed to be applied to the wrong fund should be directed to the church office."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not promise that CrossPointe will accept a particular gift.",
+        "Do not promise that a refund, correction, transfer, or fund change will be approved."
+      ],
+      "prohibitedInformation": [
+        "Transaction details",
+        "Internal financial policies"
+      ]
+    },
+    {
+      "id": "giving-receipts-and-statements",
+      "topic": "giving",
+      "title": "Giving Receipts and Annual Statements",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Will I receive a giving receipt?",
+        "How do I get my annual giving statement?",
+        "When are giving statements mailed?",
+        "Can you send me a copy of my giving statement?"
+      ],
+      "keywords": [
+        "giving receipt",
+        "giving statement",
+        "annual statement",
+        "mailed",
+        "tax season",
+        "copy"
+      ],
+      "requiredFacts": [
+        "Someone who gives online should receive an emailed receipt.",
+        "Annual giving statements are mailed to donors before tax season.",
+        "Someone may contact the church office to request a copy of their giving statement.",
+        "Wayfinder cannot search for, resend, verify, or disclose an individual receipt or giving statement."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "prohibitedInformation": [
+        "Individual giving history",
+        "Donation amounts",
+        "Giving statements",
+        "Receipts"
+      ]
+    },
+    {
+      "id": "giving-tax-deductibility",
+      "topic": "giving",
+      "title": "Tax-Deductibility and Tax Advice",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Are donations to CrossPointe tax-deductible?",
+        "Can I deduct my church giving?",
+        "Will I receive a statement before tax season?",
+        "Can you give me tax advice about my donation?"
+      ],
+      "keywords": [
+        "tax deductible",
+        "tax deduction",
+        "tax season",
+        "tax advice",
+        "annual statement"
+      ],
+      "requiredFacts": [
+        "Gifts to CrossPointe are tax-deductible.",
+        "Annual giving statements are mailed before tax season.",
+        "Wayfinder cannot provide individual tax advice."
+      ],
+      "requiredActions": [
+        "For an individual tax situation, suggest speaking with a qualified tax professional."
+      ]
+    },
+    {
+      "id": "giving-private-records",
+      "topic": "giving",
+      "title": "Private Giving Records",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How much have I given?",
+        "Can you look up my donations?",
+        "What card did I use for my gift?",
+        "Can you check the status of my refund?"
+      ],
+      "keywords": [
+        "my giving",
+        "donation history",
+        "giving record",
+        "payment method",
+        "refund status",
+        "look up donations"
+      ],
+      "requiredFacts": [
+        "Wayfinder cannot access or disclose an individual's giving history.",
+        "Someone may contact the church office to request a copy of their giving statement."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "prohibitedInformation": [
+        "Individual giving records",
+        "Donation amounts",
+        "Payment methods",
+        "Bank or card information",
+        "Giving credentials",
+        "Refund or correction status",
+        "Internal financial reports"
+      ],
+      "requiredActions": [
+        "Speak in first person, such as: I can't access your giving history.",
+        "Never ask the person to provide donation amounts, payment credentials, or financial-account information in chat."
+      ]
+    }
+  ]
+}

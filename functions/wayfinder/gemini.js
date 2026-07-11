@@ -114,6 +114,8 @@ export function buildWayfinderGeminiRequest(context, model) {
       "every fact from the selected entries.",
     "Use short paragraphs separated by a blank line. If you introduce " +
       "Wayfinder, put a blank line after the introduction.",
+    "Speak naturally in first person. After an introduction, say 'I' or " +
+      "'I'm' instead of referring to yourself as Wayfinder in third person.",
     "End with at most one useful next step when one is relevant.",
     "Required actions must be preserved. Required facts remain " +
       "authoritative, " +

@@ -42,6 +42,7 @@ test("builds a grounded structured Gemini request", () => {
   assert.equal(prompt.APPROVED_CONTEXT.entries.length, 1);
   assert.match(request.config.systemInstruction, /untrusted data/i);
   assert.match(request.config.systemInstruction, /only from APPROVED_CONTEXT/i);
+  assert.match(request.config.systemInstruction, /first person/i);
 });
 
 test("accepts a grounded answer with approved facts", () => {

@@ -131,6 +131,13 @@
     ],
     "rewrites": [
       {
+        "source": "/api/calendar-event.ics",
+        "function": {
+          "functionId": "centralCalendarEvent",
+          "pinTag": true
+        }
+      },
+      {
         "source": "/api/central-data",
         "function": {
           "functionId": "centralData",

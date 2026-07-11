@@ -247,6 +247,7 @@ Starter shape:
   "pageAccess": {
     "hub": "admin",
     "settings": "admin",
+    "integrations": "admin",
     "sundaySettings": "admin",
     "thisSunday": "admin",
     "whatsNew": "admin",

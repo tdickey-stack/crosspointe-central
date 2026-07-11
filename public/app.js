@@ -69,6 +69,7 @@ var youVersionReaderModulePromise = null;
 var youVersionReaderStylesLoaded = false;
 var sundayScriptureUnmount = null;
 var sundayScriptureMountRequestId = 0;
+var calendarMenuIdCounter = 0;
 var centralThemeMediaQuery = null;
 var centralThemeOverride = "";
 var centralLoaderProgressValue = 0;
@@ -87,7 +88,22 @@ var CENTRAL_LOADER_DOOR_MS = 1525;
 if (!CENTRAL_IS_ADMIN_ROUTE) {
   document.addEventListener("DOMContentLoaded", function() {
     initializeCentralTheme_();
+    bindCalendarMenuListeners_();
     bootCentral_();
+  });
+}
+
+function bindCalendarMenuListeners_() {
+  document.addEventListener("click", function(event) {
+    if (!event.target.closest(".event-calendar-control")) {
+      closeCalendarMenus_();
+    }
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+      closeCalendarMenus_();
+    }
   });
 }
 
@@ -1580,6 +1596,9 @@ function renderBanner(banner) {
 
 function renderToday(items) {
   if (!items || !items.length) return "";
+  var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
+      currentCentralData,
+  );
 
   return section("Today at CrossPointe", "Happening Now", renderExpandableGroup({
     id: "today-grid",
@@ -1594,6 +1613,10 @@ function renderToday(items) {
         description: "",
         buttonText: item.button_text,
         buttonUrl: item.button_url,
+        bottomButtonText: calendarIntegrationsEnabled ? "Add to Calendar" : "",
+        bottomButtonUrl: calendarIntegrationsEnabled ? item.calendar_url : "",
+        calendarFileUrl: item.calendar_file_url,
+        extraClass: "event-card",
       });
     },
   }));
@@ -1719,6 +1742,9 @@ function showSetlistService(service) {
 
 function renderEvents(items) {
   if (!items || !items.length) return "";
+  var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
+      currentCentralData,
+  );
 
   return section("Upcoming Events", "See You There", renderExpandableGroup({
     id: "events-grid",
@@ -1734,7 +1760,11 @@ function renderEvents(items) {
         description: "",
         buttonText: item.button_text,
         buttonUrl: item.button_url,
+        bottomButtonText: calendarIntegrationsEnabled ? "Add to Calendar" : "",
+        bottomButtonUrl: calendarIntegrationsEnabled ? item.calendar_url : "",
+        calendarFileUrl: item.calendar_file_url,
         featured: item.featured === "TRUE",
+        extraClass: "event-card",
       });
     },
   }), "upcoming-events");
@@ -2430,14 +2460,140 @@ function section(title, kicker, content, id) {
 }
 
 function card(options) {
+  var hasPrimaryButton = options.buttonText && options.buttonUrl;
+  var hasBottomButton = options.bottomButtonText && options.bottomButtonUrl;
+  var heading = [
+    options.meta ?
+      "<div class=\"meta\">" + escapeHtml(options.meta) + "</div>" :
+      "",
+    "<h3>", escapeHtml(options.title || ""), "</h3>",
+  ].join("");
+
   return [
     "<article class=\"card ", (options.featured ? "featured" : ""), " ", (options.extraClass || ""), "\">",
-      options.meta ? "<div class=\"meta\">" + escapeHtml(options.meta) + "</div>" : "",
-      "<h3>", escapeHtml(options.title || ""), "</h3>",
+      heading,
       options.description ? "<p>" + escapeHtml(options.description || "") + "</p>" : "",
-      button(options.buttonText, options.buttonUrl),
+      hasBottomButton ? [
+        "<div class=\"card-actions ", (hasPrimaryButton ? "" : "calendar-only"), "\">",
+          button(options.buttonText, options.buttonUrl),
+          calendarButton_(
+              options.bottomButtonText,
+              options.bottomButtonUrl,
+              options.calendarFileUrl,
+              options.title,
+          ),
+        "</div>",
+      ].join("") : button(options.buttonText, options.buttonUrl),
     "</article>",
   ].join("");
+}
+
+function calendarButton_(text, url, calendarFileUrl, eventTitle) {
+  if (!text || !url) return "";
+
+  var cleanUrl = String(url).trim();
+  var cleanCalendarFileUrl = String(calendarFileUrl || "").trim();
+  var menuId = "event-calendar-menu-" + (++calendarMenuIdCounter);
+  var accessibleLabel = "Add " + String(eventTitle || "this event") +
+    " to a calendar";
+
+  return [
+    "<div class=\"event-calendar-control\">",
+      "<button type=\"button\" class=\"btn event-calendar-btn\"",
+        " aria-label=\"", escapeAttr(accessibleLabel), "\"",
+        " aria-haspopup=\"menu\" aria-expanded=\"false\"",
+        " aria-controls=\"", escapeAttr(menuId), "\"",
+        " onclick=\"toggleCalendarMenu_(event, '", escapeJsString(menuId), "')\">",
+        "<img class=\"event-calendar-logo\" src=\"/google-calendar-logo.svg\" alt=\"\" aria-hidden=\"true\">",
+        "<span>", escapeHtml(text), "</span>",
+      "</button>",
+      "<div class=\"event-calendar-menu\" id=\"", escapeAttr(menuId), "\" role=\"menu\" hidden>",
+        calendarMenuOption_(
+            "Google Calendar",
+            cleanUrl,
+            "google",
+        ),
+        cleanCalendarFileUrl ? calendarMenuOption_(
+            "Apple Calendar",
+            cleanCalendarFileUrl,
+            "apple",
+        ) : "",
+        cleanCalendarFileUrl ? calendarMenuOption_(
+            "Outlook Calendar",
+            appendUrlQueryParam_(cleanCalendarFileUrl, "download", "1"),
+            "outlook",
+        ) : "",
+      "</div>",
+    "</div>",
+  ].join("");
+}
+
+function calendarMenuOption_(title, url, provider) {
+  var iconUrl = getCalendarProviderIcon_(provider);
+
+  return [
+    "<a class=\"event-calendar-option\" role=\"menuitem\" ",
+      buildLinkAttrs_(url),
+      " data-calendar-provider=\"", escapeAttr(provider), "\"",
+      " onclick=\"closeCalendarMenus_()\">",
+      iconUrl ? [
+        "<img class=\"event-calendar-provider-icon\" src=\"",
+          escapeAttr(iconUrl),
+          "\" alt=\"\" aria-hidden=\"true\">",
+      ].join("") : "",
+      "<strong>", escapeHtml(title), "</strong>",
+    "</a>",
+  ].join("");
+}
+
+function getCalendarProviderIcon_(provider) {
+  var icons = {
+    google: "/google-calendar-logo.svg",
+    apple: "/apple-calendar-icon.jpg",
+    outlook: "/outlook-calendar-icon.jpg",
+  };
+
+  return icons[provider] || "";
+}
+
+function appendUrlQueryParam_(url, name, value) {
+  return String(url || "") +
+    (String(url || "").indexOf("?") === -1 ? "?" : "&") +
+    encodeURIComponent(name) + "=" + encodeURIComponent(value);
+}
+
+function toggleCalendarMenu_(event, menuId) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  var menu = document.getElementById(menuId);
+  if (!menu) return;
+
+  var shouldOpen = menu.hidden;
+  closeCalendarMenus_(menuId);
+  menu.hidden = !shouldOpen;
+
+  var button = menu.parentElement &&
+    menu.parentElement.querySelector(".event-calendar-btn");
+  if (button) {
+    button.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+  }
+}
+
+function closeCalendarMenus_(exceptMenuId) {
+  document.querySelectorAll(".event-calendar-menu:not([hidden])")
+      .forEach(function(menu) {
+        if (menu.id === exceptMenuId) return;
+
+        menu.hidden = true;
+        var button = menu.parentElement &&
+          menu.parentElement.querySelector(".event-calendar-btn");
+        if (button) {
+          button.setAttribute("aria-expanded", "false");
+        }
+      });
 }
 
 function button(text, url, className) {
@@ -2929,6 +3085,56 @@ function getGoogleNotesEnabledValue_(data, sundaySettings) {
     Object.prototype.hasOwnProperty.call(sundaySettings, "google_docs_enabled")
   ) {
     return normalizeCentralBooleanValue_(sundaySettings.google_docs_enabled, true);
+  }
+
+  return true;
+}
+
+function getCalendarIntegrationsEnabledValue_(data) {
+  var sundaySettings = data && data.sundaySettings ? data.sundaySettings : {};
+
+  if (
+    data &&
+    Object.prototype.hasOwnProperty.call(data, "calendarIntegrationsEnabled")
+  ) {
+    return normalizeCentralBooleanValue_(
+        data.calendarIntegrationsEnabled,
+        true,
+    );
+  }
+
+  if (
+    data &&
+    Object.prototype.hasOwnProperty.call(data, "calendar_integrations_enabled")
+  ) {
+    return normalizeCentralBooleanValue_(
+        data.calendar_integrations_enabled,
+        true,
+    );
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+        sundaySettings,
+        "calendarIntegrationsEnabled",
+    )
+  ) {
+    return normalizeCentralBooleanValue_(
+        sundaySettings.calendarIntegrationsEnabled,
+        true,
+    );
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+        sundaySettings,
+        "calendar_integrations_enabled",
+    )
+  ) {
+    return normalizeCentralBooleanValue_(
+        sundaySettings.calendar_integrations_enabled,
+        true,
+    );
   }
 
   return true;

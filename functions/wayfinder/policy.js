@@ -33,28 +33,11 @@ const PROHIBITED_PATTERNS = [
   /\bongoing counseling\b/,
 ];
 
-const PRAYER_PATTERNS = [
-  /\bprayer request\b/,
-  /\bpray for\b/,
-  /\bprayer list\b/,
-  /\bsubmit (?:a )?prayer\b/,
-];
-
-const PASTORAL_CARE_PATTERNS = [
-  /\b(?:talk|speak|meet) (?:to|with) (?:a|the|one of your) pastor\b/,
-  /\bpastoral counseling\b/,
-  /\bpremarital counseling\b/,
-  /\bpre-marital counseling\b/,
-  /\bshort[- ]term counseling\b/,
-];
-
 export function classifyWayfinderPolicyQuestion(question) {
   const value = normalize_(question);
 
   if (matchesAny_(value, CRISIS_PATTERNS)) return "crisis";
   if (matchesAny_(value, PROHIBITED_PATTERNS)) return "prohibited";
-  if (matchesAny_(value, PRAYER_PATTERNS)) return "prayer";
-  if (matchesAny_(value, PASTORAL_CARE_PATTERNS)) return "pastoral_care";
   return "knowledge";
 }
 

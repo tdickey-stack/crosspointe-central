@@ -34,6 +34,7 @@ const TOKEN_ALIASES = new Map([
   ["volunteering", "serve"],
   ["praying", "prayer"],
   ["pray", "prayer"],
+  ["tithing", "tithe"],
 ]);
 
 const FIELD_WEIGHTS = [

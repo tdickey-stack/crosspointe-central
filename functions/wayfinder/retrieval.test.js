@@ -12,7 +12,7 @@ const entries = flattened.entries.map((entry) => entry.data);
 test("all approved Wayfinder bundles validate", () => {
   assert.deepEqual(flattened.errors, []);
   assert.equal(flattened.policies.length, 1);
-  assert.equal(flattened.entries.length, 101);
+  assert.equal(flattened.entries.length, 115);
 });
 
 const retrievalCases = [
@@ -37,10 +37,17 @@ const retrievalCases = [
   ["Can I give cash during church?", "giving-during-services"],
   ["How do I cancel recurring giving?", "giving-recurring-and-manage"],
   ["How do I get my giving statement?", "giving-receipts-and-statements"],
+  ["Do I have to tithe?", "giving-overview-and-tone"],
   ["Will my prayer request be private?", "care-prayer-privacy-and-wall"],
   ["Will a pastor visit someone in the hospital?", "care-pastoral-support"],
   ["Does CrossPointe offer counseling?", "care-pastoral-counseling"],
   ["Can you write a prayer for me?", "care-wayfinder-prayer-boundary"],
+  ["How do I get added to the prayer list?", "care-prayer-request-submit"],
+  ["What denomination is CrossPointe?", "beliefs-affiliation-and-unity"],
+  ["What does CrossPointe believe about the Bible?", "beliefs-bible-and-authority"],
+  ["How can I be saved?", "beliefs-jesus-and-salvation"],
+  ["Who should Christians vote for?", "beliefs-creation-government-and-politics"],
+  ["Is CrossPointe Calvinist or Arminian?", "beliefs-secondary-doctrines-and-comparisons"],
 ];
 
 retrievalCases.forEach(([question, expectedId]) => {

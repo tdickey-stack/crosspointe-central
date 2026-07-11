@@ -81,6 +81,27 @@ test("approved static question is sent to Gemini", async () => {
   assert.ok(selectedIds.includes("visiting-what-to-wear"));
 });
 
+test("normal prayer-list question is sent to grounded Gemini", async () => {
+  let selectedIds = [];
+  const response = await runHandler_(
+      "How do I get added to the prayer list?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "You can submit the approved Prayer Request Form.",
+          sourceEntryIds: ["care-prayer-request-submit"],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        };
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "gemini-grounded");
+  assert.equal(response.body.modelUsed, true);
+  assert.ok(selectedIds.includes("care-prayer-request-submit"));
+});
+
 test("approved static question falls back to verified facts", async () => {
   const response = await runHandler_(
       "What time is church?",

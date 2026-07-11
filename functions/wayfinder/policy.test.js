@@ -25,14 +25,14 @@ test("routes private records and staff schedules to refusal", () => {
   );
 });
 
-test("routes prayer and pastoral care to approved policies", () => {
+test("leaves normal prayer and pastoral care for grounded knowledge", () => {
   assert.equal(
       classifyWayfinderPolicyQuestion("How do I submit a prayer request?"),
-      "prayer",
+      "knowledge",
   );
   assert.equal(
       classifyWayfinderPolicyQuestion("Can I speak with a pastor?"),
-      "pastoral_care",
+      "knowledge",
   );
 });
 

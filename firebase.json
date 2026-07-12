@@ -290,6 +290,10 @@
       "enabled": true,
       "port": 4000
     },
+	"hub": {
+	  "enabled": true,
+	  "port": 4400
+	},
     "singleProjectMode": true
   },
   "auth": {

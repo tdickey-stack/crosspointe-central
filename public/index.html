@@ -47,7 +47,7 @@
     >
     <script>
       (function() {
-        function loadAdminScript_(src) {
+        function loadFirebaseScript_(src) {
           return new Promise(function(resolve, reject) {
             var script = document.createElement("script");
             script.src = src;
@@ -62,37 +62,84 @@
           });
         }
 
+        function isLocalFirebaseHost_() {
+          return window.location.hostname === "localhost" ||
+            window.location.hostname === "127.0.0.1" ||
+            window.location.hostname === "[::1]";
+        }
+
+        function loadAnalytics_() {
+          if (isAdminRoute || isLocalFirebaseHost_()) {
+            return Promise.resolve();
+          }
+
+          return loadFirebaseScript_(
+              "/__/firebase/11.10.0/firebase-analytics-compat.js",
+          ).catch(function(error) {
+            console.warn("Firebase Analytics SDK did not load.", error);
+          });
+        }
+
+        function initializeAnalytics_() {
+          window.CENTRAL_ANALYTICS_READY = false;
+
+          if (
+            isAdminRoute ||
+            isLocalFirebaseHost_() ||
+            !window.firebase ||
+            typeof window.firebase.analytics !== "function"
+          ) {
+            return;
+          }
+
+          try {
+            window.centralAnalytics = window.firebase.analytics();
+            window.CENTRAL_ANALYTICS_READY = true;
+          } catch (error) {
+            console.warn("Firebase Analytics did not initialize.", error);
+          }
+        }
+
         var isAdminRoute = /^\/admin(?:\/|$)/.test(window.location.pathname);
         var bootMode = isAdminRoute ? "admin" : "public";
 
         window.CENTRAL_BOOT_MODE = bootMode;
         document.documentElement.setAttribute("data-app-route", bootMode);
 
-        if (!isAdminRoute) {
-          return;
+        if (isAdminRoute) {
+          var adminStyle = document.createElement("link");
+          adminStyle.rel = "stylesheet";
+          adminStyle.href = "/admin.css";
+          document.head.appendChild(adminStyle);
         }
 
-        var adminStyle = document.createElement("link");
-        adminStyle.rel = "stylesheet";
-        adminStyle.href = "/admin.css";
-        document.head.appendChild(adminStyle);
-
-        loadAdminScript_("/__/firebase/11.10.0/firebase-app-compat.js")
+        loadFirebaseScript_("/__/firebase/11.10.0/firebase-app-compat.js")
             .then(function() {
-              return loadAdminScript_(
+              if (!isAdminRoute) return;
+
+              return loadFirebaseScript_(
                   "/__/firebase/11.10.0/firebase-auth-compat.js",
               );
             })
             .then(function() {
-              return loadAdminScript_(
+              if (!isAdminRoute) return;
+
+              return loadFirebaseScript_(
                   "/__/firebase/11.10.0/firebase-firestore-compat.js",
               );
             })
             .then(function() {
-              return loadAdminScript_("/__/firebase/init.js");
+              return loadAnalytics_();
             })
             .then(function() {
-              return loadAdminScript_("/admin.js");
+              return loadFirebaseScript_("/__/firebase/init.js");
+            })
+            .then(function() {
+              initializeAnalytics_();
+
+              if (isAdminRoute) {
+                return loadFirebaseScript_("/admin.js");
+              }
             })
             .catch(function(error) {
               console.error(error);

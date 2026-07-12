@@ -1,11 +1,14 @@
 import {rankWayfinderKnowledge} from "./retrieval.js";
 import {authenticateWayfinderAdminRequest} from "./access.js";
+import {applyWayfinderKnowledgeOverrides} from "./knowledge-overrides.js";
 
 export function createWayfinderPrototypeHandler(dependencies) {
   const admin = dependencies.admin;
   const firestore = dependencies.firestore;
   const isAllowedAdminEmail = dependencies.isAllowedAdminEmail;
   const getAdminUserDocPath = dependencies.getAdminUserDocPath;
+  const getActiveKnowledgeOverrides =
+    dependencies.getActiveKnowledgeOverrides;
 
   return async (request, response) => {
     response.set("Cache-Control", "no-store");
@@ -40,17 +43,20 @@ export function createWayfinderPrototypeHandler(dependencies) {
         return;
       }
 
-      const snapshot = await firestore
-          .collection("centralAssistantKnowledgeDraft")
-          .limit(250)
-          .get();
-      const entries = snapshot.docs
+      const [snapshot, activeOverrides] = await Promise.all([
+        firestore.collection("centralAssistantKnowledgeDraft")
+            .limit(250)
+            .get(),
+        typeof getActiveKnowledgeOverrides === "function" ?
+          getActiveKnowledgeOverrides() : [],
+      ]);
+      const entries = applyWayfinderKnowledgeOverrides(snapshot.docs
           .map((document) => document.data())
           .filter((entry) => {
             return entry &&
               entry.approvalStatus === "approved" &&
               entry.publicationState === "draft";
-          });
+          }), activeOverrides);
       const retrieval = rankWayfinderKnowledge(question, entries, {limit: 5});
 
       response.status(200).json({

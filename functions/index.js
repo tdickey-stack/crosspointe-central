@@ -11,9 +11,23 @@ import {
   createDeveloperApiWayfinderGenerator,
   DEFAULT_WAYFINDER_MODEL,
 } from "./wayfinder/gemini.js";
+import {
+  createWayfinderKnowledgeChangeGenerator,
+  createWayfinderKnowledgeChangeHandler,
+  getActiveWayfinderKnowledgeOverrides,
+} from "./wayfinder/knowledge-overrides.js";
 import {createWayfinderPlanningCenterRetriever} from
   "./wayfinder/planning-center.js";
+import {
+  createWayfinderNoticeCommandHandler,
+  createWayfinderNoticeDraftGenerator,
+  getActiveWayfinderNotices,
+} from "./wayfinder/notices.js";
 import {createWayfinderPrototypeHandler} from "./wayfinder/prototype.js";
+import {
+  createWayfinderWebsiteIndexHandler,
+  getRelevantWayfinderWebsiteEntries,
+} from "./wayfinder/website-index.js";
 
 setGlobalOptions({maxInstances: 10});
 admin.initializeApp();
@@ -442,6 +456,8 @@ export const wayfinderPrototypeQuery = onRequest(
       firestore: firestore,
       isAllowedAdminEmail: isAllowedCentralAdminEmail_,
       getAdminUserDocPath: getCentralAdminUserDocPath_,
+      getActiveKnowledgeOverrides: () =>
+        getActiveWayfinderKnowledgeOverrides(firestore),
     }),
 );
 
@@ -451,6 +467,65 @@ const wayfinderGeminiGenerator = createDeveloperApiWayfinderGenerator({
   getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
   model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
 });
+const wayfinderNoticeDraftGenerator = createWayfinderNoticeDraftGenerator({
+  getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
+  model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+  timezone: PCO_TIMEZONE,
+});
+const wayfinderKnowledgeChangeGenerator =
+  createWayfinderKnowledgeChangeGenerator({
+    getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
+    model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+  });
+
+export const wayfinderNoticeCommand = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderNoticeCommandHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      generateDraft: wayfinderNoticeDraftGenerator,
+    }),
+);
+
+export const wayfinderKnowledgeChange = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderKnowledgeChangeHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      generateChange: wayfinderKnowledgeChangeGenerator,
+    }),
+);
+
+export const wayfinderWebsiteIndex = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 180,
+      memory: "512MiB",
+    },
+    createWayfinderWebsiteIndexHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
 
 export const wayfinderGenerateAnswer = onRequest(
     {
@@ -467,6 +542,35 @@ export const wayfinderGenerateAnswer = onRequest(
       getAdminUserDocPath: getCentralAdminUserDocPath_,
       generateAnswer: wayfinderGeminiGenerator,
       retrieveLiveContext: getWayfinderPlanningCenterContext_,
+      getActiveNotices: () => getActiveWayfinderNotices(firestore),
+      getActiveKnowledgeOverrides: () =>
+        getActiveWayfinderKnowledgeOverrides(firestore),
+      getWebsiteEntries: (question) =>
+        getRelevantWayfinderWebsiteEntries(firestore, question),
+      model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+    }),
+);
+
+export const wayfinderPublicAnswer = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderAnswerHandler({
+      admin: admin,
+      firestore: firestore,
+      generateAnswer: wayfinderGeminiGenerator,
+      retrieveLiveContext: getWayfinderPlanningCenterContext_,
+      getActiveNotices: () => getActiveWayfinderNotices(firestore),
+      getActiveKnowledgeOverrides: () =>
+        getActiveWayfinderKnowledgeOverrides(firestore),
+      getWebsiteEntries: (question) =>
+        getRelevantWayfinderWebsiteEntries(firestore, question),
+      requireAdminAuth: false,
+      publicResponse: true,
       model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
     }),
 );

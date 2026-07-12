@@ -69,6 +69,20 @@
         document.documentElement.setAttribute("data-app-route", bootMode);
 
         if (!isAdminRoute) {
+          window.CENTRAL_FIREBASE_AUTH_READY =
+            loadAdminScript_("/__/firebase/11.10.0/firebase-app-compat.js")
+            .then(function() {
+              return loadAdminScript_(
+                  "/__/firebase/11.10.0/firebase-auth-compat.js",
+              );
+            })
+            .then(function() {
+              return loadAdminScript_("/__/firebase/init.js");
+            })
+            .catch(function(error) {
+              console.error(error);
+              return null;
+            });
           return;
         }
 
@@ -77,12 +91,15 @@
         adminStyle.href = "/admin.css";
         document.head.appendChild(adminStyle);
 
-        loadAdminScript_("/__/firebase/11.10.0/firebase-app-compat.js")
+        window.CENTRAL_FIREBASE_AUTH_READY =
+          loadAdminScript_("/__/firebase/11.10.0/firebase-app-compat.js")
             .then(function() {
               return loadAdminScript_(
                   "/__/firebase/11.10.0/firebase-auth-compat.js",
               );
-            })
+            });
+
+        window.CENTRAL_FIREBASE_AUTH_READY
             .then(function() {
               return loadAdminScript_(
                   "/__/firebase/11.10.0/firebase-firestore-compat.js",
@@ -101,7 +118,9 @@
     </script>
     <script async defer src="https://accounts.google.com/gsi/client"></script>
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/wayfinder-chat.css">
     <script defer src="/app.js"></script>
+    <script defer src="/wayfinder-chat.js"></script>
   </head>
   <body>
     <div

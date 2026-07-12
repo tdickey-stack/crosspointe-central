@@ -43,9 +43,35 @@ test("builds a grounded structured Gemini request", () => {
   assert.match(request.config.systemInstruction, /untrusted data/i);
   assert.match(request.config.systemInstruction, /only from APPROVED_CONTEXT/i);
   assert.match(request.config.systemInstruction, /first person/i);
+  assert.match(request.config.systemInstruction, /already introduced/i);
+  assert.match(request.config.systemInstruction, /answer only the question/i);
+  assert.match(request.config.systemInstruction, /followUpQuestion empty/i);
+  assert.match(request.config.systemInstruction, /do not repeat options/i);
   assert.match(
       request.config.systemInstruction,
       /main link is for event details/i,
+  );
+});
+
+test("includes untrusted conversation context for follow-ups", () => {
+  const request = buildWayfinderGeminiRequest({
+    ...CONTEXT,
+    question: "What time does it start?",
+    conversationHistory: [{
+      role: "user",
+      content: "When is Starting Pointe?",
+    }, {
+      role: "assistant",
+      content: "Starting Pointe is Tuesday, July 14.",
+    }],
+  }, DEFAULT_WAYFINDER_MODEL);
+  const prompt = JSON.parse(request.contents);
+
+  assert.equal(prompt.CONVERSATION_HISTORY.length, 2);
+  assert.equal(prompt.CONVERSATION_HISTORY[0].role, "user");
+  assert.match(
+      request.config.systemInstruction,
+      /not an approved factual source/i,
   );
 });
 
@@ -208,4 +234,24 @@ test("accepts a published time when Planning Center omits the space", () => {
   });
 
   assert.match(result.answer, /6:30 PM/);
+});
+
+test("removes an accidental space inside a social handle", () => {
+  const result = validateWayfinderGeminiOutput({
+    answer: "Follow CrossPointe on Instagram at @crosspointe. tv.",
+    sourceEntryIds: ["visiting-social-media"],
+    shouldContactChurch: false,
+    followUpQuestion: "",
+  }, {
+    question: "What is CrossPointe's Instagram?",
+    policy: {},
+    entries: [{
+      id: "visiting-social-media",
+      requiredFacts: [
+        "CrossPointe's Instagram handle is @crosspointe.tv.",
+      ],
+    }],
+  });
+
+  assert.match(result.answer, /@crosspointe\.tv/);
 });

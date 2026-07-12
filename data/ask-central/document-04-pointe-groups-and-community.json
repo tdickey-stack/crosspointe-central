@@ -80,12 +80,18 @@
       "requiredSourceType": "planning_center_groups",
       "sampleQuestions": [
         "Where can I see all the groups?",
+        "Can you provide a directory of groups?",
+        "Is there a place to see every small group?",
         "What groups are currently meeting?",
         "When does a particular group meet?",
         "Where is a group located?"
       ],
       "keywords": [
         "group directory",
+        "small group directory",
+        "list of groups",
+        "see every small group",
+        "place to view groups",
         "current groups",
         "meeting time",
         "location",

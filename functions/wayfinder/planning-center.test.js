@@ -88,6 +88,33 @@ test("uses a six-month window for a named event search", async () => {
   assert.ok(new Date(end).getTime() - NOW.getTime() > 180 * 86400000);
 });
 
+test("treats this week as a general event listing", async () => {
+  let requestedUrl = "";
+  const retriever = createWayfinderPlanningCenterRetriever({
+    now: () => NOW,
+    fetchJson: async (url) => {
+      requestedUrl = url;
+      return {
+        data: [event_(
+            "12", "Community Lunch", "2026-07-14T17:00:00Z", ["central"],
+        )],
+        included: [tag_("central", "Central")],
+        links: {next: null},
+      };
+    },
+  });
+
+  const result = await retriever({
+    question: "What events are coming up this week?",
+    sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+  });
+
+  assert.equal(result.statuses.planning_center_event, "ok");
+  assert.equal(result.entries[0].title, "Community Lunch");
+  const end = new URL(requestedUrl).searchParams.get("where[starts_at][lte]");
+  assert.ok(new Date(end).getTime() - NOW.getTime() <= 7 * 86400000 + 1000);
+});
+
 test("returns only sanitized published group fields", async () => {
   const retriever = createWayfinderPlanningCenterRetriever({
     now: () => NOW,

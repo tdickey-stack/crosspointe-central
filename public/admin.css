@@ -1350,6 +1350,33 @@
   line-height: 1.55;
 }
 
+[data-app-route="admin"] .wayfinder-website-index {
+  display: grid;
+  gap: 14px;
+}
+
+[data-app-route="admin"] .wayfinder-website-index .central-admin-item-header > div {
+  display: grid;
+  gap: 6px;
+}
+
+[data-app-route="admin"] .wayfinder-website-index .central-admin-item-header p,
+[data-app-route="admin"] .wayfinder-website-index-warning {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--cp-text-muted);
+}
+
+[data-app-route="admin"] .wayfinder-website-index-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+
+[data-app-route="admin"] .wayfinder-website-index-warning {
+  color: #b45309;
+}
+
 [data-app-route="admin"] .wayfinder-lab-question .central-admin-field textarea {
   min-height: 112px;
   font-size: 1rem;
@@ -1667,6 +1694,136 @@
   padding-top: 2px;
 }
 
+[data-app-route="admin"] .wayfinder-notice-admin {
+  border-color: color-mix(in srgb, var(--cp-red) 42%, transparent);
+}
+
+[data-app-route="admin"] .wayfinder-notice-message {
+  margin: 0;
+  line-height: 1.6;
+}
+
+[data-app-route="admin"] .wayfinder-notice-preview {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.85rem;
+  background: var(--cp-soft);
+}
+
+[data-app-route="admin"] .wayfinder-notice-preview h4,
+[data-app-route="admin"] .wayfinder-notice-preview p,
+[data-app-route="admin"] .wayfinder-notice-preview dl,
+[data-app-route="admin"] .wayfinder-notice-preview dd {
+  margin: 0;
+}
+
+[data-app-route="admin"] .wayfinder-notice-preview dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+[data-app-route="admin"] .wayfinder-notice-preview dl > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+[data-app-route="admin"] .wayfinder-notice-preview dt {
+  color: var(--cp-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-app-route="admin"] .wayfinder-update-type {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(113, 113, 122, 0.2);
+  border-radius: 12px;
+  background: rgba(113, 113, 122, 0.08);
+}
+
+[data-app-route="admin"] .wayfinder-update-type button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 13px;
+  background: transparent;
+  color: var(--cp-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+[data-app-route="admin"] .wayfinder-update-type button.is-active {
+  background: var(--cp-red);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(239, 59, 45, 0.2);
+}
+
+[data-app-route="admin"] .wayfinder-knowledge-diff,
+[data-app-route="admin"] .wayfinder-manager-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+[data-app-route="admin"] .wayfinder-knowledge-diff section {
+  padding: 12px;
+  border: 1px solid rgba(113, 113, 122, 0.2);
+  border-radius: 10px;
+}
+
+[data-app-route="admin"] .wayfinder-knowledge-diff h5,
+[data-app-route="admin"] .wayfinder-knowledge-diff ul,
+[data-app-route="admin"] .wayfinder-manager-heading h4,
+[data-app-route="admin"] .wayfinder-manager-column h5,
+[data-app-route="admin"] .wayfinder-manager-card p {
+  margin: 0;
+}
+
+[data-app-route="admin"] .wayfinder-knowledge-diff ul {
+  display: grid;
+  gap: 6px;
+  padding-left: 18px;
+  margin-top: 8px;
+}
+
+[data-app-route="admin"] .wayfinder-manager-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(113, 113, 122, 0.2);
+}
+
+[data-app-route="admin"] .wayfinder-manager-column {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+[data-app-route="admin"] .wayfinder-manager-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid rgba(113, 113, 122, 0.2);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+[data-app-route="admin"] .central-admin-link-button.is-danger {
+  color: #a51d16;
+  border-color: rgba(165, 29, 22, 0.25);
+  background: rgba(239, 59, 45, 0.08);
+}
+
 @keyframes wayfinder-lab-spin {
   to {
     transform: rotate(360deg);
@@ -1852,6 +2009,12 @@
   border-color: rgba(255, 255, 255, 0.09);
 }
 
+:root[data-theme="dark"][data-app-route="admin"] .wayfinder-manager-card,
+:root[data-theme="dark"][data-app-route="admin"] .wayfinder-knowledge-diff section {
+  background: rgba(24, 24, 27, 0.54);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
 :root[data-theme="dark"][data-app-route="admin"] .central-admin-change-request-item.is-expanded {
   background: rgba(239, 59, 45, 0.14);
   border-color: rgba(239, 59, 45, 0.22);
@@ -2008,7 +2171,10 @@
 
   [data-app-route="admin"] .wayfinder-lab-notice,
   [data-app-route="admin"] .wayfinder-lab-match-header,
-  [data-app-route="admin"] .wayfinder-lab-detail-grid {
+  [data-app-route="admin"] .wayfinder-lab-detail-grid,
+  [data-app-route="admin"] .wayfinder-notice-preview dl,
+  [data-app-route="admin"] .wayfinder-knowledge-diff,
+  [data-app-route="admin"] .wayfinder-manager-grid {
     grid-template-columns: 1fr;
   }
 

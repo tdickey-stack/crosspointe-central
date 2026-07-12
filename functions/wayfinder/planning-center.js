@@ -13,6 +13,9 @@ const GENERIC_EVENT_PATTERN = new RegExp(
     "i",
 );
 const TODAY_PATTERN = /\b(?:today|tonight|later today)\b/i;
+const RELATIVE_WEEK_PATTERN =
+  /\b(?:(?:this|coming|next)\s+week|this\s+weekend)\b/i;
+const NEXT_WEEK_PATTERN = /\bnext\s+week\b/i;
 const MINISTRY_EVENT_PATTERN = new RegExp(
     "\\b(?:kids?|children|students?|youth|women'?s|men'?s|outreach)" +
     "\\s+events?\\b",
@@ -91,10 +94,17 @@ async function retrieveEvents_(context) {
   const question = String(context.question || "").trim();
   const current = context.now();
   const todayOnly = TODAY_PATTERN.test(question);
+  const relativeWeek = RELATIVE_WEEK_PATTERN.test(question);
   const namedSearch = !todayOnly &&
+    !relativeWeek &&
     !isGenericEventQuestion_(question) &&
     !MINISTRY_EVENT_PATTERN.test(question);
-  const lookaheadDays = namedSearch ? NAMED_EVENT_DAYS : GENERAL_EVENT_DAYS;
+  let lookaheadDays = GENERAL_EVENT_DAYS;
+  if (namedSearch) {
+    lookaheadDays = NAMED_EVENT_DAYS;
+  } else if (relativeWeek) {
+    lookaheadDays = NEXT_WEEK_PATTERN.test(question) ? 14 : 7;
+  }
   const end = new Date(current.getTime() + lookaheadDays * 86400000);
   const url = new URL("/calendar/v2/event_instances", API_ORIGIN);
   url.searchParams.set("include", "tags");

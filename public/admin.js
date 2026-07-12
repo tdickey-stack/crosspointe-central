@@ -29,6 +29,11 @@
     "/api/admin/wayfinder/prototype-query";
   var WAYFINDER_GENERATE_ANSWER_ENDPOINT =
     "/api/admin/wayfinder/generate-answer";
+  var WAYFINDER_NOTICE_ENDPOINT = "/api/admin/wayfinder/notices";
+  var WAYFINDER_KNOWLEDGE_CHANGE_ENDPOINT =
+    "/api/admin/wayfinder/knowledge-changes";
+  var WAYFINDER_WEBSITE_INDEX_ENDPOINT =
+    "/api/admin/wayfinder/website-index";
   var PUBLISHED_CAMPAIGNS_COLLECTION_PATH = "centralContent/campaigns/items";
   var PUBLISHED_CAMPAIGNS_META_DOC_PATH = "centralContent/campaigns/meta/state";
   var PUBLISHED_NEXT_STEPS_COLLECTION_PATH = "centralContent/nextSteps/items";
@@ -514,6 +519,29 @@
     wayfinderAnswerError: "",
     wayfinderResult: null,
     wayfinderAnswerResult: null,
+    wayfinderNoticeModeActive: false,
+    wayfinderNoticeModeExpiresAt: "",
+    wayfinderNoticeDraft: null,
+    wayfinderNoticeWorking: false,
+    wayfinderNoticeError: "",
+    wayfinderNoticeMessage: "",
+    wayfinderAdminUpdateType: "temporary",
+    wayfinderNotices: [],
+    wayfinderKnowledgeOverrides: [],
+    wayfinderManagerLoading: false,
+    wayfinderEditingNoticeId: "",
+    wayfinderKnowledgeDraft: null,
+    wayfinderKnowledgeWorking: false,
+    wayfinderKnowledgeError: "",
+    wayfinderKnowledgeMessage: "",
+    wayfinderPendingEndNoticeId: "",
+    wayfinderPendingDeactivateEntryId: "",
+    wayfinderWebsiteIndexLoaded: false,
+    wayfinderWebsiteIndexLoading: false,
+    wayfinderWebsiteIndexWorking: false,
+    wayfinderWebsiteIndexStatus: null,
+    wayfinderWebsiteIndexError: "",
+    wayfinderWebsiteIndexMessage: "",
     roomRulesLoaded: false,
     roomRulesLoading: false,
     roomRulesSaving: false,
@@ -1266,6 +1294,80 @@
         return;
       }
 
+      if (action === "publish-wayfinder-notice") {
+        event.preventDefault();
+        publishWayfinderNotice_();
+        return;
+      }
+
+      if (action === "cancel-wayfinder-notice") {
+        event.preventDefault();
+        cancelWayfinderNotice_();
+        return;
+      }
+
+      if (action === "set-wayfinder-update-type") {
+        event.preventDefault();
+        setWayfinderUpdateType_(
+            button.getAttribute("data-wayfinder-update-type") || "temporary",
+        );
+        return;
+      }
+
+      if (action === "refresh-wayfinder-managers") {
+        event.preventDefault();
+        loadWayfinderManagers_();
+        return;
+      }
+
+      if (action === "refresh-wayfinder-website-index") {
+        event.preventDefault();
+        refreshWayfinderWebsiteIndex_();
+        return;
+      }
+
+      if (action === "check-wayfinder-website-index") {
+        event.preventDefault();
+        loadWayfinderWebsiteIndexStatus_(true);
+        return;
+      }
+
+      if (action === "edit-wayfinder-notice") {
+        event.preventDefault();
+        beginWayfinderNoticeRevision_(
+            button.getAttribute("data-wayfinder-notice-id") || "",
+        );
+        return;
+      }
+
+      if (action === "end-wayfinder-notice") {
+        event.preventDefault();
+        endWayfinderNotice_(
+            button.getAttribute("data-wayfinder-notice-id") || "",
+        );
+        return;
+      }
+
+      if (action === "publish-wayfinder-knowledge") {
+        event.preventDefault();
+        publishWayfinderKnowledgeChange_();
+        return;
+      }
+
+      if (action === "cancel-wayfinder-knowledge") {
+        event.preventDefault();
+        cancelWayfinderKnowledgeChange_();
+        return;
+      }
+
+      if (action === "deactivate-wayfinder-knowledge") {
+        event.preventDefault();
+        deactivateWayfinderKnowledgeOverride_(
+            button.getAttribute("data-wayfinder-entry-id") || "",
+        );
+        return;
+      }
+
       if (action === "try-wayfinder-question") {
         event.preventDefault();
         runWayfinderPrototypeQuery_(
@@ -1478,6 +1580,15 @@
   }
 
   function handleAdminKeyDown_(event) {
+    var wayfinderInput = event.target && event.target.matches &&
+      event.target.matches('[data-admin-field="wayfinder.question"]');
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing &&
+      wayfinderInput && adminState.currentPageId === "wayfinder") {
+      event.preventDefault();
+      generateWayfinderAnswer_();
+      return;
+    }
+
     if (event.key !== "Escape" || !adminState.deleteConfirmOpen) {
       return;
     }
@@ -4732,6 +4843,10 @@
     var permission = getPageAccessLevel_("integrations");
     var hasAccess = isActiveAdminUserRecord_() && permission !== "none";
     var result = adminState.wayfinderResult;
+    var permanentUpdateMode = adminState.wayfinderNoticeModeActive &&
+      adminState.wayfinderAdminUpdateType === "permanent";
+    var wayfinderUpdateBusy = adminState.wayfinderNoticeWorking ||
+      adminState.wayfinderKnowledgeWorking;
     var exampleQuestions = [
       "What time are services?",
       "Do I have to dress up for church?",
@@ -4763,32 +4878,53 @@
       "<p>The backend finds approved information first, then gives only that information to Gemini. Fixed safety answers skip Gemini completely.</p>",
       "</div>",
       "</div>",
+      hasAccess ? renderWayfinderWebsiteIndex_() : "",
       hasAccess ? [
         "<div class=\"central-admin-item wayfinder-lab-question\">",
         "<div class=\"central-admin-item-header\">",
-        "<strong>Ask a test question</strong>",
-        renderStatusPill_("Approved data only", "is-safe"),
+        "<strong>",
+        adminState.wayfinderNoticeModeActive ?
+          "Create a Wayfinder update" : "Ask a test question",
+        "</strong>",
+        renderStatusPill_(
+            adminState.wayfinderNoticeModeActive ?
+              "Authenticated admin mode" : "Approved data only",
+            "is-safe",
+        ),
         "</div>",
         renderAdminTextareaField_({
-          label: "Question",
+          label: permanentUpdateMode ? "Permanent knowledge change" :
+            adminState.wayfinderNoticeModeActive ?
+              "Temporary update" : "Question",
           field: "wayfinder.question",
           value: adminState.wayfinderQuestion,
-          placeholder: "Try: What should I expect on my first visit?",
+          placeholder: permanentUpdateMode ?
+            "Example: The Care Center now requires an appointment." :
+            adminState.wayfinderNoticeModeActive ?
+            "Example: The Care Center is closed this Friday." :
+            "Try: What should I expect on my first visit?",
           rows: 3,
           wide: true,
           disabled: adminState.wayfinderQuerying ||
-            adminState.wayfinderGenerating,
+            adminState.wayfinderGenerating ||
+            wayfinderUpdateBusy,
         }),
         "<div class=\"central-admin-action-row\">",
         "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"generate-wayfinder-answer\"",
-        adminState.wayfinderQuerying || adminState.wayfinderGenerating ?
+        adminState.wayfinderQuerying || adminState.wayfinderGenerating ||
+          wayfinderUpdateBusy ?
           " disabled" : "",
         ">",
-        adminState.wayfinderGenerating ? "Generating safely..." :
-          "Generate Wayfinder answer",
+        wayfinderUpdateBusy ? "Processing update..." :
+          adminState.wayfinderGenerating ? "Generating safely..." :
+          permanentUpdateMode ? "Prepare Permanent Change" :
+            adminState.wayfinderNoticeModeActive ?
+            "Prepare Notice Preview" : "Generate Wayfinder answer",
         "</button>",
         "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"run-wayfinder-query\"",
-        adminState.wayfinderQuerying || adminState.wayfinderGenerating ?
+        adminState.wayfinderQuerying || adminState.wayfinderGenerating ||
+          adminState.wayfinderNoticeModeActive ||
+          wayfinderUpdateBusy ?
           " disabled" : "",
         ">",
         adminState.wayfinderQuerying ? "Checking knowledge..." :
@@ -4800,13 +4936,16 @@
           return [
             "<button type=\"button\" data-admin-action=\"try-wayfinder-question\" data-wayfinder-question=\"",
             escapeAttr_(question), "\"",
-            adminState.wayfinderQuerying || adminState.wayfinderGenerating ?
+            adminState.wayfinderQuerying || adminState.wayfinderGenerating ||
+              adminState.wayfinderNoticeModeActive ||
+              wayfinderUpdateBusy ?
               " disabled" : "",
             ">", escapeHtml_(question), "</button>",
           ].join("");
         }).join(""),
         "</div>",
         "</div>",
+        renderWayfinderNoticeAdmin_(),
         adminState.wayfinderError ? [
           "<div class=\"central-admin-item wayfinder-lab-error\" role=\"alert\">",
           "<strong>Wayfinder could not run that test.</strong>",
@@ -4828,6 +4967,304 @@
         "</div>",
       ].join(""),
       "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderWebsiteIndex_() {
+    var status = adminState.wayfinderWebsiteIndexStatus || {};
+    var ready = status.status === "ready";
+    var busy = adminState.wayfinderWebsiteIndexLoading ||
+      adminState.wayfinderWebsiteIndexWorking;
+    var completedAt = status.completedAt ?
+      formatAdminTimestamp_(status.completedAt) : "Not indexed yet";
+
+    return [
+      "<section class=\"central-admin-item wayfinder-website-index\">",
+      "<div class=\"central-admin-item-header\"><div>",
+      "<strong>CrossPointe website index</strong>",
+      "<p>Wayfinder can use approved public website pages as a supplemental source. Planning Center remains authoritative for events.</p>",
+      "</div>",
+      renderStatusPill_(
+          busy ? "Working" : ready ? "Ready" : "Not indexed",
+          busy ? "is-warn" : ready ? "is-safe" : "is-warn",
+      ),
+      "</div>",
+      "<div class=\"wayfinder-website-index-stats\">",
+      renderInlineMeta_("Pages", String(Number(status.pageCount) || 0)),
+      renderInlineMeta_("Search chunks", String(Number(status.chunkCount) || 0)),
+      renderInlineMeta_("Last refreshed", completedAt),
+      "</div>",
+      Number(status.failedPageCount) ? [
+        "<p class=\"wayfinder-website-index-warning\">",
+        escapeHtml_(String(status.failedPageCount)),
+        " page(s) could not be read during the last refresh.</p>",
+      ].join("") : "",
+      adminState.wayfinderWebsiteIndexMessage ? [
+        "<p class=\"wayfinder-notice-message\">",
+        escapeHtml_(adminState.wayfinderWebsiteIndexMessage),
+        "</p>",
+      ].join("") : "",
+      adminState.wayfinderWebsiteIndexError ? [
+        "<div class=\"wayfinder-lab-error\" role=\"alert\"><strong>Website index not updated.</strong><p>",
+        escapeHtml_(adminState.wayfinderWebsiteIndexError),
+        "</p></div>",
+      ].join("") : "",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"refresh-wayfinder-website-index\"",
+      busy ? " disabled" : "",
+      ">",
+      adminState.wayfinderWebsiteIndexWorking ? "Refreshing website..." :
+        "Refresh Website Index",
+      "</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"check-wayfinder-website-index\"",
+      busy ? " disabled" : "",
+      ">Check Status</button>",
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderNoticeAdmin_() {
+    var noticeDraft = adminState.wayfinderNoticeDraft;
+    var knowledgeDraft = adminState.wayfinderKnowledgeDraft;
+    if (!adminState.wayfinderNoticeModeActive &&
+      !adminState.wayfinderNoticeMessage &&
+      !adminState.wayfinderNoticeError && !noticeDraft && !knowledgeDraft) {
+      return "";
+    }
+
+    return [
+      "<section class=\"central-admin-item wayfinder-notice-admin\">",
+      "<div class=\"central-admin-item-header\"><strong>Wayfinder update manager</strong>",
+      renderStatusPill_(
+          adminState.wayfinderNoticeModeActive ?
+            "Admin mode active" : "Admin mode closed",
+          adminState.wayfinderNoticeModeActive ? "is-safe" : "is-warn",
+      ),
+      "</div>",
+      adminState.wayfinderNoticeModeActive ?
+        renderWayfinderUpdateTypeControls_() : "",
+      adminState.wayfinderNoticeMessage ? [
+        "<p class=\"wayfinder-notice-message\">",
+        escapeHtml_(adminState.wayfinderNoticeMessage),
+        "</p>",
+      ].join("") : "",
+      adminState.wayfinderKnowledgeMessage ? [
+        "<p class=\"wayfinder-notice-message\">",
+        escapeHtml_(adminState.wayfinderKnowledgeMessage),
+        "</p>",
+      ].join("") : "",
+      adminState.wayfinderNoticeError ? [
+        "<div class=\"wayfinder-lab-error\" role=\"alert\"><strong>Update not completed.</strong><p>",
+        escapeHtml_(adminState.wayfinderNoticeError),
+        "</p></div>",
+      ].join("") : "",
+      adminState.wayfinderKnowledgeError ? [
+        "<div class=\"wayfinder-lab-error\" role=\"alert\"><strong>Permanent change not completed.</strong><p>",
+        escapeHtml_(adminState.wayfinderKnowledgeError),
+        "</p></div>",
+      ].join("") : "",
+      noticeDraft ? [
+        "<div class=\"wayfinder-notice-preview\">",
+        "<span class=\"central-admin-kicker\">Review before publishing</span>",
+        "<h4>", escapeHtml_(noticeDraft.title), "</h4>",
+        "<p>", escapeHtml_(noticeDraft.publicMessage), "</p>",
+        "<dl>",
+        "<div><dt>Starts</dt><dd>",
+        escapeHtml_(formatAdminTimestamp_(noticeDraft.startsAt)),
+        "</dd></div>",
+        "<div><dt>Expires</dt><dd>",
+        escapeHtml_(formatAdminTimestamp_(noticeDraft.expiresAt)),
+        "</dd></div>",
+        "<div><dt>Topic</dt><dd>",
+        escapeHtml_(noticeDraft.topic), "</dd></div>",
+        "</dl>",
+        "<div class=\"central-admin-action-row\">",
+        "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"publish-wayfinder-notice\"",
+        adminState.wayfinderNoticeWorking ? " disabled" : "",
+        ">Publish Notice</button>",
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"cancel-wayfinder-notice\"",
+        adminState.wayfinderNoticeWorking ? " disabled" : "",
+        ">Cancel Draft</button>",
+        "</div></div>",
+      ].join("") : "",
+      knowledgeDraft ? renderWayfinderKnowledgeDraft_(knowledgeDraft) : "",
+      adminState.wayfinderNoticeModeActive ?
+        renderWayfinderManagers_() : "",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderUpdateTypeControls_() {
+    var currentType = adminState.wayfinderAdminUpdateType;
+    return [
+      "<div class=\"wayfinder-update-type\" role=\"group\" aria-label=\"Update type\">",
+      "<button type=\"button\" data-admin-action=\"set-wayfinder-update-type\" data-wayfinder-update-type=\"temporary\" class=\"",
+      currentType === "temporary" ? "is-active" : "", "\">",
+      "Temporary Notice</button>",
+      "<button type=\"button\" data-admin-action=\"set-wayfinder-update-type\" data-wayfinder-update-type=\"permanent\" class=\"",
+      currentType === "permanent" ? "is-active" : "", "\">",
+      "Permanent Knowledge</button>",
+      "</div>",
+      adminState.wayfinderEditingNoticeId ? [
+        "<p class=\"central-admin-footer-note\">Editing notice ",
+        "<code>", escapeHtml_(adminState.wayfinderEditingNoticeId),
+        "</code>. Describe what should change.</p>",
+      ].join("") : "",
+    ].join("");
+  }
+
+  function renderWayfinderKnowledgeDraft_(draft) {
+    return [
+      "<div class=\"wayfinder-notice-preview wayfinder-knowledge-preview\">",
+      "<span class=\"central-admin-kicker\">Permanent change review</span>",
+      "<h4>", escapeHtml_(draft.changeSummary), "</h4>",
+      "<p><strong>Entry:</strong> <code>",
+      escapeHtml_(draft.targetEntryId), "</code></p>",
+      "<div class=\"wayfinder-knowledge-diff\">",
+      renderWayfinderKnowledgeSnapshot_("Current", draft.beforeEntry),
+      renderWayfinderKnowledgeSnapshot_(
+          "Proposed",
+          draft.replacementEntry,
+      ),
+      "</div>",
+      "<p class=\"central-admin-footer-note\">Approving creates an audited revision. The imported JSON entry remains available underneath it.</p>",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"publish-wayfinder-knowledge\"",
+      adminState.wayfinderKnowledgeWorking ? " disabled" : "",
+      ">Approve Permanent Change</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"cancel-wayfinder-knowledge\"",
+      adminState.wayfinderKnowledgeWorking ? " disabled" : "",
+      ">Cancel Draft</button>",
+      "</div></div>",
+    ].join("");
+  }
+
+  function renderWayfinderKnowledgeSnapshot_(label, entry) {
+    var facts = entry && Array.isArray(entry.requiredFacts) ?
+      entry.requiredFacts : [];
+    var allowedFacts = entry && Array.isArray(entry.allowedPublicFacts) ?
+      entry.allowedPublicFacts : [];
+    var actions = entry && Array.isArray(entry.requiredActions) ?
+      entry.requiredActions : [];
+    var guardrails = [];
+    if (entry && Array.isArray(entry.prohibitedClaims)) {
+      guardrails = guardrails.concat(entry.prohibitedClaims);
+    }
+    if (entry && Array.isArray(entry.prohibitedInformation)) {
+      guardrails = guardrails.concat(entry.prohibitedInformation);
+    }
+    var links = entry && Array.isArray(entry.approvedLinks) ?
+      entry.approvedLinks : [];
+    return [
+      "<section><span class=\"central-admin-kicker\">",
+      escapeHtml_(label), "</span>",
+      "<h5>", escapeHtml_(entry && entry.title || "Untitled entry"),
+      "</h5>",
+      renderWayfinderSnapshotList_("Facts", facts.concat(allowedFacts)),
+      renderWayfinderSnapshotList_("Required actions", actions),
+      renderWayfinderSnapshotList_("Guardrails", guardrails),
+      renderWayfinderSnapshotList_("Approved links", links.map(function(link) {
+        return String(link.label || "Link") + ": " + String(link.url || "");
+      })),
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderSnapshotList_(label, items) {
+    if (!Array.isArray(items) || !items.length) return "";
+    return [
+      "<h6>", escapeHtml_(label), "</h6><ul>",
+      items.map(function(item) {
+        return "<li>" + escapeHtml_(item) + "</li>";
+      }).join(""),
+      "</ul>",
+    ].join("");
+  }
+
+  function renderWayfinderManagers_() {
+    return [
+      "<div class=\"wayfinder-manager-heading\">",
+      "<div><span class=\"central-admin-kicker\">Stored updates</span>",
+      "<h4>Manage Wayfinder information</h4></div>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-wayfinder-managers\"",
+      adminState.wayfinderManagerLoading ? " disabled" : "",
+      ">", adminState.wayfinderManagerLoading ? "Refreshing..." :
+        "Refresh", "</button></div>",
+      "<div class=\"wayfinder-manager-grid\">",
+      renderWayfinderNoticeManager_(),
+      renderWayfinderKnowledgeManager_(),
+      "</div>",
+    ].join("");
+  }
+
+  function renderWayfinderNoticeManager_() {
+    var notices = Array.isArray(adminState.wayfinderNotices) ?
+      adminState.wayfinderNotices : [];
+    return [
+      "<section class=\"wayfinder-manager-column\"><h5>Temporary notices</h5>",
+      notices.length ? notices.map(renderWayfinderNoticeCard_).join("") :
+        "<p class=\"central-admin-footer-note\">No temporary notices yet.</p>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderNoticeCard_(notice) {
+    var canChange = notice.status === "active" ||
+      notice.status === "scheduled";
+    return [
+      "<article class=\"wayfinder-manager-card\"><div class=\"central-admin-item-header\">",
+      "<strong>", escapeHtml_(notice.title), "</strong>",
+      renderStatusPill_(String(notice.status || "ended"),
+          canChange ? "is-safe" : "is-warn"),
+      "</div><p>", escapeHtml_(notice.publicMessage), "</p>",
+      "<p class=\"central-admin-footer-note\">Expires ",
+      escapeHtml_(formatAdminTimestamp_(notice.expiresAt)),
+      notice.createdByEmail ? " · " + escapeHtml_(notice.createdByEmail) : "",
+      "</p>",
+      canChange ? [
+        "<div class=\"central-admin-action-row\">",
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-wayfinder-notice\" data-wayfinder-notice-id=\"",
+        escapeAttr_(notice.id), "\">Edit</button>",
+        "<button type=\"button\" class=\"central-admin-link-button is-danger\" data-admin-action=\"end-wayfinder-notice\" data-wayfinder-notice-id=\"",
+        escapeAttr_(notice.id), "\">",
+        adminState.wayfinderPendingEndNoticeId === notice.id ?
+          "Confirm end now" : "End now",
+        "</button></div>",
+      ].join("") : "",
+      "</article>",
+    ].join("");
+  }
+
+  function renderWayfinderKnowledgeManager_() {
+    var overrides = Array.isArray(adminState.wayfinderKnowledgeOverrides) ?
+      adminState.wayfinderKnowledgeOverrides : [];
+    return [
+      "<section class=\"wayfinder-manager-column\"><h5>Permanent overrides</h5>",
+      overrides.length ? overrides.map(function(item) {
+        return [
+          "<article class=\"wayfinder-manager-card\"><div class=\"central-admin-item-header\">",
+          "<strong>", escapeHtml_(item.title), "</strong>",
+          renderStatusPill_(item.active ? "active" : "inactive",
+              item.active ? "is-safe" : "is-warn"),
+          "</div><p>", escapeHtml_(item.changeSummary), "</p>",
+          "<p class=\"central-admin-footer-note\">Revision ",
+          escapeHtml_(String(item.revision || 0)),
+          item.updatedAt ? " · " +
+            escapeHtml_(formatAdminTimestamp_(item.updatedAt)) : "",
+          "</p>",
+          item.active ? [
+            "<button type=\"button\" class=\"central-admin-link-button is-danger\" data-admin-action=\"deactivate-wayfinder-knowledge\" data-wayfinder-entry-id=\"",
+            escapeAttr_(item.entryId), "\">",
+            adminState.wayfinderPendingDeactivateEntryId === item.entryId ?
+              "Confirm revert" : "Revert to imported entry",
+            "</button>",
+          ].join("") : "",
+          "</article>",
+        ].join("");
+      }).join("") :
+        "<p class=\"central-admin-footer-note\">No permanent overrides yet.</p>",
       "</section>",
     ].join("");
   }
@@ -8993,6 +9430,11 @@
 
     if (adminState.currentPageId === "change-requests") {
       loadChangeRequestsIfNeeded_(false);
+      return;
+    }
+
+    if (adminState.currentPageId === "wayfinder") {
+      loadWayfinderWebsiteIndexStatus_(false);
     }
   }
 
@@ -14653,10 +15095,108 @@
         });
   }
 
+  function callWayfinderWebsiteIndexEndpoint_(action) {
+    if (!adminState.user) {
+      return Promise.reject(new Error(
+          "Sign in with an approved Central admin account first.",
+      ));
+    }
+
+    return adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(WAYFINDER_WEBSITE_INDEX_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({action: action}),
+          });
+        })
+        .then(parseAdminEndpointResponse_);
+  }
+
+  function loadWayfinderWebsiteIndexStatus_(forceReload) {
+    if (!adminState.user || adminState.wayfinderWebsiteIndexLoading ||
+      adminState.wayfinderWebsiteIndexWorking) return;
+    if (adminState.wayfinderWebsiteIndexLoaded && !forceReload) return;
+
+    adminState.wayfinderWebsiteIndexLoading = true;
+    adminState.wayfinderWebsiteIndexError = "";
+    renderAdmin_();
+    callWayfinderWebsiteIndexEndpoint_("status")
+        .then(function(result) {
+          adminState.wayfinderWebsiteIndexLoading = false;
+          adminState.wayfinderWebsiteIndexLoaded = true;
+          adminState.wayfinderWebsiteIndexStatus = result || null;
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderWebsiteIndexLoading = false;
+          adminState.wayfinderWebsiteIndexLoaded = true;
+          adminState.wayfinderWebsiteIndexError = error && error.message ?
+            error.message : "The website index status is unavailable.";
+          renderAdmin_();
+        });
+  }
+
+  function refreshWayfinderWebsiteIndex_() {
+    if (!adminState.user || adminState.wayfinderWebsiteIndexWorking) return;
+    adminState.wayfinderWebsiteIndexWorking = true;
+    adminState.wayfinderWebsiteIndexError = "";
+    adminState.wayfinderWebsiteIndexMessage = "";
+    renderAdmin_();
+
+    callWayfinderWebsiteIndexEndpoint_("refresh")
+        .then(function(result) {
+          adminState.wayfinderWebsiteIndexWorking = false;
+          adminState.wayfinderWebsiteIndexLoaded = true;
+          adminState.wayfinderWebsiteIndexStatus = result || null;
+          adminState.wayfinderWebsiteIndexMessage = [
+            "Website refresh complete:",
+            String(Number(result && result.pageCount) || 0),
+            "pages and",
+            String(Number(result && result.chunkCount) || 0),
+            "search chunks are ready.",
+          ].join(" ");
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderWebsiteIndexWorking = false;
+          adminState.wayfinderWebsiteIndexError = error && error.message ?
+            error.message : "The website index refresh is unavailable.";
+          renderAdmin_();
+        });
+  }
+
   function generateWayfinderAnswer_() {
     var question = String(adminState.wayfinderQuestion || "").trim();
+    var normalizedCommand = question.toLowerCase();
 
     adminState.wayfinderAnswerError = "";
+
+    if (normalizedCommand === "alohomora") {
+      runWayfinderNoticeCommand_("enter");
+      return;
+    }
+
+    if (normalizedCommand === "colloportus") {
+      runWayfinderNoticeCommand_("exit");
+      return;
+    }
+
+    if (adminState.wayfinderNoticeModeActive) {
+      if (adminState.wayfinderAdminUpdateType === "permanent") {
+        runWayfinderKnowledgeCommand_("draft", {instruction: question});
+      } else {
+        runWayfinderNoticeCommand_("draft", {
+          instruction: question,
+          noticeId: adminState.wayfinderEditingNoticeId || "",
+        });
+      }
+      return;
+    }
 
     if (!adminState.user) {
       adminState.wayfinderAnswerError =
@@ -14713,6 +15253,326 @@
             "Gemini is unavailable for the Wayfinder lab right now.";
           renderAdmin_();
         });
+  }
+
+  function callWayfinderNoticeEndpoint_(payload) {
+    if (!adminState.user) {
+      return Promise.reject(new Error(
+          "Sign in with an approved Central admin account first.",
+      ));
+    }
+
+    return adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(WAYFINDER_NOTICE_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(payload || {}),
+          });
+        })
+        .then(parseAdminEndpointResponse_);
+  }
+
+  function runWayfinderNoticeCommand_(action, extraPayload) {
+    var payload = Object.assign({action: action}, extraPayload || {});
+    adminState.wayfinderNoticeWorking = true;
+    adminState.wayfinderNoticeError = "";
+    adminState.wayfinderAnswerError = "";
+    adminState.wayfinderAnswerResult = null;
+    renderAdmin_();
+
+    callWayfinderNoticeEndpoint_(payload)
+        .then(function(result) {
+          adminState.wayfinderNoticeWorking = false;
+          adminState.wayfinderNoticeModeActive =
+            result && result.modeActive === true;
+          adminState.wayfinderNoticeModeExpiresAt =
+            String(result && result.expiresAt || "");
+          adminState.wayfinderNoticeMessage =
+            String(result && result.message || "");
+          adminState.wayfinderNoticeDraft =
+            result && result.draft ? result.draft : null;
+          adminState.wayfinderQuestion = "";
+          if (action === "exit") {
+            adminState.wayfinderNoticeDraft = null;
+            adminState.wayfinderKnowledgeDraft = null;
+            adminState.wayfinderNotices = [];
+            adminState.wayfinderKnowledgeOverrides = [];
+            adminState.wayfinderEditingNoticeId = "";
+            adminState.wayfinderPendingEndNoticeId = "";
+            adminState.wayfinderPendingDeactivateEntryId = "";
+          } else if (action === "enter") {
+            loadWayfinderManagers_();
+          }
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderNoticeWorking = false;
+          adminState.wayfinderNoticeError = error && error.message ?
+            error.message : "The temporary notice update is unavailable.";
+          if (/expired|sign in/i.test(adminState.wayfinderNoticeError)) {
+            adminState.wayfinderNoticeModeActive = false;
+          }
+          renderAdmin_();
+        });
+  }
+
+  function publishWayfinderNotice_() {
+    var draft = adminState.wayfinderNoticeDraft;
+    if (!draft || !draft.id) return;
+    adminState.wayfinderNoticeWorking = true;
+    adminState.wayfinderNoticeError = "";
+    renderAdmin_();
+
+    callWayfinderNoticeEndpoint_({
+      action: "publish",
+      draftId: draft.id,
+    }).then(function(result) {
+      adminState.wayfinderNoticeWorking = false;
+      adminState.wayfinderNoticeDraft = null;
+      adminState.wayfinderNoticeMessage =
+        String(result && result.message || "The notice is published.");
+      adminState.wayfinderEditingNoticeId = "";
+      loadWayfinderManagers_();
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderNoticeWorking = false;
+      adminState.wayfinderNoticeError = error && error.message ?
+        error.message : "The notice could not be published.";
+      renderAdmin_();
+    });
+  }
+
+  function cancelWayfinderNotice_() {
+    var draft = adminState.wayfinderNoticeDraft;
+    if (!draft || !draft.id) return;
+    adminState.wayfinderNoticeWorking = true;
+    adminState.wayfinderNoticeError = "";
+    renderAdmin_();
+
+    callWayfinderNoticeEndpoint_({
+      action: "cancel",
+      draftId: draft.id,
+    }).then(function(result) {
+      adminState.wayfinderNoticeWorking = false;
+      adminState.wayfinderNoticeDraft = null;
+      adminState.wayfinderNoticeMessage =
+        String(result && result.message || "The draft was cancelled.");
+      adminState.wayfinderEditingNoticeId = "";
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderNoticeWorking = false;
+      adminState.wayfinderNoticeError = error && error.message ?
+        error.message : "The notice draft could not be cancelled.";
+      renderAdmin_();
+    });
+  }
+
+  function callWayfinderKnowledgeEndpoint_(payload) {
+    if (!adminState.user) {
+      return Promise.reject(new Error(
+          "Sign in with an approved Central admin account first.",
+      ));
+    }
+    return adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(WAYFINDER_KNOWLEDGE_CHANGE_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(payload || {}),
+          });
+        })
+        .then(parseAdminEndpointResponse_);
+  }
+
+  function runWayfinderKnowledgeCommand_(action, extraPayload) {
+    adminState.wayfinderKnowledgeWorking = true;
+    adminState.wayfinderKnowledgeError = "";
+    adminState.wayfinderKnowledgeMessage = "";
+    renderAdmin_();
+    callWayfinderKnowledgeEndpoint_(
+        Object.assign({action: action}, extraPayload || {}),
+    ).then(function(result) {
+      adminState.wayfinderKnowledgeWorking = false;
+      adminState.wayfinderKnowledgeDraft =
+        result && result.draft ? result.draft : null;
+      adminState.wayfinderKnowledgeMessage =
+        String(result && result.message || "");
+      adminState.wayfinderQuestion = "";
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderKnowledgeWorking = false;
+      adminState.wayfinderKnowledgeError = error && error.message ?
+        error.message : "The permanent change is unavailable.";
+      if (/expired|sign in/i.test(adminState.wayfinderKnowledgeError)) {
+        adminState.wayfinderNoticeModeActive = false;
+      }
+      renderAdmin_();
+    });
+  }
+
+  function setWayfinderUpdateType_(value) {
+    var nextType = value === "permanent" ? "permanent" : "temporary";
+    adminState.wayfinderAdminUpdateType = nextType;
+    adminState.wayfinderQuestion = "";
+    adminState.wayfinderEditingNoticeId = "";
+    adminState.wayfinderPendingEndNoticeId = "";
+    adminState.wayfinderPendingDeactivateEntryId = "";
+    adminState.wayfinderNoticeDraft = null;
+    adminState.wayfinderKnowledgeDraft = null;
+    adminState.wayfinderNoticeError = "";
+    adminState.wayfinderKnowledgeError = "";
+    renderAdmin_();
+  }
+
+  function loadWayfinderManagers_() {
+    if (!adminState.wayfinderNoticeModeActive ||
+      adminState.wayfinderManagerLoading) return;
+    adminState.wayfinderManagerLoading = true;
+    renderAdmin_();
+    Promise.all([
+      callWayfinderNoticeEndpoint_({action: "list"}),
+      callWayfinderKnowledgeEndpoint_({action: "list"}),
+    ]).then(function(results) {
+      adminState.wayfinderManagerLoading = false;
+      adminState.wayfinderNotices = results[0] &&
+        Array.isArray(results[0].notices) ? results[0].notices : [];
+      adminState.wayfinderKnowledgeOverrides = results[1] &&
+        Array.isArray(results[1].overrides) ? results[1].overrides : [];
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderManagerLoading = false;
+      adminState.wayfinderNoticeError = error && error.message ?
+        error.message : "Stored Wayfinder updates could not be loaded.";
+      renderAdmin_();
+    });
+  }
+
+  function beginWayfinderNoticeRevision_(noticeId) {
+    var notice = adminState.wayfinderNotices.find(function(item) {
+      return item.id === noticeId;
+    });
+    if (!notice) return;
+    adminState.wayfinderAdminUpdateType = "temporary";
+    adminState.wayfinderEditingNoticeId = noticeId;
+    adminState.wayfinderPendingEndNoticeId = "";
+    adminState.wayfinderQuestion = "";
+    adminState.wayfinderNoticeMessage =
+      "Describe what should change about “" + notice.title + ".”";
+    renderAdmin_();
+  }
+
+  function endWayfinderNotice_(noticeId) {
+    if (!noticeId) return;
+    if (adminState.wayfinderPendingEndNoticeId !== noticeId) {
+      adminState.wayfinderPendingEndNoticeId = noticeId;
+      adminState.wayfinderNoticeMessage =
+        "Select Confirm end now to immediately stop this notice.";
+      renderAdmin_();
+      return;
+    }
+    adminState.wayfinderNoticeWorking = true;
+    adminState.wayfinderNoticeError = "";
+    renderAdmin_();
+    callWayfinderNoticeEndpoint_({
+      action: "end",
+      noticeId: noticeId,
+    }).then(function(result) {
+      adminState.wayfinderNoticeWorking = false;
+      adminState.wayfinderNoticeMessage =
+        String(result && result.message || "The notice ended.");
+      adminState.wayfinderPendingEndNoticeId = "";
+      loadWayfinderManagers_();
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderNoticeWorking = false;
+      adminState.wayfinderNoticeError = error && error.message ?
+        error.message : "The notice could not be ended.";
+      renderAdmin_();
+    });
+  }
+
+  function publishWayfinderKnowledgeChange_() {
+    var draft = adminState.wayfinderKnowledgeDraft;
+    if (!draft || !draft.id) return;
+    adminState.wayfinderKnowledgeWorking = true;
+    adminState.wayfinderKnowledgeError = "";
+    renderAdmin_();
+    callWayfinderKnowledgeEndpoint_({
+      action: "publish",
+      draftId: draft.id,
+    }).then(function(result) {
+      adminState.wayfinderKnowledgeWorking = false;
+      adminState.wayfinderKnowledgeDraft = null;
+      adminState.wayfinderKnowledgeMessage =
+        String(result && result.message || "The permanent change is active.");
+      loadWayfinderManagers_();
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderKnowledgeWorking = false;
+      adminState.wayfinderKnowledgeError = error && error.message ?
+        error.message : "The permanent change could not be approved.";
+      renderAdmin_();
+    });
+  }
+
+  function cancelWayfinderKnowledgeChange_() {
+    var draft = adminState.wayfinderKnowledgeDraft;
+    if (!draft || !draft.id) return;
+    adminState.wayfinderKnowledgeWorking = true;
+    renderAdmin_();
+    callWayfinderKnowledgeEndpoint_({
+      action: "cancel",
+      draftId: draft.id,
+    }).then(function(result) {
+      adminState.wayfinderKnowledgeWorking = false;
+      adminState.wayfinderKnowledgeDraft = null;
+      adminState.wayfinderKnowledgeMessage =
+        String(result && result.message || "The draft was cancelled.");
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderKnowledgeWorking = false;
+      adminState.wayfinderKnowledgeError = error && error.message ?
+        error.message : "The knowledge draft could not be cancelled.";
+      renderAdmin_();
+    });
+  }
+
+  function deactivateWayfinderKnowledgeOverride_(entryId) {
+    if (!entryId) return;
+    if (adminState.wayfinderPendingDeactivateEntryId !== entryId) {
+      adminState.wayfinderPendingDeactivateEntryId = entryId;
+      adminState.wayfinderKnowledgeMessage =
+        "Select Confirm revert to restore the imported knowledge entry.";
+      renderAdmin_();
+      return;
+    }
+    adminState.wayfinderKnowledgeWorking = true;
+    renderAdmin_();
+    callWayfinderKnowledgeEndpoint_({
+      action: "deactivate",
+      entryId: entryId,
+    }).then(function(result) {
+      adminState.wayfinderKnowledgeWorking = false;
+      adminState.wayfinderKnowledgeMessage =
+        String(result && result.message || "The override is inactive.");
+      adminState.wayfinderPendingDeactivateEntryId = "";
+      loadWayfinderManagers_();
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderKnowledgeWorking = false;
+      adminState.wayfinderKnowledgeError = error && error.message ?
+        error.message : "The override could not be deactivated.";
+      renderAdmin_();
+    });
   }
 
   function callSubmitChangeRequestEndpoint_(payload) {

@@ -2,14 +2,12 @@
 
 ## Current scope
 
-The first Wayfinder prototype is retrieval-only. It validates the approved
-knowledge bundles, imports them into draft Firestore collections, and ranks
-the entries that best match an admin's test question.
+The private Wayfinder prototype validates approved knowledge bundles, imports
+them into draft Firestore collections, retrieves live public Planning Center
+context, and produces grounded Gemini answers for authorized admins.
 
 It does not:
 
-- Call Gemini
-- Generate a public-facing answer
 - Expose a public chat interface
 - Write to published Wayfinder collections
 - Delete Firestore documents
@@ -62,6 +60,11 @@ not be enabled until the draft review and publishing workflow is designed.
 - `centralAssistantConfigDraft/document-00` contains Wayfinder policy.
 - `centralAssistantKnowledgeDraft/{entryId}` contains approved knowledge
   entries in draft publication state.
+- `centralAssistantNotices/{noticeId}` contains expiring operational notices.
+- `centralAssistantKnowledgeOverrides/{entryId}` contains the current durable
+  revision that takes precedence over an imported entry.
+- `centralAssistantKnowledgeRevisionHistory/{revisionId}` preserves permanent
+  change and reversion history.
 
 Importing is additive and overwrites only documents with matching IDs. It does
 not delete documents that are absent from the local bundles.
@@ -95,7 +98,7 @@ The response includes:
 - Prohibited claims or information
 - Required live source type, when applicable
 
-The response explicitly states that no Gemini answer was generated.
+The diagnostic response reports retrieval details without generating an answer.
 
 ## Private Wayfinder Lab page
 
@@ -116,21 +119,26 @@ to the private diagnostic endpoint and displays:
 - Guardrails and prohibited claims
 - Any requirement to use a live source such as Planning Center
 
-The lab does not call Gemini or generate a guest-facing answer. If the draft
-Firestore collection is empty, run the emulator import command before local
-testing.
+The lab can use Gemini to generate a grounded preview, manage expiring notices,
+and propose permanent revisions to existing knowledge entries. Enter
+`Alohomora` to open a five-minute authenticated update session and
+`Colloportus` to close it. Temporary and permanent changes require an explicit
+preview approval. Permanent changes are stored as audited overrides so later
+JSON imports cannot silently erase them.
+
+If the draft Firestore collection is empty, run the emulator import command
+before local testing.
 
 For a full local browser test:
 
 1. Start the Firebase Auth, Functions, Firestore, and Hosting emulators.
 2. Import the approved Wayfinder bundles into the Firestore emulator.
-3. Open `http://127.0.0.1:5000/admin/wayfinder`.
+3. Open `http://127.0.0.1:5005/admin/wayfinder?emulators=1`.
 4. Sign in with an active local admin account that has Integrations access.
 5. Ask the same idea with different wording and compare the selected entries.
 
 ## Next prototype milestone
 
-After the retrieval results have been evaluated, the next milestone is a
-server-side Gemini call that receives only the selected approved entries. The
-model response must use a structured schema and pass source, URL, and safety
-validation before it can be returned to a user.
+The next milestone is the public chat experience, including conversation state,
+public rate limits, source-card presentation, and a launch-ready review of the
+admin revision workflow.

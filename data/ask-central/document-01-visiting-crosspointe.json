@@ -376,6 +376,91 @@
       ]
     },
     {
+      "id": "visiting-social-media",
+      "topic": "visiting",
+      "title": "Official CrossPointe Social Media",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What social media pages does CrossPointe have?",
+        "What other socials does CrossPointe have?",
+        "Where can I follow CrossPointe online?",
+        "Is CrossPointe on Instagram?",
+        "What is CrossPointe's TikTok account?"
+      ],
+      "keywords": [
+        "social media",
+        "socials",
+        "follow CrossPointe online",
+        "YouTube",
+        "Facebook",
+        "Instagram",
+        "TikTok",
+        "@crosspointe.tv",
+        "@crosspointenorman"
+      ],
+      "requiredFacts": [
+        "CrossPointe has official public pages on YouTube, Facebook, Instagram, and TikTok.",
+        "CrossPointe's Instagram handle is @crosspointe.tv.",
+        "CrossPointe's TikTok handle is @crosspointenorman."
+      ],
+      "approvedLinks": [
+        {
+          "label": "CrossPointe YouTube",
+          "url": "https://www.youtube.com/@CrossPointeChurchOK"
+        },
+        {
+          "label": "CrossPointe Facebook",
+          "url": "https://www.facebook.com/CrossPointe.tv"
+        },
+        {
+          "label": "CrossPointe Instagram",
+          "url": "https://www.instagram.com/crosspointe.tv"
+        },
+        {
+          "label": "CrossPointe TikTok",
+          "url": "https://www.tiktok.com/@crosspointenorman"
+        }
+      ]
+    },
+    {
+      "id": "visiting-audio-podcast",
+      "topic": "visiting",
+      "title": "CrossPointe Norman Audio Podcast",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Does CrossPointe have a podcast?",
+        "Where can I listen to the CrossPointe podcast?",
+        "Is the podcast available on Spotify?",
+        "Can I listen on Apple Podcasts or Amazon Podcasts?"
+      ],
+      "keywords": [
+        "podcast",
+        "CrossPointe Norman Audio",
+        "audio podcast",
+        "Spotify",
+        "Apple Podcasts",
+        "Amazon Podcasts",
+        "Amazon Music"
+      ],
+      "requiredFacts": [
+        "The CrossPointe Norman Audio podcast is available on Spotify, Apple Podcasts, and Amazon Podcasts."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Listen on Spotify",
+          "url": "https://open.spotify.com/show/5X691oPUNBxLdujrKLTyIw?si=fd0dddd64b5d4116"
+        },
+        {
+          "label": "Listen on Apple Podcasts",
+          "url": "https://podcasts.apple.com/us/podcast/crosspointe-norman-audio/id1878459458"
+        },
+        {
+          "label": "Listen on Amazon Podcasts",
+          "url": "https://music.amazon.com/podcasts/6551616e-a833-45ac-9d95-e34523848dfe/crosspointe-norman---audio"
+        }
+      ]
+    },
+    {
       "id": "visiting-communion",
       "topic": "visiting",
       "title": "Communion",

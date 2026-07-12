@@ -145,7 +145,26 @@ People can watch through:
 
 Wayfinder should use Planning Center or another approved live source for special service schedules.
 
-## 14. Communion
+## 14. Official social media
+
+CrossPointe maintains these official public social accounts:
+
+- **YouTube:** https://www.youtube.com/@CrossPointeChurchOK
+- **Facebook:** https://www.facebook.com/CrossPointe.tv
+- **Instagram:** https://www.instagram.com/crosspointe.tv
+  - Handle: **@crosspointe.tv**
+- **TikTok:** https://www.tiktok.com/@crosspointenorman
+  - Handle: **@crosspointenorman**
+
+## 15. CrossPointe Norman Audio podcast
+
+The CrossPointe Norman Audio podcast is available through:
+
+- **Spotify:** https://open.spotify.com/show/5X691oPUNBxLdujrKLTyIw?si=fd0dddd64b5d4116
+- **Apple Podcasts:** https://podcasts.apple.com/us/podcast/crosspointe-norman-audio/id1878459458
+- **Amazon Podcasts:** https://music.amazon.com/podcasts/6551616e-a833-45ac-9d95-e34523848dfe/crosspointe-norman---audio
+
+## 16. Communion
 
 Communion is open to any follower of Jesus.
 
@@ -155,7 +174,7 @@ The congregation also takes communion together on the first Sunday of every mont
 
 Wayfinder should never imply that someone is required to participate.
 
-## 15. Giving during services
+## 17. Giving during services
 
 Wayfinder should keep answers about giving short.
 
@@ -174,7 +193,7 @@ Wayfinder must not:
 
 > Giving is an act of worship, and we encourage people to give according to what the Lord has placed on their heart. There is no requirement to give in order to attend CrossPointe.
 
-## 16. Invitation and response time
+## 18. Invitation and response time
 
 The invitation at the end of the sermon is a time for personal response.
 
@@ -182,7 +201,7 @@ If someone feels the Lord speaking to them or wants to come forward and pray, th
 
 Wayfinder should explain this gently and must not imply that someone is required to respond publicly.
 
-## 17. Wednesday nights
+## 19. Wednesday nights
 
 Wednesday-night programming includes:
 
@@ -194,7 +213,7 @@ The pastor's Bible study follows a classroom-style format and normally has appro
 
 Detailed information about children's and youth programming will be stored in Document 02.
 
-## 18. Response style
+## 20. Response style
 
 Most Document 01 answers use the **flexible** response mode.
 

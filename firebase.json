@@ -98,6 +98,24 @@
         ]
       },
       {
+        "source": "/wayfinder-chat.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/wayfinder-chat.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/favicon.svg",
         "headers": [
           {
@@ -169,6 +187,34 @@
         "source": "/api/admin/wayfinder/generate-answer",
         "function": {
           "functionId": "wayfinderGenerateAnswer",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/notices",
+        "function": {
+          "functionId": "wayfinderNoticeCommand",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/knowledge-changes",
+        "function": {
+          "functionId": "wayfinderKnowledgeChange",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/website-index",
+        "function": {
+          "functionId": "wayfinderWebsiteIndex",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/wayfinder/chat",
+        "function": {
+          "functionId": "wayfinderPublicAnswer",
           "pinTag": true
         }
       },

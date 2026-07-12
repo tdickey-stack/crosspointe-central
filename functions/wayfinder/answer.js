@@ -3,6 +3,8 @@ import {
   createWayfinderAccessError,
 } from "./access.js";
 import {rankWayfinderKnowledge} from "./retrieval.js";
+import {selectRelevantWayfinderNotices} from "./notices.js";
+import {applyWayfinderKnowledgeOverrides} from "./knowledge-overrides.js";
 import {
   buildWayfinderLiveSourceAnswer,
   buildWayfinderPolicyAnswer,
@@ -13,7 +15,12 @@ import {
 const KNOWLEDGE_COLLECTION = "centralAssistantKnowledgeDraft";
 const POLICY_DOC_PATH = "centralAssistantConfigDraft/document-00";
 const REQUEST_LIMIT = 8;
+const PUBLIC_SESSION_LIMIT = 12;
+const PUBLIC_IP_LIMIT = 30;
 const REQUEST_WINDOW_MS = 60 * 1000;
+const MAX_HISTORY_MESSAGES = 8;
+const MAX_HISTORY_USER_LENGTH = 500;
+const MAX_HISTORY_ASSISTANT_LENGTH = 1800;
 const requestWindowsByUid = new Map();
 const LIVE_SOURCE_QUESTION_PATTERN = new RegExp(
     "\\b(?:when|next|upcoming|date|time|times|scheduled|schedule|" +
@@ -22,6 +29,34 @@ const LIVE_SOURCE_QUESTION_PATTERN = new RegExp(
 );
 const EVENT_SOURCE_TYPE = "planning_center_event";
 const GROUP_SOURCE_TYPE = "planning_center_groups";
+const GROUP_LIVE_QUESTION_PATTERN = new RegExp(
+    "\\b(?:pointe|small)\\s+groups?\\b|" +
+    "\\bgroups?\\s+(?:meet|meeting|available|join|directory)\\b",
+    "i",
+);
+const GROUP_DIRECTORY_LINK_PATTERN = new RegExp(
+    "\\b(?:directory|list)\\s+(?:of\\s+)?(?:pointe|small)?\\s*groups?\\b|" +
+    "\\b(?:where|place|page|website|link|see|view|browse)\\b" +
+    ".{0,60}\\b(?:pointe|small)?\\s*groups?\\b",
+    "i",
+);
+const FOLLOW_UP_QUESTION_PATTERN = new RegExp(
+    "^(?:and\\b|also\\b|yes\\b|no\\b|what about\\b|how about\\b|" +
+    "what other\\b|which other\\b|any other\\b|anything else\\b|" +
+    "tell me more\\b|more details?\\b|what time\\b|when\\b|where\\b|" +
+    "how long\\b|how do i\\b|how can i\\b|who\\b|why\\b|" +
+    "what\\s+(?:does|do|is|are|was|were|can|will)\\s+(?:it|that|this|" +
+    "they|them|he|she)\\b|" +
+    "how\\s+(?:does|do|is|are|can)\\s+(?:it|that|this|they|he|she)\\b|" +
+    "(?:does|do|is|are|can|will|should)\\s+(?:it|that|this|they|them|" +
+    "he|she)\\b)",
+    "i",
+);
+const WEBSITE_LINK_QUESTION_PATTERN = new RegExp(
+    "\\b(?:website|webpage|page|link|directory|where can i find|" +
+      "where do i find|show me)\\b",
+    "i",
+);
 
 export function createWayfinderAnswerHandler(dependencies) {
   const admin = dependencies.admin;
@@ -30,6 +65,12 @@ export function createWayfinderAnswerHandler(dependencies) {
   const getAdminUserDocPath = dependencies.getAdminUserDocPath;
   const generateAnswer = dependencies.generateAnswer;
   const retrieveLiveContext = dependencies.retrieveLiveContext;
+  const getActiveNotices = dependencies.getActiveNotices;
+  const getActiveKnowledgeOverrides =
+    dependencies.getActiveKnowledgeOverrides;
+  const getWebsiteEntries = dependencies.getWebsiteEntries;
+  const requireAdminAuth = dependencies.requireAdminAuth !== false;
+  const publicResponse = dependencies.publicResponse === true;
   const model = String(dependencies.model || "gemini-3.5-flash");
 
   return async (request, response) => {
@@ -41,21 +82,44 @@ export function createWayfinderAnswerHandler(dependencies) {
     }
 
     try {
-      const authResult = await authenticateWayfinderAdminRequest({
-        request: request,
-        admin: admin,
-        firestore: firestore,
-        isAllowedAdminEmail: isAllowedAdminEmail,
-        getAdminUserDocPath: getAdminUserDocPath,
-      });
-      enforcePrototypeRateLimit_(authResult.decodedToken.uid);
+      if (requireAdminAuth) {
+        const authResult = await authenticateWayfinderAdminRequest({
+          request: request,
+          admin: admin,
+          firestore: firestore,
+          isAllowedAdminEmail: isAllowedAdminEmail,
+          getAdminUserDocPath: getAdminUserDocPath,
+        });
+        enforceRequestRateLimit_(
+            "admin:" + authResult.decodedToken.uid,
+            REQUEST_LIMIT,
+        );
+      } else {
+        enforcePublicRateLimit_(request);
+      }
 
       const question = getValidQuestion_(request.body);
-      const [knowledgeSnapshot, policySnapshot] = await Promise.all([
+      const conversationHistory = getValidConversationHistory_(request.body);
+      const retrievalQuestion = buildContextualRetrievalQuestion_(
+          question,
+          conversationHistory,
+      );
+      const [
+        knowledgeSnapshot,
+        policySnapshot,
+        activeNotices,
+        activeKnowledgeOverrides,
+      ] = await Promise.all([
         firestore.collection(KNOWLEDGE_COLLECTION).limit(250).get(),
         firestore.doc(POLICY_DOC_PATH).get(),
+        typeof getActiveNotices === "function" ? getActiveNotices() : [],
+        typeof getActiveKnowledgeOverrides === "function" ?
+          getActiveKnowledgeOverrides() : [],
       ]);
-      const entries = getApprovedDraftEntries_(knowledgeSnapshot);
+      const entries = applyWayfinderKnowledgeOverrides(
+          getApprovedDraftEntries_(knowledgeSnapshot),
+          activeKnowledgeOverrides,
+      );
       const policy = getApprovedDraftPolicy_(policySnapshot);
 
       if (!policy) {
@@ -69,48 +133,101 @@ export function createWayfinderAnswerHandler(dependencies) {
       const policyAnswer = buildWayfinderPolicyAnswer(policyRoute, policy);
 
       if (policyAnswer) {
-        response.status(200).json(buildPolicyResponse_(
+        sendWayfinderSuccess_(response, buildPolicyResponse_(
             question,
             entries.length,
             policy,
             policyAnswer,
-        ));
+        ), publicResponse);
         return;
       }
 
-      const retrieval = rankWayfinderKnowledge(question, entries, {limit: 5});
+      const noticeEntries = selectRelevantWayfinderNotices(
+          retrievalQuestion,
+          activeNotices,
+      );
+
+      const retrieval = rankWayfinderKnowledge(
+          retrievalQuestion,
+          entries,
+          {limit: 5},
+      );
+      const shouldCheckWebsite = typeof getWebsiteEntries === "function" &&
+        (retrieval.confidence === "none" || retrieval.confidence === "low" ||
+          WEBSITE_LINK_QUESTION_PATTERN.test(retrievalQuestion));
+      const websiteEntries = shouldCheckWebsite ?
+        await getWebsiteEntries(retrievalQuestion) : [];
 
       if (retrieval.confidence === "none" ||
         retrieval.confidence === "low") {
-        response.status(200).json(buildFallbackResponse_(
+        if (noticeEntries.length) {
+          await respondWithApprovedEntries_({
+            response,
+            generateAnswer,
+            question,
+            conversationHistory,
+            policy,
+            entries: noticeEntries,
+            retrieval,
+            entryCount: entries.length,
+            model,
+            publicResponse,
+          });
+          return;
+        }
+        if (websiteEntries.length) {
+          const websiteRetrieval = buildWebsiteRetrieval_(
+              retrievalQuestion,
+              websiteEntries,
+          );
+          await respondWithApprovedEntries_({
+            response,
+            generateAnswer,
+            question,
+            conversationHistory,
+            policy,
+            entries: websiteEntries,
+            retrieval: websiteRetrieval,
+            entryCount: entries.length,
+            model,
+            publicResponse,
+          });
+          return;
+        }
+        sendWayfinderSuccess_(response, buildFallbackResponse_(
             question,
             entries.length,
             retrieval,
             policy,
             buildWayfinderUnknownAnswer(policy),
-        ));
+        ), publicResponse);
         return;
       }
 
       const sourceTypes = getRequiredLiveSourceTypes_(
-          question,
+          retrievalQuestion,
           retrieval.results,
-      );
+      ).filter((sourceType) => !noticeEntries.some((entry) => {
+        return arrayOfStrings_(entry.overrideTargets).includes(
+            sourceType === EVENT_SOURCE_TYPE ?
+              "planning_center_events" : "planning_center_groups",
+        );
+      }));
       let liveEntries = [];
       if (sourceTypes.length) {
         if (typeof retrieveLiveContext !== "function") {
-          response.status(200).json(buildFallbackResponse_(
+          sendWayfinderSuccess_(response, buildFallbackResponse_(
               question,
               entries.length,
               retrieval,
               policy,
               buildWayfinderLiveSourceAnswer(sourceTypes),
-          ));
+          ), publicResponse);
           return;
         }
 
         const liveContext = await retrieveLiveContext({
-          question: question,
+          question: retrievalQuestion,
           sourceTypes: sourceTypes,
         });
         const unavailable = sourceTypes.some((sourceType) => {
@@ -118,71 +235,46 @@ export function createWayfinderAnswerHandler(dependencies) {
             liveContext.statuses[sourceType] === "unavailable";
         });
         if (unavailable) {
-          response.status(200).json(buildFallbackResponse_(
+          sendWayfinderSuccess_(response, buildFallbackResponse_(
               question,
               entries.length,
               retrieval,
               policy,
               buildWayfinderLiveSourceAnswer(sourceTypes),
-          ));
+          ), publicResponse);
           return;
         }
         liveEntries = getSafeLiveEntries_(liveContext && liveContext.entries);
       }
 
       const selectedEntries = [
+        ...noticeEntries,
         ...liveEntries,
         ...selectRetrievedEntries_(
             entries,
             retrieval.results,
         ),
+        ...websiteEntries,
       ].slice(0, 5);
-      let generated = null;
-
-      if (typeof generateAnswer === "function") {
-        try {
-          generated = await generateAnswer({
-            question: question,
-            policy: policy,
-            entries: selectedEntries,
-          });
-        } catch (error) {
-          console.warn("Wayfinder used its approved knowledge fallback.", {
-            code: String(error && error.code || "model_unavailable"),
-            reason: String(error && error.safeReason || ""),
-          });
+      if (websiteEntries.length && !selectedEntries.some((entry) => {
+        return entry.sourceType === "website_page";
+      })) {
+        if (selectedEntries.length >= 5) {
+          selectedEntries.pop();
         }
+        selectedEntries.push(websiteEntries[0]);
       }
-
-      if (!generated) {
-        response.status(200).json(buildKnowledgeResponse_(
-            question,
-            entries.length,
-            retrieval,
-            selectedEntries,
-        ));
-        return;
-      }
-      const sourceCards = buildEntrySourceCards_(
-          selectedEntries,
-          generated.sourceEntryIds,
-      );
-
-      response.status(200).json({
-        ok: true,
-        prototype: true,
-        mode: "gemini-grounded",
-        modelUsed: true,
-        model: model,
-        question: question,
-        answer: generated.answer,
-        followUpQuestion: generated.followUpQuestion,
-        shouldContactChurch: generated.shouldContactChurch,
-        confidence: retrieval.confidence,
-        knowledgeEntryCount: entries.length,
-        sourceCards: sourceCards,
-        results: retrieval.results,
-        notice: "Gemini received only the selected approved Wayfinder context.",
+      await respondWithApprovedEntries_({
+        response,
+        generateAnswer,
+        question,
+        conversationHistory,
+        policy,
+        entries: selectedEntries,
+        retrieval,
+        entryCount: entries.length,
+        model,
+        publicResponse,
       });
     } catch (error) {
       const status = Number(error && error.statusCode) ||
@@ -199,14 +291,195 @@ export function createWayfinderAnswerHandler(dependencies) {
       response.status(status).json({
         error: error && error.statusCode ?
           String(error.message || "Wayfinder access denied.") :
-          "Gemini could not generate a verified Wayfinder answer. " +
-            "The approved retrieval results are still available in the lab.",
+          publicResponse ?
+            "Wayfinder could not answer safely right now. Please try again." :
+            "Gemini could not generate a verified Wayfinder answer. " +
+              "The approved retrieval results are still available in the lab.",
       });
     }
   };
 }
 
-function buildKnowledgeResponse_(question, entryCount, retrieval, entries) {
+function buildWebsiteRetrieval_(question, websiteEntries) {
+  return {
+    question: question,
+    confidence: "medium",
+    results: websiteEntries.map((entry) => ({
+      id: String(entry.id || ""),
+      topic: String(entry.topic || "website_content"),
+      title: String(entry.title || "CrossPointe website"),
+      responseMode: String(entry.responseMode || "guided"),
+      score: Number(entry.websiteScore) || 6,
+      matchedTerms: arrayOfStrings_(entry.matchedTerms),
+      requiredFacts: arrayOfStrings_(entry.requiredFacts),
+      allowedPublicFacts: arrayOfStrings_(entry.allowedPublicFacts),
+      requiredActions: arrayOfStrings_(entry.requiredActions),
+      approvedActions: Array.isArray(entry.approvedActions) ?
+        entry.approvedActions : [],
+      approvedLinks: Array.isArray(entry.approvedLinks) ?
+        entry.approvedLinks : [],
+      prohibitedClaims: arrayOfStrings_(entry.prohibitedClaims),
+      prohibitedInformation: arrayOfStrings_(entry.prohibitedInformation),
+      requiredSourceType: "",
+      sourceBundleId: "website-index",
+    })),
+  };
+}
+
+async function respondWithApprovedEntries_(options) {
+  let generated = null;
+  if (typeof options.generateAnswer === "function") {
+    try {
+      generated = await options.generateAnswer({
+        question: options.question,
+        conversationHistory: options.conversationHistory,
+        policy: options.policy,
+        entries: options.entries,
+      });
+    } catch (error) {
+      console.warn("Wayfinder used its approved knowledge fallback.", {
+        code: String(error && error.code || "model_unavailable"),
+        reason: String(error && error.safeReason || ""),
+      });
+    }
+  }
+
+  if (!generated) {
+    sendWayfinderSuccess_(options.response, buildKnowledgeResponse_(
+        options.question,
+        options.entryCount,
+        options.retrieval,
+        options.entries,
+        options.conversationHistory,
+    ), options.publicResponse);
+    return;
+  }
+
+  sendWayfinderSuccess_(options.response, {
+    ok: true,
+    prototype: true,
+    mode: "gemini-grounded",
+    modelUsed: true,
+    model: options.model,
+    question: options.question,
+    answer: generated.answer,
+    followUpQuestion: generated.followUpQuestion,
+    shouldContactChurch: generated.shouldContactChurch,
+    conversationHistory: options.conversationHistory,
+    confidence: options.entries.some((entry) => {
+      return String(entry.id || "").startsWith("active-notice-");
+    }) ? "high" : options.retrieval.confidence,
+    knowledgeEntryCount: options.entryCount,
+    sourceCards: buildEntrySourceCards_(
+        options.entries,
+        generated.sourceEntryIds,
+    ),
+    results: options.retrieval.results,
+    notice: "Gemini received only the selected approved Wayfinder context.",
+  }, options.publicResponse);
+}
+
+function sendWayfinderSuccess_(response, payload, publicResponse) {
+  if (!publicResponse) {
+    response.status(200).json(payload);
+    return;
+  }
+  response.status(200).json({
+    ok: payload && payload.ok === true,
+    answer: String(payload && payload.answer || ""),
+    followUpQuestion: "",
+    shouldContactChurch: payload && payload.shouldContactChurch === true,
+    links: buildPublicActionLinks_(
+        payload && payload.sourceCards,
+        payload && payload.question,
+        payload && payload.conversationHistory,
+    ),
+  });
+}
+
+function buildPublicActionLinks_(sourceCards, question, history) {
+  const links = [];
+  const seenUrls = new Set();
+  (Array.isArray(sourceCards) ? sourceCards : []).forEach((card) => {
+    const cardLinks = card && Array.isArray(card.links) ? card.links : [];
+    cardLinks.forEach((link) => {
+      const label = String(link && link.label || "Learn more").trim()
+          .slice(0, 80);
+      const url = getSafePublicActionUrl_(link && link.url);
+      if (!label || !url || seenUrls.has(url) || links.length >= 6) return;
+      seenUrls.add(url);
+      links.push({label, url});
+    });
+  });
+  return selectQuestionSpecificLinks_(links, question, history);
+}
+
+function selectQuestionSpecificLinks_(links, question, history) {
+  const value = String(question || "");
+  const platformIntents = [
+    {question: /\binstagram\b|@crosspointe\.tv/i, link: /instagram/i},
+    {question: /\btik\s*tok\b|@crosspointenorman/i, link: /tiktok/i},
+    {question: /\byou\s*tube\b/i, link: /youtube/i},
+    {question: /\bface\s*book\b/i, link: /facebook/i},
+    {question: /\bspotify\b/i, link: /spotify/i},
+    {question: /\bapple podcasts?\b/i, link: /apple/i},
+    {question: /\bamazon (?:music|podcasts?)\b/i, link: /amazon/i},
+  ].filter((intent) => intent.question.test(value));
+
+  let selectedLinks = links;
+  if (platformIntents.length) {
+    selectedLinks = links.filter((link) => platformIntents.some((intent) => {
+      return intent.link.test(link.label) || intent.link.test(link.url);
+    }));
+  } else if (/\b(?:watch|livestream|live stream|streaming|church online)\b/i
+      .test(value)) {
+    const churchOnline = links.find((link) => {
+      return /crosspointe\.tv\/church-online/i.test(link.url);
+    });
+    if (churchOnline) return [churchOnline];
+  }
+
+  if (/\b(?:other|else)\b/i.test(value)) {
+    const priorText = (Array.isArray(history) ? history : [])
+        .map((message) => String(message && message.content || ""))
+        .join(" ");
+    const priorIntents = [
+      {question: /\binstagram\b|@crosspointe\.tv/i, link: /instagram/i},
+      {question: /\btik\s*tok\b|@crosspointenorman/i, link: /tiktok/i},
+      {question: /\byou\s*tube\b/i, link: /youtube/i},
+      {question: /\bface\s*book\b/i, link: /facebook/i},
+      {question: /\bspotify\b/i, link: /spotify/i},
+      {question: /\bapple podcasts?\b/i, link: /apple/i},
+      {question: /\bamazon (?:music|podcasts?)\b/i, link: /amazon/i},
+    ].filter((intent) => intent.question.test(priorText));
+    if (priorIntents.length) {
+      selectedLinks = selectedLinks.filter((link) => {
+        return !priorIntents.some((intent) => {
+          return intent.link.test(link.label) || intent.link.test(link.url);
+        });
+      });
+    }
+  }
+
+  return selectedLinks;
+}
+
+function getSafePublicActionUrl_(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" ? url.toString() : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function buildKnowledgeResponse_(
+    question,
+    entryCount,
+    retrieval,
+    entries,
+    conversationHistory = [],
+) {
   const primaryEntry = Array.isArray(entries) ? entries[0] : null;
   const facts = primaryEntry ? [
     ...arrayOfStrings_(primaryEntry.requiredFacts),
@@ -224,6 +497,7 @@ function buildKnowledgeResponse_(question, entryCount, retrieval, entries) {
       "I don't have enough approved information to answer that yet.",
     followUpQuestion: "",
     shouldContactChurch: false,
+    conversationHistory: conversationHistory,
     confidence: retrieval.confidence,
     knowledgeEntryCount: entryCount,
     sourceCards: primaryEntry ? [buildEntrySourceCard_(primaryEntry)] : [],
@@ -238,17 +512,58 @@ function getValidQuestion_(body) {
   const question = String(value.question || "").trim();
 
   if (!question) {
-    throw createWayfinderAccessError(400, "Enter a question to test.");
+    throw createWayfinderAccessError(400, "Enter a question for Wayfinder.");
   }
 
   if (question.length > 500) {
     throw createWayfinderAccessError(
         400,
-        "Prototype questions must be 500 characters or fewer.",
+        "Questions must be 500 characters or fewer.",
     );
   }
 
   return question;
+}
+
+function getValidConversationHistory_(body) {
+  const value = body && typeof body === "object" ? body : {};
+  if (value.history === undefined) return [];
+  if (!Array.isArray(value.history) ||
+    value.history.length > MAX_HISTORY_MESSAGES) {
+    throw createWayfinderAccessError(
+        400,
+        "Wayfinder conversation history is invalid.",
+    );
+  }
+
+  return value.history.map((message) => {
+    const item = message && typeof message === "object" ? message : {};
+    const role = String(item.role || "").trim();
+    const content = String(item.content || "").replace(/\s+/g, " ").trim();
+    const maxLength = role === "user" ?
+      MAX_HISTORY_USER_LENGTH : MAX_HISTORY_ASSISTANT_LENGTH;
+    if ((role !== "user" && role !== "assistant") ||
+      !content || content.length > maxLength) {
+      throw createWayfinderAccessError(
+          400,
+          "Wayfinder conversation history is invalid.",
+      );
+    }
+    return {role, content};
+  });
+}
+
+function buildContextualRetrievalQuestion_(question, history) {
+  const currentQuestion = String(question || "").trim();
+  const recentContext = (Array.isArray(history) ? history : [])
+      .slice(-3)
+      .map((message) => message.content)
+      .filter(Boolean);
+  if (!recentContext.length ||
+    !FOLLOW_UP_QUESTION_PATTERN.test(currentQuestion)) {
+    return currentQuestion;
+  }
+  return recentContext.concat(currentQuestion).join("\n");
 }
 
 function getApprovedDraftEntries_(snapshot) {
@@ -271,8 +586,23 @@ function getApprovedDraftPolicy_(snapshot) {
   return policy;
 }
 
-function enforcePrototypeRateLimit_(uid) {
-  const key = String(uid || "").trim();
+function enforcePublicRateLimit_(request) {
+  const sessionId = String(
+      request.headers && request.headers["x-wayfinder-session"] || "",
+  ).trim();
+  const safeSessionId = /^[A-Za-z0-9_-]{8,100}$/.test(sessionId) ?
+    sessionId : "missing-session";
+  const ipAddress = String(request.ip || request.socket &&
+    request.socket.remoteAddress || "unknown").trim();
+  enforceRequestRateLimit_(
+      "public-session:" + safeSessionId,
+      PUBLIC_SESSION_LIMIT,
+  );
+  enforceRequestRateLimit_("public-ip:" + ipAddress, PUBLIC_IP_LIMIT);
+}
+
+function enforceRequestRateLimit_(keyValue, limit) {
+  const key = String(keyValue || "").trim();
   const now = Date.now();
   const current = requestWindowsByUid.get(key);
 
@@ -281,10 +611,10 @@ function enforcePrototypeRateLimit_(uid) {
     return;
   }
 
-  if (current.count >= REQUEST_LIMIT) {
+  if (current.count >= limit) {
     throw createWayfinderAccessError(
         429,
-        "Please wait a minute before running more Gemini tests.",
+        "Please wait a minute before asking Wayfinder more questions.",
     );
   }
 
@@ -316,9 +646,14 @@ function getRequiredLiveSourceTypes_(question, results) {
   if (hasLiveEventEntry && asksForCurrentDetails) {
     sourceTypes.add(EVENT_SOURCE_TYPE);
   }
-  if (topResults.some((result) => {
-    return String(result.requiredSourceType || "") === GROUP_SOURCE_TYPE;
-  })) {
+  const asksForGroupDirectoryLink = GROUP_DIRECTORY_LINK_PATTERN.test(
+      String(question || ""),
+  );
+  if (!asksForGroupDirectoryLink &&
+    GROUP_LIVE_QUESTION_PATTERN.test(String(question || "")) &&
+    topResults.some((result) => {
+      return String(result.requiredSourceType || "") === GROUP_SOURCE_TYPE;
+    })) {
     sourceTypes.add(GROUP_SOURCE_TYPE);
   }
   return [...sourceTypes];

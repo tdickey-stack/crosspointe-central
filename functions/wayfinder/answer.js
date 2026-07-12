@@ -382,6 +382,10 @@ async function respondWithApprovedEntries_(options) {
     answer: generated.answer,
     followUpQuestion: generated.followUpQuestion,
     shouldContactChurch: generated.shouldContactChurch,
+    communicationPosture: String(
+        generated.communicationPosture || "universal",
+    ),
+    postureConfidence: String(generated.postureConfidence || "none"),
     conversationHistory: options.conversationHistory,
     confidence: options.entries.some((entry) => {
       return String(entry.id || "").startsWith("active-notice-");
@@ -746,10 +750,15 @@ function enforceRequestRateLimit_(keyValue, limit) {
 
 function selectRetrievedEntries_(entries, results) {
   const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
-  return (Array.isArray(results) ? results : [])
+  const rankedResults = Array.isArray(results) ? results : [];
+  const first = rankedResults[0];
+  const second = rankedResults[1];
+  const hasDecisiveMatch = first && Number(first.score) >= 24 &&
+    (!second || Number(first.score) - Number(second.score) >= 5);
+  return rankedResults
+      .slice(0, hasDecisiveMatch ? 1 : 5)
       .map((result) => entriesById.get(result.id))
-      .filter(Boolean)
-      .slice(0, 5);
+      .filter(Boolean);
 }
 
 function getRequiredLiveSourceTypes_(question, results) {

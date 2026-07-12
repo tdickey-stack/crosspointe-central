@@ -37,6 +37,12 @@ test("builds a grounded structured Gemini request", () => {
 
   assert.equal(request.model, "gemini-3.5-flash");
   assert.equal(request.config.responseMimeType, "application/json");
+  assert.ok(request.config.responseJsonSchema.required.includes(
+      "communicationPosture",
+  ));
+  assert.ok(request.config.responseJsonSchema.required.includes(
+      "postureConfidence",
+  ));
   assert.equal(request.config.thinkingConfig.thinkingLevel, "MINIMAL");
   assert.equal(prompt.userQuestion, CONTEXT.question);
   assert.equal(prompt.APPROVED_CONTEXT.entries.length, 1);
@@ -61,6 +67,20 @@ test("builds a grounded structured Gemini request", () => {
   assert.match(
       request.config.systemInstruction,
       /Do not add an offer to contact the church/i,
+  );
+  assert.match(request.config.systemInstruction, /AUDIENCE ADAPTATION/i);
+  assert.match(request.config.systemInstruction, /Never identify.*persona/i);
+  assert.match(request.config.systemInstruction, /Never infer age, gender/i);
+  assert.match(request.config.systemInstruction, /reassuring_belonging/i);
+  assert.match(request.config.systemInstruction, /practical_stability/i);
+  assert.match(request.config.systemInstruction, /direct_relational_depth/i);
+  assert.match(request.config.systemInstruction, /optimistic_agency/i);
+  assert.match(request.config.systemInstruction, /curious_relevance/i);
+  assert.match(request.config.systemInstruction, /Apply.*posture subtly/i);
+  assert.match(request.config.systemInstruction, /Do not perform a persona/i);
+  assert.match(
+      request.config.systemInstruction,
+      /at most three useful examples/i,
   );
   assert.match(
       request.config.systemInstruction,
@@ -130,6 +150,35 @@ test("accepts a grounded answer with approved facts", () => {
 
   assert.equal(output.answer, "Sunday services are at 9:00 AM and 10:30 AM.");
   assert.deepEqual(output.sourceEntryIds, ["visiting-service-times"]);
+  assert.equal(output.communicationPosture, "universal");
+  assert.equal(output.postureConfidence, "none");
+});
+
+test("accepts a supported high-confidence communication posture", () => {
+  const output = validateWayfinderGeminiOutput({
+    answer: "You are welcome to come as you are.",
+    sourceEntryIds: ["visiting-service-times"],
+    shouldContactChurch: false,
+    followUpQuestion: "",
+    communicationPosture: "reassuring_belonging",
+    postureConfidence: "high",
+  }, CONTEXT);
+
+  assert.equal(output.communicationPosture, "reassuring_belonging");
+  assert.equal(output.postureConfidence, "high");
+});
+
+test("rejects an unsupported or uncertain specialized posture", () => {
+  assert.throws(() => {
+    validateWayfinderGeminiOutput({
+      answer: "Sunday services are at 9:00 AM and 10:30 AM.",
+      sourceEntryIds: ["visiting-service-times"],
+      shouldContactChurch: false,
+      followUpQuestion: "",
+      communicationPosture: "reassuring_belonging",
+      postureConfidence: "none",
+    }, CONTEXT);
+  }, /invalid communication posture/i);
 });
 
 test("rejects a source id that Gemini was not given", () => {
@@ -194,6 +243,56 @@ test("accepts structured JSON wrapped in a markdown code fence", async () => {
   });
 
   assert.equal(result.sourceEntryIds[0], "groups-overview");
+});
+
+test("repairs an over-applied communication posture once", async () => {
+  let calls = 0;
+  const generator = createDeveloperApiWayfinderGenerator({
+    apiKey: "test-key",
+    model: "test-model",
+    client: {
+      models: {
+        generateContent: async () => {
+          calls += 1;
+          return {
+            text: JSON.stringify(calls === 1 ? {
+              answer: "It is completely natural to feel nervous. " +
+                "You are absolutely welcome to come as you are.",
+              sourceEntryIds: ["visiting-what-to-wear"],
+              shouldContactChurch: false,
+              followUpQuestion: "",
+              communicationPosture: "reassuring_belonging",
+              postureConfidence: "high",
+            } : {
+              answer: "You are welcome to come as you are. " +
+                "CrossPointe is casual, with no formal dress expectation.",
+              sourceEntryIds: ["visiting-what-to-wear"],
+              shouldContactChurch: false,
+              followUpQuestion: "",
+              communicationPosture: "reassuring_belonging",
+              postureConfidence: "high",
+            }),
+          };
+        },
+      },
+    },
+  });
+  const result = await generator({
+    question: "I'm nervous about visiting. What should I wear?",
+    policy: {},
+    entries: [{
+      id: "visiting-what-to-wear",
+      requiredFacts: [
+        "CrossPointe is casual.",
+        "People are welcome to come as they are.",
+        "There is no expectation to dress formally.",
+      ],
+    }],
+  });
+
+  assert.equal(calls, 2);
+  assert.doesNotMatch(result.answer, /completely|absolutely/i);
+  assert.equal(result.communicationPosture, "reassuring_belonging");
 });
 
 test("replaces markdown links with a natural source-card reference", () => {

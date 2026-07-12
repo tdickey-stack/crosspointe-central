@@ -197,7 +197,29 @@ test("approved static question is sent to Gemini", async () => {
   assert.equal(response.body.mode, "gemini-grounded");
   assert.equal(response.body.modelUsed, true);
   assert.equal(response.body.sourceCards[0].id, "visiting-what-to-wear");
-  assert.ok(selectedIds.includes("visiting-what-to-wear"));
+  assert.deepEqual(selectedIds, ["visiting-what-to-wear"]);
+});
+
+test("private lab response includes communication posture", async () => {
+  const response = await runHandler_(
+      "I'm nervous about visiting. What should I wear?",
+      async () => ({
+        answer: "CrossPointe is casual, and you are welcome to come " +
+          "as you are.",
+        sourceEntryIds: ["visiting-what-to-wear"],
+        shouldContactChurch: false,
+        followUpQuestion: "",
+        communicationPosture: "reassuring_belonging",
+        postureConfidence: "high",
+      }),
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+      response.body.communicationPosture,
+      "reassuring_belonging",
+  );
+  assert.equal(response.body.postureConfidence, "high");
 });
 
 test("pronoun follow-up retrieves the person from recent context", async () => {
@@ -367,6 +389,8 @@ test("public answer omits admin auth and lab diagnostics", async () => {
   assert.equal(Object.hasOwn(response.body, "results"), false);
   assert.equal(Object.hasOwn(response.body, "sourceCards"), false);
   assert.equal(Object.hasOwn(response.body, "model"), false);
+  assert.equal(Object.hasOwn(response.body, "communicationPosture"), false);
+  assert.equal(Object.hasOwn(response.body, "postureConfidence"), false);
 });
 
 test("public answer exposes links without source data", async () => {

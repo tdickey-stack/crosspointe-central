@@ -5395,6 +5395,10 @@
     var sourceCards = Array.isArray(result.sourceCards) ?
       result.sourceCards : [];
     var modelUsed = result.modelUsed === true;
+    var communicationPosture = String(
+        result.communicationPosture || "universal",
+    );
+    var postureLabel = communicationPosture.replace(/_/g, " ");
     var modeLabel = modelUsed ? "Gemini grounded" :
       getWayfinderPolicyModeLabel_(result.mode);
 
@@ -5414,6 +5418,10 @@
           String(result.confidence || "none") + " confidence",
           result.confidence === "high" ? "is-safe" : "is-live",
       ),
+      modelUsed ? renderStatusPill_(
+          postureLabel + " posture",
+          result.postureConfidence === "high" ? "is-safe" : "is-live",
+      ) : "",
       "</div>",
       "</div>",
       "<div class=\"wayfinder-lab-answer-copy\">",

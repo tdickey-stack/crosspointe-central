@@ -2,6 +2,16 @@ import {GoogleGenAI} from "@google/genai";
 
 export const DEFAULT_WAYFINDER_MODEL = "gemini-3.5-flash";
 
+const COMMUNICATION_POSTURES = [
+  "universal",
+  "reassuring_belonging",
+  "practical_stability",
+  "direct_relational_depth",
+  "optimistic_agency",
+  "curious_relevance",
+];
+const POSTURE_CONFIDENCES = ["none", "high"];
+
 const WAYFINDER_RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -25,12 +35,24 @@ const WAYFINDER_RESPONSE_SCHEMA = {
       type: "string",
       description: "One optional short follow-up question, or an empty string.",
     },
+    communicationPosture: {
+      type: "string",
+      enum: COMMUNICATION_POSTURES,
+      description: "Internal delivery posture; never shown to the user.",
+    },
+    postureConfidence: {
+      type: "string",
+      enum: POSTURE_CONFIDENCES,
+      description: "High only when explicit conversation signals support it.",
+    },
   },
   required: [
     "answer",
     "sourceEntryIds",
     "shouldContactChurch",
     "followUpQuestion",
+    "communicationPosture",
+    "postureConfidence",
   ],
 };
 
@@ -70,7 +92,51 @@ export function createDeveloperApiWayfinderGenerator(options = {}) {
       throw createGeminiRequestError_(error);
     }
     const output = parseWayfinderGeminiResponse_(modelResponse);
-    return validateWayfinderGeminiOutput(output, context);
+    try {
+      return validateWayfinderGeminiOutput(output, context);
+    } catch (error) {
+      if (!error || error.safeReason !== "persona_style") throw error;
+      const repairRequest = buildPostureRepairRequest_(
+          request,
+          output,
+      );
+      let repairResponse;
+      try {
+        repairResponse = await client.models.generateContent(repairRequest);
+      } catch (repairError) {
+        throw createGeminiRequestError_(repairError);
+      }
+      return validateWayfinderGeminiOutput(
+          parseWayfinderGeminiResponse_(repairResponse),
+          context,
+      );
+    }
+  };
+}
+
+function buildPostureRepairRequest_(request, rejectedOutput) {
+  const contents = JSON.parse(String(request.contents || "{}"));
+  contents.task = "Revise the rejected draft once and return a valid answer.";
+  contents.REJECTED_DRAFT = {
+    answer: String(rejectedOutput && rejectedOutput.answer || "")
+        .slice(0, 1800),
+    communicationPosture: String(
+        rejectedOutput && rejectedOutput.communicationPosture || "universal",
+    ),
+  };
+  contents.REVISION_REQUIRED = [
+    "Keep the same approved facts and source references.",
+    "Make the specialized posture subtle, concise, and natural.",
+    "Remove canned reassurance, emotional amplification, promotional " +
+      "intensifiers, and persona performance.",
+  ];
+  return {
+    ...request,
+    contents: JSON.stringify(contents),
+    config: {
+      ...request.config,
+      temperature: 0.2,
+    },
   };
 }
 
@@ -142,6 +208,43 @@ export function buildWayfinderGeminiRequest(context, model) {
       "reason, motive, intention, emotional meaning, ministry capacity, or " +
       "promised outcome that is not explicitly present in APPROVED_CONTEXT " +
       "just to make an answer sound warmer or more inspiring.",
+    "AUDIENCE ADAPTATION: Audience personas are internal planning tools, not " +
+      "labels for people. Never identify or address a user as a persona.",
+    "Use only explicit signals in the current question and recent " +
+      "CONVERSATION_HISTORY. Never infer age, gender, family status, income, " +
+      "health, race, disability, spiritual maturity, or personal history.",
+    "Choose reassuring_belonging only when the user explicitly expresses " +
+      "nervousness, loneliness, grief, guilt, uncertainty, or concern about " +
+      "being welcomed. Be personal, reassuring, and belonging-oriented.",
+    "Choose practical_stability only when the user explicitly feels " +
+      "overwhelmed or asks for clear logistics or steps. Simplify, be " +
+      "predictable, and make the immediate next step obvious.",
+    "Choose direct_relational_depth only when the user explicitly asks for " +
+      "deeper detail or identifies relevant experience. Be direct, honest, " +
+      "relational, and respectful without becoming promotional.",
+    "Choose optimistic_agency only when the user is explicitly exploring a " +
+      "new step, involvement, or options. Explain why, invite without " +
+      "pressure, and preserve the person's ability to decide.",
+    "Choose curious_relevance only when the user explicitly asks why faith, " +
+      "church, or an action matters. Respect curiosity and explain purpose " +
+      "or relevance before asking for action.",
+    "If no posture is strongly supported, choose universal with confidence " +
+      "none and use the general CrossPointe brand voice. Any specialized " +
+      "posture requires confidence high.",
+    "A communication posture may adjust warmth, depth, directness, and " +
+      "emphasis only. It must never change approved facts, doctrine, safety " +
+      "rules, refusals, source priority, or required next steps.",
+    "Apply a specialized posture subtly. Make one or two small delivery " +
+      "adjustments without making the answer longer. Do not perform a " +
+      "persona, repeat or amplify the user's emotion, over-reassure, become " +
+      "overly enthusiastic, or use intensifiers such as 'very,' " +
+      "'absolutely,' or 'wonderful' merely because a posture was selected.",
+    "For reassuring_belonging, acknowledge the concern at most once and " +
+      "answer calmly. Do not tell the person not to worry or promise that " +
+      "they will feel comfortable, accepted, or supported.",
+    "For optimistic_agency, preserve choice without listing every available " +
+      "option. Give at most three useful examples before the approved path " +
+      "for exploring more.",
     "Keep the answer warm, calm, conversational, and brief.",
     "Avoid canned chatbot acknowledgments such as 'Thank you for sharing " +
       "that with me,' 'Thank you for letting me know,' 'I understand,' or " +
@@ -253,6 +356,12 @@ export function validateWayfinderGeminiOutput(output, context) {
           .map((id) => String(id || "").trim())
           .filter(Boolean),
   )];
+  const communicationPosture = String(
+      value.communicationPosture || "universal",
+  ).trim();
+  const postureConfidence = String(
+      value.postureConfidence || "none",
+  ).trim();
 
   if (!answer || answer.length > 1800) {
     throw createModelValidationError_(
@@ -276,12 +385,24 @@ export function validateWayfinderGeminiOutput(output, context) {
     );
   }
 
+  if (!COMMUNICATION_POSTURES.includes(communicationPosture) ||
+    !POSTURE_CONFIDENCES.includes(postureConfidence) ||
+    (communicationPosture === "universal" && postureConfidence !== "none") ||
+    (communicationPosture !== "universal" && postureConfidence !== "high")) {
+    throw createModelValidationError_(
+        "Gemini returned an invalid communication posture.",
+        "communication_posture",
+    );
+  }
+
   if (INTERNAL_DETAIL_PATTERNS.some((pattern) => pattern.test(answer))) {
     throw createModelValidationError_(
         "Gemini attempted to expose implementation details.",
         "internal_details",
     );
   }
+
+  validateCommunicationPostureStyle_(answer, communicationPosture);
 
   validateApprovedTokens_(answer, context);
 
@@ -290,7 +411,39 @@ export function validateWayfinderGeminiOutput(output, context) {
     sourceEntryIds: sourceEntryIds,
     shouldContactChurch: value.shouldContactChurch === true,
     followUpQuestion: followUpQuestion,
+    communicationPosture: communicationPosture,
+    postureConfidence: postureConfidence,
   };
+}
+
+function validateCommunicationPostureStyle_(answer, posture) {
+  const personaNamePattern = new RegExp(
+      "\\b(?:New Nancy|Caring Carly|Boomer Bill|Sooner Sam|Happy Henry)\\b",
+      "i",
+  );
+  if (personaNamePattern.test(answer)) {
+    throw createModelValidationError_(
+        "Gemini exposed an internal audience persona.",
+        "persona_style",
+    );
+  }
+
+  if (posture === "reassuring_belonging" &&
+    /\b(?:completely|absolutely|very)\b|\bnatural to feel\b|\bdon't worry\b/i
+        .test(answer)) {
+    throw createModelValidationError_(
+        "Gemini over-applied the reassuring communication posture.",
+        "persona_style",
+    );
+  }
+
+  if (posture === "optimistic_agency" &&
+    /\b(?:wonderful|amazing|exciting)\b/i.test(answer)) {
+    throw createModelValidationError_(
+        "Gemini over-applied the optimistic communication posture.",
+        "persona_style",
+    );
+  }
 }
 
 function normalizeAnswerFormatting_(value) {
@@ -360,6 +513,7 @@ function sanitizePolicy_(policy) {
     assistantIdentity: value.assistantIdentity || {},
     responsePolicy: value.responsePolicy || {},
     brandVoice: value.brandVoice || {},
+    audienceAdaptation: value.audienceAdaptation || {},
     officialChurchInformation: value.officialChurchInformation || {},
     generalContactPolicy: value.generalContactPolicy || {},
     staffContactPolicy: value.staffContactPolicy || {},

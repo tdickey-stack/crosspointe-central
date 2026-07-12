@@ -66,6 +66,10 @@ const retrievalCases = [
   ["How do I find Pointe Brew?", "campus-the-pointe-navigation"],
   ["Is Pointe Brew wheelchair accessible?", "campus-parking-and-accessibility"],
   ["How can I start volunteering?", "serving-get-started"],
+  [
+    "What options do I have for serving?",
+    "serving-opportunities-overview",
+  ],
   ["Can my teenager volunteer?", "serving-membership-age-and-eligibility"],
   ["Do I need an audition for worship team?", "serving-worship-ministry"],
   ["Can I help make coffee on Sundays?", "serving-coffee-ministry"],

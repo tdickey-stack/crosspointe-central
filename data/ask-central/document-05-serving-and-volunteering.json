@@ -67,12 +67,14 @@
       "responseMode": "flexible",
       "sampleQuestions": [
         "Where can I serve?",
+        "What options do I have for serving?",
         "What volunteer opportunities do you have?",
         "What ministries need volunteers?",
         "Is there a place for me to help?"
       ],
       "keywords": [
         "volunteer opportunities",
+        "serving options",
         "serve",
         "ministry teams",
         "help",
@@ -80,14 +82,23 @@
       ],
       "requiredFacts": [
         "CrossPointe offers many volunteer opportunities, including Watch Team, coffee ministry, Hospitality, Care Center, Children's Ministry, Student Ministry, Funeral Meals, Worship, Tech, Creative, and CARS Ministry.",
-        "A staff member or ministry leader can help someone identify an opportunity that fits their gifts and experience."
+        "A staff member or ministry leader can help someone identify an opportunity that fits their gifts and experience.",
+        "Someone may complete the Next Steps Form or text NEXT to 405-374-4740 to begin exploring a place to serve."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Complete the Next Steps Form",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/324465"
+        }
       ],
       "requiredActions": [
         "Give a brief overview rather than listing every ministry unless the person asks for a complete list.",
+        "When someone asks generally about serving options, mention no more than three representative examples before the approved next step. Do not describe the opportunities with promotional intensifiers such as wonderful, amazing, or exciting.",
         "Offer one appropriate next step."
       ],
       "prohibitedClaims": [
-        "Do not promise that someone will be placed in a particular volunteer role."
+        "Do not promise that someone will be placed in a particular volunteer role.",
+        "Do not promise that a ministry will be a perfect or best fit."
       ]
     },
     {

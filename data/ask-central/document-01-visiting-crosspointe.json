@@ -125,6 +125,12 @@
         "There is no expectation to dress formally.",
         "Guests will see a variety of clothing styles."
       ],
+      "requiredActions": [
+        "If someone expresses nervousness or concern about fitting in, use this approved pattern with small natural wording changes: You are welcome to come as you are. CrossPointe is casual, with no expectation to dress formally. Use no more than two short sentences. Do not normalize or amplify their emotion, tell them not to worry, repeat reassurance, or use intensifiers such as completely, very, or absolutely."
+      ],
+      "prohibitedClaims": [
+        "Do not name or invent specific examples of clothing such as jeans, t-shirts, dresses, suits, or business casual. Use only the approved general statement that guests wear a variety of clothing styles."
+      ],
       "exampleResponses": [
         "CrossPointe is casual, so wear whatever makes you comfortable. You'll see a range of clothing styles, and there's no expectation to dress formally."
       ]

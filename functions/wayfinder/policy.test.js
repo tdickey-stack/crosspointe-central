@@ -62,5 +62,6 @@ test("live event fallback never invents a date", () => {
   const result = buildWayfinderLiveSourceAnswer();
   assert.equal(result.route, "live_source_required");
   assert.match(result.answer, /Planning Center/);
-  assert.match(result.answer, /no date or time was generated/i);
+  assert.match(result.answer, /can't verify/i);
+  assert.doesNotMatch(result.answer, /\b\d{1,2}[:/]\d{1,2}\b/);
 });

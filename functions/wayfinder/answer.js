@@ -20,6 +20,8 @@ const LIVE_SOURCE_QUESTION_PATTERN = new RegExp(
       "register|registration|events?)\\b",
     "i",
 );
+const EVENT_SOURCE_TYPE = "planning_center_event";
+const GROUP_SOURCE_TYPE = "planning_center_groups";
 
 export function createWayfinderAnswerHandler(dependencies) {
   const admin = dependencies.admin;
@@ -27,6 +29,7 @@ export function createWayfinderAnswerHandler(dependencies) {
   const isAllowedAdminEmail = dependencies.isAllowedAdminEmail;
   const getAdminUserDocPath = dependencies.getAdminUserDocPath;
   const generateAnswer = dependencies.generateAnswer;
+  const retrieveLiveContext = dependencies.retrieveLiveContext;
   const model = String(dependencies.model || "gemini-3.5-flash");
 
   return async (request, response) => {
@@ -89,21 +92,51 @@ export function createWayfinderAnswerHandler(dependencies) {
         return;
       }
 
-      if (questionRequiresLiveSource_(question, retrieval.results)) {
-        response.status(200).json(buildFallbackResponse_(
-            question,
-            entries.length,
-            retrieval,
-            policy,
-            buildWayfinderLiveSourceAnswer(),
-        ));
-        return;
-      }
-
-      const selectedEntries = selectRetrievedEntries_(
-          entries,
+      const sourceTypes = getRequiredLiveSourceTypes_(
+          question,
           retrieval.results,
       );
+      let liveEntries = [];
+      if (sourceTypes.length) {
+        if (typeof retrieveLiveContext !== "function") {
+          response.status(200).json(buildFallbackResponse_(
+              question,
+              entries.length,
+              retrieval,
+              policy,
+              buildWayfinderLiveSourceAnswer(sourceTypes),
+          ));
+          return;
+        }
+
+        const liveContext = await retrieveLiveContext({
+          question: question,
+          sourceTypes: sourceTypes,
+        });
+        const unavailable = sourceTypes.some((sourceType) => {
+          return !liveContext || !liveContext.statuses ||
+            liveContext.statuses[sourceType] === "unavailable";
+        });
+        if (unavailable) {
+          response.status(200).json(buildFallbackResponse_(
+              question,
+              entries.length,
+              retrieval,
+              policy,
+              buildWayfinderLiveSourceAnswer(sourceTypes),
+          ));
+          return;
+        }
+        liveEntries = getSafeLiveEntries_(liveContext && liveContext.entries);
+      }
+
+      const selectedEntries = [
+        ...liveEntries,
+        ...selectRetrievedEntries_(
+            entries,
+            retrieval.results,
+        ),
+      ].slice(0, 5);
       let generated = null;
 
       if (typeof generateAnswer === "function") {
@@ -266,17 +299,37 @@ function selectRetrievedEntries_(entries, results) {
       .slice(0, 5);
 }
 
-function questionRequiresLiveSource_(question, results) {
-  const hasLiveEntry = (Array.isArray(results) ? results : [])
+function getRequiredLiveSourceTypes_(question, results) {
+  const topResults = (Array.isArray(results) ? results : []).slice(0, 3);
+  const sourceTypes = new Set();
+  const hasLiveEventEntry = topResults
       .slice(0, 3)
       .some((result) => {
         return String(result.requiredSourceType || "") ===
-          "planning_center_event";
+          EVENT_SOURCE_TYPE ||
+          String(result.requiredSourceTypeForDates || "") ===
+          EVENT_SOURCE_TYPE;
       });
   const asksForCurrentDetails = LIVE_SOURCE_QUESTION_PATTERN.test(
       String(question || ""),
   );
-  return hasLiveEntry && asksForCurrentDetails;
+  if (hasLiveEventEntry && asksForCurrentDetails) {
+    sourceTypes.add(EVENT_SOURCE_TYPE);
+  }
+  if (topResults.some((result) => {
+    return String(result.requiredSourceType || "") === GROUP_SOURCE_TYPE;
+  })) {
+    sourceTypes.add(GROUP_SOURCE_TYPE);
+  }
+  return [...sourceTypes];
+}
+
+function getSafeLiveEntries_(value) {
+  return (Array.isArray(value) ? value : []).filter((entry) => {
+    const id = String(entry && entry.id || "");
+    return id.startsWith("live-event-") || id.startsWith("live-group-") ||
+      id === "live-events-no-match" || id === "live-groups-no-match";
+  });
 }
 
 function buildPolicyResponse_(question, entryCount, policy, policyAnswer) {

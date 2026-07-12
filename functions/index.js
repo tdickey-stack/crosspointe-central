@@ -11,6 +11,8 @@ import {
   createDeveloperApiWayfinderGenerator,
   DEFAULT_WAYFINDER_MODEL,
 } from "./wayfinder/gemini.js";
+import {createWayfinderPlanningCenterRetriever} from
+  "./wayfinder/planning-center.js";
 import {createWayfinderPrototypeHandler} from "./wayfinder/prototype.js";
 
 setGlobalOptions({maxInstances: 10});
@@ -239,6 +241,8 @@ const PCO_APP_ID = process.env.PCO_APP_ID || "";
 const PCO_SECRET = process.env.PCO_SECRET || "";
 const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
 const PCO_CENTRAL_TAG_NAME = process.env.PCO_CENTRAL_TAG_NAME || "Central";
+const PCO_WAYFINDER_PRIORITY_TAG_NAME =
+  process.env.PCO_WAYFINDER_PRIORITY_TAG_NAME || "Wayfinder Priority";
 const PCO_CALENDAR_LOOKAHEAD_DAYS = parsePositiveInt_(
     process.env.PCO_CALENDAR_LOOKAHEAD_DAYS,
     14,
@@ -462,9 +466,32 @@ export const wayfinderGenerateAnswer = onRequest(
       isAllowedAdminEmail: isAllowedCentralAdminEmail_,
       getAdminUserDocPath: getCentralAdminUserDocPath_,
       generateAnswer: wayfinderGeminiGenerator,
+      retrieveLiveContext: getWayfinderPlanningCenterContext_,
       model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
     }),
 );
+
+/**
+ * Retrieves sanitized public Planning Center context for Wayfinder.
+ *
+ * @param {Object} request Live-source request from the Wayfinder handler.
+ * @return {Promise<Object>} Sanitized live entries and source statuses.
+ */
+async function getWayfinderPlanningCenterContext_(request) {
+  const roomRulesOverride = await getFirestoreRoomRulesOverride_();
+  const roomRules = roomRulesOverride.shouldOverride ?
+    roomRulesOverride.items : getDefaultCentralRoomRules_();
+  const retriever = createWayfinderPlanningCenterRetriever({
+    fetchJson: fetchPcoJson_,
+    timezone: PCO_TIMEZONE,
+    centralTagName: PCO_CENTRAL_TAG_NAME,
+    priorityTagName: PCO_WAYFINDER_PRIORITY_TAG_NAME,
+    resolveEventRooms: (instanceId) => {
+      return getEventInstanceRooms_(instanceId, roomRules);
+    },
+  });
+  return retriever(request);
+}
 
 export const centralCalendarEvent = onRequest(
     {

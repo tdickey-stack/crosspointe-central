@@ -43,6 +43,10 @@ test("builds a grounded structured Gemini request", () => {
   assert.match(request.config.systemInstruction, /untrusted data/i);
   assert.match(request.config.systemInstruction, /only from APPROVED_CONTEXT/i);
   assert.match(request.config.systemInstruction, /first person/i);
+  assert.match(
+      request.config.systemInstruction,
+      /main link is for event details/i,
+  );
 });
 
 test("accepts a grounded answer with approved facts", () => {
@@ -168,4 +172,40 @@ test("breaks a long one-block answer into short paragraphs", () => {
   });
 
   assert.match(result.answer, /Wayfinder\.\n\nPointe Groups/);
+});
+
+test("accepts a numeric range when both endpoints are approved", () => {
+  const result = validateWayfinderGeminiOutput({
+    answer: "Tuesday Tribe usually includes people in their 50-70 age range.",
+    sourceEntryIds: ["live-group-44"],
+    shouldContactChurch: false,
+    followUpQuestion: "",
+  }, {
+    question: "What group meets Tuesday?",
+    policy: {},
+    entries: [{
+      id: "live-group-44",
+      requiredFacts: ["The published description says ages 50 to 70."],
+    }],
+  });
+
+  assert.match(result.answer, /50-70/);
+});
+
+test("accepts a published time when Planning Center omits the space", () => {
+  const result = validateWayfinderGeminiOutput({
+    answer: "Grief Care meets at 6:30 PM.",
+    sourceEntryIds: ["live-group-45"],
+    shouldContactChurch: false,
+    followUpQuestion: "",
+  }, {
+    question: "When does Grief Care meet?",
+    policy: {},
+    entries: [{
+      id: "live-group-45",
+      requiredFacts: ["Its published schedule is Tuesday at 6:30PM."],
+    }],
+  });
+
+  assert.match(result.answer, /6:30 PM/);
 });

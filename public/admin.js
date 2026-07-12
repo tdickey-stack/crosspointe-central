@@ -916,15 +916,28 @@
       return;
     }
 
+    var emulatorHost = getFirebaseEmulatorHost_();
+    var authHost = emulatorHost.indexOf(":") !== -1 ?
+      "[" + emulatorHost.replace(/^\[|\]$/g, "") + "]" :
+      emulatorHost;
+
     try {
-      auth.useEmulator("http://127.0.0.1:9099");
+      auth.useEmulator("http://" + authHost + ":9099");
     } catch (error) {
     }
 
     try {
-      firestore.useEmulator("127.0.0.1", 8080);
+      firestore.useEmulator(emulatorHost, 8080);
     } catch (error) {
     }
+  }
+
+  function getFirebaseEmulatorHost_() {
+    var hostname = String(window.location.hostname || "").trim();
+    if (!hostname || hostname === "[::1]") {
+      return hostname === "[::1]" ? "::1" : "127.0.0.1";
+    }
+    return hostname;
   }
 
   function buildAdminGoogleAuthProvider_() {

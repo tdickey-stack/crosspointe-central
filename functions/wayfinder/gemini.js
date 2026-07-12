@@ -123,6 +123,8 @@ export function buildWayfinderGeminiRequest(context, model) {
       "claims and information must not appear.",
     "Never invent event dates, times, locations, registration links, " +
       "policies, ministries, or contact information.",
+    "A live event's main link is for event details. Do not describe it as " +
+      "registration unless an approved fact explicitly says registration.",
     "Do not put URLs or Markdown links in the answer. Approved links are " +
       "shown separately as source cards. Refer to a helpful link naturally " +
       "as being linked below.",
@@ -315,7 +317,7 @@ function validateApprovedTokens_(answer, context) {
   const invalidEmail = extractEmails_(answer)
       .find((email) => !approvedEmails.has(email));
   const invalidNumber = extractNumbers_(answer)
-      .find((number) => !approvedNumbers.has(number));
+      .find((number) => !isApprovedNumber_(number, approvedNumbers));
 
   if (invalidUrl || invalidEmail || invalidNumber) {
     throw createModelValidationError_(
@@ -339,8 +341,27 @@ function extractEmails_(value) {
 }
 
 function extractNumbers_(value) {
-  const matches = String(value || "").match(/\b\d[\d:().-]*\d\b|\b\d\b/g) || [];
-  return matches.map((match) => match.replace(/[^0-9:]/g, ""));
+  const numberPattern = new RegExp(
+      "\\b\\d[\\d:().-]*\\d(?=\\b|[ap]m\\b)|" +
+      "\\b\\d(?=\\b|[ap]m\\b)",
+      "gi",
+  );
+  const matches = String(value || "").match(numberPattern) || [];
+  return matches.map((match) => {
+    const rangeParts = match.split("-");
+    if (rangeParts.length === 2) {
+      return rangeParts.map((part) => part.replace(/[^0-9:]/g, ""))
+          .join("|");
+    }
+    return match.replace(/[^0-9:]/g, "");
+  });
+}
+
+function isApprovedNumber_(number, approvedNumbers) {
+  if (approvedNumbers.has(number)) return true;
+  const rangeParts = String(number || "").split("|").filter(Boolean);
+  return rangeParts.length === 2 &&
+    rangeParts.every((part) => approvedNumbers.has(part));
 }
 
 function stringArray_(value) {

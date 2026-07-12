@@ -109,14 +109,26 @@ export function buildWayfinderUnknownAnswer(policy) {
   );
 }
 
-export function buildWayfinderLiveSourceAnswer() {
+export function buildWayfinderLiveSourceAnswer(sourceTypes = []) {
+  const needsGroups = Array.isArray(sourceTypes) &&
+    sourceTypes.includes("planning_center_groups");
   return {
     route: "live_source_required",
     responseMode: "guided",
-    answer: "That question needs current Planning Center event information " +
-      "before Wayfinder can answer confidently. The live event lookup is " +
-      "the next part of the prototype, so no date or time was generated.",
-    links: [],
+    answer: needsGroups ?
+      "I can't verify the current Pointe Group directory right now. Please " +
+      "use the approved group directory or contact the church office for " +
+      "current information." :
+      "I can't verify the current Planning Center event schedule right now. " +
+      "Please check the CrossPointe events page or contact the church office " +
+      "for the latest information.",
+    links: needsGroups ? [{
+      label: "Pointe Group directory",
+      url: "https://www.crosspointe.tv/small-groups",
+    }] : [{
+      label: "CrossPointe events",
+      url: "https://www.crosspointe.tv/events",
+    }],
   };
 }
 

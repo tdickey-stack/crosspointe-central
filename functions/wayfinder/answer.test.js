@@ -60,6 +60,78 @@ test("date question waits for live Planning Center data", async () => {
   assert.equal(generatorCalls, 0);
 });
 
+test("verified live event context is sent to Gemini", async () => {
+  let selectedIds = [];
+  const response = await runHandler_(
+      "What events are coming up?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "Starting Pointe is Tuesday, July 14 at 6:00 PM.",
+          sourceEntryIds: ["live-event-123"],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        };
+      },
+      async () => ({
+        statuses: {planning_center_event: "ok"},
+        entries: [{
+          id: "live-event-123",
+          topic: "live_events",
+          title: "Starting Pointe",
+          responseMode: "guided",
+          requiredFacts: [
+            "Starting Pointe is Tuesday, July 14 at 6:00 PM.",
+          ],
+          approvedLinks: [{
+            label: "Starting Pointe",
+            url: "https://crosspointetv.churchcenter.com/calendar/event/123",
+          }],
+        }],
+      }),
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "gemini-grounded");
+  assert.ok(selectedIds.includes("live-event-123"));
+  assert.equal(response.body.sourceCards[0].id, "live-event-123");
+});
+
+test("verified published Pointe Groups are sent to Gemini", async () => {
+  let requestedSourceTypes = [];
+  const response = await runHandler_(
+      "What Pointe Groups meet on Tuesday?",
+      async () => ({
+        answer: "Young Adults meets Tuesdays at 7:00 PM.",
+        sourceEntryIds: ["live-group-44"],
+        shouldContactChurch: false,
+        followUpQuestion: "",
+      }),
+      async ({sourceTypes}) => {
+        requestedSourceTypes = sourceTypes;
+        return {
+          statuses: {planning_center_groups: "ok"},
+          entries: [{
+            id: "live-group-44",
+            topic: "pointe_groups",
+            title: "Young Adults",
+            responseMode: "guided",
+            requiredFacts: ["Young Adults meets Tuesdays at 7:00 PM."],
+            approvedLinks: [{
+              label: "Young Adults",
+              url: "https://crosspointetv.churchcenter.com/groups/pointe-groups/young-adults",
+            }],
+          }],
+        };
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "gemini-grounded");
+  assert.deepEqual(requestedSourceTypes, ["planning_center_groups"]);
+  assert.equal(response.body.sourceCards[0].id, "live-group-44");
+});
+
 test("approved static question is sent to Gemini", async () => {
   let selectedIds = [];
   const response = await runHandler_(
@@ -124,7 +196,7 @@ test("approved static question falls back to verified facts", async () => {
   );
 });
 
-async function runHandler_(question, generateAnswer) {
+async function runHandler_(question, generateAnswer, retrieveLiveContext) {
   const response = createResponse_();
   const handler = createWayfinderAnswerHandler({
     admin: {
@@ -139,6 +211,7 @@ async function runHandler_(question, generateAnswer) {
     isAllowedAdminEmail: () => true,
     getAdminUserDocPath: (uid) => "centralAdmin/root/users/" + uid,
     generateAnswer: generateAnswer,
+    retrieveLiveContext: retrieveLiveContext,
     model: "gemini-3.5-flash",
   });
 

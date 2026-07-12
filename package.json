@@ -14,6 +14,7 @@
     "deploy:firestore": "firebase deploy --only firestore",
     "emulators": "firebase emulators:start --project crosspointe-central --only hosting,functions,auth",
     "emulators:full": "firebase emulators:start --project crosspointe-central --only hosting,functions,auth,firestore",
+    "emulators:lan": "node scripts/start-lan-emulators.mjs",
     "gmail:token": "node scripts/get-gmail-refresh-token.mjs"
   },
   "devDependencies": {

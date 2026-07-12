@@ -10,6 +10,7 @@ firepit-log.txt
 
 # Firebase cache
 .firebase/
+.firebase.lan.generated.json
 
 # Firebase config
 

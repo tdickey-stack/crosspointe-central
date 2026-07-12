@@ -71,6 +71,9 @@
         "Angie Laubach is Children's Ministry Director and oversees all children's ministries, including Kingdom Kids and nursery, preschool, and elementary areas.",
         "Katelyn Balliett is Elementary Director/Multimedia Specialist and oversees Kingdom Kids elementary Sunday School and Sunday morning curriculum.",
         "Katelyn also assists the Creative Team with graphic design, social media, and approved multimedia projects."
+      ],
+      "requiredActions": [
+        "When asked who oversees Kingdom Kids, state that Angie Laubach oversees the whole ministry and that Katelyn Balliett oversees the elementary area when that distinction is relevant."
       ]
     },
     {
@@ -89,8 +92,8 @@
       "topic": "staff_and_leadership",
       "title": "Care Pastor, Funerals, Hospital Visits, and Pastoral Care",
       "responseMode": "guided",
-      "sampleQuestions": ["Who is the care pastor?", "Who do I call about a funeral?", "Can a pastor visit the hospital?", "How do I request pastoral care?"],
-      "keywords": ["Bob Usry", "Care Pastor", "funeral request", "hospital visit", "pastoral care", "prayer visit"],
+      "sampleQuestions": ["Who is the care pastor?", "Who do I call about a funeral?", "Who should I contact about a funeral?", "Can a pastor visit the hospital?", "How do I request pastoral care?"],
+      "keywords": ["Bob Usry", "Care Pastor", "funeral request", "funeral contact", "hospital visit", "pastoral care", "prayer visit"],
       "requiredFacts": [
         "Bob Usry is Care Pastor and his public responsibilities include hospital visits, funerals, prayer, and pastoral care.",
         "All funeral, hospital-visitation, and pastoral-care requests should begin with the church office so they can be assigned and followed up appropriately."

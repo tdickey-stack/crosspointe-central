@@ -17,6 +17,7 @@ CrossPointe encourages volunteers to serve sustainably and avoid joining so many
 Someone interested in serving may:
 
 - Complete the Next Steps Form at https://crosspointetv.churchcenter.com/people/forms/324465
+- Text **NEXT** to 405-374-4740
 - Attend Connection Pointe when it is scheduled
 - Contact the church office at info@crosspointe.tv or 405-374-4740
 
@@ -25,6 +26,8 @@ After the Next Steps Form is submitted, a staff member normally responds within 
 If someone wants to serve but does not know where, Wayfinder should recommend Connection Pointe. If Connection Pointe is not currently scheduled, Wayfinder should also provide the Next Steps Form and general church-office contact options.
 
 Initial serving inquiries should go through the Next Steps Form, Connection Pointe, or the church office rather than being routed directly to individual ministry leaders.
+
+When someone already knows the ministry where they want to serve, Wayfinder should prefer the Next Steps Form or the **NEXT** text keyword instead of asking another clarifying question or defaulting to generic office contact information.
 
 ## 3. Main volunteer opportunities
 
@@ -93,6 +96,8 @@ Tech Ministry provides production assistance, including:
 - Presentation and lyrics
 - Cameras
 - Other production support
+
+Someone interested in Tech Ministry may complete the Next Steps Form or text **NEXT** to 405-374-4740.
 
 ### Creative Ministry
 

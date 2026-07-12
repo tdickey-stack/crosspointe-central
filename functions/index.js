@@ -12,6 +12,10 @@ import {
   DEFAULT_WAYFINDER_MODEL,
 } from "./wayfinder/gemini.js";
 import {
+  createWayfinderAdminFeedbackHandler,
+  createWayfinderPublicFeedbackHandler,
+} from "./wayfinder/feedback.js";
+import {
   createWayfinderKnowledgeChangeGenerator,
   createWayfinderKnowledgeChangeHandler,
   getActiveWayfinderKnowledgeOverrides,
@@ -524,6 +528,37 @@ export const wayfinderWebsiteIndex = onRequest(
       firestore: firestore,
       isAllowedAdminEmail: isAllowedCentralAdminEmail_,
       getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
+export const wayfinderPublicFeedback = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderPublicFeedbackHandler({
+      firestore: firestore,
+      serverTimestamp: () =>
+        admin.firestore.FieldValue.serverTimestamp(),
+    }),
+);
+
+export const wayfinderAdminFeedback = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderAdminFeedbackHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      serverTimestamp: () =>
+        admin.firestore.FieldValue.serverTimestamp(),
     }),
 );
 

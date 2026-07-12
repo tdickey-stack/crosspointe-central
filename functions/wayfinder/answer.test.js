@@ -396,6 +396,330 @@ test("public answer exposes links without source data", async () => {
   assert.equal(Object.hasOwn(response.body, "sourceCards"), false);
 });
 
+test("public livestream answer keeps the Church Online link", async () => {
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "You can watch both services on our website.",
+      sourceEntryIds: ["staff-worship-technology-and-av"],
+      shouldContactChurch: false,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-livestream-link-test"},
+    ip: "127.0.0.31",
+    body: {question: "Where can I watch the livestream?"},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.links.length, 1);
+  assert.match(response.body.links[0].url, /church-online/);
+});
+
+test("public prayer submission answer keeps the approved form", async () => {
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "You can submit your prayer request online.",
+      sourceEntryIds: ["care-pastoral-support"],
+      shouldContactChurch: false,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-prayer-link-test"},
+    ip: "127.0.0.32",
+    body: {question: "How can I submit a prayer request?"},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.links.length, 1);
+  assert.match(response.body.links[0].url, /people\/forms\/340884/);
+});
+
+test("serving follow-up keeps the Next Steps Form", async () => {
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "Use the Next Steps Form or text NEXT to 405-374-4740.",
+      sourceEntryIds: ["serving-tech-and-creative"],
+      shouldContactChurch: false,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-serving-link-test"},
+    ip: "127.0.0.33",
+    body: {
+      question: "Tech Ministry",
+      history: [{
+        role: "user",
+        content: "Who should I contact about volunteering?",
+      }, {
+        role: "assistant",
+        content: "Which ministry interests you?",
+      }],
+    },
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.links.length, 1);
+  assert.match(response.body.links[0].url, /people\/forms\/324465/);
+});
+
+test("pastoral grief response omits an unnecessary staff link", async () => {
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "Email info@crosspointe. tv to speak with a pastor.",
+      sourceEntryIds: ["staff-contact-and-general-pastoral-routing"],
+      shouldContactChurch: true,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-grief-link-test"},
+    ip: "127.0.0.34",
+    body: {
+      question: "I'm grieving and would like to speak with a pastor.",
+    },
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.links, []);
+  assert.match(response.body.answer, /info@crosspointe\.tv/);
+  assert.doesNotMatch(response.body.answer, /crosspointe\.\s+tv/);
+});
+
+test("giving statement response omits account-management links", async () => {
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "Contact the church office to request a copy of your statement.",
+      sourceEntryIds: [
+        "giving-receipts-and-statements",
+        "giving-recurring-and-manage",
+      ],
+      shouldContactChurch: true,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-giving-statement-test"},
+    ip: "127.0.0.35",
+    body: {question: "How can I get my giving statement?"},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.links, []);
+});
+
+test("funeral response omits the general staff directory", async () => {
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "Please contact the church office about a funeral request.",
+      sourceEntryIds: [
+        "staff-care-pastor-and-funeral-routing",
+        "staff-directory-and-titles",
+      ],
+      shouldContactChurch: true,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-funeral-link-test"},
+    ip: "127.0.0.36",
+    body: {question: "Who should I contact about a funeral?"},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.links, []);
+});
+
+test("Care Center response cannot expose a CARS link", async () => {
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "The Food Pantry is normally open Fridays from 9:00 to 11:30 AM.",
+      sourceEntryIds: [
+        "outreach-care-center-overview-and-hours",
+        "outreach-cars-overview-and-application",
+      ],
+      shouldContactChurch: false,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-care-center-link-test"},
+    ip: "127.0.0.37",
+    body: {question: "When is the Care Center open?"},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.links.some((link) => {
+    return /forms\.gle\/13UrumiVUXEZCLgj9/.test(link.url);
+  }), false);
+});
+
+test("general CARS help response keeps only its application link", async () => {
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "CARS may help with some repairs. " +
+        "Start with the application below.",
+      sourceEntryIds: [
+        "outreach-cars-overview-and-application",
+        "outreach-cars-costs-and-payment",
+      ],
+      shouldContactChurch: false,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-cars-links-test"},
+    ip: "127.0.0.38",
+    body: {question: "Can CARS help fix my vehicle?"},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.links.length, 1);
+  assert.match(response.body.links[0].url, /forms\.gle\/13UrumiVUXEZCLgj9/);
+});
+
+test("theology follow-up retrieves the prior disputed topic", async () => {
+  const history = [{
+    role: "user",
+    content: "Is CrossPointe Calvinist or Arminian?",
+  }, {
+    role: "assistant",
+    content: "CrossPointe includes people with different views.",
+  }];
+  let selectedIds = [];
+  const response = await runHandler_(
+      "Which is correct though?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "I don't debate or choose sides on secondary theology.",
+          sourceEntryIds: ["beliefs-secondary-doctrines-and-comparisons"],
+          shouldContactChurch: true,
+          followUpQuestion: "",
+        };
+      },
+      undefined,
+      undefined,
+      undefined,
+      history,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(selectedIds.includes(
+      "beliefs-secondary-doctrines-and-comparisons",
+  ));
+});
+
+test("can-I follow-up keeps the prior Care Center topic", async () => {
+  const history = [{
+    role: "user",
+    content: "I used the Care Center last month.",
+  }, {
+    role: "assistant",
+    content: "Care Center visits require at least 60 days between visits.",
+  }];
+  let selectedIds = [];
+  const response = await runHandler_(
+      "Can I come back this week?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "You need to wait at least 60 days between visits.",
+          sourceEntryIds: ["outreach-care-center-eligibility-and-id"],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        };
+      },
+      undefined,
+      undefined,
+      undefined,
+      history,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(selectedIds.includes("outreach-care-center-eligibility-and-id"));
+});
+
+test("but follow-up keeps the prior giving recommendation topic", async () => {
+  const history = [{
+    role: "user",
+    content: "How much should I give?",
+  }, {
+    role: "assistant",
+    content: "Give according to what the Lord has placed on your heart.",
+  }];
+  let selectedIds = [];
+  const response = await runHandler_(
+      "But what percentage would you recommend?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "I can't recommend a specific amount or percentage.",
+          sourceEntryIds: ["giving-overview-and-tone"],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        };
+      },
+      undefined,
+      undefined,
+      undefined,
+      history,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(selectedIds.includes("giving-overview-and-tone"));
+});
+
 test("group-directory question returns the website directly", async () => {
   let liveCalls = 0;
   const response = createResponse_();

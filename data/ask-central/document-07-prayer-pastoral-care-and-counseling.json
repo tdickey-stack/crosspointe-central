@@ -30,6 +30,7 @@
         "anyone"
       ],
       "requiredFacts": [
+        "Prayer requests may be submitted online through the approved Prayer Request Form.",
         "Anyone may submit a prayer request, including someone who does not attend CrossPointe.",
         "Everyone who submits a request is added to the prayer list.",
         "CrossPointe staff meets weekly to pray over the prayer list and believes in the power of prayer."
@@ -41,6 +42,7 @@
         }
       ],
       "requiredActions": [
+        "When someone asks how to submit a prayer request, direct them to the approved online Prayer Request Form rather than substituting general office contact information.",
         "Affirm the importance of prayer without promising a particular outcome."
       ]
     },

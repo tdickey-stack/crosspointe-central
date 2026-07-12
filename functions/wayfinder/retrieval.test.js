@@ -45,6 +45,10 @@ const retrievalCases = [
   ["Can CARS replace my tires?", "outreach-cars-repair-scope"],
   ["What is RFKC?", "outreach-rfk-and-trac-independent-ministries"],
   ["Who is the lead pastor?", "staff-pastoral-worship-and-students"],
+  [
+    "Who should I contact about a funeral?",
+    "staff-care-pastor-and-funeral-routing",
+  ],
   ["Who oversees the website?", "staff-creative-and-wayfinder"],
   [
     "Who should I tell about a livestream problem?",

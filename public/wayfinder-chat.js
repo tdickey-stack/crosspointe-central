@@ -4,6 +4,7 @@
   if (window.CENTRAL_BOOT_MODE === "admin") return;
 
   var PUBLIC_CHAT_ENDPOINT = "/api/wayfinder/chat";
+  var PUBLIC_FEEDBACK_ENDPOINT = "/api/wayfinder/feedback";
   var NOTICE_ENDPOINT = "/api/admin/wayfinder/notices";
   var KNOWLEDGE_ENDPOINT = "/api/admin/wayfinder/knowledge-changes";
   var wayfinderChatState = {
@@ -143,6 +144,11 @@
             answer,
             "",
             result.links,
+            {
+              responseId: String(result.responseId || ""),
+              question: question,
+              answer: answer,
+            },
         );
         if (followUpQuestion) {
           addTextMessage_("assistant", followUpQuestion, "follow-up");
@@ -227,6 +233,26 @@
   }
 
   function handleWayfinderChatAction_(event) {
+    var ratingButton = event.target.closest(
+        "[data-wayfinder-feedback-rating]",
+    );
+    if (ratingButton) {
+      handleWayfinderFeedbackRating_(
+          ratingButton.getAttribute("data-message-id") || "",
+          ratingButton.getAttribute("data-wayfinder-feedback-rating") || "",
+      );
+      return;
+    }
+    var feedbackSubmitButton = event.target.closest(
+        "[data-wayfinder-feedback-submit]",
+    );
+    if (feedbackSubmitButton) {
+      submitWayfinderNeedsWorkFeedback_(
+          feedbackSubmitButton.getAttribute("data-message-id") || "",
+          feedbackSubmitButton,
+      );
+      return;
+    }
     var modeButton = event.target.closest("[data-wayfinder-chat-mode]");
     if (modeButton) {
       wayfinderChatState.adminUpdateType =
@@ -271,6 +297,81 @@
       },
       body: JSON.stringify(payload || {}),
     }).then(parseWayfinderResponse_);
+  }
+
+  function handleWayfinderFeedbackRating_(messageId, rating) {
+    var message = findWayfinderMessage_(messageId);
+    var feedback = message && message.data && message.data.feedback;
+    if (!feedback || feedback.status === "pending" ||
+      feedback.status === "submitted") return;
+
+    if (rating === "helpful") {
+      submitWayfinderFeedback_(message, "helpful", "", "");
+      return;
+    }
+    feedback.expanded = true;
+    feedback.error = "";
+    renderWayfinderMessages_();
+  }
+
+  function submitWayfinderNeedsWorkFeedback_(messageId, button) {
+    var message = findWayfinderMessage_(messageId);
+    if (!message) return;
+    var details = button.closest(".wayfinder-chat-feedback-details");
+    var reason = details ? String(
+        details.querySelector("select").value || "",
+    ) : "";
+    var note = details ? String(
+        details.querySelector("textarea").value || "",
+    ).trim() : "";
+    if (!reason) {
+      message.data.feedback.error = "Choose what Wayfinder should improve.";
+      renderWayfinderMessages_();
+      return;
+    }
+    submitWayfinderFeedback_(message, "needs_work", reason, note);
+  }
+
+  function submitWayfinderFeedback_(message, rating, reason, note) {
+    var data = message.data || {};
+    var feedback = data.feedback || {};
+    feedback.status = "pending";
+    feedback.error = "";
+    renderWayfinderMessages_();
+
+    fetch(PUBLIC_FEEDBACK_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Wayfinder-Session": wayfinderChatState.sessionId,
+      },
+      body: JSON.stringify({
+        responseId: feedback.responseId,
+        question: feedback.question,
+        answer: feedback.answer,
+        rating: rating,
+        reason: reason,
+        note: note,
+        links: data.links || [],
+      }),
+    }).then(parseWayfinderResponse_).then(function(result) {
+      feedback.status = "submitted";
+      feedback.rating = rating;
+      feedback.message = String(result.message || "Thanks for the feedback!");
+      renderWayfinderMessages_();
+    }).catch(function(error) {
+      feedback.status = "error";
+      feedback.error = error && error.message ? error.message :
+        "That feedback could not be saved.";
+      renderWayfinderMessages_();
+    });
+  }
+
+  function findWayfinderMessage_(messageId) {
+    return wayfinderChatState.messages.find(function(message) {
+      return message.id === messageId;
+    }) || null;
   }
 
   function rememberConversationTurn_(question, answer, followUpQuestion) {
@@ -372,12 +473,22 @@
       ) !== -1;
   }
 
-  function addTextMessage_(role, text, tone, links) {
+  function addTextMessage_(role, text, tone, links, feedback) {
     addStructuredMessage_("text", {
       role: role,
       text: String(text || ""),
       tone: String(tone || ""),
       links: Array.isArray(links) ? links : [],
+      feedback: feedback && feedback.responseId ? {
+        responseId: String(feedback.responseId),
+        question: String(feedback.question || "").slice(0, 500),
+        answer: String(feedback.answer || "").slice(0, 1800),
+        expanded: false,
+        status: "idle",
+        rating: "",
+        message: "",
+        error: "",
+      } : null,
     });
   }
 
@@ -426,7 +537,58 @@
       role === "assistant" ?
         "<img src=\"/loader-icon.svg\" alt=\"\">" : "",
       "<div>", renderParagraphs_(data.text),
-      renderWayfinderActionLinks_(data.links), "</div></article>",
+      renderWayfinderActionLinks_(data.links),
+      renderWayfinderFeedback_(message), "</div></article>",
+    ].join("");
+  }
+
+  function renderWayfinderFeedback_(message) {
+    var feedback = message.data && message.data.feedback;
+    if (!feedback) return "";
+    if (feedback.status === "submitted") {
+      return [
+        "<div class=\"wayfinder-chat-feedback is-submitted\">",
+        "<span>", escapeHtml_(feedback.message), "</span></div>",
+      ].join("");
+    }
+    var pending = feedback.status === "pending";
+    return [
+      "<div class=\"wayfinder-chat-feedback\">",
+      "<span>Was this helpful?</span>",
+      "<div class=\"wayfinder-chat-feedback-buttons\">",
+      "<button type=\"button\" data-wayfinder-feedback-rating=\"helpful\" data-message-id=\"",
+      escapeAttr_(message.id), "\"", pending ? " disabled" : "",
+      ">👍 Yes</button>",
+      "<button type=\"button\" data-wayfinder-feedback-rating=\"needs_work\" data-message-id=\"",
+      escapeAttr_(message.id), "\"", pending ? " disabled" : "",
+      ">👎 Needs work</button>",
+      "</div>",
+      feedback.expanded ? renderWayfinderFeedbackDetails_(message, pending) : "",
+      feedback.error ? "<p class=\"wayfinder-chat-feedback-error\">" +
+        escapeHtml_(feedback.error) + "</p>" : "",
+      "</div>",
+    ].join("");
+  }
+
+  function renderWayfinderFeedbackDetails_(message, pending) {
+    return [
+      "<div class=\"wayfinder-chat-feedback-details\">",
+      "<label>What needs improvement?<select",
+      pending ? " disabled" : "", ">",
+      "<option value=\"\">Choose one</option>",
+      "<option value=\"incorrect\">The answer is incorrect</option>",
+      "<option value=\"missing_information\">Important information is missing</option>",
+      "<option value=\"outdated\">The information is outdated</option>",
+      "<option value=\"too_long\">Too long or not conversational</option>",
+      "<option value=\"wrong_link\">The link is wrong or missing</option>",
+      "<option value=\"other\">Something else</option>",
+      "</select></label>",
+      "<label>Optional note<textarea maxlength=\"500\" rows=\"2\" placeholder=\"Tell us what would have been better\"",
+      pending ? " disabled" : "", "></textarea></label>",
+      "<button type=\"button\" data-wayfinder-feedback-submit data-message-id=\"",
+      escapeAttr_(message.id), "\"", pending ? " disabled" : "",
+      ">", pending ? "Saving..." : "Send feedback", "</button>",
+      "</div>",
     ].join("");
   }
 

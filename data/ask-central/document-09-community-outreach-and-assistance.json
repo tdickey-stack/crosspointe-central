@@ -18,6 +18,7 @@
       "responseMode": "guided",
       "sampleQuestions": [
         "What is the Care Center?",
+        "When is the Care Center open?",
         "When is the food pantry open?",
         "What time does the clothes closet open?",
         "Do I need an appointment for the Care Center?",
@@ -33,6 +34,7 @@
         "Holiday, weather, staffing, or temporary closures may change normal hours."
       ],
       "requiredActions": [
+        "When asked about normal hours, state both the Food Pantry and Clothes Closet hours directly before mentioning possible closures.",
         "Describe these as normal hours, not a guarantee that the Care Center is open on a particular date.",
         "When current-week confirmation matters, suggest contacting the church office until a live operational notice source is available."
       ],
@@ -56,6 +58,10 @@
         "Care Center assistance is limited to no more than four visits in a calendar year and requires at least 60 days between visits; both limits apply.",
         "The Food Pantry and Clothes Closet use the same rules.",
         "Care Center staff verify eligibility, and assistance is not guaranteed."
+      ],
+      "requiredActions": [
+        "If someone only says that they visited the Care Center recently without asking a question, briefly ask what they would like to know about their next visit. Start with a plain acknowledgment such as Got it or Okay; do not thank them for sharing or letting Wayfinder know. Vary the natural wording when possible. Do not proactively list visit limits, hours, identification requirements, or other policies.",
+        "If they then ask whether they may return this week, answer in no more than two short sentences using this pattern with small natural wording changes: This week would be a little too soon for another visit. The Care Center asks guests to leave at least 60 days between visits. Do not use You will need to wait as a command, begin with Since you visited, repeat their earlier statement, invent or imply a reason for the 60-day rule, or add the annual limit, hours, identification requirements, office contact, or other resources unless asked."
       ],
       "prohibitedClaims": [
         "Do not decide whether someone qualifies.",
@@ -105,6 +111,9 @@
         "Everyone seeking service or asking service-related questions should begin with the official application.",
         "Applicants should normally allow approximately one week for a response, which may come from an out-of-state area code.",
         "An application does not guarantee an appointment or repair."
+      ],
+      "requiredActions": [
+        "For a general question about whether CARS can help, use no more than two short sentences: say that it may help with some vehicle repairs depending on scope and volunteer capacity, then direct the person to the application. Do not discuss its schedule, response timing, parts, payment, or application guarantees unless asked."
       ],
       "approvedLinks": [{"label": "CARS Ministry application", "url": "https://forms.gle/13UrumiVUXEZCLgj9"}]
     },

@@ -34,6 +34,9 @@
         "Normal Sunday services begin at 9:00 AM and 10:30 AM.",
         "Services typically last 1 hour and 15 minutes to 1 hour and 30 minutes."
       ],
+      "requiredActions": [
+        "If someone asks only what time services begin, answer only with the two service times. Include duration only when the person asks how long a service lasts or when it ends."
+      ],
       "prohibitedClaims": [
         "Do not use normal weekly times for a special holiday or event schedule.",
         "Do not guarantee an exact ending time."
@@ -65,6 +68,9 @@
         "Announcements follow worship.",
         "The sermon normally lasts approximately 30 to 45 minutes.",
         "The service ends with an invitation and dismissal."
+      ],
+      "requiredActions": [
+        "For a broad first-visit question, give a warm summary in no more than three short sentences using only the most useful details. Do not turn it into a full service schedule, parking guide, and Plan Your Visit promotion unless those details are requested."
       ]
     },
     {

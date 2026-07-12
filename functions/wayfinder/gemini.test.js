@@ -44,9 +44,54 @@ test("builds a grounded structured Gemini request", () => {
   assert.match(request.config.systemInstruction, /only from APPROVED_CONTEXT/i);
   assert.match(request.config.systemInstruction, /first person/i);
   assert.match(request.config.systemInstruction, /already introduced/i);
+  assert.match(request.config.systemInstruction, /canned chatbot/i);
+  assert.match(
+      request.config.systemInstruction,
+      /CP-CM-1\.4 BRAND VOICE GATE/i,
+  );
+  assert.match(request.config.systemInstruction, /Be loving/i);
+  assert.match(request.config.systemInstruction, /Be stable/i);
+  assert.match(request.config.systemInstruction, /Be authentic/i);
+  assert.match(request.config.systemInstruction, /Be engaging/i);
+  assert.match(request.config.systemInstruction, /Be inspiring/i);
+  assert.match(
+      request.config.systemInstruction,
+      /Not every answer needs inspiration/i,
+  );
+  assert.match(
+      request.config.systemInstruction,
+      /Do not add an offer to contact the church/i,
+  );
+  assert.match(
+      request.config.systemInstruction,
+      /exclusive, overwhelming, or stale/i,
+  );
+  assert.match(request.config.systemInstruction, /sounds commanding/i);
+  assert.match(
+      request.config.systemInstruction,
+      /Never invent or imply a reason/i,
+  );
   assert.match(request.config.systemInstruction, /answer only the question/i);
   assert.match(request.config.systemInstruction, /followUpQuestion empty/i);
   assert.match(request.config.systemInstruction, /do not repeat options/i);
+  assert.match(
+      request.config.systemInstruction,
+      /do not reuse the opening structure/i,
+  );
+  assert.match(request.config.systemInstruction, /Since you/i);
+  assert.match(
+      request.config.systemInstruction,
+      /only shares context without asking a question/i,
+  );
+  assert.match(
+      request.config.systemInstruction,
+      /never claim.*information is missing/i,
+  );
+  assert.match(
+      request.config.systemInstruction,
+      /authoritative public source/i,
+  );
+  assert.match(request.config.systemInstruction, /I have included/i);
   assert.match(
       request.config.systemInstruction,
       /main link is for event details/i,
@@ -254,4 +299,23 @@ test("removes an accidental space inside a social handle", () => {
   });
 
   assert.match(result.answer, /@crosspointe\.tv/);
+});
+
+test("removes an accidental space inside an approved email address", () => {
+  const output = validateWayfinderGeminiOutput({
+    answer: "Email info@crosspointe. tv if you would like to speak with us.",
+    sourceEntryIds: ["entry-1"],
+    shouldContactChurch: true,
+    followUpQuestion: "",
+  }, {
+    question: "How do I speak with a pastor?",
+    policy: {},
+    entries: [{
+      id: "entry-1",
+      requiredFacts: ["The church email is info@crosspointe.tv."],
+    }],
+  });
+
+  assert.match(output.answer, /info@crosspointe\.tv/);
+  assert.doesNotMatch(output.answer, /crosspointe\.\s+tv/);
 });

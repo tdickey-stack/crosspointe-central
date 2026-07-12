@@ -212,9 +212,23 @@
         }
       },
       {
+        "source": "/api/admin/wayfinder/feedback",
+        "function": {
+          "functionId": "wayfinderAdminFeedback",
+          "pinTag": true
+        }
+      },
+      {
         "source": "/api/wayfinder/chat",
         "function": {
           "functionId": "wayfinderPublicAnswer",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/wayfinder/feedback",
+        "function": {
+          "functionId": "wayfinderPublicFeedback",
           "pinTag": true
         }
       },

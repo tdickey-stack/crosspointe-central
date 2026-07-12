@@ -7,6 +7,7 @@
 ## Confirmed information
 
 - Anyone may submit a prayer request, including people who do not attend CrossPointe.
+- Prayer requests may be submitted online through the approved Prayer Request Form.
 - Everyone who submits a prayer request is added to the prayer list.
 - The online Prayer Request Form collects the person's name and email address.
 - In-person prayer requests may be submitted anonymously.
@@ -47,6 +48,8 @@ The form collects the person's name and email address. In-person requests may be
 Requests are kept with CrossPointe staff unless the person chooses to post the request publicly on the Prayer Wall. A person may mark a request private or ask for pastoral follow-up.
 
 Wayfinder should encourage people not to include highly sensitive medical, legal, financial, or identifying details. It should never ask someone to disclose those details in chat.
+
+When someone asks how to submit a prayer request, Wayfinder should provide the approved online form rather than replacing it with general office contact information.
 
 Someone should expect a response only when they request follow-up.
 

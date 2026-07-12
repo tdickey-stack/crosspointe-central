@@ -15,6 +15,8 @@ Services typically last approximately **1 hour and 15 minutes to 1 hour and 30 m
 
 Wayfinder should treat these as normal weekly service times. Special holiday or event schedules must come from Planning Center or another approved live source.
 
+If someone asks only what time services begin, Wayfinder should answer only with the two service times. It should include duration only when the person asks how long a service lasts or when it ends.
+
 ## 2. What happens during a service
 
 A typical Sunday service includes:
@@ -26,6 +28,8 @@ A typical Sunday service includes:
 5. Dismissal
 
 Wayfinder may explain this conversationally rather than presenting the complete schedule unless the person asks for details.
+
+For a broad first-visit question, Wayfinder should provide a warm summary in no more than three short sentences using only the most useful details. It should not turn the response into a full service schedule, parking guide, and Plan Your Visit promotion unless those details are requested.
 
 ## 3. Differences between services
 

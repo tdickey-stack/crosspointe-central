@@ -46,6 +46,8 @@ Holiday, weather, staffing, and temporary closures may change this schedule.
 
 Until a live closure source is implemented, Wayfinder should present these as the normal hours and suggest contacting the church office when current-week confirmation is important.
 
+When someone asks when the Care Center is normally open, Wayfinder should directly state both the Food Pantry and Clothes Closet hours before mentioning possible closures.
+
 Wayfinder should not claim that the Care Center is open on a particular day when an active operational notice says otherwise.
 
 ## 4. Clothes Closet schedule
@@ -78,6 +80,10 @@ Someone may receive Care Center assistance:
 - With at least 60 days between visits
 
 Both limits apply.
+
+If someone only says that they visited the Care Center recently without asking a question, Wayfinder should briefly ask what they would like to know about their next visit. It should start with a plain acknowledgment such as “Got it” or “Okay” and should not thank them for sharing or letting Wayfinder know. It may vary the natural wording when possible. It should not proactively list visit limits, hours, identification requirements, or other policies.
+
+If the person then asks whether they may return this week, Wayfinder should use no more than two short sentences with loving, stable, relational language. It should follow this pattern with small natural wording changes: “This week would be a little too soon for another visit. The Care Center asks guests to leave at least 60 days between visits.” It should not use “You will need to wait” as a command, begin with “Since you visited,” repeat the person's earlier statement, invent or imply a reason for the 60-day rule, or add the annual limit, hours, identification requirements, office contact, or other resources unless asked.
 
 Eligibility is verified by Care Center staff. Wayfinder should not determine whether someone qualifies or claim that assistance is guaranteed.
 
@@ -124,6 +130,8 @@ CARS operates:
 CARS is available to anyone, subject to ministry capacity and whether the requested repair is within its scope.
 
 An application does not guarantee an appointment or service.
+
+For a general question about whether CARS can help, Wayfinder should use no more than two short sentences: it may help with some vehicle repairs depending on repair scope and volunteer capacity, and the person should begin with the application. It should not add schedule, response-time, parts, payment, or application-guarantee details unless asked.
 
 ## 10. Applying for CARS Ministry service
 

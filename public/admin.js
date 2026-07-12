@@ -34,6 +34,7 @@
     "/api/admin/wayfinder/knowledge-changes";
   var WAYFINDER_WEBSITE_INDEX_ENDPOINT =
     "/api/admin/wayfinder/website-index";
+  var WAYFINDER_FEEDBACK_ENDPOINT = "/api/admin/wayfinder/feedback";
   var PUBLISHED_CAMPAIGNS_COLLECTION_PATH = "centralContent/campaigns/items";
   var PUBLISHED_CAMPAIGNS_META_DOC_PATH = "centralContent/campaigns/meta/state";
   var PUBLISHED_NEXT_STEPS_COLLECTION_PATH = "centralContent/nextSteps/items";
@@ -542,6 +543,11 @@
     wayfinderWebsiteIndexStatus: null,
     wayfinderWebsiteIndexError: "",
     wayfinderWebsiteIndexMessage: "",
+    wayfinderFeedbackLoaded: false,
+    wayfinderFeedbackLoading: false,
+    wayfinderFeedbackWorking: false,
+    wayfinderFeedbackItems: [],
+    wayfinderFeedbackError: "",
     roomRulesLoaded: false,
     roomRulesLoading: false,
     roomRulesSaving: false,
@@ -1329,6 +1335,22 @@
       if (action === "check-wayfinder-website-index") {
         event.preventDefault();
         loadWayfinderWebsiteIndexStatus_(true);
+        return;
+      }
+
+      if (action === "refresh-wayfinder-feedback") {
+        event.preventDefault();
+        loadWayfinderFeedback_(true);
+        return;
+      }
+
+      if (action === "review-wayfinder-feedback" ||
+        action === "reopen-wayfinder-feedback") {
+        event.preventDefault();
+        updateWayfinderFeedbackStatus_(
+            button.getAttribute("data-wayfinder-feedback-id") || "",
+            action === "review-wayfinder-feedback" ? "review" : "reopen",
+        );
         return;
       }
 
@@ -4879,6 +4901,7 @@
       "</div>",
       "</div>",
       hasAccess ? renderWayfinderWebsiteIndex_() : "",
+      hasAccess ? renderWayfinderFeedbackManager_() : "",
       hasAccess ? [
         "<div class=\"central-admin-item wayfinder-lab-question\">",
         "<div class=\"central-admin-item-header\">",
@@ -5023,6 +5046,89 @@
       "</div>",
       "</section>",
     ].join("");
+  }
+
+  function renderWayfinderFeedbackManager_() {
+    var items = Array.isArray(adminState.wayfinderFeedbackItems) ?
+      adminState.wayfinderFeedbackItems : [];
+    var newItems = items.filter(function(item) {
+      return item.rating === "needs_work" && item.status !== "reviewed";
+    });
+    var busy = adminState.wayfinderFeedbackLoading ||
+      adminState.wayfinderFeedbackWorking;
+    return [
+      "<section class=\"central-admin-item wayfinder-feedback-manager\">",
+      "<div class=\"central-admin-item-header\"><div>",
+      "<strong>Wayfinder feedback</strong>",
+      "<p>Test ratings help us find knowledge gaps and tune retrieval. They do not train Gemini.</p>",
+      "</div>",
+      renderStatusPill_(
+          newItems.length + " to review",
+          newItems.length ? "is-warn" : "is-safe",
+      ),
+      "</div>",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-wayfinder-feedback\"",
+      busy ? " disabled" : "", ">",
+      adminState.wayfinderFeedbackLoading ? "Refreshing..." :
+        "Refresh Feedback",
+      "</button></div>",
+      adminState.wayfinderFeedbackError ? [
+        "<div class=\"wayfinder-lab-error\" role=\"alert\"><strong>Feedback unavailable.</strong><p>",
+        escapeHtml_(adminState.wayfinderFeedbackError), "</p></div>",
+      ].join("") : "",
+      adminState.wayfinderFeedbackLoading && !items.length ?
+        "<p>Loading feedback...</p>" : "",
+      items.length ? [
+        "<div class=\"wayfinder-feedback-list\">",
+        items.map(renderWayfinderFeedbackItem_).join(""),
+        "</div>",
+      ].join("") : adminState.wayfinderFeedbackLoaded ?
+        "<div class=\"central-admin-empty\"><strong>No feedback yet.</strong><p>Use the public Wayfinder chat to begin rating test answers.</p></div>" : "",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderFeedbackItem_(item) {
+    var reviewed = item.status === "reviewed" || item.status === "recorded";
+    var reason = getWayfinderFeedbackReasonLabel_(item.reason);
+    return [
+      "<article class=\"wayfinder-feedback-item",
+      reviewed ? " is-reviewed" : "", "\">",
+      "<div class=\"wayfinder-feedback-item-header\"><div>",
+      "<span>", item.rating === "helpful" ? "👍 Helpful" :
+        "👎 Needs work", reason ? " · " + escapeHtml_(reason) : "",
+      "</span><time>", escapeHtml_(formatAdminTimestamp_(item.createdAt)),
+      "</time></div>",
+      renderStatusPill_(item.status === "recorded" ? "Helpful" :
+        reviewed ? "Reviewed" : "New",
+          reviewed ? "is-safe" : "is-warn"),
+      "</div>",
+      "<h4>", escapeHtml_(item.question), "</h4>",
+      "<p class=\"wayfinder-feedback-answer\">",
+      escapeHtml_(item.answer), "</p>",
+      item.note ? "<p class=\"wayfinder-feedback-note\"><strong>Tester note:</strong> " +
+        escapeHtml_(item.note) + "</p>" : "",
+      item.status === "recorded" ? "" : [
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"",
+      reviewed ? "reopen-wayfinder-feedback" : "review-wayfinder-feedback",
+      "\" data-wayfinder-feedback-id=\"", escapeAttr_(item.id), "\"",
+      adminState.wayfinderFeedbackWorking ? " disabled" : "", ">",
+      reviewed ? "Reopen" : "Mark Reviewed", "</button>",
+      ].join(""),
+      "</article>",
+    ].join("");
+  }
+
+  function getWayfinderFeedbackReasonLabel_(reason) {
+    return {
+      incorrect: "Incorrect",
+      missing_information: "Missing information",
+      outdated: "Outdated",
+      too_long: "Too long or not conversational",
+      wrong_link: "Wrong or missing link",
+      other: "Other",
+    }[String(reason || "")] || "";
   }
 
   function renderWayfinderNoticeAdmin_() {
@@ -9435,6 +9541,7 @@
 
     if (adminState.currentPageId === "wayfinder") {
       loadWayfinderWebsiteIndexStatus_(false);
+      loadWayfinderFeedback_(false);
     }
   }
 
@@ -15168,6 +15275,73 @@
             error.message : "The website index refresh is unavailable.";
           renderAdmin_();
         });
+  }
+
+  function callWayfinderFeedbackEndpoint_(payload) {
+    if (!adminState.user) {
+      return Promise.reject(new Error(
+          "Sign in with an approved Central admin account first.",
+      ));
+    }
+    return adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(WAYFINDER_FEEDBACK_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(payload || {}),
+          });
+        })
+        .then(parseAdminEndpointResponse_);
+  }
+
+  function loadWayfinderFeedback_(forceReload) {
+    if (!adminState.user || adminState.wayfinderFeedbackLoading ||
+      adminState.wayfinderFeedbackWorking) return;
+    if (adminState.wayfinderFeedbackLoaded && !forceReload) return;
+    adminState.wayfinderFeedbackLoading = true;
+    adminState.wayfinderFeedbackError = "";
+    renderAdmin_();
+    callWayfinderFeedbackEndpoint_({action: "list"})
+        .then(function(result) {
+          adminState.wayfinderFeedbackLoading = false;
+          adminState.wayfinderFeedbackLoaded = true;
+          adminState.wayfinderFeedbackItems =
+            Array.isArray(result.feedback) ? result.feedback : [];
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderFeedbackLoading = false;
+          adminState.wayfinderFeedbackLoaded = true;
+          adminState.wayfinderFeedbackError = error && error.message ?
+            error.message : "Wayfinder feedback is unavailable.";
+          renderAdmin_();
+        });
+  }
+
+  function updateWayfinderFeedbackStatus_(feedbackId, action) {
+    if (!feedbackId || adminState.wayfinderFeedbackWorking) return;
+    adminState.wayfinderFeedbackWorking = true;
+    adminState.wayfinderFeedbackError = "";
+    renderAdmin_();
+    callWayfinderFeedbackEndpoint_({
+      action: action,
+      feedbackId: feedbackId,
+    }).then(function(result) {
+      adminState.wayfinderFeedbackWorking = false;
+      adminState.wayfinderFeedbackLoaded = true;
+      adminState.wayfinderFeedbackItems =
+        Array.isArray(result.feedback) ? result.feedback : [];
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderFeedbackWorking = false;
+      adminState.wayfinderFeedbackError = error && error.message ?
+        error.message : "That feedback could not be updated.";
+      renderAdmin_();
+    });
   }
 
   function generateWayfinderAnswer_() {

@@ -33,6 +33,7 @@
       ],
       "requiredFacts": [
         "Someone interested in serving may complete the Next Steps Form, attend Connection Pointe when it is scheduled, or contact the church office.",
+        "Someone may also text NEXT to 405-374-4740 to begin the serving and next-steps process.",
         "After the Next Steps Form is submitted, a staff member normally responds within one week and helps connect the person with an appropriate ministry.",
         "Connection Pointe is especially helpful for someone who wants to serve but does not know which ministry may be a good fit."
       ],
@@ -55,7 +56,8 @@
         }
       ],
       "requiredActions": [
-        "Use the Next Steps Form, Connection Pointe, or the church office as the initial public serving route."
+        "Use the Next Steps Form, Connection Pointe, text NEXT to 405-374-4740, or the church office as the initial public serving route.",
+        "When someone has identified a ministry where they want to serve, prefer the Next Steps Form or the NEXT text keyword over asking another clarifying question or defaulting to generic office contact."
       ]
     },
     {
@@ -317,7 +319,17 @@
       ],
       "requiredFacts": [
         "Tech Ministry may include sound, lighting, presentation and lyrics, cameras, and other production support.",
-        "Creative Ministry may include graphic design, social media, content creation, and other creative communication work."
+        "Creative Ministry may include graphic design, social media, content creation, and other creative communication work.",
+        "Someone interested in Tech or Creative Ministry may complete the Next Steps Form or text NEXT to 405-374-4740 to begin serving."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Complete the Next Steps Form",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/324465"
+        }
+      ],
+      "requiredActions": [
+        "When someone asks to join Tech or Creative Ministry, direct them to the Next Steps Form or tell them to text NEXT to 405-374-4740."
       ]
     },
     {

@@ -37,6 +37,10 @@
         "CrossPointe encourages people to give according to what the Lord has placed on their heart.",
         "Giving is never required to attend CrossPointe."
       ],
+      "requiredActions": [
+        "When asked for an amount or percentage, explicitly say that I cannot recommend a specific amount or percentage, then briefly repeat that people may give according to what the Lord has placed on their heart.",
+        "When asked whether tithing or giving is required, answer in no more than two short sentences: giving is not required to attend CrossPointe, and people are encouraged to give according to what the Lord has placed on their heart. Do not add teaching about biblical stewardship or tithing, offer a pastoral conversation, or add another next step unless asked."
+      ],
       "prohibitedClaims": [
         "Do not pressure someone to give.",
         "Do not recommend an amount or percentage.",
@@ -62,8 +66,10 @@
         "website"
       ],
       "requiredFacts": [
-        "People may give online through CrossPointe's public giving page.",
-        "The CrossPointe giving page is the authoritative public source for current online giving options."
+        "People can give online through CrossPointe's giving page linked below."
+      ],
+      "requiredActions": [
+        "For a general online-giving question, use this approved sentence with only small conversational wording changes: You can give online through CrossPointe's giving page linked below. Do not add a second sentence, recurring gifts, fund choices, text giving, or other giving methods unless asked."
       ],
       "approvedLinks": [
         {
@@ -73,7 +79,8 @@
       ],
       "prohibitedClaims": [
         "Do not expose or rely on long payment-provider URLs when the CrossPointe giving page is available.",
-        "Do not discuss payment-processing fees."
+        "Do not discuss payment-processing fees.",
+        "Do not claim that online giving is quick, easy, or secure."
       ]
     },
     {

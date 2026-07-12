@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 import {
   authenticateWayfinderAdminRequest,
   createWayfinderAccessError,
@@ -41,10 +43,11 @@ const GROUP_DIRECTORY_LINK_PATTERN = new RegExp(
     "i",
 );
 const FOLLOW_UP_QUESTION_PATTERN = new RegExp(
-    "^(?:and\\b|also\\b|yes\\b|no\\b|what about\\b|how about\\b|" +
-    "what other\\b|which other\\b|any other\\b|anything else\\b|" +
+    "^(?:and\\b|also\\b|but\\b|yes\\b|no\\b|what about\\b|how about\\b|" +
+    "what other\\b|which\\b|any other\\b|anything else\\b|" +
     "tell me more\\b|more details?\\b|what time\\b|when\\b|where\\b|" +
-    "how long\\b|how do i\\b|how can i\\b|who\\b|why\\b|" +
+    "how long\\b|how do i\\b|how can i\\b|can i\\b|could i\\b|" +
+    "would i\\b|who\\b|why\\b|" +
     "what\\s+(?:does|do|is|are|was|were|can|will)\\s+(?:it|that|this|" +
     "they|them|he|she)\\b|" +
     "how\\s+(?:does|do|is|are|can)\\s+(?:it|that|this|they|he|she)\\b|" +
@@ -55,6 +58,20 @@ const FOLLOW_UP_QUESTION_PATTERN = new RegExp(
 const WEBSITE_LINK_QUESTION_PATTERN = new RegExp(
     "\\b(?:website|webpage|page|link|directory|where can i find|" +
       "where do i find|show me)\\b",
+    "i",
+);
+const PRAYER_FORM_QUESTION_PATTERN = new RegExp(
+    "\\b(?:submit|send|make|add(?:ed)?)\\b.{0,40}\\bprayer\\b|" +
+      "\\bprayer\\b.{0,40}\\b(?:request|list|form)\\b",
+    "i",
+);
+const SERVING_QUESTION_PATTERN = new RegExp(
+    "\\b(?:volunteer|serving|serve|tech ministry|creative ministry)\\b",
+    "i",
+);
+const PASTORAL_CONVERSATION_PATTERN = new RegExp(
+    "\\b(?:griev(?:e|ing)|bereavement|pastoral care|" +
+      "(?:speak|talk|meet|connect)\\s+(?:with|to)\\s+(?:a\\s+)?pastor)\\b",
     "i",
 );
 
@@ -370,13 +387,62 @@ async function respondWithApprovedEntries_(options) {
       return String(entry.id || "").startsWith("active-notice-");
     }) ? "high" : options.retrieval.confidence,
     knowledgeEntryCount: options.entryCount,
-    sourceCards: buildEntrySourceCards_(
+    sourceCards: buildAnswerSourceCards_(
         options.entries,
         generated.sourceEntryIds,
+        options.question,
+        options.conversationHistory,
+        options.publicResponse,
     ),
     results: options.retrieval.results,
     notice: "Gemini received only the selected approved Wayfinder context.",
   }, options.publicResponse);
+}
+
+function buildAnswerSourceCards_(
+    entries,
+    sourceEntryIds,
+    question,
+    history,
+    publicResponse,
+) {
+  const cards = buildEntrySourceCards_(entries, sourceEntryIds);
+  if (!publicResponse) return cards;
+  const context = [
+    String(question || ""),
+    ...(Array.isArray(history) ? history : []).map((message) => {
+      return String(message && message.content || "");
+    }),
+  ].join(" ");
+  const requiredLinkRules = [
+    {
+      intent: PRAYER_FORM_QUESTION_PATTERN,
+      link: /\/people\/forms\/340884/i,
+    },
+    {
+      intent: SERVING_QUESTION_PATTERN,
+      link: /\/people\/forms\/324465/i,
+    },
+    {
+      intent: /\b(?:watch|livestream|live stream|streaming|church online)\b/i,
+      link: /crosspointe\.tv\/church-online/i,
+    },
+  ];
+  const existingIds = new Set(cards.map((card) => card.id));
+  requiredLinkRules.filter((rule) => rule.intent.test(context))
+      .forEach((rule) => {
+        entries.forEach((entry) => {
+          if (existingIds.has(entry.id)) return;
+          const links = Array.isArray(entry.approvedLinks) ?
+            entry.approvedLinks : [];
+          if (!links.some((link) => rule.link.test(String(link.url || "")))) {
+            return;
+          }
+          cards.push(buildEntrySourceCard_(entry));
+          existingIds.add(entry.id);
+        });
+      });
+  return cards;
 }
 
 function sendWayfinderSuccess_(response, payload, publicResponse) {
@@ -386,7 +452,8 @@ function sendWayfinderSuccess_(response, payload, publicResponse) {
   }
   response.status(200).json({
     ok: payload && payload.ok === true,
-    answer: String(payload && payload.answer || ""),
+    responseId: crypto.randomUUID(),
+    answer: normalizePublicAnswer_(payload && payload.answer),
     followUpQuestion: "",
     shouldContactChurch: payload && payload.shouldContactChurch === true,
     links: buildPublicActionLinks_(
@@ -395,6 +462,14 @@ function sendWayfinderSuccess_(response, payload, publicResponse) {
         payload && payload.conversationHistory,
     ),
   });
+}
+
+function normalizePublicAnswer_(value) {
+  return String(value || "")
+      .replace(
+          /([a-z0-9._%+-]+@[a-z0-9.-]+)\.\s+([a-z]{2,})\b/gi,
+          "$1.$2",
+      );
 }
 
 function buildPublicActionLinks_(sourceCards, question, history) {
@@ -416,6 +491,10 @@ function buildPublicActionLinks_(sourceCards, question, history) {
 
 function selectQuestionSpecificLinks_(links, question, history) {
   const value = String(question || "");
+  const priorText = (Array.isArray(history) ? history : [])
+      .map((message) => String(message && message.content || ""))
+      .join(" ");
+  const context = value + " " + priorText;
   const platformIntents = [
     {question: /\binstagram\b|@crosspointe\.tv/i, link: /instagram/i},
     {question: /\btik\s*tok\b|@crosspointenorman/i, link: /tiktok/i},
@@ -427,6 +506,43 @@ function selectQuestionSpecificLinks_(links, question, history) {
   ].filter((intent) => intent.question.test(value));
 
   let selectedLinks = links;
+  if (/\b(?:giving|donation)\s+(?:receipt|statement)\b/i.test(value) ||
+    /\bannual\s+giving\s+statement\b/i.test(value)) {
+    return [];
+  }
+  if (/\bfuneral\b/i.test(value) &&
+    !/\b(?:link|page|profile|staff directory)\b/i.test(value)) {
+    selectedLinks = selectedLinks.filter((link) => {
+      return !/crosspointe\.tv\/(?:staff|contributor\/)/i.test(link.url);
+    });
+  }
+  if (/\bcare center\b|\bfood pantry\b|\bclothes closet\b/i.test(context)) {
+    selectedLinks = selectedLinks.filter((link) => {
+      return !/forms\.gle\/13UrumiVUXEZCLgj9|crosspointe\.tv\/give/i
+          .test(link.url);
+    });
+  }
+  if (/\bkingdom kids\b|\bchildren(?:'s)? ministry\b/i.test(context)) {
+    selectedLinks = selectedLinks.filter((link) => {
+      return !/forms\.gle\/13UrumiVUXEZCLgj9|crosspointe\.tv\/give/i
+          .test(link.url);
+    });
+  }
+  if (/\bCARS\b|\bcar\s+repair\b|\bvehicle\s+repair\b/i.test(context)) {
+    const asksAboutCosts = /\b(?:cost|pay|payment|parts|donat|give)\w*\b/i
+        .test(value);
+    if (!asksAboutCosts) {
+      selectedLinks = selectedLinks.filter((link) => {
+        return !/crosspointe\.tv\/give/i.test(link.url);
+      });
+    }
+  }
+  if (PASTORAL_CONVERSATION_PATTERN.test(context) &&
+    !/\b(?:link|page|profile|contact form)\b/i.test(value)) {
+    selectedLinks = selectedLinks.filter((link) => {
+      return !/crosspointe\.tv\/(?:staff|contributor\/)/i.test(link.url);
+    });
+  }
   if (platformIntents.length) {
     selectedLinks = links.filter((link) => platformIntents.some((intent) => {
       return intent.link.test(link.label) || intent.link.test(link.url);
@@ -437,12 +553,19 @@ function selectQuestionSpecificLinks_(links, question, history) {
       return /crosspointe\.tv\/church-online/i.test(link.url);
     });
     if (churchOnline) return [churchOnline];
+  } else if (PRAYER_FORM_QUESTION_PATTERN.test(context)) {
+    const prayerForm = links.find((link) => {
+      return /\/people\/forms\/340884/i.test(link.url);
+    });
+    if (prayerForm) return [prayerForm];
+  } else if (SERVING_QUESTION_PATTERN.test(context)) {
+    const nextStepsForm = links.find((link) => {
+      return /\/people\/forms\/324465/i.test(link.url);
+    });
+    if (nextStepsForm) return [nextStepsForm];
   }
 
   if (/\b(?:other|else)\b/i.test(value)) {
-    const priorText = (Array.isArray(history) ? history : [])
-        .map((message) => String(message && message.content || ""))
-        .join(" ");
     const priorIntents = [
       {question: /\binstagram\b|@crosspointe\.tv/i, link: /instagram/i},
       {question: /\btik\s*tok\b|@crosspointenorman/i, link: /tiktok/i},

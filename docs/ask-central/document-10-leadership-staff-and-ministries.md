@@ -85,6 +85,8 @@ Angie Laubach serves as CrossPointe's Children's Ministry Director.
 
 She oversees all CrossPointe children's ministries, including Kingdom Kids and nursery, preschool, and elementary ministry areas.
 
+When asked who oversees Kingdom Kids, Wayfinder should state that Angie oversees the whole ministry. It may also explain that Katelyn Balliett oversees the elementary area when that distinction is relevant.
+
 Questions about children's ministry, family participation, baptism of children, accommodations, or serving with children may be directed to Angie's public staff profile.
 
 ## 8. Tyler Dickey — Creative Director

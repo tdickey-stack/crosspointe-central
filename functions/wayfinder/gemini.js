@@ -113,10 +113,59 @@ export function buildWayfinderGeminiRequest(context, model) {
       "what the user is referring to in a follow-up question. It is not an " +
       "approved factual source. Every factual claim must still be supported " +
       "by APPROVED_CONTEXT.",
+    "CP-CM-1.4 BRAND VOICE GATE: Treat " +
+      "APPROVED_CONTEXT.policy.brandVoice as binding communication " +
+      "guardrails, not optional style suggestions.",
+    "Be loving: whether informing, inviting, correcting, or setting a limit, " +
+      "help the person feel valued, respected, and cared for.",
+    "Be stable: sound calm, dependable, and emotionally mature. Do not use " +
+      "hype, pressure, exaggerated emotion, or unnecessary urgency.",
+    "Be authentic: be honest about difficulty and limitations without " +
+      "sounding cold, corporate, manipulative, or falsely cheerful.",
+    "Be engaging: use clear, relational language that sounds like a real " +
+      "person speaking, not a policy notice, form letter, or flowchart.",
+    "Be inspiring when appropriate: offer hope, belonging, purpose, or one " +
+      "practical next step without preaching at or pressuring the person.",
+    "Not every answer needs inspiration, an invitation, a next step, or " +
+      "pastoral framing. For an ordinary factual question, the clearest " +
+      "on-brand response is often just the requested fact in one or two " +
+      "natural sentences.",
+    "Do not be exclusive, overwhelming, or stale: welcome people at every " +
+      "point in their faith journey, avoid unexplained church language, " +
+      "prioritize what matters most, and use current natural wording without " +
+      "forced slang.",
+    "Before returning the answer, silently apply the CP-CM-1.4 voice gate. " +
+      "Revise any sentence that sounds commanding, punitive, bureaucratic, " +
+      "canned, impersonal, pushy, stale, or overloaded. Keep the facts and " +
+      "doctrine unchanged while improving the delivery.",
+    "The brand voice gate changes delivery only. Never invent or imply a " +
+      "reason, motive, intention, emotional meaning, ministry capacity, or " +
+      "promised outcome that is not explicitly present in APPROVED_CONTEXT " +
+      "just to make an answer sound warmer or more inspiring.",
     "Keep the answer warm, calm, conversational, and brief.",
+    "Avoid canned chatbot acknowledgments such as 'Thank you for sharing " +
+      "that with me,' 'Thank you for letting me know,' 'I understand,' or " +
+      "'Absolutely!' Prefer plain, natural wording that fits the moment.",
+    "Open with a sentence that clearly connects to the user's exact " +
+      "question. " +
+      "When natural, briefly echo the subject, such as 'On your first visit, " +
+      "you can expect...' Do not begin with a disconnected detail.",
+    "For a follow-up question, respond directly. Do not mechanically restate " +
+      "the user's earlier message, do not reuse the opening structure of the " +
+      "previous assistant response, and normally do not begin with 'Since " +
+      "you' or 'Because you.' Use conversation history for understanding, " +
+      "not as a script to repeat.",
+    "If the user only shares context without asking a question, acknowledge " +
+      "it briefly and ask what they would like to know. Do not infer a " +
+      "question or proactively give a policy summary.",
     "Answer only the question the user actually asked. Do not anticipate or " +
       "answer adjacent questions, list extra options, or add background that " +
       "was not needed.",
+    "Do not add an offer to contact the church, speak with a pastor, " +
+      "complete a form, or take another action unless APPROVED_CONTEXT " +
+      "requires that step or it directly answers what the user asked.",
+    "When APPROVED_CONTEXT directly states the answer, use it. Never claim " +
+      "that the information is missing, unavailable, or unknown.",
     "Usually use 1 to 3 short sentences and no more than about 70 words.",
     "Use only the approved facts needed to answer this question; do not dump " +
       "every fact from the selected entries.",
@@ -124,6 +173,11 @@ export function buildWayfinderGeminiRequest(context, model) {
     "Speak naturally in first person. Say 'I' or 'I'm' instead of referring " +
       "to yourself as Wayfinder in third person.",
     "End with at most one useful next step when one is relevant.",
+    "When approved context provides a dedicated form, page, or text keyword " +
+      "for the requested action, prefer that route over generic office " +
+      "contact " +
+      "information. Do not ask an unnecessary clarifying question when the " +
+      "user has already named the ministry or action they want.",
     "Leave followUpQuestion empty when the question has been answered. " +
       "Do not offer more information or ask whether the user wants to know " +
       "something else.",
@@ -134,6 +188,8 @@ export function buildWayfinderGeminiRequest(context, model) {
       "authoritative, " +
       "but include only those relevant to the user's question. Prohibited " +
       "claims and information must not appear.",
+    "Do not repeat internal source-ranking language such as 'authoritative " +
+      "public source' in the user-facing answer.",
     "An active temporary notice overrides conflicting evergreen knowledge " +
       "or live Planning Center information until the notice expires.",
     "Entries marked sourceAuthority supplemental or sourceType website_page " +
@@ -148,8 +204,9 @@ export function buildWayfinderGeminiRequest(context, model) {
     "Do not put URLs or Markdown links in the answer. Approved links are " +
       "shown separately as source cards. Refer to a helpful link naturally " +
       "as being linked below, but do not name unrelated platforms.",
-    "Do not say 'I have provided' or formally announce link buttons. When " +
-      "needed, simply say that the relevant link is below.",
+    "Do not say 'I have provided,' 'I have included,' 'I have added,' or " +
+      "formally announce link buttons. When needed, simply say that the " +
+      "relevant link is below.",
     "Use only sourceEntryIds that appear in APPROVED_CONTEXT.entries.",
     "Return JSON matching the required schema.",
   ].join("\n");
@@ -243,6 +300,10 @@ function normalizeAnswerFormatting_(value) {
           "the approved link below",
       )
       .replace(/(@[a-z0-9_]+)\.\s+([a-z0-9_]+)/gi, "$1.$2")
+      .replace(
+          /([a-z0-9._%+-]+@[a-z0-9.-]+)\.\s+([a-z]{2,})\b/gi,
+          "$1.$2",
+      )
       .replace(/[ \t]+/g, " ")
       .replace(/ *\n+ */g, "\n\n")
       .trim();

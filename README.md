@@ -22,6 +22,17 @@ This repository is intended to be the source of truth for the project.
 - `src/`: source for generated frontend assets like the YouVersion reader
 - `docs/`: project notes and bootstrap docs
 
+## Backend Data Reference
+
+The canonical Firestore path map, document shapes, and content/admin upsert
+flows are documented in:
+
+- `docs/backend-data-schema.md`
+
+First-admin setup and older editor-specific examples remain in:
+
+- `docs/admin-firestore-bootstrap.md`
+
 ## Local Development
 
 Install the web dependencies:

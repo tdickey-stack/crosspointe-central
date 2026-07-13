@@ -69,6 +69,14 @@ var youVersionReaderModulePromise = null;
 var youVersionReaderStylesLoaded = false;
 var sundayScriptureUnmount = null;
 var sundayScriptureMountRequestId = 0;
+var sundayStreamMiniPlayerEnabled = false;
+var sundayStreamMiniPlayerWidth = 420;
+var sundayStreamPlayerAnimation = null;
+var sundayStreamReturnAnimationFrame = 0;
+var sundayStreamResizePointerId = null;
+var sundayStreamResizeStartX = 0;
+var sundayStreamResizeStartWidth = 0;
+var sundayStreamResizeHandle = null;
 var calendarMenuIdCounter = 0;
 var centralThemeMediaQuery = null;
 var centralThemeOverride = "";
@@ -84,6 +92,10 @@ var centralHostedWhatsNewConfig = null;
 var centralHostedWhatsNewConfigPromise = null;
 var CENTRAL_LOADER_COLLAPSE_MS = 680;
 var CENTRAL_LOADER_DOOR_MS = 1525;
+var SUNDAY_STREAM_MINI_DEFAULT_WIDTH = 420;
+var SUNDAY_STREAM_MINI_MIN_WIDTH = 360;
+var SUNDAY_STREAM_MINI_MAX_WIDTH = 680;
+var SUNDAY_STREAM_MINI_WIDTH_STEP = 80;
 
 if (!CENTRAL_IS_ADMIN_ROUTE) {
   document.addEventListener("DOMContentLoaded", function() {
@@ -841,6 +853,7 @@ function isTruthyHostedWhatsNewValue_(value) {
 function renderCentral(data) {
   currentCentralData = data || {};
   removeWhatsNewModal_();
+  teardownSundayStreamMiniPlayer_();
   teardownSundayScripture_();
   serveNeedInterestItemsByKey = {};
   serveNeedInterestKeyCounter = 0;
@@ -853,6 +866,7 @@ function renderCentral(data) {
   if (data.sundayMode && data.sundayMode.enabled) {
     document.getElementById("app").innerHTML = renderSundayPage(data);
     syncCentralThemeToggleUi_(getResolvedCentralTheme_());
+    initSundayStreamMiniPlayer_();
     initSundayNotes(data);
     initSundayScripture(data);
     syncSundayNotesSaveButton_(data);
@@ -1649,17 +1663,439 @@ function renderSundayLivestream(sundaySettings) {
   return [
     "<article class=\"card sunday-stream-card\" id=\"live\">",
       "<div class=\"sunday-stream-copy\">",
-        "<div class=\"section-kicker\">Live Right Now</div>",
-        "<h3>", escapeHtml((sundaySettings && sundaySettings.sunday_livestream_title) || "Watch Live"), "</h3>",
-        (sundaySettings && sundaySettings.sunday_livestream_note) ?
-          "<p>" + escapeHtml(sundaySettings.sunday_livestream_note) + "</p>" :
-          "",
+        "<div class=\"sunday-stream-copy-main\">",
+          "<div class=\"section-kicker\">Live Right Now</div>",
+          "<h3>", escapeHtml((sundaySettings && sundaySettings.sunday_livestream_title) || "Watch Live"), "</h3>",
+          (sundaySettings && sundaySettings.sunday_livestream_note) ?
+            "<p>" + escapeHtml(sundaySettings.sunday_livestream_note) + "</p>" :
+            "",
+        "</div>",
+        "<button type=\"button\" class=\"sunday-stream-mini-toggle\" aria-controls=\"sunday-stream-player\" aria-pressed=\"false\" onclick=\"toggleSundayStreamMiniPlayer()\">",
+          "<span class=\"sunday-stream-mini-icon\" aria-hidden=\"true\"></span>",
+          "<span data-sunday-stream-toggle-label>Keep Watching</span>",
+        "</button>",
       "</div>",
-      "<div class=\"sunday-stream-frame\">",
-        "<iframe allow=\"fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
+      "<div class=\"sunday-stream-status\" data-sunday-stream-status aria-live=\"polite\"></div>",
+      "<div class=\"sunday-stream-stage\" data-sunday-stream-stage>",
+        "<div class=\"sunday-stream-player\" id=\"sunday-stream-player\" data-sunday-stream-player>",
+          "<div class=\"sunday-stream-mini-bar\">",
+            "<strong>CrossPointe Live</strong>",
+            "<div class=\"sunday-stream-mini-actions\">",
+              "<button type=\"button\" onclick=\"returnToSundayLivestream()\">Back to live</button>",
+              "<button type=\"button\" class=\"sunday-stream-size-control\" data-sunday-stream-size=\"smaller\" aria-label=\"Make mini player smaller\" title=\"Make smaller\" onclick=\"resizeSundayStreamMiniPlayer(-1)\">&minus;</button>",
+              "<button type=\"button\" class=\"sunday-stream-size-control\" data-sunday-stream-size=\"larger\" aria-label=\"Make mini player larger\" title=\"Make larger\" onclick=\"resizeSundayStreamMiniPlayer(1)\">+</button>",
+              "<button type=\"button\" class=\"sunday-stream-mini-close\" aria-label=\"Close mini player and stop the stream\" title=\"Close and stop\" onclick=\"closeSundayStreamMiniPlayer()\">&times;</button>",
+            "</div>",
+          "</div>",
+          "<div class=\"sunday-stream-frame\">",
+            "<iframe allow=\"fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
+          "</div>",
+          "<button type=\"button\" class=\"sunday-stream-resize-handle\" aria-label=\"Drag to resize mini player\" title=\"Drag left or right to resize\" onpointerdown=\"beginSundayStreamMiniPlayerResize(event)\" onkeydown=\"handleSundayStreamMiniPlayerResizeKeydown(event)\"><span aria-hidden=\"true\"></span></button>",
+        "</div>",
       "</div>",
     "</article>",
   ].join("");
+}
+
+function initSundayStreamMiniPlayer_() {
+  var stageEl = document.querySelector("[data-sunday-stream-stage]");
+  if (!stageEl) return;
+
+  sundayStreamMiniPlayerEnabled = false;
+  sundayStreamMiniPlayerWidth = SUNDAY_STREAM_MINI_DEFAULT_WIDTH;
+  syncSundayStreamMiniPlayer_();
+}
+
+function teardownSundayStreamMiniPlayer_() {
+  if (sundayStreamPlayerAnimation) {
+    sundayStreamPlayerAnimation.cancel();
+    sundayStreamPlayerAnimation = null;
+  }
+
+  if (sundayStreamReturnAnimationFrame) {
+    window.cancelAnimationFrame(sundayStreamReturnAnimationFrame);
+    sundayStreamReturnAnimationFrame = 0;
+  }
+
+  stopSundayStreamMiniPlayerResize_();
+  sundayStreamMiniPlayerEnabled = false;
+  sundayStreamMiniPlayerWidth = SUNDAY_STREAM_MINI_DEFAULT_WIDTH;
+
+  if (document.body) {
+    document.body.classList.remove("sunday-stream-mini-active");
+  }
+}
+
+function toggleSundayStreamMiniPlayer() {
+  if (sundayStreamMiniPlayerEnabled) {
+    dockSundayStreamMiniPlayer_();
+    return;
+  }
+
+  popOutSundayStreamMiniPlayer_();
+}
+
+function popOutSundayStreamMiniPlayer_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl || sundayStreamMiniPlayerEnabled) return;
+
+  var startRect = playerEl.getBoundingClientRect();
+  cancelSundayStreamPlayerAnimation_();
+  playerEl.classList.add("is-position-animating");
+  sundayStreamMiniPlayerEnabled = true;
+  syncSundayStreamMiniPlayer_();
+  animateSundayStreamPlayerFromRect_(playerEl, startRect);
+}
+
+function dockSundayStreamMiniPlayer_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl || !sundayStreamMiniPlayerEnabled) return;
+
+  var startRect = playerEl.getBoundingClientRect();
+  cancelSundayStreamPlayerAnimation_();
+  playerEl.classList.add("is-position-animating");
+  sundayStreamMiniPlayerEnabled = false;
+  syncSundayStreamMiniPlayer_();
+  animateSundayStreamPlayerFromRect_(playerEl, startRect);
+}
+
+function animateSundayStreamPlayerFromRect_(playerEl, startRect) {
+  var endRect = playerEl.getBoundingClientRect();
+  var canAnimate = typeof playerEl.animate === "function" &&
+    !prefersReducedCentralMotion_() &&
+    startRect.width > 0 &&
+    startRect.height > 0 &&
+    endRect.width > 0 &&
+    endRect.height > 0;
+
+  if (!canAnimate) {
+    playerEl.classList.remove("is-position-animating");
+    return;
+  }
+
+  var translateX = startRect.left - endRect.left;
+  var translateY = startRect.top - endRect.top;
+  var scaleX = startRect.width / endRect.width;
+  var scaleY = startRect.height / endRect.height;
+
+  sundayStreamPlayerAnimation = playerEl.animate([
+    {
+      transformOrigin: "top left",
+      transform: "translate(" + translateX + "px, " + translateY +
+        "px) scale(" + scaleX + ", " + scaleY + ")",
+    },
+    {
+      transformOrigin: "top left",
+      transform: "translate(0, 0) scale(1, 1)",
+    },
+  ], {
+    duration: 480,
+    easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+  });
+
+  sundayStreamPlayerAnimation.onfinish = function() {
+    sundayStreamPlayerAnimation = null;
+    playerEl.classList.remove("is-position-animating");
+  };
+
+  sundayStreamPlayerAnimation.oncancel = function() {
+    playerEl.classList.remove("is-position-animating");
+  };
+}
+
+function cancelSundayStreamPlayerAnimation_() {
+  if (!sundayStreamPlayerAnimation) return;
+
+  sundayStreamPlayerAnimation.cancel();
+  sundayStreamPlayerAnimation = null;
+}
+
+function prefersReducedCentralMotion_() {
+  return !!(
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function returnToSundayLivestream() {
+  var stageEl = document.querySelector("[data-sunday-stream-stage]");
+  if (!stageEl) return;
+
+  if (sundayStreamReturnAnimationFrame) {
+    window.cancelAnimationFrame(sundayStreamReturnAnimationFrame);
+    sundayStreamReturnAnimationFrame = 0;
+  }
+
+  stageEl.scrollIntoView({
+    behavior: prefersReducedCentralMotion_() ? "auto" : "smooth",
+    block: "center",
+  });
+
+  waitForSundayStreamStageThenDock_(Date.now());
+}
+
+function waitForSundayStreamStageThenDock_(startedAt) {
+  var stageEl = document.querySelector("[data-sunday-stream-stage]");
+  if (!stageEl || !sundayStreamMiniPlayerEnabled) {
+    sundayStreamReturnAnimationFrame = 0;
+    return;
+  }
+
+  var rect = stageEl.getBoundingClientRect();
+  var viewportHeight = window.innerHeight ||
+    document.documentElement.clientHeight || 0;
+  var stageIsReady = rect.top < viewportHeight * 0.72 &&
+    rect.bottom > viewportHeight * 0.28;
+
+  if (stageIsReady || Date.now() - startedAt > 1600) {
+    sundayStreamReturnAnimationFrame = 0;
+    dockSundayStreamMiniPlayer_();
+    return;
+  }
+
+  sundayStreamReturnAnimationFrame = window.requestAnimationFrame(function() {
+    waitForSundayStreamStageThenDock_(startedAt);
+  });
+}
+
+function closeSundayStreamMiniPlayer() {
+  var iframeEl = document.querySelector(".sunday-stream-player iframe");
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  var streamUrl = iframeEl ? iframeEl.getAttribute("src") : "";
+
+  if (sundayStreamReturnAnimationFrame) {
+    window.cancelAnimationFrame(sundayStreamReturnAnimationFrame);
+    sundayStreamReturnAnimationFrame = 0;
+  }
+
+  cancelSundayStreamPlayerAnimation_();
+
+  var finishClose = function() {
+    sundayStreamMiniPlayerEnabled = false;
+    syncSundayStreamMiniPlayer_();
+
+    if (iframeEl && streamUrl) {
+      iframeEl.setAttribute("src", "about:blank");
+      window.setTimeout(function() {
+        if (iframeEl.isConnected) {
+          iframeEl.setAttribute("src", streamUrl);
+        }
+      }, 0);
+    }
+  };
+
+  if (
+    playerEl &&
+    sundayStreamMiniPlayerEnabled &&
+    typeof playerEl.animate === "function" &&
+    !prefersReducedCentralMotion_()
+  ) {
+    sundayStreamPlayerAnimation = playerEl.animate([
+      {opacity: 1, transform: "scale(1)"},
+      {opacity: 0, transform: "scale(0.94)"},
+    ], {
+      duration: 180,
+      easing: "ease-in",
+    });
+    sundayStreamPlayerAnimation.onfinish = function() {
+      sundayStreamPlayerAnimation = null;
+      finishClose();
+    };
+    return;
+  }
+
+  finishClose();
+}
+
+function resizeSundayStreamMiniPlayer(direction) {
+  if (!sundayStreamMiniPlayerEnabled) return;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamMiniPlayerWidth +
+      Number(direction || 0) * SUNDAY_STREAM_MINI_WIDTH_STEP,
+  );
+  applySundayStreamMiniPlayerWidth_();
+}
+
+function beginSundayStreamMiniPlayerResize(event) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (
+    !playerEl ||
+    !sundayStreamMiniPlayerEnabled ||
+    window.innerWidth <= 640
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  cancelSundayStreamPlayerAnimation_();
+  sundayStreamResizePointerId = event.pointerId;
+  sundayStreamResizeStartX = event.clientX;
+  sundayStreamResizeStartWidth = playerEl.getBoundingClientRect().width;
+  sundayStreamResizeHandle = event.currentTarget;
+  playerEl.classList.add("is-resizing");
+
+  if (typeof sundayStreamResizeHandle.setPointerCapture === "function") {
+    sundayStreamResizeHandle.setPointerCapture(event.pointerId);
+  }
+
+  window.addEventListener("pointermove", handleSundayStreamMiniPlayerResize_);
+  window.addEventListener("pointerup", endSundayStreamMiniPlayerResize_);
+  window.addEventListener("pointercancel", endSundayStreamMiniPlayerResize_);
+}
+
+function handleSundayStreamMiniPlayerResize_(event) {
+  if (event.pointerId !== sundayStreamResizePointerId) return;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamResizeStartWidth +
+      sundayStreamResizeStartX -
+      event.clientX,
+  );
+  applySundayStreamMiniPlayerWidth_();
+}
+
+function endSundayStreamMiniPlayerResize_(event) {
+  if (
+    event &&
+    sundayStreamResizePointerId !== null &&
+    event.pointerId !== sundayStreamResizePointerId
+  ) {
+    return;
+  }
+
+  stopSundayStreamMiniPlayerResize_();
+}
+
+function stopSundayStreamMiniPlayerResize_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+
+  if (
+    sundayStreamResizeHandle &&
+    sundayStreamResizePointerId !== null &&
+    typeof sundayStreamResizeHandle.releasePointerCapture === "function"
+  ) {
+    try {
+      sundayStreamResizeHandle.releasePointerCapture(
+          sundayStreamResizePointerId,
+      );
+    } catch (error) {
+    }
+  }
+
+  window.removeEventListener("pointermove", handleSundayStreamMiniPlayerResize_);
+  window.removeEventListener("pointerup", endSundayStreamMiniPlayerResize_);
+  window.removeEventListener("pointercancel", endSundayStreamMiniPlayerResize_);
+
+  if (playerEl) {
+    playerEl.classList.remove("is-resizing");
+  }
+
+  sundayStreamResizePointerId = null;
+  sundayStreamResizeStartX = 0;
+  sundayStreamResizeStartWidth = 0;
+  sundayStreamResizeHandle = null;
+}
+
+function handleSundayStreamMiniPlayerResizeKeydown(event) {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+
+  event.preventDefault();
+  resizeSundayStreamMiniPlayer(event.key === "ArrowLeft" ? 1 : -1);
+}
+
+function clampSundayStreamMiniPlayerWidth_(width) {
+  var viewportMax = Math.max(
+      SUNDAY_STREAM_MINI_MIN_WIDTH,
+      (window.innerWidth || SUNDAY_STREAM_MINI_MAX_WIDTH) - 40,
+  );
+  var maximumWidth = Math.min(
+      SUNDAY_STREAM_MINI_MAX_WIDTH,
+      viewportMax,
+  );
+
+  return Math.max(
+      SUNDAY_STREAM_MINI_MIN_WIDTH,
+      Math.min(maximumWidth, Math.round(Number(width) || 0)),
+  );
+}
+
+function applySundayStreamMiniPlayerWidth_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl) return;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamMiniPlayerWidth,
+  );
+  playerEl.style.setProperty(
+      "--sunday-stream-mini-width",
+      sundayStreamMiniPlayerWidth + "px",
+  );
+
+  var smallerButton = document.querySelector(
+      "[data-sunday-stream-size=\"smaller\"]",
+  );
+  var largerButton = document.querySelector(
+      "[data-sunday-stream-size=\"larger\"]",
+  );
+
+  if (smallerButton) {
+    smallerButton.disabled = sundayStreamMiniPlayerWidth <=
+      SUNDAY_STREAM_MINI_MIN_WIDTH;
+  }
+
+  if (largerButton) {
+    largerButton.disabled = sundayStreamMiniPlayerWidth >=
+      clampSundayStreamMiniPlayerWidth_(SUNDAY_STREAM_MINI_MAX_WIDTH);
+  }
+}
+
+function syncSundayStreamMiniPlayer_() {
+  var cardEl = document.getElementById("live");
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  var stageEl = document.querySelector("[data-sunday-stream-stage]");
+  var toggleEl = document.querySelector(".sunday-stream-mini-toggle");
+  var labelEl = document.querySelector("[data-sunday-stream-toggle-label]");
+  var statusEl = document.querySelector("[data-sunday-stream-status]");
+  var shouldFloat = sundayStreamMiniPlayerEnabled;
+
+  if (cardEl) {
+    cardEl.classList.toggle("is-mini-player-active", shouldFloat);
+  }
+
+  if (playerEl) {
+    playerEl.classList.toggle("is-floating", shouldFloat);
+  }
+
+  if (stageEl) {
+    stageEl.classList.toggle("has-floating-player", shouldFloat);
+  }
+
+  if (document.body) {
+    document.body.classList.toggle("sunday-stream-mini-active", shouldFloat);
+  }
+
+  if (toggleEl) {
+    toggleEl.classList.toggle("is-enabled", sundayStreamMiniPlayerEnabled);
+    toggleEl.setAttribute(
+        "aria-pressed",
+        sundayStreamMiniPlayerEnabled ? "true" : "false",
+    );
+  }
+
+  if (labelEl) {
+    labelEl.textContent = sundayStreamMiniPlayerEnabled ?
+      "Return Player" :
+      "Keep Watching";
+  }
+
+  if (statusEl) {
+    statusEl.textContent = sundayStreamMiniPlayerEnabled ?
+      "The mini player is active. Keep browsing while you watch." :
+      "";
+  }
+
+  applySundayStreamMiniPlayerWidth_();
 }
 
 function renderSundayScriptureCard(sunday, sundaySettings) {

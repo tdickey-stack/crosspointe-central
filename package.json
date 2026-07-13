@@ -5,10 +5,16 @@
   "scripts": {
     "build:youversion": "node scripts/build-youversion-reader.mjs",
     "check:syntax": "node --check public/app.js && node --check public/admin.js && node --check functions/index.js",
+    "wayfinder:validate": "npm --prefix functions run wayfinder:validate",
+    "wayfinder:test": "npm --prefix functions run test:wayfinder",
+    "wayfinder:query": "npm --prefix functions run wayfinder:query --",
+    "wayfinder:import:dry-run": "npm --prefix functions run wayfinder:import:dry-run",
+    "wayfinder:import:emulator": "npm --prefix functions run wayfinder:import:emulator",
     "deploy:live": "firebase deploy --project crosspointe-central --only hosting,functions,firestore",
     "deploy:firestore": "firebase deploy --only firestore",
     "emulators": "firebase emulators:start --project crosspointe-central --only hosting,functions,auth",
     "emulators:full": "firebase emulators:start --project crosspointe-central --only hosting,functions,auth,firestore",
+    "emulators:lan": "node scripts/start-lan-emulators.mjs",
     "gmail:token": "node scripts/get-gmail-refresh-token.mjs"
   },
   "devDependencies": {

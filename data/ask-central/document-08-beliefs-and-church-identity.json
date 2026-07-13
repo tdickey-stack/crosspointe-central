@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-08",
+  "title": "Beliefs and Church Identity",
+  "status": "approved",
+  "approvedDate": "2026-07-10",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "guided",
+  "entries": [
+    {
+      "id": "beliefs-mission-identity-and-history",
+      "topic": "beliefs_and_identity",
+      "title": "Mission, Church Identity, and History",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What is CrossPointe's mission?",
+        "What kind of church is CrossPointe?",
+        "What does A Church with a Heart mean?",
+        "When was CrossPointe founded?",
+        "What was CrossPointe's former name?"
+      ],
+      "keywords": [
+        "mission statement",
+        "Church with a Heart",
+        "community church",
+        "church history",
+        "founded",
+        "Norman First Free Will Baptist",
+        "CrossPointe name"
+      ],
+      "requiredFacts": [
+        "CrossPointe's mission is: We exist to shine our Love for God, Love for Others, and Love for A Broken World.",
+        "A Church with a Heart emphasizes loving God, loving people, serving the community, and sharing the hope of Christ with a broken world.",
+        "CrossPointe is a community church with people from many denominational backgrounds.",
+        "The church was founded September 16, 1950 as Norman First Free Will Baptist Church, moved to the present campus in January 1999, and became CrossPointe Church in 2003 to better reflect its community-church ministry."
+      ],
+      "requiredActions": [
+        "Use historical details only when they are relevant to the question."
+      ]
+    },
+    {
+      "id": "beliefs-affiliation-and-unity",
+      "topic": "beliefs_and_identity",
+      "title": "Free Will Baptist Affiliation and Doctrinal Unity",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What denomination is CrossPointe?",
+        "Is CrossPointe a Free Will Baptist church?",
+        "Is CrossPointe nondenominational?",
+        "Do people from other denominations attend?"
+      ],
+      "keywords": [
+        "denomination",
+        "Free Will Baptist",
+        "National Association of Free Will Baptists",
+        "nondenominational",
+        "multi-denominational",
+        "essentials unity"
+      ],
+      "requiredFacts": [
+        "CrossPointe maintains an affiliation with the National Association of Free Will Baptists.",
+        "CrossPointe is a community church with people from many denominational backgrounds.",
+        "The church emphasizes unity in essential beliefs, liberty in secondary matters, and love in all things.",
+        "The affiliation provides doctrinal accountability, cooperation in the Great Commission, and fellowship with churches that share essential beliefs."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that every CrossPointe attendee holds identical views on every secondary doctrine."
+      ]
+    },
+    {
+      "id": "beliefs-bible-and-authority",
+      "topic": "beliefs_and_identity",
+      "title": "The Bible and Biblical Authority",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What does CrossPointe believe about the Bible?",
+        "Do you believe the Bible is inspired?",
+        "Is the Bible your final authority?",
+        "Is the Bible inerrant?"
+      ],
+      "keywords": [
+        "Bible",
+        "biblical authority",
+        "inspired",
+        "infallible",
+        "inerrant",
+        "Word of God"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes the Bible is God's inspired, infallible, and inerrant Word and the supreme and final authority for Christian doctrine and practice.",
+        "No other writing holds the same divine authority."
+      ],
+      "requiredActions": [
+        "For detailed interpretation or personal application of a passage, recommend speaking with a pastor rather than acting as a biblical teacher."
+      ]
+    },
+    {
+      "id": "beliefs-god-and-trinity",
+      "topic": "beliefs_and_identity",
+      "title": "God and the Trinity",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Does CrossPointe believe in the Trinity?",
+        "What do you believe about God?",
+        "Are the Father, Son, and Holy Spirit one God?",
+        "What do you believe about God the Father?"
+      ],
+      "keywords": [
+        "God",
+        "Trinity",
+        "Father Son Holy Spirit",
+        "one God",
+        "Creator",
+        "God the Father"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes there is one living and true God, Creator of heaven and earth, who exists eternally as Father, Son, and Holy Spirit.",
+        "Each person of the Trinity is fully God and personally distinct, and together they are one God.",
+        "God the Father is eternal, self-existent, all-powerful, all-knowing, all-wise, unchanging, holy, righteous, just, and good, and His grace and mercy are without limit."
+      ]
+    },
+    {
+      "id": "beliefs-jesus-and-salvation",
+      "topic": "beliefs_and_identity",
+      "title": "Jesus Christ and Salvation",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What does CrossPointe believe about Jesus?",
+        "How can I be saved?",
+        "Can good works save me?"
+      ],
+      "keywords": [
+        "Jesus Christ",
+        "Son of God",
+        "salvation",
+        "saved",
+        "grace through faith",
+        "repentance",
+        "good works"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes Jesus Christ is the eternal Son of God, fully God and fully human.",
+        "Jesus was born of the Virgin Mary, lived without sin, died for humanity's sins, rose bodily from the dead, ascended to the Father, and will return.",
+        "Salvation and eternal life are gifts from God and cannot be earned through personal goodness or human effort.",
+        "Salvation is received through repentance and faith in Jesus Christ and His finished work on the cross."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Tell CrossPointe about your decision",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/328118"
+        }
+      ],
+      "approvedActions": [
+        {
+          "type": "text_keyword",
+          "label": "Text DECISION",
+          "value": "Text DECISION to 405-374-4740"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not claim that completing a form or sending a text produces salvation.",
+        "Do not determine another person's salvation."
+      ]
+    },
+    {
+      "id": "beliefs-holy-spirit-and-humanity",
+      "topic": "beliefs_and_identity",
+      "title": "The Holy Spirit, Humanity, Sin, and Free Will",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What does CrossPointe believe about the Holy Spirit?",
+        "Do you believe people have free will?",
+        "What do you believe about sin?",
+        "Are people made in God's image?"
+      ],
+      "keywords": [
+        "Holy Spirit",
+        "spiritual gifts",
+        "humanity",
+        "image of God",
+        "sin",
+        "free will",
+        "moral choice"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes the Holy Spirit is the third person of the Trinity, convicts the world of sin, draws people to Christ, lives in every believer, empowers Christlike living, and gives spiritual gifts for service.",
+        "Every person is created in God's image, is deeply loved by God, and has moral agency and free choice.",
+        "Humanity is affected by sin and, apart from Christ, is spiritually lost and accountable to God."
+      ],
+      "prohibitedClaims": [
+        "Do not identify someone's spiritual gift or claim what the Holy Spirit is personally telling them."
+      ]
+    },
+    {
+      "id": "beliefs-return-resurrection-and-eternity",
+      "topic": "beliefs_and_identity",
+      "title": "Christ's Return, Resurrection, Judgment, Heaven, and Hell",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Does CrossPointe believe Jesus will return?",
+        "What do you believe about Heaven and Hell?",
+        "Do you believe in a final judgment?",
+        "When will Jesus return?"
+      ],
+      "keywords": [
+        "second coming",
+        "Jesus return",
+        "resurrection of the dead",
+        "final judgment",
+        "Heaven",
+        "Hell",
+        "eternity"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes Jesus Christ will return at an unknown time as promised in Scripture.",
+        "The dead will be physically raised at Christ's return, every person is accountable to God, believers will be received into God's presence, and those who remain separated from God will face judgment.",
+        "CrossPointe believes Heaven and Hell are real places of eternal existence."
+      ],
+      "prohibitedClaims": [
+        "Do not predict the date of Christ's return, determine another person's eternal destiny, or use fear to pressure someone."
+      ]
+    },
+    {
+      "id": "beliefs-church-baptism-and-communion",
+      "topic": "beliefs_and_identity",
+      "title": "The Church, Baptism, and Communion",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What does CrossPointe believe about the Church?",
+        "Does baptism save me?",
+        "Why do you baptize by immersion?",
+        "What does communion mean?"
+      ],
+      "keywords": [
+        "Church",
+        "body of Christ",
+        "baptism",
+        "immersion",
+        "communion",
+        "Lord's Supper"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes all believers are members of the universal body of Christ and that the local church gathers for worship, prayer, biblical instruction, encouragement, accountability, community, and the Great Commission.",
+        "CrossPointe practices baptism by immersion as an outward expression of faith; baptism does not produce salvation.",
+        "Communion is a ceremony for believers to remember and proclaim Christ's death and resurrection."
+      ],
+      "routingGuidance": [
+        "Use Document 03 for the baptism process and Document 01 for communion practices during services."
+      ]
+    },
+    {
+      "id": "beliefs-creation-government-and-politics",
+      "topic": "beliefs_and_identity",
+      "title": "Creation, Civil Government, and Political Neutrality",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What does CrossPointe believe about creation?",
+        "Does CrossPointe believe in evolution?",
+        "What does the church believe about government?",
+        "Who should Christians vote for?",
+        "Does CrossPointe support a political party?"
+      ],
+      "keywords": [
+        "creation",
+        "evolution",
+        "civil government",
+        "politics",
+        "political party",
+        "candidate",
+        "vote"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes God created the universe and rejects evolutionary theories of origins as unscriptural.",
+        "CrossPointe believes God established authority in the home, church, and state, with each accountable to God and responsible within its proper sphere.",
+        "Political-party, candidate, and voting recommendations are outside Wayfinder's scope."
+      ],
+      "requiredActions": [
+        "For pastoral guidance about political or civic questions, offer the church office."
+      ],
+      "prohibitedClaims": [
+        "Do not endorse or oppose a political party or candidate, tell someone how to vote, or present a personal political opinion.",
+        "Do not engage in a scientific debate about creation."
+      ]
+    },
+    {
+      "id": "beliefs-marriage-sexuality-family-and-divorce",
+      "topic": "beliefs_and_identity",
+      "title": "Marriage, Sexuality, Family, Divorce, and Remarriage",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What does CrossPointe believe about marriage?",
+        "What does CrossPointe believe about sexuality or gender?",
+        "What does the church believe about family roles?",
+        "What does CrossPointe believe about divorce and remarriage?"
+      ],
+      "keywords": [
+        "marriage",
+        "sexuality",
+        "gender",
+        "family roles",
+        "divorce",
+        "remarriage",
+        "adultery",
+        "abandonment"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes sexual intimacy is reserved for marriage between one man and one woman and that marriage is the joining of one man and one woman.",
+        "CrossPointe teaches that people should live in accordance with their God-given sex.",
+        "CrossPointe believes men and women are spiritually equal before God while having distinct biblical roles in the home and church, and that parents are responsible for teaching children spiritual and moral values.",
+        "CrossPointe believes marriage is intended to last for life, reconciliation should be pursued when possible, and the statement of faith recognizes adultery and abandonment by an unbelieving spouse as grounds for divorce and possible remarriage."
+      ],
+      "requiredActions": [
+        "Give only a brief, respectful summary and recommend speaking with a pastor for deeper or personal guidance."
+      ],
+      "prohibitedClaims": [
+        "Do not insult, ridicule, debate, speculate about an individual, determine someone's salvation, provide marriage counseling, or decide whether someone has biblical grounds for divorce or remarriage."
+      ]
+    },
+    {
+      "id": "beliefs-life-abortion-and-abstinence",
+      "topic": "beliefs_and_identity",
+      "title": "Value of Life, Abortion, and Abstinence",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What does CrossPointe believe about abortion?",
+        "When does CrossPointe believe life begins?",
+        "What does the church teach about alcohol?",
+        "What does CrossPointe believe about gambling or addictive behaviors?"
+      ],
+      "keywords": [
+        "abortion",
+        "life begins at conception",
+        "unborn life",
+        "alcohol",
+        "illegal drugs",
+        "gambling",
+        "pornography",
+        "addictive behavior"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes human life begins at conception and that unborn human life should be protected.",
+        "CrossPointe rejects abortion as birth control.",
+        "CrossPointe teaches abstinence from alcohol, illegal drugs, gambling, pornography, misuse of prescription drugs, and other addictive behaviors."
+      ],
+      "requiredActions": [
+        "State the belief compassionately and briefly and route personal spiritual guidance through the church office."
+      ],
+      "prohibitedClaims": [
+        "Do not provide medical or legal advice, shame someone, diagnose addiction, prescribe treatment, or attempt pastoral counseling."
+      ]
+    },
+    {
+      "id": "beliefs-love-conflict-and-lawsuits",
+      "topic": "beliefs_and_identity",
+      "title": "Love, Personal Conflict, and Lawsuits",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How should Christians treat people who disagree with them?",
+        "What does CrossPointe believe about revenge or violence?",
+        "What does the church believe about lawsuits between Christians?",
+        "Can the church settle my dispute?"
+      ],
+      "keywords": [
+        "love others",
+        "disagreement",
+        "revenge",
+        "violence",
+        "personal conflict",
+        "lawsuit",
+        "legal dispute"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes Christians should treat believers, nonbelievers, and opponents graciously, gently, patiently, humbly, and with love.",
+        "CrossPointe rejects revenge, threats, violence, and intentionally stirring up conflict as ways to resolve personal disputes.",
+        "CrossPointe's statement of faith teaches that Christians should not use civil lawsuits against other Christians or the church to resolve personal disputes and permits seeking appropriate insurance compensation without malice or slander."
+      ],
+      "prohibitedClaims": [
+        "Do not mediate disputes, adjudicate complaints, interpret church discipline, provide legal advice, or apply the lawsuit doctrine to an individual's situation."
+      ]
+    },
+    {
+      "id": "beliefs-missions-giving-and-stewardship",
+      "topic": "beliefs_and_identity",
+      "title": "Missions, Giving, and Stewardship Beliefs",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What does CrossPointe believe about missions?",
+        "Does CrossPointe teach tithing?",
+        "What does CrossPointe believe about stewardship?",
+        "Will God make me rich if I tithe?"
+      ],
+      "keywords": [
+        "missions",
+        "Great Commission",
+        "tithe",
+        "tithing",
+        "stewardship",
+        "giving belief",
+        "financial blessing"
+      ],
+      "requiredFacts": [
+        "CrossPointe believes the Church has been given the Great Commission to proclaim the Gospel and make disciples among every nation, tribe, ethnic group, and language group.",
+        "CrossPointe teaches biblical stewardship and tithing.",
+        "Wayfinder may acknowledge that CrossPointe teaches tithing but must leave the teaching itself to a pastor."
+      ],
+      "routingGuidance": [
+        "Use Document 06 for public giving methods and giving privacy."
+      ],
+      "prohibitedClaims": [
+        "Do not teach tithing, recommend an amount or percentage, pressure someone to give, or promise a financial blessing."
+      ]
+    },
+    {
+      "id": "beliefs-secondary-doctrines-and-comparisons",
+      "topic": "beliefs_and_identity",
+      "title": "Secondary Doctrines, Denominational Comparisons, and Debate",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Is CrossPointe Calvinist or Arminian?",
+        "Does CrossPointe believe in eternal security?",
+        "How is CrossPointe different from another denomination?",
+        "Is another religion wrong?",
+        "Can you debate theology with me?"
+      ],
+      "keywords": [
+        "Calvinism",
+        "Arminianism",
+        "eternal security",
+        "conditional security",
+        "secondary doctrine",
+        "denomination comparison",
+        "religion comparison",
+        "theological debate"
+      ],
+      "requiredFacts": [
+        "CrossPointe includes people with different views on some secondary doctrines, including eternal and conditional security.",
+        "CrossPointe maintains that salvation comes through God's grace and power rather than human self-effort and expects mutual respect when Christians disagree on secondary issues.",
+        "Wayfinder may explain CrossPointe's own beliefs but should not represent, attack, ridicule, or judge another group."
+      ],
+      "requiredActions": [
+        "Give a brief approved summary, acknowledge that Christians may disagree on secondary matters, and recommend speaking with a pastor for deeper discussion.",
+        "If someone presses Wayfinder to choose which disputed theological position is correct, clearly explain that Wayfinder does not have the ability to debate or choose sides on secondary theological topics and offer to connect them with a pastor."
+      ],
+      "prohibitedClaims": [
+        "Do not conduct a prolonged doctrinal debate, claim to represent another group's beliefs without an approved source, or decide whether an individual is a Christian."
+      ]
+    }
+  ]
+}

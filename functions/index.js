@@ -4,11 +4,58 @@ import admin from "firebase-admin";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import {onRequest} from "firebase-functions/v2/https";
+import {defineSecret} from "firebase-functions/params";
+
+import {createWayfinderAnswerHandler} from "./wayfinder/answer.js";
+import {
+  createWayfinderAlphaAccessHandler,
+  createWayfinderAlphaSettingsHandler,
+  getWayfinderAlphaConfig,
+} from "./wayfinder/alpha-access.js";
+import {
+  buildWayfinderFeaturedEventEntries,
+  createWayfinderFeaturedEventProvider,
+} from "./wayfinder/featured-events.js";
+import {createWayfinderFeaturedEventHealthHandler} from
+  "./wayfinder/featured-event-health.js";
+import {
+  createDeveloperApiWayfinderGenerator,
+  DEFAULT_WAYFINDER_MODEL,
+} from "./wayfinder/gemini.js";
+import {
+  createWayfinderAdminFeedbackHandler,
+  createWayfinderPublicFeedbackHandler,
+} from "./wayfinder/feedback.js";
+import {createWayfinderEvaluationHandler} from
+  "./wayfinder/evaluations.js";
+import {
+  createWayfinderKnowledgeChangeGenerator,
+  createWayfinderKnowledgeChangeHandler,
+  getActiveWayfinderKnowledgeOverrides,
+} from "./wayfinder/knowledge-overrides.js";
+import {createWayfinderPlanningCenterRetriever} from
+  "./wayfinder/planning-center.js";
+import {
+  createWayfinderNoticeCommandHandler,
+  createWayfinderNoticeDraftGenerator,
+  getActiveWayfinderNotices,
+} from "./wayfinder/notices.js";
+import {createWayfinderPrototypeHandler} from "./wayfinder/prototype.js";
+import {
+  createWayfinderWebsiteIndexHandler,
+  getRelevantWayfinderWebsiteEntries,
+} from "./wayfinder/website-index.js";
 
 setGlobalOptions({maxInstances: 10});
 admin.initializeApp();
 
 const firestore = admin.firestore();
+const getWayfinderFeaturedEvents = createWayfinderFeaturedEventProvider();
+const getWayfinderFeaturedEventEntries = async (question) => {
+  return buildWayfinderFeaturedEventEntries(
+      await getWayfinderFeaturedEvents(), question,
+  );
+};
 
 const CENTRAL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CENTRAL_ALLOWED_ADMIN_EMAIL_DOMAINS = ["crosspointe.tv"];
@@ -231,6 +278,8 @@ const PCO_APP_ID = process.env.PCO_APP_ID || "";
 const PCO_SECRET = process.env.PCO_SECRET || "";
 const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
 const PCO_CENTRAL_TAG_NAME = process.env.PCO_CENTRAL_TAG_NAME || "Central";
+const PCO_WAYFINDER_PRIORITY_TAG_NAME =
+  process.env.PCO_WAYFINDER_PRIORITY_TAG_NAME || "Wayfinder Priority";
 const PCO_CALENDAR_LOOKAHEAD_DAYS = parsePositiveInt_(
     process.env.PCO_CALENDAR_LOOKAHEAD_DAYS,
     14,
@@ -272,6 +321,7 @@ const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
+  {key: "wayfinder", label: "Wayfinder"},
   {key: "thisSunday", label: "Sunday"},
   {key: "quickLinks", label: "Quick Links"},
   {key: "statusBanner", label: "Status Banner"},
@@ -419,6 +469,325 @@ export const centralData = onRequest(
       }
     },
 );
+
+export const wayfinderPrototypeQuery = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    createWayfinderPrototypeHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      getActiveKnowledgeOverrides: () =>
+        getActiveWayfinderKnowledgeOverrides(firestore),
+    }),
+);
+
+// Stored in Secret Manager and exposed only to the Wayfinder answer function.
+const WAYFINDER_GEMINI_API_KEY = defineSecret("WAYFINDER_GEMINI_API_KEY");
+const wayfinderGeminiGenerator = createDeveloperApiWayfinderGenerator({
+  getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
+  model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+});
+const wayfinderNoticeDraftGenerator = createWayfinderNoticeDraftGenerator({
+  getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
+  model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+  timezone: PCO_TIMEZONE,
+});
+const wayfinderKnowledgeChangeGenerator =
+  createWayfinderKnowledgeChangeGenerator({
+    getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
+    model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+  });
+const wayfinderEvaluationAnswerHandler = createWayfinderAnswerHandler({
+  admin: admin,
+  firestore: firestore,
+  generateAnswer: wayfinderGeminiGenerator,
+  retrieveLiveContext: getWayfinderPlanningCenterContext_,
+  getActiveNotices: () => getActiveWayfinderNotices(firestore),
+  getActiveKnowledgeOverrides: () =>
+    getActiveWayfinderKnowledgeOverrides(firestore),
+  getWebsiteEntries: (question) =>
+    getRelevantWayfinderWebsiteEntries(firestore, question),
+  getFeaturedEventEntries: getWayfinderFeaturedEventEntries,
+  requireAdminAuth: false,
+  publicResponse: false,
+  model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+});
+
+export const wayfinderNoticeCommand = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderNoticeCommandHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      generateDraft: wayfinderNoticeDraftGenerator,
+    }),
+);
+
+export const wayfinderKnowledgeChange = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderKnowledgeChangeHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      generateChange: wayfinderKnowledgeChangeGenerator,
+    }),
+);
+
+export const wayfinderWebsiteIndex = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 180,
+      memory: "512MiB",
+    },
+    createWayfinderWebsiteIndexHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
+export const wayfinderFeaturedEventHealth = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+    },
+    createWayfinderFeaturedEventHealthHandler({
+      admin,
+      firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      getFeaturedEvents: getWayfinderFeaturedEvents,
+      fetchJson: fetchPcoJson_,
+      timezone: PCO_TIMEZONE,
+    }),
+);
+
+export const wayfinderPublicFeedback = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderPublicFeedbackHandler({
+      admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      requireEnabled: async () => {
+        const config = await getWayfinderAlphaConfig(firestore);
+        return config.enabled;
+      },
+      serverTimestamp: () =>
+        admin.firestore.FieldValue.serverTimestamp(),
+    }),
+);
+
+export const wayfinderAdminFeedback = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderAdminFeedbackHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      serverTimestamp: () =>
+        admin.firestore.FieldValue.serverTimestamp(),
+    }),
+);
+
+export const wayfinderEvaluations = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 300,
+      memory: "512MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderEvaluationHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      serverTimestamp: () =>
+        admin.firestore.FieldValue.serverTimestamp(),
+      executeCase: executeWayfinderEvaluationCase_,
+    }),
+);
+
+export const wayfinderGenerateAnswer = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderAnswerHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      generateAnswer: wayfinderGeminiGenerator,
+      retrieveLiveContext: getWayfinderPlanningCenterContext_,
+      getActiveNotices: () => getActiveWayfinderNotices(firestore),
+      getActiveKnowledgeOverrides: () =>
+        getActiveWayfinderKnowledgeOverrides(firestore),
+      getWebsiteEntries: (question) =>
+        getRelevantWayfinderWebsiteEntries(firestore, question),
+      getFeaturedEventEntries: getWayfinderFeaturedEventEntries,
+      model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+    }),
+);
+
+export const wayfinderAlphaAccess = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderAlphaAccessHandler({
+      admin,
+      firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
+export const wayfinderAlphaSettings = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderAlphaSettingsHandler({
+      admin,
+      firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
+export const wayfinderPublicAnswer = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderAnswerHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      generateAnswer: wayfinderGeminiGenerator,
+      retrieveLiveContext: getWayfinderPlanningCenterContext_,
+      getActiveNotices: () => getActiveWayfinderNotices(firestore),
+      getActiveKnowledgeOverrides: () =>
+        getActiveWayfinderKnowledgeOverrides(firestore),
+      getWebsiteEntries: (question) =>
+        getRelevantWayfinderWebsiteEntries(firestore, question),
+      getFeaturedEventEntries: getWayfinderFeaturedEventEntries,
+      requireEnabled: async () => {
+        const config = await getWayfinderAlphaConfig(firestore);
+        return config.enabled;
+      },
+      publicResponse: true,
+      model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+    }),
+);
+
+/**
+ * Retrieves sanitized public Planning Center context for Wayfinder.
+ *
+ * @param {Object} request Live-source request from the Wayfinder handler.
+ * @return {Promise<Object>} Sanitized live entries and source statuses.
+ */
+async function getWayfinderPlanningCenterContext_(request) {
+  const roomRulesOverride = await getFirestoreRoomRulesOverride_();
+  const roomRules = roomRulesOverride.shouldOverride ?
+    roomRulesOverride.items : getDefaultCentralRoomRules_();
+  const retriever = createWayfinderPlanningCenterRetriever({
+    fetchJson: fetchPcoJson_,
+    timezone: PCO_TIMEZONE,
+    centralTagName: PCO_CENTRAL_TAG_NAME,
+    priorityTagName: PCO_WAYFINDER_PRIORITY_TAG_NAME,
+    getFeaturedEvents: getWayfinderFeaturedEvents,
+    resolveEventRooms: (instanceId) => {
+      return getEventInstanceRooms_(instanceId, roomRules);
+    },
+  });
+  return retriever(request);
+}
+
+/**
+ * Runs one curated evaluation case through the private diagnostic pipeline.
+ *
+ * @param {Object} testCase Curated evaluation case.
+ * @return {Promise<Object>} Private Wayfinder answer payload.
+ */
+async function executeWayfinderEvaluationCase_(testCase) {
+  const conversation = Array.isArray(testCase.conversation) ?
+    testCase.conversation : [];
+  const finalMessage = conversation[conversation.length - 1] || {};
+  return new Promise((resolve, reject) => {
+    const response = {
+      set: () => response,
+      status: (statusCode) => {
+        response.statusCode = statusCode;
+        return response;
+      },
+      json: (body) => {
+        if (response.statusCode >= 400) {
+          reject(new Error(String(body && body.error || "Evaluation failed.")));
+          return;
+        }
+        resolve(body);
+      },
+      statusCode: 200,
+    };
+    wayfinderEvaluationAnswerHandler({
+      method: "POST",
+      headers: {
+        "x-wayfinder-session": "evaluation-" + crypto.randomUUID(),
+      },
+      ip: "wayfinder-evaluation",
+      body: {
+        question: String(finalMessage.content || ""),
+        history: conversation.slice(0, -1),
+      },
+    }, response).catch(reject);
+  });
+}
 
 export const centralCalendarEvent = onRequest(
     {
@@ -10628,6 +10997,7 @@ function buildFirstAdminPageAccess_() {
     hub: "admin",
     settings: "admin",
     integrations: "admin",
+    wayfinder: "admin",
     sundaySettings: "admin",
     thisSunday: "admin",
     whatsNew: "admin",

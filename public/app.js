@@ -77,6 +77,8 @@ var sundayStreamResizePointerId = null;
 var sundayStreamResizeStartX = 0;
 var sundayStreamResizeStartWidth = 0;
 var sundayStreamResizeHandle = null;
+var sundayStreamGestureState = null;
+var sundayStreamMiniPlayerPosition = null;
 var calendarMenuIdCounter = 0;
 var centralThemeMediaQuery = null;
 var centralThemeOverride = "";
@@ -96,6 +98,9 @@ var SUNDAY_STREAM_MINI_DEFAULT_WIDTH = 420;
 var SUNDAY_STREAM_MINI_MIN_WIDTH = 360;
 var SUNDAY_STREAM_MINI_MAX_WIDTH = 680;
 var SUNDAY_STREAM_MINI_WIDTH_STEP = 80;
+var SUNDAY_STREAM_MINI_MOBILE_DEFAULT_WIDTH = 240;
+var SUNDAY_STREAM_MINI_MOBILE_MIN_WIDTH = 220;
+var SUNDAY_STREAM_MINI_MOBILE_BREAKPOINT = 640;
 
 if (!CENTRAL_IS_ADMIN_ROUTE) {
   document.addEventListener("DOMContentLoaded", function() {
@@ -1678,8 +1683,8 @@ function renderSundayLivestream(sundaySettings) {
       "<div class=\"sunday-stream-status\" data-sunday-stream-status aria-live=\"polite\"></div>",
       "<div class=\"sunday-stream-stage\" data-sunday-stream-stage>",
         "<div class=\"sunday-stream-player\" id=\"sunday-stream-player\" data-sunday-stream-player>",
-          "<div class=\"sunday-stream-mini-bar\">",
-            "<strong>CrossPointe Live</strong>",
+          "<div class=\"sunday-stream-mini-bar\" role=\"group\" tabindex=\"0\" aria-label=\"Mini player controls. Drag to move and pinch to resize.\" title=\"Drag to move. Pinch to resize.\" onpointerdown=\"beginSundayStreamMiniPlayerGesture(event)\" onkeydown=\"handleSundayStreamMiniPlayerMoveKeydown(event)\">",
+            "<strong><span class=\"sunday-stream-live-label\">CrossPointe Live</span><span class=\"sunday-stream-gesture-label\">Drag &middot; Pinch</span></strong>",
             "<div class=\"sunday-stream-mini-actions\">",
               "<button type=\"button\" onclick=\"returnToSundayLivestream()\">Back to live</button>",
               "<button type=\"button\" class=\"sunday-stream-size-control\" data-sunday-stream-size=\"smaller\" aria-label=\"Make mini player smaller\" title=\"Make smaller\" onclick=\"resizeSundayStreamMiniPlayer(-1)\">&minus;</button>",
@@ -1702,7 +1707,9 @@ function initSundayStreamMiniPlayer_() {
   if (!stageEl) return;
 
   sundayStreamMiniPlayerEnabled = false;
-  sundayStreamMiniPlayerWidth = SUNDAY_STREAM_MINI_DEFAULT_WIDTH;
+  sundayStreamMiniPlayerWidth = getSundayStreamMiniPlayerDefaultWidth_();
+  sundayStreamMiniPlayerPosition = null;
+  window.addEventListener("resize", handleSundayStreamMiniViewportChange_);
   syncSundayStreamMiniPlayer_();
 }
 
@@ -1718,8 +1725,12 @@ function teardownSundayStreamMiniPlayer_() {
   }
 
   stopSundayStreamMiniPlayerResize_();
+  stopSundayStreamMiniPlayerGesture_();
+  resetSundayStreamMiniPlayerPosition_();
+  window.removeEventListener("resize", handleSundayStreamMiniViewportChange_);
   sundayStreamMiniPlayerEnabled = false;
-  sundayStreamMiniPlayerWidth = SUNDAY_STREAM_MINI_DEFAULT_WIDTH;
+  sundayStreamMiniPlayerWidth = getSundayStreamMiniPlayerDefaultWidth_();
+  sundayStreamMiniPlayerPosition = null;
 
   if (document.body) {
     document.body.classList.remove("sunday-stream-mini-active");
@@ -1907,6 +1918,289 @@ function closeSundayStreamMiniPlayer() {
   finishClose();
 }
 
+function beginSundayStreamMiniPlayerGesture(event) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  var targetEl = event.target;
+
+  if (
+    !playerEl ||
+    !sundayStreamMiniPlayerEnabled ||
+    (targetEl && targetEl.closest && targetEl.closest("button"))
+  ) {
+    return;
+  }
+
+  if (
+    sundayStreamGestureState &&
+    getSundayStreamGesturePointers_().length >= 2
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  cancelSundayStreamPlayerAnimation_();
+
+  if (!sundayStreamGestureState) {
+    sundayStreamGestureState = {
+      handle: event.currentTarget,
+      pointers: {},
+      mode: "move",
+      startRect: playerEl.getBoundingClientRect(),
+      startPointerX: event.clientX,
+      startPointerY: event.clientY,
+    };
+
+    window.addEventListener(
+        "pointermove",
+        handleSundayStreamMiniPlayerGestureMove_,
+    );
+    window.addEventListener(
+        "pointerup",
+        endSundayStreamMiniPlayerGesturePointer_,
+    );
+    window.addEventListener(
+        "pointercancel",
+        endSundayStreamMiniPlayerGesturePointer_,
+    );
+    window.addEventListener("blur", stopSundayStreamMiniPlayerGesture_);
+  }
+
+  sundayStreamGestureState.pointers[String(event.pointerId)] = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+  };
+
+  if (
+    sundayStreamGestureState.handle &&
+    typeof sundayStreamGestureState.handle.setPointerCapture === "function"
+  ) {
+    try {
+      sundayStreamGestureState.handle.setPointerCapture(event.pointerId);
+    } catch (error) {
+    }
+  }
+
+  playerEl.classList.add("is-moving");
+
+  if (getSundayStreamGesturePointers_().length === 2) {
+    initializeSundayStreamMiniPlayerPinch_();
+  }
+}
+
+function handleSundayStreamMiniPlayerGestureMove_(event) {
+  if (!sundayStreamGestureState) return;
+
+  var pointerKey = String(event.pointerId);
+  if (!sundayStreamGestureState.pointers[pointerKey]) return;
+
+  event.preventDefault();
+  sundayStreamGestureState.pointers[pointerKey].x = event.clientX;
+  sundayStreamGestureState.pointers[pointerKey].y = event.clientY;
+
+  var pointers = getSundayStreamGesturePointers_();
+  if (pointers.length >= 2) {
+    if (sundayStreamGestureState.mode !== "pinch") {
+      initializeSundayStreamMiniPlayerPinch_();
+    }
+    applySundayStreamMiniPlayerPinch_(pointers[0], pointers[1]);
+    return;
+  }
+
+  if (pointers.length !== 1) return;
+
+  if (sundayStreamGestureState.mode !== "move") {
+    initializeSundayStreamMiniPlayerMove_(pointers[0]);
+  }
+
+  setSundayStreamMiniPlayerPosition_(
+      sundayStreamGestureState.startRect.left +
+        pointers[0].x - sundayStreamGestureState.startPointerX,
+      sundayStreamGestureState.startRect.top +
+        pointers[0].y - sundayStreamGestureState.startPointerY,
+  );
+}
+
+function initializeSundayStreamMiniPlayerMove_(pointer) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl || !sundayStreamGestureState || !pointer) return;
+
+  sundayStreamGestureState.mode = "move";
+  sundayStreamGestureState.startRect = playerEl.getBoundingClientRect();
+  sundayStreamGestureState.startPointerX = pointer.x;
+  sundayStreamGestureState.startPointerY = pointer.y;
+  playerEl.classList.remove("is-gesture-resizing");
+}
+
+function initializeSundayStreamMiniPlayerPinch_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  var pointers = getSundayStreamGesturePointers_();
+  if (!playerEl || !sundayStreamGestureState || pointers.length < 2) return;
+
+  var rect = playerEl.getBoundingClientRect();
+  var center = getSundayStreamGestureCenter_(pointers[0], pointers[1]);
+
+  sundayStreamGestureState.mode = "pinch";
+  sundayStreamGestureState.startRect = rect;
+  sundayStreamGestureState.startWidth = rect.width;
+  sundayStreamGestureState.startDistance = Math.max(
+      10,
+      getSundayStreamGestureDistance_(pointers[0], pointers[1]),
+  );
+  sundayStreamGestureState.startGestureCenter = center;
+  sundayStreamGestureState.startPlayerCenter = {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+  playerEl.classList.add("is-gesture-resizing");
+}
+
+function applySundayStreamMiniPlayerPinch_(firstPointer, secondPointer) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (
+    !playerEl ||
+    !sundayStreamGestureState ||
+    sundayStreamGestureState.mode !== "pinch"
+  ) {
+    return;
+  }
+
+  var distance = getSundayStreamGestureDistance_(
+      firstPointer,
+      secondPointer,
+  );
+  var center = getSundayStreamGestureCenter_(firstPointer, secondPointer);
+  var widthScale = distance / sundayStreamGestureState.startDistance;
+  var desiredCenterX = sundayStreamGestureState.startPlayerCenter.x +
+    center.x - sundayStreamGestureState.startGestureCenter.x;
+  var desiredCenterY = sundayStreamGestureState.startPlayerCenter.y +
+    center.y - sundayStreamGestureState.startGestureCenter.y;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamGestureState.startWidth * widthScale,
+  );
+  applySundayStreamMiniPlayerWidth_();
+
+  var resizedRect = playerEl.getBoundingClientRect();
+  setSundayStreamMiniPlayerPosition_(
+      desiredCenterX - resizedRect.width / 2,
+      desiredCenterY - resizedRect.height / 2,
+  );
+}
+
+function endSundayStreamMiniPlayerGesturePointer_(event) {
+  if (!sundayStreamGestureState) return;
+
+  var pointerKey = String(event.pointerId);
+  if (!sundayStreamGestureState.pointers[pointerKey]) return;
+
+  delete sundayStreamGestureState.pointers[pointerKey];
+
+  if (
+    sundayStreamGestureState.handle &&
+    typeof sundayStreamGestureState.handle.releasePointerCapture === "function"
+  ) {
+    try {
+      sundayStreamGestureState.handle.releasePointerCapture(event.pointerId);
+    } catch (error) {
+    }
+  }
+
+  var pointers = getSundayStreamGesturePointers_();
+  if (pointers.length) {
+    initializeSundayStreamMiniPlayerMove_(pointers[0]);
+    return;
+  }
+
+  stopSundayStreamMiniPlayerGesture_();
+}
+
+function stopSundayStreamMiniPlayerGesture_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+
+  if (
+    sundayStreamGestureState &&
+    sundayStreamGestureState.handle &&
+    typeof sundayStreamGestureState.handle.releasePointerCapture === "function"
+  ) {
+    getSundayStreamGesturePointers_().forEach(function(pointer) {
+      try {
+        sundayStreamGestureState.handle.releasePointerCapture(pointer.id);
+      } catch (error) {
+      }
+    });
+  }
+
+  window.removeEventListener(
+      "pointermove",
+      handleSundayStreamMiniPlayerGestureMove_,
+  );
+  window.removeEventListener(
+      "pointerup",
+      endSundayStreamMiniPlayerGesturePointer_,
+  );
+  window.removeEventListener(
+      "pointercancel",
+      endSundayStreamMiniPlayerGesturePointer_,
+  );
+  window.removeEventListener("blur", stopSundayStreamMiniPlayerGesture_);
+
+  if (playerEl) {
+    playerEl.classList.remove("is-moving", "is-gesture-resizing");
+  }
+
+  sundayStreamGestureState = null;
+}
+
+function getSundayStreamGesturePointers_() {
+  if (!sundayStreamGestureState) return [];
+
+  return Object.keys(sundayStreamGestureState.pointers).map(function(key) {
+    return sundayStreamGestureState.pointers[key];
+  });
+}
+
+function getSundayStreamGestureDistance_(firstPointer, secondPointer) {
+  var deltaX = secondPointer.x - firstPointer.x;
+  var deltaY = secondPointer.y - firstPointer.y;
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+}
+
+function getSundayStreamGestureCenter_(firstPointer, secondPointer) {
+  return {
+    x: (firstPointer.x + secondPointer.x) / 2,
+    y: (firstPointer.y + secondPointer.y) / 2,
+  };
+}
+
+function handleSundayStreamMiniPlayerMoveKeydown(event) {
+  if (
+    event.target !== event.currentTarget ||
+    !sundayStreamMiniPlayerEnabled ||
+    ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(
+        event.key,
+    ) === -1
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl) return;
+
+  var rect = playerEl.getBoundingClientRect();
+  var step = event.shiftKey ? 40 : 16;
+  var deltaX = event.key === "ArrowLeft" ? -step :
+    (event.key === "ArrowRight" ? step : 0);
+  var deltaY = event.key === "ArrowUp" ? -step :
+    (event.key === "ArrowDown" ? step : 0);
+
+  setSundayStreamMiniPlayerPosition_(
+      rect.left + deltaX,
+      rect.top + deltaY,
+  );
+}
+
 function resizeSundayStreamMiniPlayer(direction) {
   if (!sundayStreamMiniPlayerEnabled) return;
 
@@ -2004,20 +2298,113 @@ function handleSundayStreamMiniPlayerResizeKeydown(event) {
   resizeSundayStreamMiniPlayer(event.key === "ArrowLeft" ? 1 : -1);
 }
 
+function getSundayStreamMiniPlayerDefaultWidth_() {
+  if (isSundayStreamMiniMobileViewport_()) {
+    return clampSundayStreamMiniPlayerWidth_(
+        SUNDAY_STREAM_MINI_MOBILE_DEFAULT_WIDTH,
+    );
+  }
+
+  return SUNDAY_STREAM_MINI_DEFAULT_WIDTH;
+}
+
+function isSundayStreamMiniMobileViewport_() {
+  return (window.innerWidth || 0) <=
+    SUNDAY_STREAM_MINI_MOBILE_BREAKPOINT;
+}
+
+function getSundayStreamMiniPlayerMinimumWidth_() {
+  if (!isSundayStreamMiniMobileViewport_()) {
+    return SUNDAY_STREAM_MINI_MIN_WIDTH;
+  }
+
+  var viewportWidth = window.innerWidth ||
+    SUNDAY_STREAM_MINI_MOBILE_DEFAULT_WIDTH + 28;
+
+  return Math.min(
+      SUNDAY_STREAM_MINI_MOBILE_MIN_WIDTH,
+      Math.max(160, viewportWidth - 28),
+  );
+}
+
+function getSundayStreamMiniPlayerMaximumWidth_() {
+  var viewportWidth = window.innerWidth || SUNDAY_STREAM_MINI_MAX_WIDTH;
+  var minimumWidth = getSundayStreamMiniPlayerMinimumWidth_();
+  var viewportMargin = isSundayStreamMiniMobileViewport_() ? 28 : 40;
+  var maximumWidth = viewportWidth - viewportMargin;
+
+  if (!isSundayStreamMiniMobileViewport_()) {
+    maximumWidth = Math.min(SUNDAY_STREAM_MINI_MAX_WIDTH, maximumWidth);
+  }
+
+  return Math.max(minimumWidth, maximumWidth);
+}
+
 function clampSundayStreamMiniPlayerWidth_(width) {
-  var viewportMax = Math.max(
-      SUNDAY_STREAM_MINI_MIN_WIDTH,
-      (window.innerWidth || SUNDAY_STREAM_MINI_MAX_WIDTH) - 40,
-  );
-  var maximumWidth = Math.min(
-      SUNDAY_STREAM_MINI_MAX_WIDTH,
-      viewportMax,
-  );
+  var minimumWidth = getSundayStreamMiniPlayerMinimumWidth_();
+  var maximumWidth = getSundayStreamMiniPlayerMaximumWidth_();
 
   return Math.max(
-      SUNDAY_STREAM_MINI_MIN_WIDTH,
+      minimumWidth,
       Math.min(maximumWidth, Math.round(Number(width) || 0)),
   );
+}
+
+function setSundayStreamMiniPlayerPosition_(left, top) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl || !sundayStreamMiniPlayerEnabled) return;
+
+  var rect = playerEl.getBoundingClientRect();
+  var viewportWidth = window.innerWidth || rect.right;
+  var viewportHeight = window.innerHeight || rect.bottom;
+  var edge = 8;
+  var maximumLeft = Math.max(edge, viewportWidth - rect.width - edge);
+  var maximumTop = Math.max(edge, viewportHeight - rect.height - edge);
+  var resolvedLeft = Math.max(edge, Math.min(maximumLeft, Number(left) || 0));
+  var resolvedTop = Math.max(edge, Math.min(maximumTop, Number(top) || 0));
+
+  sundayStreamMiniPlayerPosition = {
+    left: resolvedLeft,
+    top: resolvedTop,
+  };
+  playerEl.classList.add("has-custom-position");
+  playerEl.style.left = resolvedLeft + "px";
+  playerEl.style.top = resolvedTop + "px";
+  playerEl.style.right = "auto";
+  playerEl.style.bottom = "auto";
+}
+
+function constrainSundayStreamMiniPlayerPosition_() {
+  if (!sundayStreamMiniPlayerPosition) return;
+
+  setSundayStreamMiniPlayerPosition_(
+      sundayStreamMiniPlayerPosition.left,
+      sundayStreamMiniPlayerPosition.top,
+  );
+}
+
+function resetSundayStreamMiniPlayerPosition_(playerEl) {
+  var resolvedPlayerEl = playerEl ||
+    document.querySelector("[data-sunday-stream-player]");
+
+  sundayStreamMiniPlayerPosition = null;
+  if (!resolvedPlayerEl) return;
+
+  resolvedPlayerEl.classList.remove("has-custom-position");
+  resolvedPlayerEl.style.removeProperty("left");
+  resolvedPlayerEl.style.removeProperty("top");
+  resolvedPlayerEl.style.removeProperty("right");
+  resolvedPlayerEl.style.removeProperty("bottom");
+}
+
+function handleSundayStreamMiniViewportChange_() {
+  if (!sundayStreamMiniPlayerEnabled) return;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamMiniPlayerWidth,
+  );
+  applySundayStreamMiniPlayerWidth_();
+  constrainSundayStreamMiniPlayerPosition_();
 }
 
 function applySundayStreamMiniPlayerWidth_() {
@@ -2041,13 +2428,15 @@ function applySundayStreamMiniPlayerWidth_() {
 
   if (smallerButton) {
     smallerButton.disabled = sundayStreamMiniPlayerWidth <=
-      SUNDAY_STREAM_MINI_MIN_WIDTH;
+      getSundayStreamMiniPlayerMinimumWidth_();
   }
 
   if (largerButton) {
     largerButton.disabled = sundayStreamMiniPlayerWidth >=
-      clampSundayStreamMiniPlayerWidth_(SUNDAY_STREAM_MINI_MAX_WIDTH);
+      getSundayStreamMiniPlayerMaximumWidth_();
   }
+
+  constrainSundayStreamMiniPlayerPosition_();
 }
 
 function syncSundayStreamMiniPlayer_() {
@@ -2064,6 +2453,10 @@ function syncSundayStreamMiniPlayer_() {
   }
 
   if (playerEl) {
+    if (!shouldFloat) {
+      stopSundayStreamMiniPlayerGesture_();
+      resetSundayStreamMiniPlayerPosition_(playerEl);
+    }
     playerEl.classList.toggle("is-floating", shouldFloat);
   }
 

@@ -35,6 +35,22 @@ export function createWayfinderPublicFeedbackHandler(dependencies) {
     }
 
     try {
+      if (dependencies.admin) {
+        await authenticateWayfinderAdminRequest({
+          request,
+          admin: dependencies.admin,
+          firestore,
+          isAllowedAdminEmail: dependencies.isAllowedAdminEmail,
+          getAdminUserDocPath: dependencies.getAdminUserDocPath,
+        });
+      }
+      if (typeof dependencies.requireEnabled === "function" &&
+        await dependencies.requireEnabled() !== true) {
+        throw createWayfinderAccessError(
+            403,
+            "Wayfinder is not enabled right now.",
+        );
+      }
       enforceFeedbackRateLimit_(request);
       const feedback = validatePublicFeedback_(request.body);
       const feedbackRef = firestore.collection(FEEDBACK_COLLECTION)

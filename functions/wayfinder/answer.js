@@ -91,6 +91,7 @@ export function createWayfinderAnswerHandler(dependencies) {
   const getWebsiteEntries = dependencies.getWebsiteEntries;
   const getFeaturedEventEntries = dependencies.getFeaturedEventEntries;
   const requireAdminAuth = dependencies.requireAdminAuth !== false;
+  const requireEnabled = dependencies.requireEnabled;
   const publicResponse = dependencies.publicResponse === true;
   const model = String(dependencies.model || "gemini-3.5-flash");
 
@@ -117,6 +118,14 @@ export function createWayfinderAnswerHandler(dependencies) {
         );
       } else {
         enforcePublicRateLimit_(request);
+      }
+
+      if (typeof requireEnabled === "function" &&
+        await requireEnabled() !== true) {
+        throw createWayfinderAccessError(
+            403,
+            "Wayfinder is not enabled right now.",
+        );
       }
 
       const question = getValidQuestion_(request.body);

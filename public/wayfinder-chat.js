@@ -4,6 +4,7 @@
   if (window.CENTRAL_BOOT_MODE === "admin") return;
 
   var PUBLIC_CHAT_ENDPOINT = "/api/wayfinder/chat";
+  var ALPHA_ACCESS_ENDPOINT = "/api/wayfinder/access";
   var PUBLIC_FEEDBACK_ENDPOINT = "/api/wayfinder/feedback";
   var NOTICE_ENDPOINT = "/api/admin/wayfinder/notices";
   var KNOWLEDGE_ENDPOINT = "/api/admin/wayfinder/knowledge-changes";
@@ -17,6 +18,7 @@
     conversationHistory: [],
     messageCounter: 0,
     authPromise: null,
+    permission: "none",
   };
   var chatRoot = null;
   var chatPanel = null;
@@ -24,9 +26,31 @@
   var chatMessages = null;
   var chatInput = null;
 
-  document.addEventListener("DOMContentLoaded", initializeWayfinderChat_);
+  document.addEventListener("DOMContentLoaded", initializeWayfinderAlpha_);
 
-  function initializeWayfinderChat_() {
+  function initializeWayfinderAlpha_() {
+    wayfinderChatState.authPromise = initializePublicFirebaseAuth_();
+    wayfinderChatState.authPromise.then(function(user) {
+      if (!user) return null;
+      return user.getIdToken().then(function(idToken) {
+        return fetch(ALPHA_ACCESS_ENDPOINT, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + idToken,
+          },
+        });
+      }).then(parseWayfinderResponse_);
+    }).then(function(access) {
+      if (!access || access.enabled !== true || access.canUse !== true) return;
+      wayfinderChatState.permission = String(access.permission || "none");
+      mountWayfinderChat_();
+    }).catch(function() {
+      // During alpha, ineligible and signed-out visitors should not see Wayfinder.
+    });
+  }
+
+  function mountWayfinderChat_() {
     chatRoot = document.createElement("div");
     chatRoot.className = "wayfinder-chat-root";
     chatRoot.innerHTML = [
@@ -90,7 +114,6 @@
         "Hello! I’m Wayfinder, CrossPointe’s virtual AI information " +
           "assistant. What can I help you find?",
     );
-    wayfinderChatState.authPromise = initializePublicFirebaseAuth_();
   }
 
   function openWayfinderChat_() {
@@ -171,6 +194,11 @@
   }
 
   function enterPublicWayfinderAdminMode_() {
+    if (wayfinderChatState.permission !== "admin") {
+      return Promise.reject(new Error(
+          "Your Wayfinder access does not include Admin Update Mode.",
+      ));
+    }
     return callAuthenticatedWayfinder_(NOTICE_ENDPOINT, {action: "enter"})
         .then(function(result) {
           wayfinderChatState.adminMode = result.modeActive === true;
@@ -288,14 +316,17 @@
   }
 
   function callPublicWayfinder_(payload) {
-    return fetch(PUBLIC_CHAT_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-Wayfinder-Session": wayfinderChatState.sessionId,
-      },
-      body: JSON.stringify(payload || {}),
+    return getCurrentAdminIdToken_().then(function(idToken) {
+      return fetch(PUBLIC_CHAT_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + idToken,
+          "X-Wayfinder-Session": wayfinderChatState.sessionId,
+        },
+        body: JSON.stringify(payload || {}),
+      });
     }).then(parseWayfinderResponse_);
   }
 
@@ -339,22 +370,25 @@
     feedback.error = "";
     renderWayfinderMessages_();
 
-    fetch(PUBLIC_FEEDBACK_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-Wayfinder-Session": wayfinderChatState.sessionId,
-      },
-      body: JSON.stringify({
-        responseId: feedback.responseId,
-        question: feedback.question,
-        answer: feedback.answer,
-        rating: rating,
-        reason: reason,
-        note: note,
-        links: data.links || [],
-      }),
+    getCurrentAdminIdToken_().then(function(idToken) {
+      return fetch(PUBLIC_FEEDBACK_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + idToken,
+          "X-Wayfinder-Session": wayfinderChatState.sessionId,
+        },
+        body: JSON.stringify({
+          responseId: feedback.responseId,
+          question: feedback.question,
+          answer: feedback.answer,
+          rating: rating,
+          reason: reason,
+          note: note,
+          links: data.links || [],
+        }),
+      });
     }).then(parseWayfinderResponse_).then(function(result) {
       feedback.status = "submitted";
       feedback.rating = rating;

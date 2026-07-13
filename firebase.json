@@ -233,6 +233,20 @@
         }
       },
       {
+        "source": "/api/admin/wayfinder/alpha-settings",
+        "function": {
+          "functionId": "wayfinderAlphaSettings",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/wayfinder/access",
+        "function": {
+          "functionId": "wayfinderAlphaAccess",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/wayfinder/chat",
         "function": {
           "functionId": "wayfinderPublicAnswer",

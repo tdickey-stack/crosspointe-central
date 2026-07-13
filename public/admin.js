@@ -36,6 +36,8 @@
     "/api/admin/wayfinder/website-index";
   var WAYFINDER_FEATURED_EVENT_HEALTH_ENDPOINT =
     "/api/admin/wayfinder/featured-event-health";
+  var WAYFINDER_ALPHA_SETTINGS_ENDPOINT =
+    "/api/admin/wayfinder/alpha-settings";
   var WAYFINDER_FEEDBACK_ENDPOINT = "/api/admin/wayfinder/feedback";
   var WAYFINDER_EVALUATIONS_ENDPOINT =
     "/api/admin/wayfinder/evaluations";
@@ -169,7 +171,7 @@
       id: "wayfinder",
       label: "Wayfinder Lab",
       route: "/admin/wayfinder",
-      pageAccessKey: "integrations",
+      pageAccessKey: "wayfinder",
       summary: "Private testing for Wayfinder's approved knowledge retrieval before Gemini is connected.",
       collectionPath: "centralAssistantKnowledgeDraft",
       status: "Private prototype",
@@ -315,6 +317,7 @@
     hub: "admin",
     settings: "admin",
     integrations: "admin",
+    wayfinder: "admin",
     sundaySettings: "admin",
     thisSunday: "admin",
     whatsNew: "admin",
@@ -514,6 +517,10 @@
     settingsSundayDraft: createEmptySettingsSundayDraft_(),
     settingsSundayError: "",
     settingsSundayMessage: "",
+    wayfinderAlphaEnabled: false,
+    wayfinderAlphaSaving: false,
+    wayfinderAlphaError: "",
+    wayfinderAlphaMessage: "",
     integrationsPublishing: false,
     integrationsError: "",
     integrationsMessage: "",
@@ -1286,6 +1293,14 @@
         event.preventDefault();
         resetSettingsSundayDraftFromCurrent_();
         renderAdmin_();
+        return;
+      }
+
+      if (action === "toggle-wayfinder-alpha") {
+        event.preventDefault();
+        saveWayfinderAlphaSetting_(
+            (button.getAttribute("data-wayfinder-enabled") || "") !== "true",
+        );
         return;
       }
 
@@ -4726,6 +4741,7 @@
         "",
       "</div>",
       renderSettingsSundayEditor_(),
+      renderWayfinderAlphaSettings_(),
       renderRoomRulesEditor_(),
       renderRoomRulesWorkingList_(),
       renderAdminUsersManager_(),
@@ -4813,6 +4829,53 @@
       !canEdit ? " disabled" : "",
       ">Reset Changes</button>",
       "</div>",
+      ].join(""),
+    });
+  }
+
+  function renderWayfinderAlphaSettings_() {
+    var permission = getPageAccessLevel_("wayfinder");
+    var canAdmin = permission === "admin";
+    var enabled = adminState.wayfinderAlphaEnabled === true;
+    return renderCollapsibleAdminSection_({
+      id: "settings-wayfinder-alpha",
+      title: "Wayfinder Staff Alpha",
+      pillHtml: renderStatusPill_(
+          enabled ? "Enabled" : "Disabled",
+          enabled ? "is-safe" : "is-warn",
+      ),
+      bodyHtml: [
+        renderAdminNote_(
+            enabled ?
+              "Wayfinder is visible only to signed-in Central users who have User or Admin Wayfinder permission." :
+              "Wayfinder is hidden from everyone on the public Central page, including staff testers.",
+        ),
+        renderAdminNote_(
+            "User permission allows alpha testing. Admin permission also unlocks Alohomora and Colloportus update mode.",
+        ),
+        adminState.wayfinderAlphaMessage ?
+          renderAdminNote_(adminState.wayfinderAlphaMessage) : "",
+        adminState.wayfinderAlphaError ?
+          "<p class=\"central-admin-note\">" +
+            escapeHtml_(adminState.wayfinderAlphaError) + "</p>" : "",
+        "<div class=\"central-admin-action-row\">",
+        "<button type=\"button\" class=\"central-admin-link-button ",
+        enabled ? "is-secondary" : "is-primary",
+        "\" data-admin-action=\"toggle-wayfinder-alpha\" data-wayfinder-enabled=\"",
+        enabled ? "true" : "false",
+        "\"",
+        (!canAdmin || adminState.wayfinderAlphaSaving) ? " disabled" : "",
+        ">",
+        escapeHtml_(
+            adminState.wayfinderAlphaSaving ?
+              "Saving..." :
+              (enabled ? "Disable Wayfinder" : "Enable Staff Alpha"),
+        ),
+        "</button>",
+        "</div>",
+        !canAdmin ?
+          renderAdminNote_("Only a Wayfinder Admin can change this switch.") :
+          "",
       ].join(""),
     });
   }
@@ -6306,14 +6369,17 @@
       }),
       "<div class=\"central-admin-form-grid\">",
       getManagedAdminPageConfigs_().map(function(pageConfig) {
+        var permissionOptions = pageConfig.key === "wayfinder" ?
+          ["none", "view", "admin"] : ADMIN_PERMISSION_OPTIONS;
         return renderAdminSelectField_({
           label: pageConfig.label,
           field: "admin-user.pageAccess." + pageConfig.key,
           value: getAdminUserDraftPermissionValue_(pageConfig.key),
-          options: ADMIN_PERMISSION_OPTIONS.map(function(permission) {
+          options: permissionOptions.map(function(permission) {
             return {
               value: permission,
-              label: PERMISSION_LABELS[permission] || permission,
+              label: pageConfig.key === "wayfinder" && permission === "view" ?
+                "User" : (PERMISSION_LABELS[permission] || permission),
             };
           }),
         });
@@ -10059,11 +10125,13 @@
       adminFirestore.doc(PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH).get(),
       adminFirestore.collection(PUBLISHED_ROOM_RULES_COLLECTION_PATH).get(),
       adminFirestore.doc(PUBLISHED_ROOM_RULES_META_DOC_PATH).get(),
+      adminFirestore.doc(PUBLISHED_HUB_SETTINGS_DOC_PATH).get(),
     ])
         .then(function(results) {
           var sundaySettingsSnapshot = results[0];
           var publishedSnapshot = results[1];
           var roomRulesMetaSnapshot = results[2];
+          var publicSettingsSnapshot = results[3];
           var roomRulesOverrideActive = hasPublishedListOverrideState_(
               roomRulesMetaSnapshot,
           );
@@ -10098,6 +10166,10 @@
 
                 adminState.settingsLoading = false;
                 adminState.settingsLoaded = true;
+                adminState.wayfinderAlphaEnabled = !!(
+                  publicSettingsSnapshot.exists &&
+                  publicSettingsSnapshot.data().wayfinder_enabled === true
+                );
                 adminState.settingsSundayCurrent = normalizeSettingsSundayData_(
                     sundaySettingsSnapshot.exists ?
                       sundaySettingsSnapshot.data() :
@@ -10157,6 +10229,43 @@
             "Unable to load the current settings.";
           renderAdmin_();
         });
+  }
+
+  function saveWayfinderAlphaSetting_(enabled) {
+    if (!adminState.user ||
+      getPageAccessLevel_("wayfinder") !== "admin") {
+      adminState.wayfinderAlphaError =
+        "Only a Wayfinder Admin can change alpha access.";
+      renderAdmin_();
+      return;
+    }
+
+    adminState.wayfinderAlphaSaving = true;
+    adminState.wayfinderAlphaError = "";
+    adminState.wayfinderAlphaMessage = "";
+    renderAdmin_();
+
+    adminState.user.getIdToken().then(function(idToken) {
+      return fetch(WAYFINDER_ALPHA_SETTINGS_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + idToken,
+        },
+        body: JSON.stringify({enabled: enabled === true}),
+      });
+    }).then(parseAdminEndpointResponse_).then(function(result) {
+      adminState.wayfinderAlphaSaving = false;
+      adminState.wayfinderAlphaEnabled = result.enabled === true;
+      adminState.wayfinderAlphaMessage = String(result.message || "");
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderAlphaSaving = false;
+      adminState.wayfinderAlphaError = error && error.message ?
+        error.message : "Unable to update Wayfinder alpha access.";
+      renderAdmin_();
+    });
   }
 
   function canEditHubSettings_() {
@@ -16371,6 +16480,7 @@
       {key: "hub", label: "Hub"},
       {key: "settings", label: "Settings"},
       {key: "integrations", label: "Integrations"},
+      {key: "wayfinder", label: "Wayfinder"},
       {key: "thisSunday", label: "Sunday"},
       {key: "quickLinks", label: "Quick Links"},
       {key: "statusBanner", label: "Status Banner"},

@@ -1274,7 +1274,7 @@ function createFirestore_() {
           exists: true,
           get: (field) => {
             if (field === "active") return true;
-            if (field === "pageAccess") return {integrations: "admin"};
+            if (field === "pageAccess") return {wayfinder: "admin"};
             return undefined;
           },
         };

@@ -8,6 +8,11 @@ import {defineSecret} from "firebase-functions/params";
 
 import {createWayfinderAnswerHandler} from "./wayfinder/answer.js";
 import {
+  createWayfinderAlphaAccessHandler,
+  createWayfinderAlphaSettingsHandler,
+  getWayfinderAlphaConfig,
+} from "./wayfinder/alpha-access.js";
+import {
   buildWayfinderFeaturedEventEntries,
   createWayfinderFeaturedEventProvider,
 } from "./wayfinder/featured-events.js";
@@ -316,6 +321,7 @@ const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
+  {key: "wayfinder", label: "Wayfinder"},
   {key: "thisSunday", label: "Sunday"},
   {key: "quickLinks", label: "Quick Links"},
   {key: "statusBanner", label: "Status Banner"},
@@ -586,7 +592,14 @@ export const wayfinderPublicFeedback = onRequest(
       memory: "256MiB",
     },
     createWayfinderPublicFeedbackHandler({
+      admin,
       firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      requireEnabled: async () => {
+        const config = await getWayfinderAlphaConfig(firestore);
+        return config.enabled;
+      },
       serverTimestamp: () =>
         admin.firestore.FieldValue.serverTimestamp(),
     }),
@@ -653,6 +666,36 @@ export const wayfinderGenerateAnswer = onRequest(
     }),
 );
 
+export const wayfinderAlphaAccess = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderAlphaAccessHandler({
+      admin,
+      firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
+export const wayfinderAlphaSettings = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderAlphaSettingsHandler({
+      admin,
+      firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
 export const wayfinderPublicAnswer = onRequest(
     {
       region: "us-central1",
@@ -664,6 +707,8 @@ export const wayfinderPublicAnswer = onRequest(
     createWayfinderAnswerHandler({
       admin: admin,
       firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
       generateAnswer: wayfinderGeminiGenerator,
       retrieveLiveContext: getWayfinderPlanningCenterContext_,
       getActiveNotices: () => getActiveWayfinderNotices(firestore),
@@ -672,7 +717,10 @@ export const wayfinderPublicAnswer = onRequest(
       getWebsiteEntries: (question) =>
         getRelevantWayfinderWebsiteEntries(firestore, question),
       getFeaturedEventEntries: getWayfinderFeaturedEventEntries,
-      requireAdminAuth: false,
+      requireEnabled: async () => {
+        const config = await getWayfinderAlphaConfig(firestore);
+        return config.enabled;
+      },
       publicResponse: true,
       model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
     }),
@@ -10949,6 +10997,7 @@ function buildFirstAdminPageAccess_() {
     hub: "admin",
     settings: "admin",
     integrations: "admin",
+    wayfinder: "admin",
     sundaySettings: "admin",
     thisSunday: "admin",
     whatsNew: "admin",

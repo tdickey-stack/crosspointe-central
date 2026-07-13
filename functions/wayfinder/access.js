@@ -1,8 +1,5 @@
 const ALLOWED_PERMISSIONS = new Set([
   "view",
-  "propose",
-  "edit",
-  "approve",
   "admin",
 ]);
 
@@ -55,7 +52,7 @@ export async function authenticateWayfinderAdminRequest(options) {
 
   const pageAccess = userSnapshot.get("pageAccess") || {};
   const permission = String(
-      pageAccess.integrations || pageAccess.settings || "none",
+      pageAccess.wayfinder || "none",
   ).trim().toLowerCase();
 
   if (!ALLOWED_PERMISSIONS.has(permission)) {

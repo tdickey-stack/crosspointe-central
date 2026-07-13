@@ -12,7 +12,7 @@ const MODE_DURATION_MS = 5 * 60 * 1000;
 const DRAFT_DURATION_MS = 15 * 60 * 1000;
 const MAX_NOTICE_DURATION_MS = 31 * 24 * 60 * 60 * 1000;
 const MAX_NOTICE_RESULTS = 3;
-const PUBLISH_PERMISSIONS = new Set(["edit", "approve", "admin"]);
+const PUBLISH_PERMISSIONS = new Set(["admin"]);
 const ALLOWED_TOPICS = new Set([
   "general",
   "events",

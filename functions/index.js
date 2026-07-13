@@ -7,8 +7,12 @@ import {onRequest} from "firebase-functions/v2/https";
 import {defineSecret} from "firebase-functions/params";
 
 import {createWayfinderAnswerHandler} from "./wayfinder/answer.js";
-import {createWayfinderFeaturedEventProvider} from
-  "./wayfinder/featured-events.js";
+import {
+  buildWayfinderFeaturedEventEntries,
+  createWayfinderFeaturedEventProvider,
+} from "./wayfinder/featured-events.js";
+import {createWayfinderFeaturedEventHealthHandler} from
+  "./wayfinder/featured-event-health.js";
 import {
   createDeveloperApiWayfinderGenerator,
   DEFAULT_WAYFINDER_MODEL,
@@ -42,6 +46,11 @@ admin.initializeApp();
 
 const firestore = admin.firestore();
 const getWayfinderFeaturedEvents = createWayfinderFeaturedEventProvider();
+const getWayfinderFeaturedEventEntries = async (question) => {
+  return buildWayfinderFeaturedEventEntries(
+      await getWayfinderFeaturedEvents(), question,
+  );
+};
 
 const CENTRAL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CENTRAL_ALLOWED_ADMIN_EMAIL_DOMAINS = ["crosspointe.tv"];
@@ -496,6 +505,7 @@ const wayfinderEvaluationAnswerHandler = createWayfinderAnswerHandler({
     getActiveWayfinderKnowledgeOverrides(firestore),
   getWebsiteEntries: (question) =>
     getRelevantWayfinderWebsiteEntries(firestore, question),
+  getFeaturedEventEntries: getWayfinderFeaturedEventEntries,
   requireAdminAuth: false,
   publicResponse: false,
   model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
@@ -547,6 +557,24 @@ export const wayfinderWebsiteIndex = onRequest(
       firestore: firestore,
       isAllowedAdminEmail: isAllowedCentralAdminEmail_,
       getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
+export const wayfinderFeaturedEventHealth = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+    },
+    createWayfinderFeaturedEventHealthHandler({
+      admin,
+      firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      getFeaturedEvents: getWayfinderFeaturedEvents,
+      fetchJson: fetchPcoJson_,
+      timezone: PCO_TIMEZONE,
     }),
 );
 
@@ -620,6 +648,7 @@ export const wayfinderGenerateAnswer = onRequest(
         getActiveWayfinderKnowledgeOverrides(firestore),
       getWebsiteEntries: (question) =>
         getRelevantWayfinderWebsiteEntries(firestore, question),
+      getFeaturedEventEntries: getWayfinderFeaturedEventEntries,
       model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
     }),
 );
@@ -642,6 +671,7 @@ export const wayfinderPublicAnswer = onRequest(
         getActiveWayfinderKnowledgeOverrides(firestore),
       getWebsiteEntries: (question) =>
         getRelevantWayfinderWebsiteEntries(firestore, question),
+      getFeaturedEventEntries: getWayfinderFeaturedEventEntries,
       requireAdminAuth: false,
       publicResponse: true,
       model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,

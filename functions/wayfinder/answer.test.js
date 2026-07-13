@@ -342,6 +342,171 @@ test("pronoun follow-up retrieves the person from recent context", async () => {
   assert.match(response.body.answer, /leadership/i);
 });
 
+test("standalone leadership question ignores prior event context", async () => {
+  const history = [{
+    role: "user",
+    content: "What youth events are coming up?",
+  }, {
+    role: "assistant",
+    content: "CSM Summer Games is coming up on Wednesday.",
+  }];
+  let liveCalls = 0;
+  let selectedIds = [];
+  const response = await runHandler_(
+      "Who leads women's ministry?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "Ladies Connect is led by Angie Laubach.",
+          sourceEntryIds: ["staff-womens-ministry-leadership"],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        };
+      },
+      async () => {
+        liveCalls += 1;
+        return {entries: [], statuses: {planning_center_event: "ok"}};
+      },
+      undefined,
+      undefined,
+      history,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(liveCalls, 0);
+  assert.deepEqual(selectedIds, ["staff-womens-ministry-leadership"]);
+  assert.equal(response.body.sourceCards[0].id,
+      "staff-womens-ministry-leadership");
+});
+
+test("can-you follow-up keeps Featured Event context", async () => {
+  const history = [{
+    role: "user",
+    content: "What happens during CSM Summer Games?",
+  }, {
+    role: "assistant",
+    content: "CSM Summer Games includes team challenges and theme nights.",
+  }];
+  let featuredQuestion = "";
+  let selectedIds = [];
+  const response = await runHandler_(
+      "Can you give an example?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "Students can participate in team challenges and " +
+            "theme nights.",
+          sourceEntryIds: ["featured-event-csm-summer-games"],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        };
+      },
+      async () => ({
+        entries: [],
+        statuses: {planning_center_event: "ok"},
+      }),
+      undefined,
+      undefined,
+      history,
+      undefined,
+      async (question) => {
+        featuredQuestion = question;
+        return [featuredEntry_(
+            "featured-event-csm-summer-games", "CSM Summer Games",
+        )];
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(featuredQuestion, /CSM Summer Games/i);
+  assert.ok(selectedIds.includes("featured-event-csm-summer-games"));
+});
+
+test("kids follow-up keeps the prior Converge event context", async () => {
+  const history = [{
+    role: "user",
+    content: "What is Converge?",
+  }, {
+    role: "assistant",
+    content: "Converge is a music camp for children.",
+  }];
+  let featuredQuestion = "";
+  const response = await runHandler_(
+      "What do the kids do?",
+      async () => ({
+        answer: "Children learn music and prepare a performance.",
+        sourceEntryIds: ["featured-event-converge-2026"],
+        shouldContactChurch: false,
+        followUpQuestion: "",
+      }),
+      async () => ({
+        entries: [],
+        statuses: {planning_center_event: "ok"},
+      }),
+      undefined,
+      undefined,
+      history,
+      undefined,
+      async (question) => {
+        featuredQuestion = question;
+        return [featuredEntry_(
+            "featured-event-converge-2026", "Converge 2026",
+        )];
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(featuredQuestion, /Converge/i);
+  assert.equal(response.body.sourceCards[0].id,
+      "featured-event-converge-2026");
+});
+
+test("college audience follow-up keeps the prior event request", async () => {
+  const history = [{
+    role: "user",
+    content: "What youth events do you have coming up?",
+  }, {
+    role: "assistant",
+    content: "CSM Summer Games is the next youth event.",
+  }];
+  let liveQuestion = "";
+  const response = await runHandler_(
+      "What about for college students?",
+      async (context) => ({
+        answer: "Young Adults Life Group is the next college-age event.",
+        sourceEntryIds: ["live-event-young-adults"],
+        shouldContactChurch: false,
+        followUpQuestion: "",
+      }),
+      async ({question}) => {
+        liveQuestion = question;
+        return {
+          statuses: {planning_center_event: "ok"},
+          entries: [{
+            id: "live-event-young-adults",
+            topic: "live_events",
+            title: "Young Adults Life Group",
+            responseMode: "guided",
+            requiredFacts: ["The verified Young Adults event is Thursday."],
+            approvedLinks: [{
+              label: "Young Adults Life Group",
+              url: "https://crosspointetv.churchcenter.com/calendar/event/1",
+            }],
+          }],
+        };
+      },
+      undefined,
+      undefined,
+      history,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(liveQuestion, /events/i);
+  assert.match(liveQuestion, /college students/i);
+  assert.equal(response.body.sourceCards[0].id,
+      "live-event-young-adults");
+});
+
 test("normal prayer-list question is sent to grounded Gemini", async () => {
   let selectedIds = [];
   const response = await runHandler_(
@@ -1046,6 +1211,7 @@ async function runHandler_(
     getActiveKnowledgeOverrides,
     history = [],
     getWebsiteEntries,
+    getFeaturedEventEntries,
 ) {
   const response = createResponse_();
   const handler = createWayfinderAnswerHandler({
@@ -1065,6 +1231,7 @@ async function runHandler_(
     getActiveNotices: getActiveNotices,
     getActiveKnowledgeOverrides: getActiveKnowledgeOverrides,
     getWebsiteEntries: getWebsiteEntries,
+    getFeaturedEventEntries: getFeaturedEventEntries,
     model: "gemini-3.5-flash",
   });
 
@@ -1074,6 +1241,19 @@ async function runHandler_(
     body: {question: question, history: history},
   }, response);
   return response;
+}
+
+function featuredEntry_(id, title) {
+  return {
+    id: id,
+    topic: "live_events",
+    title: title,
+    responseMode: "guided",
+    requiredSourceType: "planning_center_event",
+    requiredFacts: [title + " has approved public activity details."],
+    approvedLinks: [],
+    sourceType: "website_featured_event",
+  };
 }
 
 function createFirestore_() {

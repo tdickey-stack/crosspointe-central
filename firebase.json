@@ -212,6 +212,13 @@
         }
       },
       {
+        "source": "/api/admin/wayfinder/featured-event-health",
+        "function": {
+          "functionId": "wayfinderFeaturedEventHealth",
+          "pinTag": true
+        }
+      },
+      {
         "source": "/api/admin/wayfinder/feedback",
         "function": {
           "functionId": "wayfinderAdminFeedback",

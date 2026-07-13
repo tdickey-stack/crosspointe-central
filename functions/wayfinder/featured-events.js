@@ -25,9 +25,10 @@ export function createWayfinderFeaturedEventProvider(options = {}) {
     Math.max(0, options.cacheTtlMs) : DEFAULT_CACHE_TTL_MS;
   let cache = null;
 
-  return async () => {
+  return async (request = {}) => {
     const current = now();
-    if (cache && current.getTime() - cache.cachedAt < cacheTtlMs) {
+    if (request.forceRefresh !== true && cache &&
+      current.getTime() - cache.cachedAt < cacheTtlMs) {
       return cache.value;
     }
 
@@ -90,7 +91,11 @@ async function fetchFeaturedEvents_({fetchImpl, current}) {
         seen.add(event.normalizedName);
         return true;
       });
-  return {status: "ok", events};
+  return {
+    status: "ok",
+    fetchedAt: current.toISOString(),
+    events,
+  };
 }
 
 async function fetchWithTimeout_(fetchImpl, url, options) {
@@ -135,8 +140,19 @@ function sanitizeFeaturedEvent_(row) {
     name,
     normalizedName,
     startsAt: startsAt.toISOString(),
+    description: extractFeaturedContentText_(row && row.content),
     url: "https://www.crosspointe.tv/event/" + slug,
   };
+}
+
+function extractFeaturedContentText_(content) {
+  if (typeof content === "string") return cleanText_(content, 900);
+  const blocks = content && Array.isArray(content.blocks) ?
+    content.blocks.slice(0, 30) : [];
+  return cleanText_(blocks.map((block) => {
+    return block && block.data && typeof block.data.text === "string" ?
+      block.data.text : "";
+  }).filter(Boolean).join(" "), 900);
 }
 
 /**
@@ -153,8 +169,96 @@ export function normalizeFeaturedEventName(value) {
       .trim();
 }
 
+/**
+ * Checks a small set of approved public-title to PCO-title mappings.
+ *
+ * @param {string} featuredName Website Featured Event name.
+ * @param {string} planningCenterName Planning Center event name.
+ * @return {boolean} Whether the titles are an approved equivalent.
+ */
+export function isApprovedFeaturedEventAlias(
+    featuredName, planningCenterName,
+) {
+  const websiteName = normalizeFeaturedEventName(featuredName);
+  const pcoName = normalizeFeaturedEventName(planningCenterName);
+  const aliases = {
+    "csm summer games": ["csm wednesday nights"],
+  };
+  return Array.isArray(aliases[websiteName]) &&
+    aliases[websiteName].includes(pcoName);
+}
+
+/**
+ * Converts matching public Featured Events into temporary grounded entries.
+ * Website descriptions are supplemental; Planning Center remains required for
+ * schedule and location details.
+ *
+ * @param {Object} featuredResult Sanitized Featured Events provider result.
+ * @param {string} question Current question plus safe follow-up context.
+ * @return {Array<Object>} Matching temporary knowledge entries.
+ */
+export function buildWayfinderFeaturedEventEntries(
+    featuredResult, question,
+) {
+  if (!featuredResult || featuredResult.status !== "ok" ||
+    !Array.isArray(featuredResult.events)) return [];
+  const queryTokens = new Set(normalizeFeaturedEventName(question)
+      .split(/\s+/).filter((token) => token.length > 2));
+  if (!queryTokens.size) return [];
+
+  return featuredResult.events.map((event) => {
+    const name = cleanText_(event && event.name, 160);
+    const normalizedName = normalizeFeaturedEventName(name);
+    const nameTokens = normalizedName.split(/\s+/)
+        .filter((token) => token.length > 2 && !/^\d+$/.test(token));
+    const score = nameTokens.reduce((total, token) => {
+      return total + (queryTokens.has(token) ? 1 : 0);
+    }, 0);
+    return {event, name, normalizedName, score};
+  }).filter((item) => item.name && item.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 3)
+      .map((item) => {
+        const description = cleanText_(item.event.description, 900);
+        return {
+          id: "featured-event-" + item.normalizedName.replace(/\s+/g, "-"),
+          topic: "live_events",
+          title: item.name,
+          responseMode: "guided",
+          requiredSourceType: "planning_center_event",
+          requiredFacts: description ? [
+            "Public Featured Event description: " + description,
+          ] : [
+            item.name + " is currently listed as a Featured Event on " +
+              "CrossPointe's website.",
+          ],
+          requiredActions: [
+            "Use this website description as supplemental event context.",
+            "Use Planning Center for dates, times, locations, and the main " +
+              "event link.",
+          ],
+          prohibitedClaims: [
+            "Do not use the website description to invent or override a " +
+              "date, time, location, registration detail, or cancellation.",
+          ],
+          approvedLinks: item.event.url ? [{
+            label: item.name,
+            url: item.event.url,
+          }] : [],
+          sourceType: "website_featured_event",
+        };
+      });
+}
+
 function cleanText_(value, maxLength) {
-  return String(value || "").replace(/<[^>]*>/g, " ")
+  return String(value || "")
+      .replace(/&nbsp;|&#160;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, "\"")
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/<[^>]*>/g, " ")
       .replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 

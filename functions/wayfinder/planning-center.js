@@ -1,4 +1,7 @@
-import {normalizeFeaturedEventName} from "./featured-events.js";
+import {
+  isApprovedFeaturedEventAlias,
+  normalizeFeaturedEventName,
+} from "./featured-events.js";
 
 const API_ORIGIN = "https://api.planningcenteronline.com";
 const EVENT_SOURCE = "planning_center_event";
@@ -19,7 +22,8 @@ const RELATIVE_WEEK_PATTERN =
   /\b(?:(?:this|coming|next)\s+week|this\s+weekend)\b/i;
 const NEXT_WEEK_PATTERN = /\bnext\s+week\b/i;
 const MINISTRY_EVENT_PATTERN = new RegExp(
-    "\\b(?:kids?|children|students?|youth|women'?s|men'?s|outreach)" +
+    "\\b(?:kids?|children|students?|youth|college(?:\\s+students?)?|" +
+    "young\\s+adults?|women'?s|men'?s|outreach)" +
     "\\s+events?\\b",
     "i",
 );
@@ -104,12 +108,16 @@ async function retrieveEvents_(context) {
   const current = context.now();
   const todayOnly = TODAY_PATTERN.test(question);
   const relativeWeek = RELATIVE_WEEK_PATTERN.test(question);
+  const ministrySearch = MINISTRY_EVENT_PATTERN.test(question);
+  const youthEventSearch = isYouthEventSearch_(question);
+  const collegeEventSearch = isCollegeEventSearch_(question);
   const namedSearch = !todayOnly &&
     !relativeWeek &&
     !isGenericEventQuestion_(question) &&
-    !MINISTRY_EVENT_PATTERN.test(question);
+    !ministrySearch;
+  const targetedSearch = namedSearch || ministrySearch;
   let lookaheadDays = GENERAL_EVENT_DAYS;
-  if (namedSearch) {
+  if (targetedSearch) {
     lookaheadDays = NAMED_EVENT_DAYS;
   } else if (relativeWeek) {
     lookaheadDays = NEXT_WEEK_PATTERN.test(question) ? 14 : 7;
@@ -132,7 +140,13 @@ async function retrieveEvents_(context) {
       .filter(Boolean)
       .filter((event) => event.tags.includes(context.centralTagName) ||
         isFeaturedEventMatch_(event, context.featured, context.timezone))
-      .filter((event) => !isRegularWeeklyProgramming_(event, context.timezone));
+      .filter((event) => !isRegularWeeklyProgramming_(
+          event, context.timezone,
+      ) || isFeaturedEventMatch_(
+          event, context.featured, context.timezone,
+      ))
+      .filter((event) => !youthEventSearch || !isYoungAdultEvent_(event))
+      .filter((event) => !collegeEventSearch || isYoungAdultEvent_(event));
 
   let selected;
   if (todayOnly) {
@@ -140,7 +154,7 @@ async function retrieveEvents_(context) {
     selected = candidates.filter((event) => {
       return localDateKey_(event.startsAt, context.timezone) === todayKey;
     });
-  } else if (namedSearch) {
+  } else if (targetedSearch) {
     selected = candidates
         .map((event) => ({event, score: scoreText_(event.searchText, tokens)}))
         .filter((item) => item.score > 0)
@@ -170,9 +184,7 @@ async function retrieveEvents_(context) {
     const featuredMatch = findFeaturedEventMatch_(
         event, context.featured, context.timezone,
     );
-    return buildEventEntry_(
-        event, rooms, context.timezone, featuredMatch && featuredMatch.name,
-    );
+    return buildEventEntry_(event, rooms, context.timezone, featuredMatch);
   }));
 
   if (!entries.length) {
@@ -200,6 +212,7 @@ function findFeaturedEventMatch_(event, featured, timezone) {
         item.normalizedName || item.name,
     );
     if (featuredName === eventName) return true;
+    if (isApprovedFeaturedEventAlias(item.name, event.name)) return true;
     const featuredDate = new Date(String(item.startsAt || ""));
     if (Number.isNaN(featuredDate.getTime()) ||
       localDateKey_(featuredDate, timezone) !== eventDate) return false;
@@ -332,12 +345,17 @@ function normalizeGroup_(group, groupTypes, tags, enrollments) {
   };
 }
 
-function buildEventEntry_(event, rawRooms, timezone, featuredName = "") {
+function buildEventEntry_(event, rawRooms, timezone, featuredEvent = null) {
   const rooms = (Array.isArray(rawRooms) ? rawRooms : [])
       .map((room) => cleanPublicText_(room, 120)).filter(Boolean);
   const location = rooms.length ? rooms.join(", ") : event.location;
-  const displayName = cleanPublicText_(featuredName, 160) || event.name;
-  const isFeatured = Boolean(featuredName);
+  const displayName = cleanPublicText_(
+      featuredEvent && featuredEvent.name, 160,
+  ) || event.name;
+  const featuredDescription = cleanPublicText_(
+      featuredEvent && featuredEvent.description, 900,
+  );
+  const isFeatured = Boolean(featuredEvent);
   const facts = [
     "The verified event is " + displayName + " on " +
       formatEventDate_(event.startsAt, timezone) + " at " +
@@ -350,6 +368,9 @@ function buildEventEntry_(event, rawRooms, timezone, featuredName = "") {
   facts.push(location ? "The listed location is " + location + "." :
     "A location has not been posted yet.");
   if (event.description) facts.push("Public event note: " + event.description);
+  if (featuredDescription) {
+    facts.push("Public Featured Event description: " + featuredDescription);
+  }
 
   return {
     id: "live-event-" + safeId_(event.id),
@@ -362,6 +383,9 @@ function buildEventEntry_(event, rawRooms, timezone, featuredName = "") {
       ...(isFeatured ? [
         "When listing multiple events, present this event before events " +
           "that are not featured. Do not explain the internal ranking.",
+        "Use the Featured Event description only as supplemental public " +
+          "context. Planning Center remains authoritative for schedule and " +
+          "location details.",
       ] : []),
     ],
     prohibitedClaims: [
@@ -554,9 +578,48 @@ function deduplicateRecurringEvents_(events) {
 }
 
 function meaningfulTokens_(value) {
-  return [...new Set(String(value || "").toLowerCase()
+  const tokens = new Set(String(value || "").toLowerCase()
       .replace(/[^a-z0-9]+/g, " ").split(/\s+/)
-      .filter((token) => token.length > 1 && !STOP_WORDS.has(token)))];
+      .filter((token) => token.length > 1 && !STOP_WORDS.has(token)));
+  if (["woman", "women", "womens", "lady", "ladies"]
+      .some((token) => tokens.has(token))) {
+    tokens.add("women");
+    tokens.add("womens");
+    tokens.add("lady");
+    tokens.add("ladies");
+  }
+  const adultAudience = ["college", "career", "adult", "adults"]
+      .some((token) => tokens.has(token));
+  if (adultAudience) {
+    tokens.add("young");
+    tokens.add("adult");
+    tokens.add("adults");
+    tokens.add("college");
+    tokens.add("career");
+  }
+  if (!adultAudience && ["csm", "student", "students", "youth"]
+      .some((token) => tokens.has(token))) {
+    tokens.add("csm");
+    tokens.add("student");
+    tokens.add("students");
+    tokens.add("youth");
+  }
+  return [...tokens];
+}
+
+function isYouthEventSearch_(question) {
+  const value = String(question || "");
+  return /\b(?:csm|students?|youth|middle school|high school)\b/i.test(value) &&
+    !/\b(?:young adults?|college|career)\b/i.test(value);
+}
+
+function isCollegeEventSearch_(question) {
+  const currentQuestion = String(question || "").trim().split(/\n/).pop() || "";
+  return /\b(?:young adults?|college|career)\b/i.test(currentQuestion);
+}
+
+function isYoungAdultEvent_(event) {
+  return /\byoung adults?\b/i.test(String(event && event.searchText || ""));
 }
 
 function scoreText_(text, tokens) {

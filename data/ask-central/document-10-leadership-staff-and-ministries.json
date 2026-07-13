@@ -153,6 +153,29 @@
       "prohibitedClaims": ["Do not use outdated public information naming Sam Crump as the current CARS leader."]
     },
     {
+      "id": "staff-womens-ministry-leadership",
+      "topic": "staff_and_leadership",
+      "title": "Ladies Connect Leadership",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who leads Women's Ministry?", "Who is over Ladies Connect?", "Who should I contact about Ladies Night?", "What about women's ministry?"],
+      "keywords": ["Women's Ministry", "Womens Ministry", "women's", "womens", "Ladies Connect", "Ladies Night", "Angie Laubach"],
+      "requiredFacts": ["CrossPointe's women's ministry is officially called Ladies Connect, and Angie Laubach leads it. People may still use women's ministry, ladies ministry, or Ladies Night when asking about Ladies Connect."],
+      "requiredActions": ["Call the ministry Ladies Connect in the answer and provide Angie's approved staff-profile link for leadership or contact questions."],
+      "prohibitedClaims": ["Do not direct Women's Ministry questions to Mike Lewis."],
+      "approvedLinks": [{"label": "Contact Angie Laubach", "url": "https://www.crosspointe.tv/contributor/angie-laubach"}]
+    },
+    {
+      "id": "staff-mens-ministry-leadership",
+      "topic": "staff_and_leadership",
+      "title": "Men's Ministry Leadership",
+      "responseMode": "guided",
+      "sampleQuestions": ["Who leads Men's Ministry?", "Who is over Mens Ministry?"],
+      "keywords": ["Men's Ministry", "Mens Ministry", "Men's Night", "Mens Night", "Chris Todd"],
+      "requiredFacts": ["Lead Pastor Chris Todd leads CrossPointe's Men's Ministry."],
+      "requiredActions": ["Provide Chris Todd's approved staff-profile link for Men's Ministry leadership or contact questions."],
+      "approvedLinks": [{"label": "Contact Chris Todd", "url": "https://www.crosspointe.tv/contributor/chris-todd"}]
+    },
+    {
       "id": "staff-public-biographies-and-structure",
       "topic": "staff_and_leadership",
       "title": "Public Staff Biographies and Approved Ministry Structure",

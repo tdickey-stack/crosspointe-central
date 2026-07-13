@@ -12,7 +12,7 @@ const entries = flattened.entries.map((entry) => entry.data);
 test("all approved Wayfinder bundles validate", () => {
   assert.deepEqual(flattened.errors, []);
   assert.equal(flattened.policies.length, 1);
-  assert.equal(flattened.entries.length, 152);
+  assert.equal(flattened.entries.length, 157);
 });
 
 const retrievalCases = [
@@ -55,9 +55,27 @@ const retrievalCases = [
     "staff-worship-technology-and-av",
   ],
   ["Who leads CARS Ministry?", "staff-volunteer-ministry-leaders"],
+  [
+    "Who leads Women's Ministry?",
+    "staff-womens-ministry-leadership",
+  ],
+  [
+    "What about women's?",
+    "staff-womens-ministry-leadership",
+  ],
+  [
+    "Who leads Men's Ministry?",
+    "staff-mens-ministry-leadership",
+  ],
   ["What events are coming up?", "events-general-upcoming"],
   ["What's happening today?", "events-today"],
   ["Are there any women's events?", "events-named-and-ministry-search"],
+  [
+    "What happens on Monday Nights at The Pointe?",
+    "events-monday-nights-at-the-pointe",
+  ],
+  ["What is CSM Summer Games?", "events-csm-summer-games-featured-overlay"],
+  ["Do you have events for college students?", "events-young-adults"],
   ["Where is the Welcome Center?", "campus-welcome-center-main-building"],
   [
     "Where do I check my kids in?",

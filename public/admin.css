@@ -1377,6 +1377,56 @@
   color: #b45309;
 }
 
+[data-app-route="admin"] .wayfinder-featured-health,
+[data-app-route="admin"] .wayfinder-featured-health-list {
+  display: grid;
+  gap: 14px;
+}
+
+[data-app-route="admin"] .wayfinder-featured-health .central-admin-item-header > div,
+[data-app-route="admin"] .wayfinder-featured-health-item .central-admin-item-header > div {
+  display: grid;
+  gap: 5px;
+}
+
+[data-app-route="admin"] .wayfinder-featured-health .central-admin-item-header p,
+[data-app-route="admin"] .wayfinder-featured-health-item h4,
+[data-app-route="admin"] .wayfinder-featured-health-item p {
+  margin: 0;
+}
+
+[data-app-route="admin"] .wayfinder-featured-health .central-admin-item-header p,
+[data-app-route="admin"] .wayfinder-featured-health-item p {
+  color: var(--cp-text-muted);
+  line-height: 1.5;
+}
+
+[data-app-route="admin"] .wayfinder-featured-health-item {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+[data-app-route="admin"] .wayfinder-featured-health-item.is-unmatched,
+[data-app-route="admin"] .wayfinder-featured-health-item.is-unverified {
+  border-color: rgba(202, 138, 4, 0.3);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+[data-app-route="admin"] .wayfinder-featured-health-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+[data-app-route="admin"] .wayfinder-featured-health-links a {
+  color: var(--cp-red-dark);
+  font-weight: 800;
+}
+
 [data-app-route="admin"] .wayfinder-feedback-manager,
 [data-app-route="admin"] .wayfinder-feedback-list {
   display: grid;
@@ -2175,6 +2225,17 @@
 :root[data-theme="dark"][data-app-route="admin"] .wayfinder-knowledge-diff section {
   background: rgba(24, 24, 27, 0.54);
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .wayfinder-featured-health-item {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .wayfinder-featured-health-item.is-unmatched,
+:root[data-theme="dark"][data-app-route="admin"] .wayfinder-featured-health-item.is-unverified {
+  background: rgba(234, 179, 8, 0.09);
+  border-color: rgba(234, 179, 8, 0.2);
 }
 
 :root[data-theme="dark"][data-app-route="admin"] .central-admin-change-request-item.is-expanded {

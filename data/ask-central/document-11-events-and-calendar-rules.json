@@ -63,6 +63,49 @@
       "prohibitedClaims": ["Do not reuse an old date or infer a traditional annual schedule when no live event is posted."]
     },
     {
+      "id": "events-monday-nights-at-the-pointe",
+      "topic": "live_events",
+      "title": "Monday Nights at The Pointe",
+      "responseMode": "guided",
+      "sampleQuestions": ["What happens on Monday Nights at The Pointe?", "When is Ladies Night?", "When is Family Night?", "When is Men's Night?"],
+      "keywords": ["Monday Nights at The Pointe", "Monday night schedule", "Ladies Night", "Women's Night", "Womens Night", "Family Night", "Men's Night", "Mens Night", "first Monday", "second Monday", "third Monday"],
+      "requiredSourceType": "planning_center_event",
+      "requiredFacts": [
+        "Monday Nights at The Pointe is a weekly rotating program on the first three Mondays of each month.",
+        "Ladies Night is normally held on the first Monday of the month.",
+        "Family Night is normally held on the second Monday of the month.",
+        "Men's Night is normally held on the third Monday of the month.",
+        "Fourth and fifth Mondays are normally off weeks."
+      ],
+      "requiredActions": ["Use live Planning Center information for a specific upcoming date, time, location, change, or cancellation. If no matching live event is posted, explain the normal rotation without inventing a specific date."],
+      "approvedLinks": [{"label": "CrossPointe events", "url": "https://www.crosspointe.tv/events"}],
+      "prohibitedClaims": ["Do not promise that the normal rotation will occur on a specific date when Planning Center does not verify it."]
+    },
+    {
+      "id": "events-csm-summer-games-featured-overlay",
+      "topic": "live_events",
+      "title": "CSM Summer Games and Wednesday Student Programming",
+      "responseMode": "guided",
+      "sampleQuestions": ["What is CSM Summer Games?", "When is CSM Summer Games?", "Is Summer Games a separate student event?"],
+      "keywords": ["CSM Summer Games", "Summer Games", "CSM Wednesday Nights", "student Wednesday programming", "youth Wednesday programming"],
+      "requiredSourceType": "planning_center_event",
+      "requiredFacts": ["CSM Summer Games is special seasonal programming that takes place during the regular CrossPointe Student Ministries Wednesday night schedule rather than being a separate Planning Center calendar event."],
+      "requiredActions": ["Cross-reference CSM Summer Games with the next verified CSM Wednesday Nights occurrence for current schedule details."],
+      "prohibitedClaims": ["Do not describe CSM Summer Games as a separate calendar event or invent activities, dates, or details not included in approved sources."]
+    },
+    {
+      "id": "events-young-adults",
+      "topic": "live_events",
+      "title": "Young Adults and College-Age Events",
+      "responseMode": "guided",
+      "sampleQuestions": ["Do you have events for college students?", "What about Young Adults?", "Are there activities for career-age adults?"],
+      "keywords": ["Young Adults", "college students", "college age", "career age", "young adult events", "college events"],
+      "requiredSourceType": "planning_center_event",
+      "requiredFacts": ["CrossPointe's Young Adults ministry serves college-age and career-age adults. Young Adults is separate from CrossPointe Student Ministries for middle-school and high-school students."],
+      "requiredActions": ["Use live Planning Center information for current Young Adults events, dates, times, locations, and links."],
+      "prohibitedClaims": ["Do not classify Young Adults activities as youth or student-ministry events."]
+    },
+    {
       "id": "events-details-registration-and-location",
       "topic": "live_events",
       "title": "Event Details, Registration, Links, and Locations",

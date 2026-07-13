@@ -34,6 +34,8 @@
     "/api/admin/wayfinder/knowledge-changes";
   var WAYFINDER_WEBSITE_INDEX_ENDPOINT =
     "/api/admin/wayfinder/website-index";
+  var WAYFINDER_FEATURED_EVENT_HEALTH_ENDPOINT =
+    "/api/admin/wayfinder/featured-event-health";
   var WAYFINDER_FEEDBACK_ENDPOINT = "/api/admin/wayfinder/feedback";
   var WAYFINDER_EVALUATIONS_ENDPOINT =
     "/api/admin/wayfinder/evaluations";
@@ -545,6 +547,10 @@
     wayfinderWebsiteIndexStatus: null,
     wayfinderWebsiteIndexError: "",
     wayfinderWebsiteIndexMessage: "",
+    wayfinderFeaturedHealthLoaded: false,
+    wayfinderFeaturedHealthLoading: false,
+    wayfinderFeaturedHealthReport: null,
+    wayfinderFeaturedHealthError: "",
     wayfinderFeedbackLoaded: false,
     wayfinderFeedbackLoading: false,
     wayfinderFeedbackWorking: false,
@@ -1343,6 +1349,12 @@
       if (action === "check-wayfinder-website-index") {
         event.preventDefault();
         loadWayfinderWebsiteIndexStatus_(true);
+        return;
+      }
+
+      if (action === "check-wayfinder-featured-events") {
+        event.preventDefault();
+        loadWayfinderFeaturedEventHealth_(true);
         return;
       }
 
@@ -4928,6 +4940,7 @@
       "<p>The backend finds approved information first, then gives only that information to Gemini. Fixed safety answers skip Gemini completely.</p>",
       "</div>",
       "</div>",
+      hasAccess ? renderWayfinderFeaturedEventHealth_() : "",
       hasAccess ? renderWayfinderWebsiteIndex_() : "",
       hasAccess ? renderWayfinderEvaluations_() : "",
       hasAccess ? renderWayfinderFeedbackManager_() : "",
@@ -5074,6 +5087,94 @@
       ">Check Status</button>",
       "</div>",
       "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderFeaturedEventHealth_() {
+    var report = adminState.wayfinderFeaturedHealthReport || {};
+    var events = Array.isArray(report.events) ? report.events : [];
+    var busy = adminState.wayfinderFeaturedHealthLoading;
+    var ready = report.status === "ready";
+    var needsAttention = ready && Number(report.unmatchedCount) > 0;
+    var checkedAt = report.checkedAt ?
+      formatAdminTimestamp_(report.checkedAt) : "Not checked yet";
+
+    return [
+      "<section class=\"central-admin-item wayfinder-featured-health\">",
+      "<div class=\"central-admin-item-header\"><div>",
+      "<strong>Featured Event health</strong>",
+      "<p>Compares the Featured Events on crosspointe.tv with Planning Center. Website titles are public-facing; Planning Center supplies schedule details.</p>",
+      "</div>",
+      renderStatusPill_(
+          busy ? "Checking" : !ready ? "Unavailable" :
+            needsAttention ? "Needs attention" : "Healthy",
+          busy || !ready || needsAttention ? "is-warn" : "is-safe",
+      ),
+      "</div>",
+      "<div class=\"wayfinder-website-index-stats\">",
+      renderInlineMeta_("Featured", String(Number(report.featuredCount) || 0)),
+      renderInlineMeta_("Matched", String(Number(report.matchedCount) || 0)),
+      renderInlineMeta_(
+          "Name differences",
+          String(Number(report.nameDifferenceCount) || 0),
+      ),
+      renderInlineMeta_("Unmatched", String(Number(report.unmatchedCount) || 0)),
+      renderInlineMeta_("Last checked", checkedAt),
+      "</div>",
+      adminState.wayfinderFeaturedHealthError ? [
+        "<div class=\"wayfinder-lab-error\" role=\"alert\"><strong>Featured Event check unavailable.</strong><p>",
+        escapeHtml_(adminState.wayfinderFeaturedHealthError),
+        "</p></div>",
+      ].join("") : "",
+      events.length ? [
+        "<div class=\"wayfinder-featured-health-list\">",
+        events.map(renderWayfinderFeaturedEventHealthItem_).join(""),
+        "</div>",
+      ].join("") : ready && !busy ?
+        "<div class=\"central-admin-empty\"><strong>No featured events found.</strong><p>The website Featured Events section is currently empty.</p></div>" : "",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"check-wayfinder-featured-events\"",
+      busy ? " disabled" : "", ">",
+      busy ? "Checking events..." : "Check Featured Events",
+      "</button></div></section>",
+    ].join("");
+  }
+
+  function renderWayfinderFeaturedEventHealthItem_(item) {
+    var status = String(item.status || "unmatched");
+    var matched = status === "matched";
+    var differs = matched && item.nameDiffers;
+    return [
+      "<article class=\"wayfinder-featured-health-item is-",
+      escapeAttr_(status), "\">",
+      "<div class=\"central-admin-item-header\"><div>",
+      "<span class=\"central-admin-kicker\">Website title</span>",
+      "<h4>", escapeHtml_(item.websiteName), "</h4>",
+      "</div>",
+      renderStatusPill_(
+          matched ? differs ? "Matched · name differs" : "Matched" :
+            status === "unverified" ? "Not checked" : "No PCO match",
+          matched ? differs ? "is-live" : "is-safe" : "is-warn",
+      ),
+      "</div>",
+      differs ? [
+        "<p><strong>Planning Center title:</strong> ",
+        escapeHtml_(item.planningCenterName), "</p>",
+      ].join("") : matched ?
+        "<p>Planning Center uses the same event name.</p>" :
+        "<p>Wayfinder will not present this as a verified event until it can be matched safely.</p>",
+      item.planningCenterStartsAt ? [
+        "<p><strong>Verified schedule:</strong> ",
+        escapeHtml_(formatAdminTimestamp_(item.planningCenterStartsAt)),
+        "</p>",
+      ].join("") : "",
+      "<div class=\"wayfinder-featured-health-links\">",
+      item.websiteUrl ? "<a href=\"" + escapeAttr_(item.websiteUrl) +
+        "\" target=\"_blank\" rel=\"noopener noreferrer\">Website card</a>" : "",
+      item.planningCenterUrl ? "<a href=\"" +
+        escapeAttr_(item.planningCenterUrl) +
+        "\" target=\"_blank\" rel=\"noopener noreferrer\">Planning Center event</a>" : "",
+      "</div></article>",
     ].join("");
   }
 
@@ -9672,6 +9773,7 @@
     }
 
     if (adminState.currentPageId === "wayfinder") {
+      loadWayfinderFeaturedEventHealth_(false);
       loadWayfinderWebsiteIndexStatus_(false);
       loadWayfinderFeedback_(false);
       loadWayfinderEvaluations_(false);
@@ -15355,6 +15457,41 @@
           });
         })
         .then(parseAdminEndpointResponse_);
+  }
+
+  function loadWayfinderFeaturedEventHealth_(forceReload) {
+    if (!adminState.user || adminState.wayfinderFeaturedHealthLoading) return;
+    if (adminState.wayfinderFeaturedHealthLoaded && !forceReload) return;
+    adminState.wayfinderFeaturedHealthLoading = true;
+    adminState.wayfinderFeaturedHealthError = "";
+    renderAdmin_();
+
+    adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(WAYFINDER_FEATURED_EVENT_HEALTH_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({action: "check"}),
+          });
+        })
+        .then(parseAdminEndpointResponse_)
+        .then(function(result) {
+          adminState.wayfinderFeaturedHealthLoading = false;
+          adminState.wayfinderFeaturedHealthLoaded = true;
+          adminState.wayfinderFeaturedHealthReport = result || null;
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderFeaturedHealthLoading = false;
+          adminState.wayfinderFeaturedHealthLoaded = true;
+          adminState.wayfinderFeaturedHealthError = error && error.message ?
+            error.message : "Featured Event health is unavailable.";
+          renderAdmin_();
+        });
   }
 
   function loadWayfinderWebsiteIndexStatus_(forceReload) {

@@ -57,6 +57,35 @@ try {
     ...result.entries,
   ];
 
+  const expectedIdsByCollection = new Map();
+  writes.forEach((write) => {
+    if (!expectedIdsByCollection.has(write.collection)) {
+      expectedIdsByCollection.set(write.collection, new Set());
+    }
+    expectedIdsByCollection.get(write.collection).add(write.id);
+  });
+
+  const staleReferences = [];
+  for (const [collection, expectedIds] of expectedIdsByCollection) {
+    const snapshot = await firestore.collection(collection).get();
+    snapshot.docs.forEach((document) => {
+      const data = document.data() || {};
+      const managedByImporter = Boolean(data.sourceBundleId) ||
+        data.documentType === "assistant_policy";
+      if (managedByImporter && !expectedIds.has(document.id)) {
+        staleReferences.push(document.ref);
+      }
+    });
+  }
+
+  for (let offset = 0; offset < staleReferences.length; offset += 400) {
+    const batch = firestore.batch();
+    staleReferences.slice(offset, offset + 400).forEach((reference) => {
+      batch.delete(reference);
+    });
+    await batch.commit();
+  }
+
   for (let offset = 0; offset < writes.length; offset += 400) {
     const batch = firestore.batch();
     writes.slice(offset, offset + 400).forEach((write) => {
@@ -71,6 +100,10 @@ try {
 
   console.log("Imported " + writes.length + " draft document(s) into " +
     (emulatorHost ? "the Firestore emulator." : "production Firestore."));
+  if (staleReferences.length) {
+    console.log("Removed " + staleReferences.length +
+      " stale imported document(s).");
+  }
 } catch (error) {
   console.error(error && error.stack || error);
   process.exitCode = 1;

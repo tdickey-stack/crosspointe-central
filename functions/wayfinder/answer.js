@@ -47,8 +47,10 @@ const FOLLOW_UP_QUESTION_PATTERN = new RegExp(
     "^(?:and\\b|also\\b|but\\b|yes\\b|no\\b|what about\\b|how about\\b|" +
     "what if\\b|what other\\b|which\\b|any other\\b|anything else\\b|" +
     "tell me more\\b|more details?\\b|what time\\b|when\\b|where\\b|" +
-    "how long\\b|how do i\\b|how can i\\b|can i\\b|could i\\b|" +
+    "how long\\b|how do i\\b|how can i\\b|can i\\b|can you\\b|" +
+    "could i\\b|" +
     "would i\\b|who\\b|why\\b|" +
+    "what do (?:the )?(?:kids|children|students|people|they) do\\b|" +
     "what\\s+(?:does|do|is|are|was|were|can|will)\\s+(?:it|that|this|" +
     "they|them|he|she)\\b|" +
     "how\\s+(?:does|do|is|are|can)\\s+(?:it|that|this|they|he|she)\\b|" +
@@ -87,6 +89,7 @@ export function createWayfinderAnswerHandler(dependencies) {
   const getActiveKnowledgeOverrides =
     dependencies.getActiveKnowledgeOverrides;
   const getWebsiteEntries = dependencies.getWebsiteEntries;
+  const getFeaturedEventEntries = dependencies.getFeaturedEventEntries;
   const requireAdminAuth = dependencies.requireAdminAuth !== false;
   const publicResponse = dependencies.publicResponse === true;
   const model = String(dependencies.model || "gemini-3.5-flash");
@@ -165,9 +168,16 @@ export function createWayfinderAnswerHandler(dependencies) {
           activeNotices,
       );
 
+      const featuredEventEntries =
+        typeof getFeaturedEventEntries === "function" ?
+          await getFeaturedEventEntries(retrievalQuestion) : [];
+      const rankedEntries = entries.concat(
+          Array.isArray(featuredEventEntries) ? featuredEventEntries : [],
+      );
+
       const retrieval = rankWayfinderKnowledge(
           retrievalQuestion,
-          entries,
+          rankedEntries,
           {limit: 5},
       );
       const shouldCheckWebsite = typeof getWebsiteEntries === "function" &&
@@ -265,15 +275,16 @@ export function createWayfinderAnswerHandler(dependencies) {
         liveEntries = getSafeLiveEntries_(liveContext && liveContext.entries);
       }
 
-      const selectedEntries = [
+      const selectedEntries = deduplicateEntries_([
         ...noticeEntries,
         ...liveEntries,
+        ...featuredEventEntries,
         ...selectRetrievedEntries_(
-            entries,
+            rankedEntries,
             retrieval.results,
         ),
         ...websiteEntries,
-      ].slice(0, 5);
+      ]).slice(0, 5);
       if (GROUP_DIRECTORY_LINK_PATTERN.test(retrievalQuestion)) {
         const directoryEntry = entries.find((entry) => {
           return entry.id === "groups-live-directory";
@@ -713,10 +724,24 @@ function buildContextualRetrievalQuestion_(question, history) {
       .map((message) => message.content)
       .filter(Boolean);
   if (!recentContext.length ||
+    isStandaloneFollowUpQuestion_(currentQuestion) ||
     !FOLLOW_UP_QUESTION_PATTERN.test(currentQuestion)) {
     return currentQuestion;
   }
   return recentContext.concat(currentQuestion).join("\n");
+}
+
+function isStandaloneFollowUpQuestion_(question) {
+  const value = String(question || "").trim();
+  if (/^who\b/i.test(value) &&
+    !/\b(?:it|that|this|them|they|he|she)\b/i.test(value)) {
+    return true;
+  }
+  const whatAbout = value.match(/^what about\s+(.+)$/i);
+  if (!whatAbout) return false;
+  if (/^for\b/i.test(whatAbout[1].trim())) return false;
+  return !/^(?:it|that|this|them|they|him|her)(?:\b|[?!.])/i
+      .test(whatAbout[1].trim());
 }
 
 function getApprovedDraftEntries_(snapshot) {
@@ -785,6 +810,16 @@ function selectRetrievedEntries_(entries, results) {
       .slice(0, hasDecisiveMatch ? 1 : 5)
       .map((result) => entriesById.get(result.id))
       .filter(Boolean);
+}
+
+function deduplicateEntries_(entries) {
+  const seen = new Set();
+  return (Array.isArray(entries) ? entries : []).filter((entry) => {
+    const id = String(entry && entry.id || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
 
 function getRequiredLiveSourceTypes_(question, results) {

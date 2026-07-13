@@ -124,6 +124,7 @@ test("includes a date-and-name matched featured PCO event without Central tag",
             name: "Men's Night",
             normalizedName: "mens night",
             startsAt: "2026-07-20T22:30:00.000Z",
+            description: "A time for guys to connect and grow.",
             url: "https://www.crosspointe.tv/event/mens-night",
           }],
         }),
@@ -137,6 +138,8 @@ test("includes a date-and-name matched featured PCO event without Central tag",
       assert.equal(result.statuses.planning_center_event, "ok");
       assert.equal(result.entries[0].title, "Men's Night");
       assert.match(result.entries[0].requiredFacts.join(" "), /July 20/);
+      assert.match(result.entries[0].requiredFacts.join(" "),
+          /connect and grow/);
       assert.doesNotMatch(JSON.stringify(result.entries),
           /The Pointe - Men's Ministry/);
     });
@@ -196,6 +199,149 @@ test("uses a six-month window for a named event search", async () => {
   assert.equal(result.entries[0].title, "Starting Pointe");
   const end = new URL(requestedUrl).searchParams.get("where[starts_at][lte]");
   assert.ok(new Date(end).getTime() - NOW.getTime() > 180 * 86400000);
+});
+
+test("treats women and ladies as equivalent in a six-month event search",
+    async () => {
+      let requestedUrl = "";
+      const retriever = createWayfinderPlanningCenterRetriever({
+        now: () => NOW,
+        fetchJson: async (url) => {
+          requestedUrl = url;
+          return {
+            data: [event_(
+                "15", "CrossPointe Ladies Connect Luau",
+                "2026-08-03T23:30:00Z", [],
+            )],
+            included: [],
+            links: {next: null},
+          };
+        },
+        getFeaturedEvents: async () => ({
+          status: "ok",
+          events: [{
+            name: "Ladies Night",
+            normalizedName: "ladies night",
+            startsAt: "2026-08-03T23:30:00.000Z",
+            url: "https://www.crosspointe.tv/event/ladies-night",
+          }],
+        }),
+      });
+
+      const result = await retriever({
+        question: "Are there any women's events?",
+        sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+      });
+
+      assert.equal(result.statuses.planning_center_event, "ok");
+      assert.equal(result.entries[0].title, "Ladies Night");
+      const end = new URL(requestedUrl).searchParams
+          .get("where[starts_at][lte]");
+      assert.ok(new Date(end).getTime() - NOW.getTime() > 180 * 86400000);
+    });
+
+test("maps CSM Summer Games to the regular CSM Wednesday occurrence",
+    async () => {
+      const retriever = createWayfinderPlanningCenterRetriever({
+        now: () => NOW,
+        fetchJson: async () => ({
+          data: [event_(
+              "16", "CSM Wednesday Nights",
+              "2026-07-15T22:00:00Z", ["central"],
+          )],
+          included: [tag_("central", "Central")],
+          links: {next: null},
+        }),
+        getFeaturedEvents: async () => ({
+          status: "ok",
+          events: [{
+            name: "CSM Summer Games",
+            normalizedName: "csm summer games",
+            startsAt: "2026-06-03T22:00:00.000Z",
+            url: "https://www.crosspointe.tv/event/csm-summer-games-2",
+          }],
+        }),
+      });
+
+      const result = await retriever({
+        question: "What events are coming up?",
+        sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+      });
+
+      assert.equal(result.statuses.planning_center_event, "ok");
+      assert.equal(result.entries[0].title, "CSM Summer Games");
+      assert.match(result.entries[0].requiredFacts.join(" "), /July 15/);
+    });
+
+test("youth event searches exclude Young Adults programming", async () => {
+  const retriever = createWayfinderPlanningCenterRetriever({
+    now: () => NOW,
+    fetchJson: async () => ({
+      data: [
+        event_(
+            "16", "CSM Wednesday Nights",
+            "2026-07-15T22:00:00Z", ["central"],
+        ),
+        event_(
+            "17", "Young Adults Life Group",
+            "2026-07-16T23:30:00Z", ["central"],
+        ),
+      ],
+      included: [tag_("central", "Central")],
+      links: {next: null},
+    }),
+    getFeaturedEvents: async () => ({
+      status: "ok",
+      events: [{
+        name: "CSM Summer Games",
+        normalizedName: "csm summer games",
+        startsAt: "2026-07-15T22:00:00.000Z",
+        description: "Students compete in games, challenges, and theme nights.",
+        url: "https://www.crosspointe.tv/event/csm-summer-games-2",
+      }],
+    }),
+  });
+
+  const result = await retriever({
+    question: "What youth events do you have coming up?",
+    sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+  });
+
+  assert.deepEqual(result.entries.map((entry) => entry.title), [
+    "CSM Summer Games",
+  ]);
+  assert.match(result.entries[0].requiredFacts.join(" "), /theme nights/i);
+});
+
+test("college event searches select Young Adults programming", async () => {
+  const retriever = createWayfinderPlanningCenterRetriever({
+    now: () => NOW,
+    fetchJson: async () => ({
+      data: [
+        event_(
+            "16", "CSM Wednesday Nights",
+            "2026-07-15T22:00:00Z", ["central"],
+        ),
+        event_(
+            "17", "Young Adults Life Group",
+            "2026-07-16T23:30:00Z", ["central"],
+        ),
+      ],
+      included: [tag_("central", "Central")],
+      links: {next: null},
+    }),
+  });
+
+  const result = await retriever({
+    question: "What youth events do you have coming up?\n" +
+      "CSM Summer Games is the next youth event.\n" +
+      "What about for college students?",
+    sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+  });
+
+  assert.deepEqual(result.entries.map((entry) => entry.title), [
+    "Young Adults Life Group",
+  ]);
 });
 
 test("treats this week as a general event listing", async () => {

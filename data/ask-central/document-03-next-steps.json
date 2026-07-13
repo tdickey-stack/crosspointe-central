@@ -1,0 +1,551 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-03",
+  "title": "Next Steps",
+  "status": "approved",
+  "approvedDate": "2026-07-10",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "flexible",
+  "entries": [
+    {
+      "id": "next-steps-overview",
+      "topic": "next_steps",
+      "title": "Finding the Right Next Step",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What should my next step be?",
+        "How can I get more involved?",
+        "I'm new here. What should I do next?",
+        "How can I grow at CrossPointe?"
+      ],
+      "keywords": [
+        "next step",
+        "get involved",
+        "grow",
+        "Pointe Group",
+        "baptism",
+        "membership",
+        "serve"
+      ],
+      "requiredFacts": [
+        "CrossPointe encourages everyone to become involved in a Pointe Group.",
+        "The right additional next step depends on the person's situation."
+      ],
+      "routingGuidance": [
+        "A recent decision to follow Christ routes to the Decision Form entry.",
+        "A request for community routes to Pointe Groups.",
+        "A baptism request routes to the church office and baptism process.",
+        "A membership request routes to Foundations and Starting Pointe.",
+        "A serving request routes to Connection Pointe."
+      ],
+      "requiredActions": [
+        "Ask a short clarifying question when the person's intended next step is unclear."
+      ]
+    },
+    {
+      "id": "next-steps-decision-for-christ",
+      "topic": "next_steps",
+      "title": "Decision to Follow Christ",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "I accepted Jesus. What do I do next?",
+        "I decided to follow Christ.",
+        "How do I tell the church about my decision?",
+        "What happens after I submit the Decision Form?"
+      ],
+      "keywords": [
+        "accepted Jesus",
+        "follow Christ",
+        "decision",
+        "salvation",
+        "Decision Form",
+        "tell someone"
+      ],
+      "requiredFacts": [
+        "Someone who recently decided to follow Christ should be warmly encouraged to tell someone.",
+        "They can complete the Decision Form or text DECISION to 405-374-4740.",
+        "A pastor or staff member will normally contact them within one week to discuss their decision and appropriate next steps.",
+        "If they have already told someone, CrossPointe encourages them to become involved in a Pointe Group."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Decision Form",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/328118"
+        }
+      ],
+      "approvedActions": [
+        {
+          "type": "text",
+          "label": "Text DECISION",
+          "value": "405-374-4740"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not imply that completing a form, sending a text, joining a group, or being baptized is what saves someone.",
+        "Do not promise an exact contact time; use normally within one week."
+      ]
+    },
+    {
+      "id": "next-steps-pointe-group-summary",
+      "topic": "next_steps",
+      "title": "Pointe Group Summary",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What is a Pointe Group?",
+        "Why should I join a group?",
+        "Where do Pointe Groups meet?",
+        "How big is a Pointe Group?"
+      ],
+      "keywords": [
+        "Pointe Group",
+        "small group",
+        "fellowship",
+        "Bible study",
+        "community",
+        "homes",
+        "on campus"
+      ],
+      "requiredFacts": [
+        "A Pointe Group is a group of approximately 10 to 60 or more people.",
+        "Pointe Groups gather to fellowship, study God's Word, build relationships, and grow together.",
+        "Pointe Groups meet regularly either on CrossPointe's campus or in people's homes."
+      ],
+      "relatedDocumentIds": [
+        "document-04"
+      ]
+    },
+    {
+      "id": "next-steps-starting-pointe-overview",
+      "topic": "next_steps",
+      "title": "Starting Pointe Overview",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What is Starting Pointe?",
+        "Is Starting Pointe required for membership?",
+        "What happens at Starting Pointe?",
+        "Does Starting Pointe cost anything?",
+        "Is childcare available?"
+      ],
+      "keywords": [
+        "Starting Pointe",
+        "membership event",
+        "staff families",
+        "mission and vision",
+        "home-cooked meal",
+        "childcare",
+        "free"
+      ],
+      "requiredFacts": [
+        "Starting Pointe is for adults interested in becoming CrossPointe members.",
+        "Attendees meet staff members and their families, learn CrossPointe's mission and vision, share a home-cooked meal, and learn about membership.",
+        "Starting Pointe normally lasts approximately one hour.",
+        "Starting Pointe has no cost.",
+        "Childcare can be provided when needed.",
+        "Registration is available in person at the Welcome Center.",
+        "Starting Pointe is required for those pursuing membership.",
+        "Attending does not automatically make someone a member, and applying remains their choice."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that Starting Pointe attendance guarantees membership."
+      ]
+    },
+    {
+      "id": "next-steps-starting-pointe-schedule",
+      "topic": "next_steps",
+      "title": "Finding the Next Starting Pointe",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "When is the next Starting Pointe?",
+        "Is Starting Pointe happening this quarter?",
+        "How often is Starting Pointe held?",
+        "How do I register for Starting Pointe?"
+      ],
+      "keywords": [
+        "Starting Pointe date",
+        "current quarter",
+        "quarterly",
+        "register",
+        "Planning Center"
+      ],
+      "requiredSourceType": "planning_center_event",
+      "requiredFacts": [
+        "CrossPointe aims to hold Starting Pointe once per quarter, but the schedule varies and depends partly on membership interest.",
+        "Registration is available in person at the Welcome Center."
+      ],
+      "retrievalRules": [
+        "Search Planning Center for a Starting Pointe during the current quarter.",
+        "If none is listed, say that no Starting Pointe is currently scheduled in the current quarter and provide the general church contact information."
+      ],
+      "prohibitedClaims": [
+        "Do not promise that Starting Pointe will happen every quarter.",
+        "Do not invent a date or use an old website or social-media date."
+      ]
+    },
+    {
+      "id": "next-steps-connection-pointe",
+      "topic": "next_steps",
+      "title": "Connection Pointe",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What is Connection Pointe?",
+        "How can I find a place to serve?",
+        "Do I need to register for Connection Pointe?",
+        "Is Connection Pointe for members only?",
+        "When is the next Connection Pointe?"
+      ],
+      "keywords": [
+        "Connection Pointe",
+        "serve",
+        "ministry booths",
+        "Event Hall",
+        "come and go",
+        "volunteer"
+      ],
+      "requiredFacts": [
+        "Connection Pointe is for anyone interested in connecting with ministries or finding a place to serve.",
+        "It is held in the Event Hall during both Sunday services on selected Sundays.",
+        "It is open to everyone and is not limited to members.",
+        "It is a free, come-and-go event with no registration required.",
+        "Ministry booths allow people to meet representatives, ask questions, learn about ministries, and express interest in serving."
+      ],
+      "requiredSourceTypeForDates": "planning_center_event",
+      "prohibitedClaims": [
+        "Do not imply that Connection Pointe happens every Sunday.",
+        "Do not invent event dates."
+      ]
+    },
+    {
+      "id": "next-steps-pointe-event-differences",
+      "topic": "next_steps",
+      "title": "Starting Pointe Versus Connection Pointe",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What is the difference between Starting Pointe and Connection Pointe?",
+        "Which Pointe event should I attend?",
+        "Do I attend Connection Pointe before Starting Pointe?"
+      ],
+      "keywords": [
+        "Starting Pointe versus Connection Pointe",
+        "membership",
+        "serving",
+        "connect"
+      ],
+      "requiredFacts": [
+        "Starting Pointe is for adults pursuing church membership.",
+        "Connection Pointe is for anyone interested in connecting with ministries or finding a place to serve.",
+        "Neither event is automatically a prerequisite for the other."
+      ]
+    },
+    {
+      "id": "next-steps-foundations",
+      "topic": "next_steps",
+      "title": "Foundations Study",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What is Foundations?",
+        "How many Foundations sessions are there?",
+        "Do I need to finish Foundations before Starting Pointe?",
+        "Is Foundations required for membership?"
+      ],
+      "keywords": [
+        "Foundations",
+        "six sessions",
+        "self-guided",
+        "Christian beliefs",
+        "membership requirement"
+      ],
+      "requiredFacts": [
+        "Foundations is a six-session, self-guided study focused on foundational Christian beliefs.",
+        "Completing Foundations before Starting Pointe is recommended but not required.",
+        "Foundations must be completed before membership can be approved."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Foundations",
+          "url": "https://www.crosspointe.tv/foundations"
+        }
+      ]
+    },
+    {
+      "id": "next-steps-membership-process",
+      "topic": "next_steps",
+      "title": "CrossPointe Membership Process",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How do I become a member?",
+        "What is the membership process?",
+        "How old do I have to be to become a member?",
+        "Who approves membership?",
+        "How long does membership approval take?"
+      ],
+      "keywords": [
+        "membership",
+        "18 years old",
+        "Foundations",
+        "Starting Pointe",
+        "application",
+        "General Board",
+        "third Sunday"
+      ],
+      "requiredFacts": [
+        "Membership applicants must be at least 18 years old.",
+        "Applicants complete Foundations, attend Starting Pointe, choose whether to apply, complete remaining requirements, and receive General Board approval.",
+        "The General Board normally meets on the third Sunday of each month.",
+        "After approval, the new member is notified by email."
+      ],
+      "prohibitedClaims": [
+        "Do not promise a particular Board review date or approval timeline.",
+        "Do not imply that attending Starting Pointe automatically grants membership."
+      ]
+    },
+    {
+      "id": "next-steps-membership-commitments",
+      "topic": "next_steps",
+      "title": "Membership Commitments",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What do CrossPointe members commit to?",
+        "Do members have to join a group?",
+        "Do members have to serve or give?",
+        "Can members vote in business meetings?"
+      ],
+      "keywords": [
+        "membership commitments",
+        "Statement of Faith",
+        "baptized believer",
+        "Pointe Group",
+        "serve",
+        "give",
+        "business meetings",
+        "vote"
+      ],
+      "requiredFacts": [
+        "Members must be at least 18 years old.",
+        "Members agree with CrossPointe's Statement of Faith.",
+        "Members must be baptized as believers.",
+        "Members agree to join a Pointe Group, serve in a volunteer ministry, give toward church needs, and continue growing in their relationship with the Lord.",
+        "Members complete Foundations, attend Starting Pointe, and receive General Board approval.",
+        "Membership demonstrates commitment to CrossPointe and allows members to vote in church business meetings."
+      ],
+      "styleRules": [
+        "Explain membership commitments clearly without pressure or manipulative language."
+      ]
+    },
+    {
+      "id": "next-steps-new-member-notification",
+      "topic": "next_steps",
+      "title": "New Member Notification and Welcome Slide",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "How will I know if my membership is approved?",
+        "Will my photo be shown at church?",
+        "Can I opt out of the new member slide?"
+      ],
+      "keywords": [
+        "approval email",
+        "new member slide",
+        "photo",
+        "pre-service announcements",
+        "opt out"
+      ],
+      "requiredFacts": [
+        "New members are notified of approval by email.",
+        "New members may choose to provide a photo for a new-member slide shown during pre-service announcements.",
+        "Providing a photo and appearing in the slide are optional, and members may opt out."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that public recognition or providing a photo is required."
+      ]
+    },
+    {
+      "id": "next-steps-baptism-beliefs",
+      "topic": "next_steps",
+      "title": "What CrossPointe Believes About Baptism",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What does CrossPointe believe about baptism?",
+        "Does baptism save me?",
+        "Is baptism required for salvation?",
+        "How does CrossPointe baptize people?",
+        "Is baptism required for membership?"
+      ],
+      "keywords": [
+        "baptism",
+        "believer's baptism",
+        "salvation",
+        "outward expression",
+        "full immersion",
+        "membership"
+      ],
+      "requiredFacts": [
+        "Baptism is for people who have personally chosen to follow Jesus.",
+        "Baptism is not an act of salvation and is not required to be saved.",
+        "Baptism is an outward expression of an inward commitment to Christ and an act of obedience every believer should take.",
+        "CrossPointe practices full-immersion baptism.",
+        "Believer's baptism is required for CrossPointe membership."
+      ],
+      "prohibitedClaims": [
+        "Do not imply that baptism earns or completes salvation."
+      ]
+    },
+    {
+      "id": "next-steps-previous-baptisms",
+      "topic": "next_steps",
+      "title": "Recognizing Previous Baptisms",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Do I have to be baptized again?",
+        "Does CrossPointe recognize my previous baptism?",
+        "Does baptism have to be by immersion?",
+        "Does CrossPointe recognize infant baptism?",
+        "Does CrossPointe recognize an LDS or Jehovah's Witness baptism?"
+      ],
+      "keywords": [
+        "previous baptism",
+        "other denomination",
+        "infant baptism",
+        "immersion",
+        "LDS",
+        "Mormon",
+        "Jehovah's Witness"
+      ],
+      "requiredFacts": [
+        "A person does not need to have been baptized at CrossPointe to become a member.",
+        "CrossPointe recognizes baptisms from other Christian denominations when the baptism followed the person's own decision to follow Christ.",
+        "CrossPointe recognizes baptism methods other than full immersion, although CrossPointe practices full immersion.",
+        "CrossPointe does not recognize infant baptism.",
+        "CrossPointe does not recognize baptisms performed by the Church of Jesus Christ of Latter-day Saints or Jehovah's Witnesses because CrossPointe considers their beliefs outside historic Christian belief."
+      ],
+      "styleRules": [
+        "State the policy briefly and respectfully.",
+        "Do not make hostile statements about individuals belonging to other organizations."
+      ],
+      "prohibitedBehaviors": [
+        "Do not begin a theological argument or debate."
+      ]
+    },
+    {
+      "id": "next-steps-request-baptism",
+      "topic": "next_steps",
+      "title": "Requesting Baptism",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How do I get baptized?",
+        "Who do I contact about baptism?",
+        "When can I be baptized?",
+        "Do I meet with a pastor first?"
+      ],
+      "keywords": [
+        "request baptism",
+        "schedule baptism",
+        "pastor meeting",
+        "church office",
+        "baptism date"
+      ],
+      "requiredFacts": [
+        "Anyone interested in baptism should contact the church office.",
+        "The person meets with a pastor to discuss baptism and their faith.",
+        "Upon the pastor's recommendation, the baptism is scheduled."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "dynamicSourceRules": [
+        "Baptism dates must come from Planning Center or the church office."
+      ],
+      "prohibitedClaims": [
+        "Do not promise a baptism date.",
+        "Do not imply that requesting baptism guarantees the pastor's recommendation."
+      ]
+    },
+    {
+      "id": "next-steps-child-teen-baptism",
+      "topic": "next_steps",
+      "title": "Baptism for Children and Teenagers",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can my child be baptized?",
+        "How does a teenager request baptism?",
+        "Is there a baptism class for children?",
+        "Who talks with my child about baptism?"
+      ],
+      "keywords": [
+        "child baptism",
+        "teen baptism",
+        "Children's Pastor",
+        "Student Pastor",
+        "baptism class",
+        "ready for baptism"
+      ],
+      "requiredFacts": [
+        "Requests begin through the church office.",
+        "Children meet with the Children's Pastor and complete a short class to discuss their understanding and readiness for baptism.",
+        "Teenagers meet with the Student Pastor to discuss baptism and their decision to follow Christ."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "styleRules": [
+        "Use encouraging language such as ready for baptism rather than describing the conversation as a test."
+      ]
+    },
+    {
+      "id": "next-steps-contact",
+      "topic": "next_steps",
+      "title": "Contacting CrossPointe About Next Steps",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Who can help me choose my next step?",
+        "Can I talk to someone about getting involved?",
+        "I don't know whether I need baptism, membership, or a group."
+      ],
+      "keywords": [
+        "next step help",
+        "contact office",
+        "baptism",
+        "membership",
+        "Pointe Group",
+        "serving",
+        "pastor"
+      ],
+      "requiredActions": [
+        "When useful, ask whether the person is interested in baptism, membership, joining a group, serving, or speaking with a pastor.",
+        "Provide general church contact information when personal guidance is needed."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ]
+    }
+  ]
+}

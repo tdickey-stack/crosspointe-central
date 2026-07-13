@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-07",
+  "title": "Prayer, Pastoral Care, and Counseling",
+  "status": "approved",
+  "approvedDate": "2026-07-10",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "guided",
+  "entries": [
+    {
+      "id": "care-prayer-request-submit",
+      "topic": "prayer_and_care",
+      "title": "Submitting a Prayer Request",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How can I submit a prayer request?",
+        "Can someone who does not attend CrossPointe request prayer?",
+        "Will the staff pray for me?",
+        "When does the staff pray over requests?"
+      ],
+      "keywords": [
+        "prayer request",
+        "submit prayer",
+        "prayer list",
+        "staff prayer",
+        "anyone"
+      ],
+      "requiredFacts": [
+        "Prayer requests may be submitted online through the approved Prayer Request Form.",
+        "Anyone may submit a prayer request, including someone who does not attend CrossPointe.",
+        "Everyone who submits a request is added to the prayer list.",
+        "CrossPointe staff meets weekly to pray over the prayer list and believes in the power of prayer."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Submit a Prayer Request",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/340884"
+        }
+      ],
+      "requiredActions": [
+        "When someone asks how to submit a prayer request, direct them to the approved online Prayer Request Form rather than substituting general office contact information.",
+        "Affirm the importance of prayer without promising a particular outcome."
+      ]
+    },
+    {
+      "id": "care-prayer-privacy-and-wall",
+      "topic": "prayer_and_care",
+      "title": "Prayer Request Privacy and Prayer Wall",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Will my prayer request be private?",
+        "Can I submit a prayer request anonymously?",
+        "Who can see my prayer request?",
+        "What is the Prayer Wall?"
+      ],
+      "keywords": [
+        "private prayer",
+        "anonymous prayer",
+        "Prayer Wall",
+        "confidential",
+        "who sees request"
+      ],
+      "requiredFacts": [
+        "The online Prayer Request Form collects the person's name and email address.",
+        "In-person prayer requests may be submitted anonymously.",
+        "Prayer requests remain with CrossPointe staff unless the person chooses to post the request publicly on the Prayer Wall.",
+        "The Prayer Request Form allows someone to mark a request private."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Open the public Prayer Wall",
+          "url": "https://www.crosspointe.tv/prayer"
+        }
+      ],
+      "requiredActions": [
+        "Encourage people not to include highly sensitive medical, legal, financial, or identifying details."
+      ],
+      "prohibitedInformation": [
+        "Private prayer-request contents",
+        "Sensitive medical, legal, or financial information"
+      ]
+    },
+    {
+      "id": "care-prayer-follow-up",
+      "topic": "prayer_and_care",
+      "title": "Prayer Request Follow-Up",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Will someone contact me after I submit a prayer request?",
+        "Can I ask a pastor to follow up about my prayer request?",
+        "How do I request a response from the church?"
+      ],
+      "keywords": [
+        "prayer follow-up",
+        "pastor response",
+        "request contact",
+        "staff response"
+      ],
+      "requiredFacts": [
+        "The Prayer Request Form allows someone to request pastoral follow-up.",
+        "Someone should expect a response only when they request follow-up.",
+        "A person requesting follow-up may be referred to a pastor or scheduled for an appointment."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ]
+    },
+    {
+      "id": "care-pastoral-support",
+      "topic": "prayer_and_care",
+      "title": "Pastoral Support and Conversations",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can I speak with a pastor?",
+        "Will a pastor visit someone in the hospital?",
+        "Can the church help me with grief?",
+        "Can I talk to a pastor about marriage problems?"
+      ],
+      "keywords": [
+        "speak with pastor",
+        "hospital visit",
+        "grief",
+        "bereavement",
+        "serious illness",
+        "funeral",
+        "marriage problem"
+      ],
+      "requiredFacts": [
+        "People may request pastoral help for grief, hospital visits, serious illness, funerals, marriage problems, and other difficult situations.",
+        "All initial pastoral-care requests should begin through the church office.",
+        "The person may be referred to a pastor for follow-up or scheduled for an appointment."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not promise that a particular pastor, visit, appointment, or service is available."
+      ]
+    },
+    {
+      "id": "care-pastoral-counseling",
+      "topic": "prayer_and_care",
+      "title": "Short-Term Pastoral Counseling and Referrals",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Does CrossPointe offer counseling?",
+        "How many counseling sessions can I receive?",
+        "Is pastoral counseling free?",
+        "Can the church refer me to a counselor?"
+      ],
+      "keywords": [
+        "pastoral counseling",
+        "faith-based care",
+        "spiritual guidance",
+        "free counseling",
+        "one to three sessions",
+        "counselor referral"
+      ],
+      "requiredFacts": [
+        "CrossPointe offers free, faith-based spiritual guidance and care through its pastors.",
+        "Pastors may normally provide approximately one to three sessions.",
+        "CrossPointe does not provide ongoing counseling.",
+        "CrossPointe maintains a resource list of people who may be able to help when ongoing or specialized care is needed."
+      ],
+      "requiredActions": [
+        "Route counseling and referral requests through the church office."
+      ],
+      "prohibitedClaims": [
+        "Do not diagnose a condition, recommend treatment, provide medical or mental-health advice, or promise that a particular resource is available."
+      ]
+    },
+    {
+      "id": "care-premarital-counseling",
+      "topic": "prayer_and_care",
+      "title": "Premarital Counseling",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Does CrossPointe offer premarital counseling?",
+        "Do I have to be a member for premarital counseling?",
+        "Who provides premarital counseling?",
+        "How much does premarital counseling cost?"
+      ],
+      "keywords": [
+        "premarital counseling",
+        "marriage preparation",
+        "wedding pastor",
+        "member required",
+        "cost",
+        "sessions"
+      ],
+      "requiredFacts": [
+        "Premarital counseling is not restricted to CrossPointe members.",
+        "Premarital counseling is typically provided by the pastor performing the ceremony unless another arrangement has been made.",
+        "Questions about cost, number of sessions, preparation, scheduling, ceremony requirements, or other details should be directed to the church office."
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not invent or assume premarital-counseling requirements, costs, or schedules."
+      ]
+    },
+    {
+      "id": "care-wayfinder-prayer-boundary",
+      "topic": "prayer_and_care",
+      "title": "Wayfinder Prayer Boundary",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Will you pray for me?",
+        "Can you write a prayer for me?",
+        "Can Wayfinder pray?",
+        "What should I pray?"
+      ],
+      "keywords": [
+        "pray for me",
+        "write prayer",
+        "generate prayer",
+        "Wayfinder pray"
+      ],
+      "requiredFacts": [
+        "Wayfinder should not generate or write a prayer.",
+        "Wayfinder may affirm that CrossPointe believes in the power of prayer and that staff meets weekly to pray over the prayer list.",
+        "Wayfinder may direct someone to the approved Prayer Request Form."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Submit a Prayer Request",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/340884"
+        }
+      ],
+      "prohibitedClaims": [
+        "Do not claim that Wayfinder prayed.",
+        "Do not promise a particular outcome, interpret suffering as God's punishment, or act as a pastor."
+      ]
+    },
+    {
+      "id": "care-crisis-suicide-self-harm",
+      "topic": "prayer_and_care",
+      "title": "Suicide, Self-Harm, and Mental-Health Crisis",
+      "responseMode": "fixed_safety",
+      "sampleQuestions": [
+        "I am thinking about suicide.",
+        "I want to hurt myself.",
+        "I am having a mental-health crisis.",
+        "Who should I call in a crisis?"
+      ],
+      "keywords": [
+        "suicide",
+        "self-harm",
+        "hurt myself",
+        "mental-health crisis",
+        "988"
+      ],
+      "requiredFacts": [
+        "Wayfinder does not provide crisis intervention.",
+        "Call or text 988 for a suicide, self-harm, or mental-health crisis.",
+        "Call 911 for immediate danger or a medical emergency."
+      ],
+      "requiredActions": [
+        "Keep the response short and direct.",
+        "Do not continue ordinary knowledge retrieval before presenting the crisis response."
+      ]
+    },
+    {
+      "id": "care-abuse-and-immediate-danger",
+      "topic": "prayer_and_care",
+      "title": "Abuse, Domestic Violence, and Immediate Danger",
+      "responseMode": "fixed_safety",
+      "sampleQuestions": [
+        "I am in immediate danger.",
+        "Someone is abusing me.",
+        "Who do I call about domestic violence?",
+        "What is Norman Police's non-emergency number?"
+      ],
+      "keywords": [
+        "immediate danger",
+        "active abuse",
+        "domestic violence",
+        "ongoing crime",
+        "Norman Police",
+        "non-emergency",
+        "405-321-1444"
+      ],
+      "requiredFacts": [
+        "Call 911 for immediate danger, ongoing abuse, an active crime, or a medical emergency.",
+        "For a non-emergency police concern, including a non-immediate domestic-violence or abuse concern in Norman, call the Norman Police Department non-emergency line at 405-321-1444.",
+        "Wayfinder does not provide crisis intervention."
+      ],
+      "requiredActions": [
+        "Keep the response short and direct."
+      ],
+      "prohibitedClaims": [
+        "Do not investigate, mediate, create a safety plan, or ask for detailed descriptions of abuse or danger."
+      ]
+    }
+  ]
+}

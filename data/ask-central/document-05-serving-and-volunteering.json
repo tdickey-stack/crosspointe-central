@@ -1,0 +1,432 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-05",
+  "title": "Serving and Volunteering",
+  "status": "approved",
+  "approvedDate": "2026-07-10",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "flexible",
+  "entries": [
+    {
+      "id": "serving-get-started",
+      "topic": "serving",
+      "title": "How to Begin Serving",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How do I start serving?",
+        "How can I start volunteering?",
+        "How can I volunteer at CrossPointe?",
+        "Where do I sign up to serve?",
+        "I want to help but do not know where to start."
+      ],
+      "keywords": [
+        "serve",
+        "volunteer",
+        "sign up",
+        "get involved",
+        "Next Steps Form",
+        "Connection Pointe"
+      ],
+      "requiredFacts": [
+        "Someone interested in serving may complete the Next Steps Form, attend Connection Pointe when it is scheduled, or contact the church office.",
+        "Someone may also text NEXT to 405-374-4740 to begin the serving and next-steps process.",
+        "After the Next Steps Form is submitted, a staff member normally responds within one week and helps connect the person with an appropriate ministry.",
+        "Connection Pointe is especially helpful for someone who wants to serve but does not know which ministry may be a good fit."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Complete the Next Steps Form",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/324465"
+        }
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ],
+      "requiredActions": [
+        "Use the Next Steps Form, Connection Pointe, text NEXT to 405-374-4740, or the church office as the initial public serving route.",
+        "When someone has identified a ministry where they want to serve, prefer the Next Steps Form or the NEXT text keyword over asking another clarifying question or defaulting to generic office contact."
+      ]
+    },
+    {
+      "id": "serving-opportunities-overview",
+      "topic": "serving",
+      "title": "Volunteer Opportunities Overview",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Where can I serve?",
+        "What options do I have for serving?",
+        "What volunteer opportunities do you have?",
+        "What ministries need volunteers?",
+        "Is there a place for me to help?"
+      ],
+      "keywords": [
+        "volunteer opportunities",
+        "serving options",
+        "serve",
+        "ministry teams",
+        "help",
+        "get involved"
+      ],
+      "requiredFacts": [
+        "CrossPointe offers many volunteer opportunities, including Watch Team, coffee ministry, Hospitality, Care Center, Children's Ministry, Student Ministry, Funeral Meals, Worship, Tech, Creative, and CARS Ministry.",
+        "A staff member or ministry leader can help someone identify an opportunity that fits their gifts and experience.",
+        "Someone may complete the Next Steps Form or text NEXT to 405-374-4740 to begin exploring a place to serve."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Complete the Next Steps Form",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/324465"
+        }
+      ],
+      "requiredActions": [
+        "Give a brief overview rather than listing every ministry unless the person asks for a complete list.",
+        "When someone asks generally about serving options, mention no more than three representative examples before the approved next step. Do not describe the opportunities with promotional intensifiers such as wonderful, amazing, or exciting.",
+        "Offer one appropriate next step."
+      ],
+      "prohibitedClaims": [
+        "Do not promise that someone will be placed in a particular volunteer role.",
+        "Do not promise that a ministry will be a perfect or best fit."
+      ]
+    },
+    {
+      "id": "serving-watch-team",
+      "topic": "serving",
+      "title": "Watch Team",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can I volunteer with church security?",
+        "What is the Watch Team?",
+        "How do I join the Watch Team?",
+        "Does the Watch Team require a background check?"
+      ],
+      "keywords": [
+        "Watch Team",
+        "campus safety",
+        "security",
+        "monitor campus",
+        "background check"
+      ],
+      "requiredFacts": [
+        "The Watch Team helps monitor the campus and support a safe environment during church activities.",
+        "Watch Team volunteers must pass a background check.",
+        "CrossPointe arranges and pays the background-check fee."
+      ],
+      "prohibitedClaims": [
+        "Do not describe Watch Team volunteers as licensed security personnel.",
+        "Do not describe internal safety procedures, assignments, or response plans."
+      ]
+    },
+    {
+      "id": "serving-coffee-ministry",
+      "topic": "serving",
+      "title": "Coffee Ministry Opportunities",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Can I volunteer with coffee?",
+        "What is the difference between Coffee Team and Pointe Brew?",
+        "Can I serve at Pointe Brew?",
+        "Do you need baristas?"
+      ],
+      "keywords": [
+        "coffee ministry",
+        "Coffee Team",
+        "Pointe Brew",
+        "barista",
+        "specialty coffee"
+      ],
+      "requiredFacts": [
+        "CrossPointe has two separate coffee-serving opportunities.",
+        "The Sunday Coffee Team prepares standard coffee for Sunday services in the Great Hall.",
+        "Pointe Brew is a volunteer-led coffee shop in The Pointe that prepares specialty, barista-style drinks."
+      ],
+      "requiredActions": [
+        "Begin with a general coffee-ministry answer and explain the distinction when helpful."
+      ]
+    },
+    {
+      "id": "serving-hospitality-team",
+      "topic": "serving",
+      "title": "Hospitality Team",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Can I be a greeter?",
+        "What does the Hospitality Team do?",
+        "Can I volunteer at the Welcome Center?",
+        "Who welcomes guests on Sunday?"
+      ],
+      "keywords": [
+        "Hospitality Team",
+        "greeter",
+        "Welcome Center",
+        "welcome guests",
+        "door"
+      ],
+      "requiredFacts": [
+        "Hospitality volunteers help welcome people to CrossPointe.",
+        "Opportunities include greeting people at entrances and serving at the Welcome Center."
+      ]
+    },
+    {
+      "id": "serving-children-and-students",
+      "topic": "serving",
+      "title": "Serving with Children and Students",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How can I serve in Children's Ministry?",
+        "Can I volunteer with students?",
+        "Do children's volunteers need a background check?",
+        "How long must I attend before serving with kids?"
+      ],
+      "keywords": [
+        "Children's Ministry",
+        "Student Ministry",
+        "nursery worker",
+        "Sunday School teacher",
+        "six months",
+        "background check"
+      ],
+      "requiredFacts": [
+        "Children's Ministry roles may include Sunday School teachers, nursery workers, and other classroom or ministry support positions.",
+        "Children's Ministry volunteers must have attended CrossPointe for at least six months and must pass a background check.",
+        "Student Ministry volunteers must pass a background check.",
+        "CrossPointe arranges and pays all required background-check fees.",
+        "The six-month attendance requirement applies specifically to Children's Ministry and is not a universal requirement for every volunteer role."
+      ],
+      "prohibitedInformation": [
+        "Background-check results",
+        "Private screening decisions",
+        "Internal child-safety procedures"
+      ]
+    },
+    {
+      "id": "serving-care-center-and-cars",
+      "topic": "serving",
+      "title": "Serving with Care Center and CARS Ministry",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Can I volunteer at the Care Center?",
+        "Can I help with the food pantry?",
+        "How can I volunteer with CARS Ministry?",
+        "Do I need automotive experience to help with CARS?"
+      ],
+      "keywords": [
+        "Care Center",
+        "food pantry",
+        "Clothes Closet",
+        "CARS Ministry",
+        "automotive experience",
+        "community outreach"
+      ],
+      "requiredFacts": [
+        "Care Center volunteers help serve community members through CrossPointe's food pantry and Clothes Closet.",
+        "CARS Ministry helps provide automotive repairs for community members in need.",
+        "Mechanical CARS Ministry roles normally require automotive experience, but some non-mechanical volunteer opportunities may be available."
+      ],
+      "routingGuidance": [
+        "Use Document 09 for detailed questions about receiving Care Center or CARS Ministry assistance."
+      ],
+      "prohibitedClaims": [
+        "Do not promise that assistance or a repair appointment is available."
+      ]
+    },
+    {
+      "id": "serving-funeral-meals",
+      "topic": "serving",
+      "title": "Funeral Meals Volunteers",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "What do Funeral Meals volunteers do?",
+        "Can I help with funeral meals?",
+        "Do you need people to serve food at funerals?"
+      ],
+      "keywords": [
+        "Funeral Meals",
+        "prepare food",
+        "serve meals",
+        "cleanup",
+        "funeral"
+      ],
+      "requiredFacts": [
+        "Funeral Meals volunteers help prepare food, serve meals, and clean up for funeral meals held at CrossPointe."
+      ]
+    },
+    {
+      "id": "serving-worship-ministry",
+      "topic": "serving",
+      "title": "Serving in Worship Ministry",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "How do I join the worship team?",
+        "Do singers have to audition?",
+        "Can I play an instrument at church?",
+        "Who do I contact about Worship Ministry?"
+      ],
+      "keywords": [
+        "Worship Ministry",
+        "worship team",
+        "musician",
+        "singer",
+        "rehearsal",
+        "Mike Lewis"
+      ],
+      "requiredFacts": [
+        "Worship Ministry includes musicians and singers.",
+        "There is not a formal audition.",
+        "Prospective musicians or singers may be invited to attend and sit in on rehearsals for a period of time so ministry leaders can determine whether the person is a good fit for the band."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Contact Mike Lewis",
+          "url": "https://www.crosspointe.tv/contributor/mike-lewis"
+        }
+      ],
+      "approvedActions": [
+        {
+          "type": "email",
+          "label": "Email the church office",
+          "value": "info@crosspointe.tv"
+        },
+        {
+          "type": "phone_or_text",
+          "label": "Call or text the church office",
+          "value": "405-374-4740"
+        }
+      ]
+    },
+    {
+      "id": "serving-tech-and-creative",
+      "topic": "serving",
+      "title": "Tech and Creative Ministry",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Can I help with church production?",
+        "How can I volunteer with sound or cameras?",
+        "Do you need graphic designers?",
+        "Can I help with social media?"
+      ],
+      "keywords": [
+        "Tech Ministry",
+        "Creative Ministry",
+        "sound",
+        "lighting",
+        "presentation",
+        "cameras",
+        "graphic design",
+        "social media",
+        "content creation"
+      ],
+      "requiredFacts": [
+        "Tech Ministry may include sound, lighting, presentation and lyrics, cameras, and other production support.",
+        "Creative Ministry may include graphic design, social media, content creation, and other creative communication work.",
+        "Someone interested in Tech or Creative Ministry may complete the Next Steps Form or text NEXT to 405-374-4740 to begin serving."
+      ],
+      "approvedLinks": [
+        {
+          "label": "Complete the Next Steps Form",
+          "url": "https://crosspointetv.churchcenter.com/people/forms/324465"
+        }
+      ],
+      "requiredActions": [
+        "When someone asks to join Tech or Creative Ministry, direct them to the Next Steps Form or tell them to text NEXT to 405-374-4740."
+      ]
+    },
+    {
+      "id": "serving-membership-age-and-eligibility",
+      "topic": "serving",
+      "title": "Membership, Age, and Volunteer Eligibility",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "Do I have to be a member to serve?",
+        "Can teenagers volunteer?",
+        "How old do I have to be to serve?",
+        "Can my teen help in the nursery?"
+      ],
+      "keywords": [
+        "membership required",
+        "teen volunteer",
+        "age limit",
+        "minor",
+        "supervision",
+        "eligibility"
+      ],
+      "requiredFacts": [
+        "Church membership is not required to volunteer.",
+        "Teenagers are welcome to serve, and CrossPointe does not use one universal minimum serving age.",
+        "Some roles, including nursery service, may require additional supervision or ministry-specific judgment.",
+        "A ministry leader helps determine the appropriate role, training, and supervision."
+      ],
+      "prohibitedClaims": [
+        "Do not promise that someone is automatically eligible for a particular position."
+      ]
+    },
+    {
+      "id": "serving-training-and-scheduling",
+      "topic": "serving",
+      "title": "Volunteer Training and Scheduling",
+      "responseMode": "guided",
+      "sampleQuestions": [
+        "What training do volunteers receive?",
+        "How often would I be scheduled?",
+        "How will the ministry contact me?",
+        "Is there a volunteer orientation?"
+      ],
+      "keywords": [
+        "volunteer training",
+        "orientation",
+        "schedule",
+        "contact",
+        "policies",
+        "procedures"
+      ],
+      "requiredFacts": [
+        "Every ministry provides training appropriate to its work.",
+        "Training, policies, procedures, scheduling, and communication vary by ministry.",
+        "The appropriate ministry leader will explain the next steps after someone is connected."
+      ],
+      "prohibitedInformation": [
+        "Internal ministry policies and procedures",
+        "Private volunteer schedules",
+        "Private volunteer contact information"
+      ]
+    },
+    {
+      "id": "serving-multiple-ministries",
+      "topic": "serving",
+      "title": "Serving in Multiple Ministries",
+      "responseMode": "flexible",
+      "sampleQuestions": [
+        "Can I serve in more than one ministry?",
+        "Can I change volunteer teams later?",
+        "How many ministries can I join?",
+        "Can I stop serving if I get overwhelmed?"
+      ],
+      "keywords": [
+        "multiple ministries",
+        "change teams",
+        "burnout",
+        "overwhelmed",
+        "volunteer commitments"
+      ],
+      "requiredFacts": [
+        "People may serve in more than one ministry or change ministries later.",
+        "CrossPointe encourages people to limit commitments when necessary so they can serve faithfully without becoming overwhelmed or burned out."
+      ],
+      "prohibitedClaims": [
+        "Do not impose or invent a fixed maximum number of ministries."
+      ]
+    }
+  ]
+}

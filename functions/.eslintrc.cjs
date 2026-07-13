@@ -18,6 +18,19 @@ module.exports = {
   },
   overrides: [
     {
+      files: [
+        "wayfinder/**/*.js",
+        "scripts/wayfinder-bundles.js",
+      ],
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: "module",
+      },
+      rules: {
+        "require-jsdoc": "off",
+      },
+    },
+    {
       files: ["**/*.spec.*"],
       env: {
         mocha: true,

@@ -98,6 +98,24 @@
         ]
       },
       {
+        "source": "/wayfinder-chat.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/wayfinder-chat.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/favicon.svg",
         "headers": [
           {
@@ -155,6 +173,76 @@
         "source": "/api/admin/publish-preview-content",
         "function": {
           "functionId": "publishPreviewContent",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/prototype-query",
+        "function": {
+          "functionId": "wayfinderPrototypeQuery",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/generate-answer",
+        "function": {
+          "functionId": "wayfinderGenerateAnswer",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/notices",
+        "function": {
+          "functionId": "wayfinderNoticeCommand",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/knowledge-changes",
+        "function": {
+          "functionId": "wayfinderKnowledgeChange",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/website-index",
+        "function": {
+          "functionId": "wayfinderWebsiteIndex",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/featured-event-health",
+        "function": {
+          "functionId": "wayfinderFeaturedEventHealth",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/feedback",
+        "function": {
+          "functionId": "wayfinderAdminFeedback",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/admin/wayfinder/evaluations",
+        "function": {
+          "functionId": "wayfinderEvaluations",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/wayfinder/chat",
+        "function": {
+          "functionId": "wayfinderPublicAnswer",
+          "pinTag": true
+        }
+      },
+      {
+        "source": "/api/wayfinder/feedback",
+        "function": {
+          "functionId": "wayfinderPublicFeedback",
           "pinTag": true
         }
       },
@@ -230,6 +318,10 @@
       "enabled": true,
       "port": 4000
     },
+	"hub": {
+	  "enabled": true,
+	  "port": 4400
+	},
     "singleProjectMode": true
   },
   "auth": {

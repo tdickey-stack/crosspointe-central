@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "documentType": "knowledge_bundle",
+  "documentId": "document-12",
+  "title": "Campus Navigation and Facilities",
+  "status": "approved",
+  "approvedDate": "2026-07-11",
+  "firestoreTarget": {
+    "draftCollection": "centralAssistantKnowledgeDraft",
+    "publishedCollection": "centralAssistantKnowledge"
+  },
+  "defaultResponseMode": "guided",
+  "entries": [
+    {
+      "id": "campus-overview-map-and-aliases",
+      "topic": "campus_navigation",
+      "title": "Campus Overview, Map, and Current Names",
+      "responseMode": "flexible",
+      "sampleQuestions": ["Where can I find a campus map?", "Is the North Building the Main Building?", "Where is the auditorium?", "What buildings are on campus?"],
+      "keywords": ["campus map", "Main Building", "North Building", "Sanctuary", "Auditorium", "Student Center", "Student Sanctuary", "Children's Center", "Kingdom Kids", "Community Center"],
+      "requiredFacts": [
+        "CrossPointe is at 2601 24th Ave SE, Norman, OK 73071.",
+        "The main public areas are the Main Building, Children's Center, The Pointe, Care Center, and CARS Ministry garage.",
+        "Main Building is the preferred name for the North Building shown on the older map.",
+        "Sanctuary and Auditorium refer to the same main worship room, with Sanctuary preferred.",
+        "Student Center is the preferred name for Student Sanctuary on the older map.",
+        "Children's Center is the physical area; Kingdom Kids is the ministry.",
+        "Community Center refers to the gymnasium and weight-room side of The Pointe."
+      ],
+      "approvedLinks": [{"label": "CrossPointe campus map", "url": "https://www.crosspointe.tv/campus-map"}]
+    },
+    {
+      "id": "campus-welcome-center-main-building",
+      "topic": "campus_navigation",
+      "title": "Welcome Center, Great Hall, Sanctuary, Event Hall, and Offices",
+      "responseMode": "guided",
+      "sampleQuestions": ["Where is the Welcome Center?", "How do I find the Sanctuary?", "Where is the Event Hall?", "How do I get to the church office?", "Where can I get regular coffee?"],
+      "keywords": ["Welcome Center entrance", "Great Hall", "Sanctuary directions", "Event Hall directions", "church office directions", "standard coffee", "guest parking"],
+      "requiredFacts": [
+        "Guest parking near the Welcome Center is marked by feather flags, and the Welcome Center desk is immediately visible after entering the Great Hall.",
+        "The Great Hall is the Main Building's large lobby and contains the Welcome Center and standard Sunday coffee.",
+        "From the Welcome Center entrance, turn left into the hallway for the Sanctuary.",
+        "The first-floor Event Hall is straight down the Great Hall and entered from it.",
+        "During Sunday services, reach the offices by walking about halfway down the Great Hall, turning right, continuing to the end of that hallway, and turning right again.",
+        "During Monday-through-Thursday office hours, public visitors may use the separate office entrance."
+      ],
+      "requiredActions": ["During services, recommend the Welcome Center for in-person navigation help."],
+      "approvedLinks": [{"label": "CrossPointe campus map", "url": "https://www.crosspointe.tv/campus-map"}]
+    },
+    {
+      "id": "campus-childrens-center-and-family-arrival",
+      "topic": "campus_navigation",
+      "title": "Children's Center, Family Check-In, Nursery, and The Palace",
+      "responseMode": "guided",
+      "sampleQuestions": ["Where do I check my kids in?", "Which entrance should a first-time family use?", "Where is the nursery?", "Where is The Palace?", "Where is the breastfeeding room?"],
+      "keywords": ["Children's Center entrance", "Kingdom Kids check-in", "Children's Welcome Center", "drawbridge", "nursery", "preschool", "The Palace", "breastfeeding room", "family guest parking"],
+      "requiredFacts": [
+        "The Children's Center entrance is the recommended Sunday entrance for first-time families and has nearby guest and accessible parking on the north side of the parking lot.",
+        "From the main Welcome Center, continue straight down the Great Hall, cross the actual castle-themed drawbridge, continue to the end, and find Children's check-in on the right.",
+        "Nursery and preschool are on the first floor.",
+        "The breastfeeding room is across the hall from the nursery.",
+        "The Palace is the upstairs elementary area and is served by the Children's Center elevator and stairs.",
+        "The outdoor playground has an exterior gate."
+      ],
+      "prohibitedClaims": ["Do not provide child-security workarounds, gate-access details, or supervision procedures."]
+    },
+    {
+      "id": "campus-adult-classrooms-elevators-and-restrooms",
+      "topic": "campus_navigation",
+      "title": "Adult Classrooms, Elevators, and Main Building Restrooms",
+      "responseMode": "guided",
+      "sampleQuestions": ["Where are the adult classrooms?", "Which elevator should I use?", "Where is classroom 12?", "Where is the restroom?"],
+      "keywords": ["Adult Classrooms", "adult classroom elevator", "Children's Center elevator", "classroom number", "restrooms", "bathroom"],
+      "requiredFacts": [
+        "Adult Classrooms are individually numbered and upstairs in a separate area from the upstairs Children's Center.",
+        "The elevator directly to the right after entering the Great Hall serves Adult Classrooms.",
+        "The Children's Center elevator serves The Palace and upstairs Children's Center.",
+        "Signs upstairs direct visitors to individual Adult Classroom numbers.",
+        "Public restrooms are in the hallway outside the Sanctuary, the hallway to the offices, and the Children's Center, and are clearly marked."
+      ],
+      "requiredActions": ["For an unknown classroom number, recommend following on-site signs or asking at the Welcome Center rather than inventing directions."],
+      "prohibitedClaims": ["Do not assume someone can use stairs; provide the correct elevator route when accessibility is relevant."]
+    },
+    {
+      "id": "campus-the-pointe-navigation",
+      "topic": "campus_navigation",
+      "title": "The Pointe, Pointe Brew, Student Center, Classrooms, and Gym",
+      "responseMode": "guided",
+      "sampleQuestions": ["Where is The Pointe?", "How do I find Pointe Brew?", "Where is the Student Center?", "How do I get to the gym?", "Where are The Pointe classrooms?"],
+      "keywords": ["The Pointe", "Pointe Brew", "Student Center", "Student check-in", "Game Room", "classroom hallway", "gymnasium", "Community Center", "Weight Room"],
+      "requiredFacts": [
+        "The Pointe is on the south side of campus and requires an outdoor walk from the Main Building.",
+        "The main Pointe entrance opens into the shared lobby, with Student check-in immediately inside, Pointe Brew directly in the lobby, and the Student Center connected to the lobby.",
+        "The Pointe classrooms are in back: go through the Game Room, then the double set of glass doors into the classroom hallway.",
+        "The gym may be reached past the Student Center through the connecting hallway and gym door, or from the door at the end of the classroom hallway.",
+        "Community Center refers to the gymnasium and weight-room side of The Pointe."
+      ],
+      "approvedLinks": [{"label": "CrossPointe campus map", "url": "https://www.crosspointe.tv/campus-map"}]
+    },
+    {
+      "id": "campus-care-center-and-cars",
+      "topic": "campus_navigation",
+      "title": "Care Center and CARS Ministry Locations",
+      "responseMode": "guided",
+      "sampleQuestions": ["Where is the Care Center?", "Which entrance do I use for the food pantry?", "Where is the CARS garage?", "Should I go to the CARS garage without an appointment?"],
+      "keywords": ["Care Center entrance", "food pantry location", "clothes closet location", "CARS garage", "CARS appointment", "large parking lot"],
+      "requiredFacts": [
+        "The Care Center is a separate building not internally connected to the Main Building; visitors should park in the large lot between the Main Building and The Pointe and use the clearly labeled Care Center entrance.",
+        "The CARS Ministry garage is a separate building east of The Pointe.",
+        "Someone with a confirmed CARS appointment may go to the garage and should follow CARS arrival instructions.",
+        "Someone without an appointment should use the official application instead of arriving at the garage."
+      ],
+      "approvedLinks": [{"label": "CARS Ministry application", "url": "https://forms.gle/13UrumiVUXEZCLgj9"}]
+    },
+    {
+      "id": "campus-parking-and-accessibility",
+      "topic": "campus_navigation",
+      "title": "Guest Parking and Accessible Routes",
+      "responseMode": "guided",
+      "sampleQuestions": ["Is the campus wheelchair accessible?", "Where is accessible parking?", "Which entrance should I use with a wheelchair?", "Is Pointe Brew accessible?"],
+      "keywords": ["wheelchair accessible", "ADA compliant", "accessible parking", "handicap parking", "accessible entrance", "Pointe Brew entrance", "elevator route"],
+      "requiredFacts": [
+        "The campus is wheelchair accessible and ADA compliant.",
+        "All mapped public entrances are wheelchair accessible except the separate exterior Pointe Brew entrance under the Pointe Brew sign.",
+        "Use the main Pointe entrance for an accessible route to Pointe Brew.",
+        "Accessible parking is near the north entrance to the Sanctuary and in the Children's Center parking area.",
+        "Guest parking is near both the Welcome Center entrance and Children's Center entrance."
+      ],
+      "requiredActions": ["Use the correct elevator and avoid presenting stairs as the only route."],
+      "prohibitedClaims": ["Do not promise a particular parking space or claim an unknown temporary obstruction or elevator outage does not exist."]
+    },
+    {
+      "id": "campus-navigation-safety-and-help",
+      "topic": "campus_navigation",
+      "title": "Navigation Help and Facility Safety Boundaries",
+      "responseMode": "guided",
+      "sampleQuestions": ["I'm lost on campus", "Can you track where I am?", "Which locked door should I use?", "How do I get into a restricted room?"],
+      "keywords": ["lost on campus", "navigation help", "locked door", "access code", "security route", "current location", "staff-only area"],
+      "requiredFacts": ["During Sunday services, the Welcome Center can help people find public rooms; at other times, the church office is the approved contact."],
+      "requiredActions": ["Ask for the person's current public landmark and destination only when needed for clearer directions."],
+      "prohibitedClaims": [
+        "Do not request or track live personal location data.",
+        "Do not provide keys, codes, credentials, access-control instructions, security positions, staff-only routes, infrastructure details, child-security workarounds, or instructions for entering locked areas.",
+        "If a route is unavailable, direct the person to the Welcome Center or office rather than suggesting unauthorized access."
+      ],
+      "approvedActions": [
+        {"type": "email", "label": "Email the church office", "value": "info@crosspointe.tv"},
+        {"type": "phone", "label": "Call or text the church office", "value": "405-374-4740"}
+      ]
+    }
+  ]
+}

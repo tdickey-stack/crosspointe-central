@@ -1683,17 +1683,12 @@ function renderSundayLivestream(sundaySettings) {
       "<div class=\"sunday-stream-status\" data-sunday-stream-status aria-live=\"polite\"></div>",
       "<div class=\"sunday-stream-stage\" data-sunday-stream-stage>",
         "<div class=\"sunday-stream-player\" id=\"sunday-stream-player\" data-sunday-stream-player>",
-          "<div class=\"sunday-stream-mini-bar\" role=\"group\" tabindex=\"0\" aria-label=\"Mini player controls. Drag to move and pinch to resize.\" title=\"Drag to move. Pinch to resize.\" onpointerdown=\"beginSundayStreamMiniPlayerGesture(event)\" onkeydown=\"handleSundayStreamMiniPlayerMoveKeydown(event)\">",
-            "<strong><span class=\"sunday-stream-live-label\">CrossPointe Live</span><span class=\"sunday-stream-gesture-label\">Drag &middot; Pinch</span></strong>",
-            "<div class=\"sunday-stream-mini-actions\">",
-              "<button type=\"button\" onclick=\"returnToSundayLivestream()\">Back to live</button>",
-              "<button type=\"button\" class=\"sunday-stream-size-control\" data-sunday-stream-size=\"smaller\" aria-label=\"Make mini player smaller\" title=\"Make smaller\" onclick=\"resizeSundayStreamMiniPlayer(-1)\">&minus;</button>",
-              "<button type=\"button\" class=\"sunday-stream-size-control\" data-sunday-stream-size=\"larger\" aria-label=\"Make mini player larger\" title=\"Make larger\" onclick=\"resizeSundayStreamMiniPlayer(1)\">+</button>",
-              "<button type=\"button\" class=\"sunday-stream-mini-close\" aria-label=\"Close mini player and stop the stream\" title=\"Close and stop\" onclick=\"closeSundayStreamMiniPlayer()\">&times;</button>",
-            "</div>",
-          "</div>",
           "<div class=\"sunday-stream-frame\">",
             "<iframe allow=\"fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
+            "<div class=\"sunday-stream-gesture-surface\" role=\"group\" tabindex=\"0\" aria-label=\"Mini player. Drag to move or pinch to resize.\" title=\"Drag to move. Pinch to resize.\" onpointerdown=\"beginSundayStreamMiniPlayerGesture(event)\" onkeydown=\"handleSundayStreamMiniPlayerMoveKeydown(event)\">",
+              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-return\" aria-label=\"Return player to the live section\" title=\"Back to live\" onclick=\"returnToSundayLivestream()\"><span aria-hidden=\"true\">&#8598;</span></button>",
+              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-close\" aria-label=\"Close mini player and stop the stream\" title=\"Close and stop\" onclick=\"closeSundayStreamMiniPlayer()\">&times;</button>",
+            "</div>",
           "</div>",
           "<button type=\"button\" class=\"sunday-stream-resize-handle\" aria-label=\"Drag to resize mini player\" title=\"Drag left or right to resize\" onpointerdown=\"beginSundayStreamMiniPlayerResize(event)\" onkeydown=\"handleSundayStreamMiniPlayerResizeKeydown(event)\"><span aria-hidden=\"true\"></span></button>",
         "</div>",
@@ -2418,23 +2413,6 @@ function applySundayStreamMiniPlayerWidth_() {
       "--sunday-stream-mini-width",
       sundayStreamMiniPlayerWidth + "px",
   );
-
-  var smallerButton = document.querySelector(
-      "[data-sunday-stream-size=\"smaller\"]",
-  );
-  var largerButton = document.querySelector(
-      "[data-sunday-stream-size=\"larger\"]",
-  );
-
-  if (smallerButton) {
-    smallerButton.disabled = sundayStreamMiniPlayerWidth <=
-      getSundayStreamMiniPlayerMinimumWidth_();
-  }
-
-  if (largerButton) {
-    largerButton.disabled = sundayStreamMiniPlayerWidth >=
-      getSundayStreamMiniPlayerMaximumWidth_();
-  }
 
   constrainSundayStreamMiniPlayerPosition_();
 }

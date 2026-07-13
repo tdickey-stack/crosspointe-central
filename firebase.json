@@ -215,7 +215,7 @@
         "source": "/api/admin/wayfinder/featured-event-health",
         "function": {
           "functionId": "wayfinderFeaturedEventHealth",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {

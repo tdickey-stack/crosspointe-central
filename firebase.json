@@ -219,6 +219,13 @@
         }
       },
       {
+        "source": "/api/admin/wayfinder/evaluations",
+        "function": {
+          "functionId": "wayfinderEvaluations",
+          "pinTag": true
+        }
+      },
+      {
         "source": "/api/wayfinder/chat",
         "function": {
           "functionId": "wayfinderPublicAnswer",

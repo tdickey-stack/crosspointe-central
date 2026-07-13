@@ -15,6 +15,8 @@ import {
   createWayfinderAdminFeedbackHandler,
   createWayfinderPublicFeedbackHandler,
 } from "./wayfinder/feedback.js";
+import {createWayfinderEvaluationHandler} from
+  "./wayfinder/evaluations.js";
 import {
   createWayfinderKnowledgeChangeGenerator,
   createWayfinderKnowledgeChangeHandler,
@@ -481,6 +483,20 @@ const wayfinderKnowledgeChangeGenerator =
     getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
     model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
   });
+const wayfinderEvaluationAnswerHandler = createWayfinderAnswerHandler({
+  admin: admin,
+  firestore: firestore,
+  generateAnswer: wayfinderGeminiGenerator,
+  retrieveLiveContext: getWayfinderPlanningCenterContext_,
+  getActiveNotices: () => getActiveWayfinderNotices(firestore),
+  getActiveKnowledgeOverrides: () =>
+    getActiveWayfinderKnowledgeOverrides(firestore),
+  getWebsiteEntries: (question) =>
+    getRelevantWayfinderWebsiteEntries(firestore, question),
+  requireAdminAuth: false,
+  publicResponse: false,
+  model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+});
 
 export const wayfinderNoticeCommand = onRequest(
     {
@@ -562,6 +578,25 @@ export const wayfinderAdminFeedback = onRequest(
     }),
 );
 
+export const wayfinderEvaluations = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 300,
+      memory: "512MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY],
+    },
+    createWayfinderEvaluationHandler({
+      admin: admin,
+      firestore: firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      serverTimestamp: () =>
+        admin.firestore.FieldValue.serverTimestamp(),
+      executeCase: executeWayfinderEvaluationCase_,
+    }),
+);
+
 export const wayfinderGenerateAnswer = onRequest(
     {
       region: "us-central1",
@@ -630,6 +665,46 @@ async function getWayfinderPlanningCenterContext_(request) {
     },
   });
   return retriever(request);
+}
+
+/**
+ * Runs one curated evaluation case through the private diagnostic pipeline.
+ *
+ * @param {Object} testCase Curated evaluation case.
+ * @return {Promise<Object>} Private Wayfinder answer payload.
+ */
+async function executeWayfinderEvaluationCase_(testCase) {
+  const conversation = Array.isArray(testCase.conversation) ?
+    testCase.conversation : [];
+  const finalMessage = conversation[conversation.length - 1] || {};
+  return new Promise((resolve, reject) => {
+    const response = {
+      set: () => response,
+      status: (statusCode) => {
+        response.statusCode = statusCode;
+        return response;
+      },
+      json: (body) => {
+        if (response.statusCode >= 400) {
+          reject(new Error(String(body && body.error || "Evaluation failed.")));
+          return;
+        }
+        resolve(body);
+      },
+      statusCode: 200,
+    };
+    wayfinderEvaluationAnswerHandler({
+      method: "POST",
+      headers: {
+        "x-wayfinder-session": "evaluation-" + crypto.randomUUID(),
+      },
+      ip: "wayfinder-evaluation",
+      body: {
+        question: String(finalMessage.content || ""),
+        history: conversation.slice(0, -1),
+      },
+    }, response).catch(reject);
+  });
 }
 
 export const centralCalendarEvent = onRequest(

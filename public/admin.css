@@ -1383,6 +1383,93 @@
   gap: 14px;
 }
 
+[data-app-route="admin"] .wayfinder-evaluations,
+[data-app-route="admin"] .wayfinder-evaluation-run,
+[data-app-route="admin"] .wayfinder-evaluation-results {
+  display: grid;
+  gap: 14px;
+}
+
+[data-app-route="admin"] .wayfinder-evaluations .central-admin-item-header > div,
+[data-app-route="admin"] .wayfinder-evaluation-run-heading > div {
+  display: grid;
+  gap: 5px;
+}
+
+[data-app-route="admin"] .wayfinder-evaluations .central-admin-item-header p,
+[data-app-route="admin"] .wayfinder-evaluation-progress p,
+[data-app-route="admin"] .wayfinder-evaluation-result h4,
+[data-app-route="admin"] .wayfinder-evaluation-result p {
+  margin: 0;
+}
+
+[data-app-route="admin"] .wayfinder-evaluations .central-admin-item-header p {
+  color: var(--cp-text-muted);
+  line-height: 1.55;
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--cp-surface-soft);
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-run-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-result {
+  display: grid;
+  gap: 11px;
+  padding: 15px;
+  border: 1px solid var(--cp-border);
+  border-left: 4px solid #16a34a;
+  border-radius: 16px;
+  background: var(--cp-surface-soft);
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-result.is-warning {
+  border-left-color: #d97706;
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-result.is-fail {
+  border-left-color: #dc2626;
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-result h4 {
+  color: var(--cp-text-strong);
+  font-size: 0.95rem;
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-answer {
+  white-space: pre-line;
+  line-height: 1.55;
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-result ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--cp-text-muted);
+  font-size: 0.82rem;
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-result li.is-fail,
+[data-app-route="admin"] .wayfinder-evaluation-error {
+  color: #b91c1c;
+}
+
+[data-app-route="admin"] .wayfinder-evaluation-result li.is-warning {
+  color: #b45309;
+}
+
 [data-app-route="admin"] .wayfinder-feedback-manager .central-admin-item-header > div {
   display: grid;
   gap: 6px;

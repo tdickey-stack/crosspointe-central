@@ -35,6 +35,8 @@
   var WAYFINDER_WEBSITE_INDEX_ENDPOINT =
     "/api/admin/wayfinder/website-index";
   var WAYFINDER_FEEDBACK_ENDPOINT = "/api/admin/wayfinder/feedback";
+  var WAYFINDER_EVALUATIONS_ENDPOINT =
+    "/api/admin/wayfinder/evaluations";
   var PUBLISHED_CAMPAIGNS_COLLECTION_PATH = "centralContent/campaigns/items";
   var PUBLISHED_CAMPAIGNS_META_DOC_PATH = "centralContent/campaigns/meta/state";
   var PUBLISHED_NEXT_STEPS_COLLECTION_PATH = "centralContent/nextSteps/items";
@@ -548,6 +550,12 @@
     wayfinderFeedbackWorking: false,
     wayfinderFeedbackItems: [],
     wayfinderFeedbackError: "",
+    wayfinderEvaluationsLoaded: false,
+    wayfinderEvaluationsLoading: false,
+    wayfinderEvaluationsRunning: false,
+    wayfinderEvaluationRuns: [],
+    wayfinderEvaluationsLibrarySize: 0,
+    wayfinderEvaluationsError: "",
     roomRulesLoaded: false,
     roomRulesLoading: false,
     roomRulesSaving: false,
@@ -1341,6 +1349,26 @@
       if (action === "refresh-wayfinder-feedback") {
         event.preventDefault();
         loadWayfinderFeedback_(true);
+        return;
+      }
+
+      if (action === "run-wayfinder-evaluations") {
+        event.preventDefault();
+        runWayfinderEvaluations_("");
+        return;
+      }
+
+      if (action === "rerun-wayfinder-evaluations") {
+        event.preventDefault();
+        runWayfinderEvaluations_(
+            button.getAttribute("data-wayfinder-evaluation-run-id") || "",
+        );
+        return;
+      }
+
+      if (action === "refresh-wayfinder-evaluations") {
+        event.preventDefault();
+        loadWayfinderEvaluations_(true);
         return;
       }
 
@@ -4901,6 +4929,7 @@
       "</div>",
       "</div>",
       hasAccess ? renderWayfinderWebsiteIndex_() : "",
+      hasAccess ? renderWayfinderEvaluations_() : "",
       hasAccess ? renderWayfinderFeedbackManager_() : "",
       hasAccess ? [
         "<div class=\"central-admin-item wayfinder-lab-question\">",
@@ -5086,6 +5115,101 @@
       ].join("") : adminState.wayfinderFeedbackLoaded ?
         "<div class=\"central-admin-empty\"><strong>No feedback yet.</strong><p>Use the public Wayfinder chat to begin rating test answers.</p></div>" : "",
       "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderEvaluations_() {
+    var runs = Array.isArray(adminState.wayfinderEvaluationRuns) ?
+      adminState.wayfinderEvaluationRuns : [];
+    var latest = runs[0] || null;
+    var busy = adminState.wayfinderEvaluationsLoading ||
+      adminState.wayfinderEvaluationsRunning;
+    var summary = latest && latest.summary || {};
+    return [
+      "<section class=\"central-admin-item wayfinder-evaluations\">",
+      "<div class=\"central-admin-item-header\"><div>",
+      "<strong>Automated answer check</strong>",
+      "<p>Each run draws one question from five categories. Questions do not repeat until their category's shuffle bag has been used.</p>",
+      "</div>",
+      latest ? renderStatusPill_(
+          String(Number(summary.pass) || 0) + " passed · " +
+          String(Number(summary.warning) || 0) + " warnings · " +
+          String(Number(summary.fail) || 0) + " failed",
+          Number(summary.fail) ? "is-warn" : "is-safe",
+      ) : renderStatusPill_("Ready", "is-live"),
+      "</div>",
+      "<p class=\"central-admin-footer-note\">",
+      escapeHtml_(String(adminState.wayfinderEvaluationsLibrarySize || 25)),
+      " curated questions are available. The usual fixed safety tests still run separately on every code check.</p>",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"run-wayfinder-evaluations\"",
+      busy ? " disabled" : "", ">",
+      adminState.wayfinderEvaluationsRunning ?
+        "Testing five answers..." : "Run Random 5", "</button>",
+      latest ? [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"rerun-wayfinder-evaluations\" data-wayfinder-evaluation-run-id=\"",
+        escapeAttr_(latest.runId), "\"", busy ? " disabled" : "",
+        ">Rerun Same 5</button>",
+      ].join("") : "",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-wayfinder-evaluations\"",
+      busy ? " disabled" : "", ">Refresh History</button>",
+      "</div>",
+      adminState.wayfinderEvaluationsError ? [
+        "<div class=\"wayfinder-lab-error\" role=\"alert\"><strong>Evaluation unavailable.</strong><p>",
+        escapeHtml_(adminState.wayfinderEvaluationsError), "</p></div>",
+      ].join("") : "",
+      adminState.wayfinderEvaluationsRunning ? [
+        "<div class=\"wayfinder-evaluation-progress\" role=\"status\">",
+        "<span class=\"wayfinder-lab-spinner\" aria-hidden=\"true\"></span>",
+        "<p>Wayfinder is answering and checking five questions. Live event and group checks can take a moment.</p></div>",
+      ].join("") : "",
+      latest ? renderWayfinderEvaluationRun_(latest) :
+        adminState.wayfinderEvaluationsLoaded ?
+          "<div class=\"central-admin-empty\"><strong>No runs yet.</strong><p>Run the first five-question check when you are ready.</p></div>" : "",
+      "</section>",
+    ].join("");
+  }
+
+  function renderWayfinderEvaluationRun_(run) {
+    var results = Array.isArray(run.results) ? run.results : [];
+    return [
+      "<div class=\"wayfinder-evaluation-run\">",
+      "<div class=\"wayfinder-evaluation-run-heading\"><div>",
+      "<span class=\"central-admin-kicker\">Latest run</span>",
+      "<strong>", escapeHtml_(formatAdminTimestamp_(run.createdAt)),
+      "</strong></div><code>", escapeHtml_(String(run.runId || "").slice(0, 8)),
+      "</code></div>",
+      "<div class=\"wayfinder-evaluation-results\">",
+      results.map(renderWayfinderEvaluationResult_).join(""),
+      "</div></div>",
+    ].join("");
+  }
+
+  function renderWayfinderEvaluationResult_(result) {
+    var status = String(result.status || "fail");
+    var checks = Array.isArray(result.checks) ? result.checks : [];
+    var sourceIds = Array.isArray(result.sourceIds) ? result.sourceIds : [];
+    return [
+      "<article class=\"wayfinder-evaluation-result is-", escapeAttr_(status),
+      "\"><div class=\"central-admin-item-header\"><div>",
+      "<span class=\"central-admin-kicker\">",
+      escapeHtml_(String(result.category || "").replace(/_/g, " ")),
+      "</span><h4>", escapeHtml_(result.question), "</h4></div>",
+      renderStatusPill_(status, status === "pass" ? "is-safe" :
+        status === "warning" ? "is-live" : "is-warn"), "</div>",
+      result.error ? "<p class=\"wayfinder-evaluation-error\">" +
+        escapeHtml_(result.error) + "</p>" : "",
+      result.answer ? "<p class=\"wayfinder-evaluation-answer\">" +
+        escapeHtml_(result.answer) + "</p>" : "",
+      checks.length ? "<ul>" + checks.map(function(check) {
+        return "<li class=\"is-" + escapeAttr_(check.status) + "\">" +
+          escapeHtml_(check.message) + "</li>";
+      }).join("") + "</ul>" : "",
+      sourceIds.length ? "<p class=\"central-admin-footer-note\">Sources: " +
+        sourceIds.map(function(id) {
+          return "<code>" + escapeHtml_(id) + "</code>";
+        }).join(" ") + "</p>" : "",
+      "</article>",
     ].join("");
   }
 
@@ -9550,6 +9674,7 @@
     if (adminState.currentPageId === "wayfinder") {
       loadWayfinderWebsiteIndexStatus_(false);
       loadWayfinderFeedback_(false);
+      loadWayfinderEvaluations_(false);
     }
   }
 
@@ -15304,6 +15429,76 @@
           });
         })
         .then(parseAdminEndpointResponse_);
+  }
+
+  function callWayfinderEvaluationsEndpoint_(payload) {
+    if (!adminState.user) {
+      return Promise.reject(new Error(
+          "Sign in with an approved Central admin account first.",
+      ));
+    }
+    return adminState.user.getIdToken()
+        .then(function(idToken) {
+          return fetch(WAYFINDER_EVALUATIONS_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + idToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(payload || {}),
+          });
+        })
+        .then(parseAdminEndpointResponse_);
+  }
+
+  function loadWayfinderEvaluations_(forceReload) {
+    if (!adminState.user || adminState.wayfinderEvaluationsLoading ||
+      adminState.wayfinderEvaluationsRunning) return;
+    if (adminState.wayfinderEvaluationsLoaded && !forceReload) return;
+    adminState.wayfinderEvaluationsLoading = true;
+    adminState.wayfinderEvaluationsError = "";
+    renderAdmin_();
+    callWayfinderEvaluationsEndpoint_({action: "list"})
+        .then(function(result) {
+          adminState.wayfinderEvaluationsLoading = false;
+          adminState.wayfinderEvaluationsLoaded = true;
+          adminState.wayfinderEvaluationsLibrarySize =
+            Number(result.librarySize) || 0;
+          adminState.wayfinderEvaluationRuns =
+            Array.isArray(result.runs) ? result.runs : [];
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderEvaluationsLoading = false;
+          adminState.wayfinderEvaluationsLoaded = true;
+          adminState.wayfinderEvaluationsError = error && error.message ?
+            error.message : "Evaluation history is unavailable.";
+          renderAdmin_();
+        });
+  }
+
+  function runWayfinderEvaluations_(runId) {
+    if (!adminState.user || adminState.wayfinderEvaluationsRunning) return;
+    adminState.wayfinderEvaluationsRunning = true;
+    adminState.wayfinderEvaluationsError = "";
+    renderAdmin_();
+    callWayfinderEvaluationsEndpoint_({
+      action: runId ? "rerun" : "run",
+      runId: runId || "",
+    }).then(function(result) {
+      adminState.wayfinderEvaluationsRunning = false;
+      adminState.wayfinderEvaluationsLoaded = true;
+      adminState.wayfinderEvaluationRuns =
+        Array.isArray(result.runs) ? result.runs :
+          result.run ? [result.run] : [];
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderEvaluationsRunning = false;
+      adminState.wayfinderEvaluationsError = error && error.message ?
+        error.message : "The five-question evaluation could not finish.";
+      renderAdmin_();
+    });
   }
 
   function loadWayfinderFeedback_(forceReload) {

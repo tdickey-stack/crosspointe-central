@@ -26,7 +26,8 @@ const MAX_HISTORY_ASSISTANT_LENGTH = 1800;
 const requestWindowsByUid = new Map();
 const LIVE_SOURCE_QUESTION_PATTERN = new RegExp(
     "\\b(?:when|next|upcoming|date|time|times|scheduled|schedule|" +
-      "register|registration|events?)\\b",
+      "register|registration|events?|happening|today|tomorrow|" +
+      "weekends?|this\\s+week|this\\s+month|anything\\s+special)\\b",
     "i",
 );
 const EVENT_SOURCE_TYPE = "planning_center_event";
@@ -44,7 +45,7 @@ const GROUP_DIRECTORY_LINK_PATTERN = new RegExp(
 );
 const FOLLOW_UP_QUESTION_PATTERN = new RegExp(
     "^(?:and\\b|also\\b|but\\b|yes\\b|no\\b|what about\\b|how about\\b|" +
-    "what other\\b|which\\b|any other\\b|anything else\\b|" +
+    "what if\\b|what other\\b|which\\b|any other\\b|anything else\\b|" +
     "tell me more\\b|more details?\\b|what time\\b|when\\b|where\\b|" +
     "how long\\b|how do i\\b|how can i\\b|can i\\b|could i\\b|" +
     "would i\\b|who\\b|why\\b|" +
@@ -273,6 +274,17 @@ export function createWayfinderAnswerHandler(dependencies) {
         ),
         ...websiteEntries,
       ].slice(0, 5);
+      if (GROUP_DIRECTORY_LINK_PATTERN.test(retrievalQuestion)) {
+        const directoryEntry = entries.find((entry) => {
+          return entry.id === "groups-live-directory";
+        });
+        if (directoryEntry && !selectedEntries.some((entry) => {
+          return entry.id === directoryEntry.id;
+        })) {
+          if (selectedEntries.length >= 5) selectedEntries.pop();
+          selectedEntries.push(directoryEntry);
+        }
+      }
       if (websiteEntries.length && !selectedEntries.some((entry) => {
         return entry.sourceType === "website_page";
       })) {
@@ -411,13 +423,28 @@ function buildAnswerSourceCards_(
     publicResponse,
 ) {
   const cards = buildEntrySourceCards_(entries, sourceEntryIds);
-  if (!publicResponse) return cards;
   const context = [
     String(question || ""),
     ...(Array.isArray(history) ? history : []).map((message) => {
       return String(message && message.content || "");
     }),
   ].join(" ");
+  const existingIds = new Set(cards.map((card) => card.id));
+  if (GROUP_DIRECTORY_LINK_PATTERN.test(context)) {
+    entries.forEach((entry) => {
+      if (existingIds.has(entry.id)) return;
+      const links = Array.isArray(entry.approvedLinks) ?
+        entry.approvedLinks : [];
+      if (!links.some((link) => {
+        return /crosspointe\.tv\/small-groups/i.test(
+            String(link && link.url || ""),
+        );
+      })) return;
+      cards.push(buildEntrySourceCard_(entry));
+      existingIds.add(entry.id);
+    });
+  }
+  if (!publicResponse) return cards;
   const requiredLinkRules = [
     {
       intent: PRAYER_FORM_QUESTION_PATTERN,
@@ -432,7 +459,6 @@ function buildAnswerSourceCards_(
       link: /crosspointe\.tv\/church-online/i,
     },
   ];
-  const existingIds = new Set(cards.map((card) => card.id));
   requiredLinkRules.filter((rule) => rule.intent.test(context))
       .forEach((rule) => {
         entries.forEach((entry) => {

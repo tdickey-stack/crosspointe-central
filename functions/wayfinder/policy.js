@@ -16,6 +16,17 @@ const CRISIS_PATTERNS = [
 const PROHIBITED_PATTERNS = [
   /\b(?:my|someone'?s|their) giving record(?:s)?\b/,
   /\b(?:my|someone'?s|their) donation record(?:s)?\b/,
+  new RegExp(
+      "\\b(?:how much|what (?:amount|total))\\b.{0,70}" +
+      "\\b(?:did|has|have)\\b.{0,70}" +
+      "\\b(?:give|given|donate|donated|contribute|contributed)\\b",
+  ),
+  /\b(?:giving|donation|contribution)\s+(?:history|total|amount)\b/,
+  new RegExp(
+      "\\b(?:husband|wife|spouse|mother|father|parent|son|daughter|" +
+      "child|friend|member)'?s\\s+" +
+      "(?:giving|donation|contribution)(?:s)?\\b",
+  ),
   /\bmember record(?:s)?\b/,
   /\bchild record(?:s)?\b/,
   /\bpastoral (?:note|record)(?:s)?\b/,

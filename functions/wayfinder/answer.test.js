@@ -27,6 +27,25 @@ test("crisis policy skips Gemini", async () => {
   assert.match(response.body.answer, /988/);
 });
 
+test("private giving history uses the fixed privacy refusal", async () => {
+  let generatorCalls = 0;
+  const response = await runHandler_(
+      "How much did my husband give to the church last year?",
+      async () => {
+        generatorCalls += 1;
+        return null;
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "policy-answer");
+  assert.equal(response.body.policyRoute, "prohibited");
+  assert.equal(response.body.modelUsed, false);
+  assert.equal(response.body.shouldContactChurch, false);
+  assert.equal(generatorCalls, 0);
+  assert.doesNotMatch(response.body.answer, /office|email|call|text/i);
+});
+
 test("CARS transmission question uses approved grounded fallback", async () => {
   let generatorCalls = 0;
   const response = await runHandler_(
@@ -142,6 +161,76 @@ test("a follow-up retrieves live details from recent context", async () => {
   assert.deepEqual(generatorHistory, history);
   assert.match(response.body.answer, /6:00 PM/);
 });
+
+test("a child baptism follow-up keeps the baptism context", async () => {
+  const history = [{
+    role: "user",
+    content: "How do I request baptism?",
+  }, {
+    role: "assistant",
+    content: "Contact the office to schedule a conversation with a pastor.",
+  }];
+  let selectedIds = [];
+  const response = await runHandler_(
+      "What if it is for my child?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "Contact the office. A child meets with the Children's " +
+            "Pastor and completes a short class.",
+          sourceEntryIds: ["next-steps-child-teen-baptism"],
+          shouldContactChurch: true,
+          followUpQuestion: "",
+        };
+      },
+      undefined,
+      undefined,
+      undefined,
+      history,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(selectedIds.includes("next-steps-child-teen-baptism"));
+  assert.equal(response.body.sourceCards[0].id,
+      "next-steps-child-teen-baptism");
+});
+
+test("weekend event wording always checks live Planning Center data",
+    async () => {
+      let requestedSourceTypes = [];
+      let selectedIds = [];
+      const response = await runHandler_(
+          "Is anything special happening this weekend?",
+          async (context) => {
+            selectedIds = context.entries.map((entry) => entry.id);
+            return {
+              answer: "No matching special event is currently posted.",
+              sourceEntryIds: ["live-events-no-match"],
+              shouldContactChurch: false,
+              followUpQuestion: "",
+            };
+          },
+          async ({sourceTypes}) => {
+            requestedSourceTypes = sourceTypes;
+            return {
+              statuses: {planning_center_event: "ok"},
+              entries: [{
+                id: "live-events-no-match",
+                topic: "live_events",
+                title: "No Matching Published Event",
+                responseMode: "guided",
+                requiredFacts: ["No matching event is currently posted."],
+                approvedLinks: [],
+              }],
+            };
+          },
+      );
+
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(requestedSourceTypes, ["planning_center_event"]);
+      assert.ok(selectedIds.includes("live-events-no-match"));
+      assert.equal(response.body.sourceCards[0].id, "live-events-no-match");
+    });
 
 test("verified published Pointe Groups are sent to Gemini", async () => {
   let requestedSourceTypes = [];
@@ -772,6 +861,39 @@ test("group-directory question returns the website directly", async () => {
 
   assert.equal(response.statusCode, 200);
   assert.equal(liveCalls, 0);
+  assert.equal(response.body.links.length, 1);
+  assert.match(response.body.links[0].url, /crosspointe\.tv\/small-groups/);
+});
+
+test("group-directory follow-up keeps the directory link", async () => {
+  const history = [{
+    role: "user",
+    content: "What is a Pointe Group?",
+  }, {
+    role: "assistant",
+    content: "Pointe Groups help people fellowship and grow together.",
+  }];
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "You can see every current Pointe Group in our directory.",
+      sourceEntryIds: ["next-steps-pointe-group-summary"],
+      shouldContactChurch: false,
+      followUpQuestion: "",
+    }),
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-group-followup-test-123"},
+    ip: "127.0.0.41",
+    body: {question: "Where can I see all of them?", history: history},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
   assert.equal(response.body.links.length, 1);
   assert.match(response.body.links[0].url, /crosspointe\.tv\/small-groups/);
 });

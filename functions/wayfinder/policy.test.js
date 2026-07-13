@@ -23,6 +23,25 @@ test("routes private records and staff schedules to refusal", () => {
       classifyWayfinderPolicyQuestion("What is the pastor's staff schedule?"),
       "prohibited",
   );
+  [
+    "How much did my husband give to the church last year?",
+    "How much has my wife donated?",
+    "What amount did another member contribute this year?",
+    "Can you show me my spouse's giving history?",
+  ].forEach((question) => {
+    assert.equal(classifyWayfinderPolicyQuestion(question), "prohibited");
+  });
+});
+
+test("does not confuse general giving questions with private records", () => {
+  assert.equal(
+      classifyWayfinderPolicyQuestion("How much should my husband give?"),
+      "knowledge",
+  );
+  assert.equal(
+      classifyWayfinderPolicyQuestion("How can I request my giving statement?"),
+      "knowledge",
+  );
 });
 
 test("leaves normal prayer and pastoral care for grounded knowledge", () => {

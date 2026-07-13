@@ -204,7 +204,7 @@ Behavior:
 
 The Settings page manages operational controls instead of homepage copy.
 
-- `Force Sunday Mode`
+- Separate Live and Dev Preview Sunday Mode override and schedule controls
 - `Livestream URL`
 - `Livestream Note`
 - `Bible ID`
@@ -213,7 +213,10 @@ The Settings page manages operational controls instead of homepage copy.
 
 Behavior:
 
-- Publishing Sunday controls writes to `centralApp/root/public/sundaySettings` for preview.
+- Publishing Sunday controls writes both environment-specific control groups to
+  `centralApp/root/public/sundaySettings`. The existing unprefixed fields control
+  Live; the `dev_sunday_mode_*` fields control the Firebase `dev` preview and
+  local emulator.
 - Room Rules publish to `centralContent/roomRules/items/{itemId}`.
 - Admin users are managed through privileged Functions endpoints rather than direct browser writes.
 

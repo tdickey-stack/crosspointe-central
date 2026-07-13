@@ -7,6 +7,8 @@ import {onRequest} from "firebase-functions/v2/https";
 import {defineSecret} from "firebase-functions/params";
 
 import {createWayfinderAnswerHandler} from "./wayfinder/answer.js";
+import {createWayfinderFeaturedEventProvider} from
+  "./wayfinder/featured-events.js";
 import {
   createDeveloperApiWayfinderGenerator,
   DEFAULT_WAYFINDER_MODEL,
@@ -39,6 +41,7 @@ setGlobalOptions({maxInstances: 10});
 admin.initializeApp();
 
 const firestore = admin.firestore();
+const getWayfinderFeaturedEvents = createWayfinderFeaturedEventProvider();
 
 const CENTRAL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CENTRAL_ALLOWED_ADMIN_EMAIL_DOMAINS = ["crosspointe.tv"];
@@ -660,6 +663,7 @@ async function getWayfinderPlanningCenterContext_(request) {
     timezone: PCO_TIMEZONE,
     centralTagName: PCO_CENTRAL_TAG_NAME,
     priorityTagName: PCO_WAYFINDER_PRIORITY_TAG_NAME,
+    getFeaturedEvents: getWayfinderFeaturedEvents,
     resolveEventRooms: (instanceId) => {
       return getEventInstanceRooms_(instanceId, roomRules);
     },

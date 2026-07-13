@@ -2,6 +2,8 @@ import {
   createWayfinderPlanningCenterRetriever,
   WAYFINDER_PCO_SOURCE_TYPES,
 } from "../wayfinder/planning-center.js";
+import {createWayfinderFeaturedEventProvider} from
+  "../wayfinder/featured-events.js";
 
 const appId = String(process.env.PCO_APP_ID || "").trim();
 const secret = String(process.env.PCO_SECRET || "").trim();
@@ -17,6 +19,7 @@ const retriever = createWayfinderPlanningCenterRetriever({
   centralTagName: process.env.PCO_CENTRAL_TAG_NAME || "Central",
   priorityTagName:
     process.env.PCO_WAYFINDER_PRIORITY_TAG_NAME || "Wayfinder Priority",
+  getFeaturedEvents: createWayfinderFeaturedEventProvider(),
   fetchJson: async (url) => {
     const response = await fetch(url, {
       method: "GET",

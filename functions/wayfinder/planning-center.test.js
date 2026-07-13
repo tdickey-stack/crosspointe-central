@@ -8,7 +8,7 @@ import {
 
 const NOW = new Date("2026-07-11T15:00:00.000Z");
 
-test("returns future Central-tagged events with priority first", async () => {
+test("ranks website Featured Events while keeping PCO details", async () => {
   const requestedUrls = [];
   const retriever = createWayfinderPlanningCenterRetriever({
     now: () => NOW,
@@ -44,6 +44,15 @@ test("returns future Central-tagged events with priority first", async () => {
       };
     },
     resolveEventRooms: async (id) => id === "2" ? ["Event Hall"] : [],
+    getFeaturedEvents: async () => ({
+      status: "ok",
+      events: [{
+        name: "Starting Pointe",
+        normalizedName: "starting pointe",
+        startsAt: "2026-07-14T23:00:00.000Z",
+        url: "https://www.crosspointe.tv/event/starting-pointe",
+      }],
+    }),
   });
 
   const result = await retriever({
@@ -55,12 +64,113 @@ test("returns future Central-tagged events with priority first", async () => {
   assert.equal(result.entries.length, 2);
   assert.equal(result.entries[0].title, "Starting Pointe");
   assert.match(result.entries[0].requiredFacts.join(" "), /Event Hall/);
+  assert.match(result.entries[0].requiredActions.join(" "),
+      /before events that are not featured/);
   assert.equal(
       result.entries.some((entry) => /Private/.test(entry.title)),
       false,
   );
   assert.match(requestedUrls[0], /where%5Bstarts_at%5D%5Blte%5D/);
 });
+
+test("ignores featured website events that are absent from PCO", async () => {
+  const retriever = createWayfinderPlanningCenterRetriever({
+    now: () => NOW,
+    fetchJson: async () => ({
+      data: [
+        event_("1", "Community Lunch", "2026-07-13T17:00:00Z", ["central"]),
+        event_("2", "Men's Night", "2026-07-14T23:00:00Z", ["central"]),
+      ],
+      included: [tag_("central", "Central")],
+      links: {next: null},
+    }),
+    getFeaturedEvents: async () => ({
+      status: "ok",
+      events: [{
+        name: "Website Only Event",
+        normalizedName: "website only event",
+        startsAt: "2026-07-15T23:00:00.000Z",
+        url: "https://www.crosspointe.tv/event/website-only-event",
+      }],
+    }),
+  });
+
+  const result = await retriever({
+    question: "What events are coming up?",
+    sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+  });
+
+  assert.deepEqual(result.entries.map((entry) => entry.title), [
+    "Community Lunch", "Men's Night",
+  ]);
+  assert.doesNotMatch(JSON.stringify(result.entries), /Website Only Event/);
+});
+
+test("includes a date-and-name matched featured PCO event without Central tag",
+    async () => {
+      const retriever = createWayfinderPlanningCenterRetriever({
+        now: () => NOW,
+        fetchJson: async () => ({
+          data: [event_(
+              "2", "The Pointe - Men's Ministry",
+              "2026-07-20T22:30:00Z", [],
+          )],
+          included: [tag_("central", "Central")],
+          links: {next: null},
+        }),
+        getFeaturedEvents: async () => ({
+          status: "ok",
+          events: [{
+            name: "Men's Night",
+            normalizedName: "mens night",
+            startsAt: "2026-07-20T22:30:00.000Z",
+            url: "https://www.crosspointe.tv/event/mens-night",
+          }],
+        }),
+      });
+
+      const result = await retriever({
+        question: "What events are coming up?",
+        sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+      });
+
+      assert.equal(result.statuses.planning_center_event, "ok");
+      assert.equal(result.entries[0].title, "Men's Night");
+      assert.match(result.entries[0].requiredFacts.join(" "), /July 20/);
+      assert.doesNotMatch(JSON.stringify(result.entries),
+          /The Pointe - Men's Ministry/);
+    });
+
+test("does not use a legacy priority tag when website feed is available",
+    async () => {
+      const retriever = createWayfinderPlanningCenterRetriever({
+        now: () => NOW,
+        fetchJson: async () => ({
+          data: [
+            event_("1", "First Event", "2026-07-13T17:00:00Z", ["central"]),
+            event_(
+                "2", "Tagged Event", "2026-07-14T23:00:00Z",
+                ["central", "priority"],
+            ),
+          ],
+          included: [
+            tag_("central", "Central"),
+            tag_("priority", "Wayfinder Priority"),
+          ],
+          links: {next: null},
+        }),
+        getFeaturedEvents: async () => ({status: "ok", events: []}),
+      });
+
+      const result = await retriever({
+        question: "What events are coming up?",
+        sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+      });
+
+      assert.deepEqual(result.entries.map((entry) => entry.title), [
+        "First Event", "Tagged Event",
+      ]);
+    });
 
 test("uses a six-month window for a named event search", async () => {
   let requestedUrl = "";

@@ -246,6 +246,9 @@ export function buildWayfinderGeminiRequest(context, model) {
       "option. Give at most three useful examples before the approved path " +
       "for exploring more.",
     "Keep the answer warm, calm, conversational, and brief.",
+    "When APPROVED_CONTEXT contains multiple live event entries, preserve " +
+      "their supplied order. Retrieval has already applied CrossPointe's " +
+      "approved priority rules. Do not announce or explain the ranking.",
     "Avoid canned chatbot acknowledgments such as 'Thank you for sharing " +
       "that with me,' 'Thank you for letting me know,' 'I understand,' or " +
       "'Absolutely!' Prefer plain, natural wording that fits the moment.",
@@ -313,9 +316,16 @@ export function buildWayfinderGeminiRequest(context, model) {
     "Use only sourceEntryIds that appear in APPROVED_CONTEXT.entries.",
     "Return JSON matching the required schema.",
   ].join("\n");
+  const liveEventAnswerOrder = entries
+      .filter((entry) => entry.id.startsWith("live-event-"))
+      .map((entry) => entry.title);
   const contents = JSON.stringify({
-    task: "Write one grounded Wayfinder answer to the user question.",
+    task: liveEventAnswerOrder.length > 1 ?
+      "Write one grounded Wayfinder answer. Mention live events in the exact " +
+        "order listed in LIVE_EVENT_ANSWER_ORDER." :
+      "Write one grounded Wayfinder answer to the user question.",
     userQuestion: String(value.question || "").trim(),
+    LIVE_EVENT_ANSWER_ORDER: liveEventAnswerOrder,
     CONVERSATION_HISTORY: sanitizeConversationHistory_(
         value.conversationHistory,
     ),

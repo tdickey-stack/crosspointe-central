@@ -17,12 +17,14 @@
       "title": "General Upcoming Events",
       "responseMode": "guided",
       "sampleQuestions": ["What events are coming up?", "What's happening at CrossPointe?", "What can I attend soon?"],
-      "keywords": ["upcoming events", "events coming up", "church calendar", "next events", "Wayfinder Priority"],
+      "keywords": ["upcoming events", "events coming up", "church calendar", "next events", "featured events", "priority events"],
       "requiredSourceType": "planning_center_event",
       "retrievalRules": [
-        "Search only public events carrying the Central tag from the current time through the next 14 days.",
+        "Search public events carrying the Central tag, plus Planning Center events that can be safely cross-referenced to the website Featured Events section, from the current time through the next 14 days.",
         "Return the next three relevant events that have not started.",
-        "Rank events with the Wayfinder Priority tag first, then fill remaining spaces with the next regular Central-tagged events.",
+        "Use the Featured Events section at crosspointe.tv/events only to identify which matching events should be ranked first, then fill remaining spaces with the next regular Central-tagged events.",
+        "Cross-reference featured website events against Planning Center using the event identity and date. A website event that cannot be matched to Planning Center must not be presented as verified.",
+        "For a safely matched featured event, use the public-facing event name from the Featured Events section. Planning Center remains authoritative for dates, times, locations, descriptions, and main links.",
         "Exclude normal Sunday morning services and normal Wednesday night programming, but allow intentionally published special events, including Sunday evening events.",
         "List only the next occurrence of a recurring event."
       ],

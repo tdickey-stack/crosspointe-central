@@ -1,3 +1,5 @@
+import {normalizeFeaturedEventName} from "./featured-events.js";
+
 const API_ORIGIN = "https://api.planningcenteronline.com";
 const EVENT_SOURCE = "planning_center_event";
 const GROUP_SOURCE = "planning_center_groups";
@@ -42,6 +44,11 @@ export function createWayfinderPlanningCenterRetriever(options = {}) {
   ).trim();
   const resolveEventRooms = typeof options.resolveEventRooms === "function" ?
     options.resolveEventRooms : async () => [];
+  const getFeaturedEvents = typeof options.getFeaturedEvents === "function" ?
+    options.getFeaturedEvents : async () => ({
+      status: "unavailable",
+      events: [],
+    });
   const now = typeof options.now === "function" ?
     options.now : () => new Date();
 
@@ -52,6 +59,7 @@ export function createWayfinderPlanningCenterRetriever(options = {}) {
 
     if (requested.has(EVENT_SOURCE)) {
       try {
+        const featured = await getFeaturedEvents();
         const events = await retrieveEvents_({
           question,
           fetchJson,
@@ -59,6 +67,7 @@ export function createWayfinderPlanningCenterRetriever(options = {}) {
           timezone,
           centralTagName,
           priorityTagName,
+          featured,
           now,
         });
         liveEntries.push(...events.entries);
@@ -121,7 +130,8 @@ async function retrieveEvents_(context) {
   const candidates = pages.flatMap((page) => page.data || [])
       .map((instance) => normalizeEvent_(instance, tagMap, current))
       .filter(Boolean)
-      .filter((event) => event.tags.includes(context.centralTagName))
+      .filter((event) => event.tags.includes(context.centralTagName) ||
+        isFeaturedEventMatch_(event, context.featured, context.timezone))
       .filter((event) => !isRegularWeeklyProgramming_(event, context.timezone));
 
   let selected;
@@ -138,10 +148,16 @@ async function retrieveEvents_(context) {
           a.event.startsAt.getTime() - b.event.startsAt.getTime())
         .map((item) => item.event);
   } else {
+    const hasWebsitePriority = context.featured &&
+      context.featured.status === "ok";
     selected = [...candidates].sort((a, b) => {
-      const priorityDifference = Number(
-          b.tags.includes(context.priorityTagName),
-      ) - Number(a.tags.includes(context.priorityTagName));
+      const priorityDifference = hasWebsitePriority ?
+        Number(isFeaturedEventMatch_(b, context.featured, context.timezone)) -
+          Number(isFeaturedEventMatch_(
+              a, context.featured, context.timezone,
+          )) :
+        Number(b.tags.includes(context.priorityTagName)) -
+          Number(a.tags.includes(context.priorityTagName));
       return priorityDifference || a.startsAt.getTime() - b.startsAt.getTime();
     });
   }
@@ -151,7 +167,12 @@ async function retrieveEvents_(context) {
 
   const entries = await Promise.all(selected.map(async (event) => {
     const rooms = await context.resolveEventRooms(event.id);
-    return buildEventEntry_(event, rooms, context.timezone);
+    const featuredMatch = findFeaturedEventMatch_(
+        event, context.featured, context.timezone,
+    );
+    return buildEventEntry_(
+        event, rooms, context.timezone, featuredMatch && featuredMatch.name,
+    );
   }));
 
   if (!entries.length) {
@@ -162,6 +183,37 @@ async function retrieveEvents_(context) {
   }
 
   return {status: "ok", entries};
+}
+
+function isFeaturedEventMatch_(event, featured, timezone) {
+  return Boolean(findFeaturedEventMatch_(event, featured, timezone));
+}
+
+function findFeaturedEventMatch_(event, featured, timezone) {
+  if (!featured || featured.status !== "ok" ||
+    !Array.isArray(featured.events)) return null;
+  const eventName = normalizeFeaturedEventName(event.name);
+  const eventTokens = featuredIdentityTokens_(eventName);
+  const eventDate = localDateKey_(event.startsAt, timezone);
+  return featured.events.find((item) => {
+    const featuredName = normalizeFeaturedEventName(
+        item.normalizedName || item.name,
+    );
+    if (featuredName === eventName) return true;
+    const featuredDate = new Date(String(item.startsAt || ""));
+    if (Number.isNaN(featuredDate.getTime()) ||
+      localDateKey_(featuredDate, timezone) !== eventDate) return false;
+    const featuredTokens = featuredIdentityTokens_(featuredName);
+    return [...featuredTokens].some((token) => eventTokens.has(token));
+  }) || null;
+}
+
+function featuredIdentityTokens_(value) {
+  const ignored = new Set([
+    "event", "ministry", "night", "pointe", "the", "crosspointe",
+  ]);
+  return new Set(String(value || "").split(/\s+/)
+      .filter((token) => token.length >= 3 && !ignored.has(token)));
 }
 
 async function retrieveGroups_({question, fetchJson}) {
@@ -280,12 +332,14 @@ function normalizeGroup_(group, groupTypes, tags, enrollments) {
   };
 }
 
-function buildEventEntry_(event, rawRooms, timezone) {
+function buildEventEntry_(event, rawRooms, timezone, featuredName = "") {
   const rooms = (Array.isArray(rawRooms) ? rawRooms : [])
       .map((room) => cleanPublicText_(room, 120)).filter(Boolean);
   const location = rooms.length ? rooms.join(", ") : event.location;
+  const displayName = cleanPublicText_(featuredName, 160) || event.name;
+  const isFeatured = Boolean(featuredName);
   const facts = [
-    "Planning Center currently lists " + event.name + " on " +
+    "The verified event is " + displayName + " on " +
       formatEventDate_(event.startsAt, timezone) + " at " +
       formatEventTime_(event.startsAt, timezone) + ".",
   ];
@@ -300,17 +354,23 @@ function buildEventEntry_(event, rawRooms, timezone) {
   return {
     id: "live-event-" + safeId_(event.id),
     topic: "live_events",
-    title: event.name,
+    title: displayName,
     responseMode: "guided",
     requiredFacts: facts,
-    requiredActions: ["Treat these as live Planning Center details."],
+    requiredActions: [
+      "Treat these as live Planning Center details.",
+      ...(isFeatured ? [
+        "When listing multiple events, present this event before events " +
+          "that are not featured. Do not explain the internal ranking.",
+      ] : []),
+    ],
     prohibitedClaims: [
       "Do not add dates, times, locations, registration details, or capacity " +
       "information that are not stated here.",
       "The main event link is for details. Do not call it a registration " +
       "link unless the approved facts explicitly identify registration.",
     ],
-    approvedLinks: event.url ? [{label: event.name, url: event.url}] : [],
+    approvedLinks: event.url ? [{label: displayName, url: event.url}] : [],
     liveSource: {type: EVENT_SOURCE, sourceId: event.id},
   };
 }

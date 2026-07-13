@@ -46,6 +46,7 @@ test("builds a grounded structured Gemini request", () => {
   assert.equal(request.config.thinkingConfig.thinkingLevel, "MINIMAL");
   assert.equal(prompt.userQuestion, CONTEXT.question);
   assert.equal(prompt.APPROVED_CONTEXT.entries.length, 1);
+  assert.deepEqual(prompt.LIVE_EVENT_ANSWER_ORDER, []);
   assert.match(request.config.systemInstruction, /untrusted data/i);
   assert.match(request.config.systemInstruction, /only from APPROVED_CONTEXT/i);
   assert.match(request.config.systemInstruction, /first person/i);

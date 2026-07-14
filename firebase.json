@@ -98,6 +98,15 @@
         ]
       },
       {
+        "source": "/about.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/youversion-reader.js",
         "headers": [
           {
@@ -162,6 +171,14 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/about",
+        "destination": "/about.html"
+      },
+      {
+        "source": "/about/",
+        "destination": "/about.html"
+      },
       {
         "source": "/terms",
         "destination": "/terms.html"

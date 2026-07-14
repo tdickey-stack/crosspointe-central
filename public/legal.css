@@ -128,6 +128,26 @@
   color: var(--cp-red);
 }
 
+.legal-inline-link {
+  color: var(--cp-red);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.legal-inline-link:hover,
+.legal-inline-link:focus-visible {
+  color: var(--cp-text-strong);
+}
+
+.about-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
 .legal-back-row {
   display: flex;
   justify-content: center;

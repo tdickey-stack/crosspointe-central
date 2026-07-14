@@ -62,6 +62,42 @@
         ]
       },
       {
+        "source": "/legal.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/legal.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/privacy.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/terms.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/youversion-reader.js",
         "headers": [
           {
@@ -125,29 +161,23 @@
         ]
       }
     ],
-    "redirects": [
+    "rewrites": [
       {
         "source": "/terms",
-        "destination": "https://docs.google.com/document/d/e/2PACX-1vQaEqAZCeDPa6JQ81jx6O6cpKdEzRibYVlCZjDW_baScTCvdLKHJCTMJTcXJ9dAe1wfxzn5wcJ_iUUR/pub",
-        "type": 302
+        "destination": "/terms.html"
       },
       {
         "source": "/terms/",
-        "destination": "https://docs.google.com/document/d/e/2PACX-1vQaEqAZCeDPa6JQ81jx6O6cpKdEzRibYVlCZjDW_baScTCvdLKHJCTMJTcXJ9dAe1wfxzn5wcJ_iUUR/pub",
-        "type": 302
+        "destination": "/terms.html"
       },
       {
         "source": "/privacy",
-        "destination": "https://docs.google.com/document/d/e/2PACX-1vQm2GRDE1T6kutZeo9mVgl8zsC0AKLPqJ2JxKg3-LjUbgbOkL938nSvkpHYID7WhyhEopUMv4OrvmWs/pub",
-        "type": 302
+        "destination": "/privacy.html"
       },
       {
         "source": "/privacy/",
-        "destination": "https://docs.google.com/document/d/e/2PACX-1vQm2GRDE1T6kutZeo9mVgl8zsC0AKLPqJ2JxKg3-LjUbgbOkL938nSvkpHYID7WhyhEopUMv4OrvmWs/pub",
-        "type": 302
-      }
-    ],
-    "rewrites": [
+        "destination": "/privacy.html"
+      },
       {
         "source": "/api/calendar-event.ics",
         "function": {

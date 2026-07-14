@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#f4f4f5">
+    <meta
+      name="description"
+      content="Terms of Service for CrossPointe Central."
+    >
+    <title>Terms of Service | CrossPointe Central</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <script>
+      (function() {
+        var theme = "light";
+
+        try {
+          var storedTheme = localStorage.getItem("central-theme-override-v2");
+
+          if (storedTheme === "light" || storedTheme === "dark") {
+            theme = storedTheme;
+          } else if (
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ) {
+            theme = "dark";
+          }
+        } catch (error) {
+        }
+
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.style.colorScheme = theme;
+      }());
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&amp;display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/legal.css">
+    <script defer src="/legal.js"></script>
+  </head>
+  <body class="legal-page">
+    <div class="central legal-shell">
+      <header class="hero legal-hero">
+        <div class="wrap">
+          <div class="hero-topbar">
+            <a class="legal-brand" href="/">
+              <img src="/loader-icon.svg" alt="">
+              <span>CrossPointe Central</span>
+            </a>
+            <button
+              type="button"
+              class="theme-toggle"
+              data-legal-theme-toggle
+              aria-label="Switch color theme"
+            >
+              <span class="theme-toggle-copy">
+                <strong>Theme</strong>
+                <small data-legal-theme-label>Light</small>
+              </span>
+              <span class="theme-toggle-switch" aria-hidden="true">
+                <span class="theme-toggle-thumb"></span>
+              </span>
+            </button>
+          </div>
+          <div class="legal-heading">
+            <span class="eyebrow">
+              <span class="eyebrow-dot"></span>
+              Legal
+            </span>
+            <h1>Terms of Service</h1>
+            <p>
+              The terms that govern access to and use of CrossPointe Central.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main class="legal-content">
+        <div class="wrap">
+          <article class="legal-card">
+            <p class="legal-effective-date">
+              <strong>Effective Date:</strong> July 1, 2026
+            </p>
+
+            <div class="legal-intro">
+              <p>Welcome to CrossPointe Central.</p>
+              <p>
+                By accessing or using CrossPointe Central, you agree to these
+                Terms of Service.
+              </p>
+            </div>
+
+            <section>
+              <h2>Purpose</h2>
+              <p>
+                CrossPointe Central exists to provide church information,
+                ministry resources, event details, sermon tools, and other
+                digital resources offered by CrossPointe Church.
+              </p>
+            </section>
+
+            <section>
+              <h2>Optional Third-Party Integrations</h2>
+              <p>
+                Some features may connect with third-party services such as
+                Google Drive or the YouVersion Bible App.
+              </p>
+              <p>
+                Use of these services is entirely optional and remains subject
+                to each provider's own terms and policies. CrossPointe Church
+                is not responsible for the operation or availability of
+                third-party services.
+              </p>
+            </section>
+
+            <section>
+              <h2>Acceptable Use</h2>
+              <p>You agree not to:</p>
+              <ul>
+                <li>Use CrossPointe Central for unlawful purposes.</li>
+                <li>
+                  Attempt to interfere with the operation or security of the
+                  application.
+                </li>
+                <li>
+                  Attempt to access data or services you are not authorized to
+                  use.
+                </li>
+                <li>
+                  Misuse or abuse any features provided by CrossPointe Central.
+                </li>
+              </ul>
+            </section>
+
+            <section>
+              <h2>Content Accuracy</h2>
+              <p>
+                While we strive to keep all information accurate and current,
+                event details, schedules, announcements, and ministry
+                information may change without notice.
+              </p>
+            </section>
+
+            <section>
+              <h2>Availability</h2>
+              <p>
+                CrossPointe Central is provided on an "as is" and "as
+                available" basis. We do not guarantee uninterrupted
+                availability or that every feature will always function
+                without error.
+              </p>
+            </section>
+
+            <section>
+              <h2>Intellectual Property</h2>
+              <p>
+                Unless otherwise noted, the content, branding, graphics, and
+                custom software within CrossPointe Central are the property of
+                CrossPointe Church or are used with permission.
+              </p>
+              <p>
+                Third-party trademarks and services remain the property of
+                their respective owners.
+              </p>
+            </section>
+
+            <section>
+              <h2>Changes</h2>
+              <p>
+                CrossPointe Church may modify these Terms of Service at any
+                time. Continued use of CrossPointe Central after changes are
+                posted constitutes acceptance of the updated Terms.
+              </p>
+            </section>
+          </article>
+
+          <div class="legal-back-row">
+            <a class="legal-back-link" href="/">Back to CrossPointe Central</a>
+          </div>
+        </div>
+      </main>
+
+      <footer class="public-footer">
+        <div class="wrap public-footer-wrap">
+          <nav class="public-footer-links" aria-label="Footer links">
+            <a href="/">Central Home</a>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms" aria-current="page">Terms of Service</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

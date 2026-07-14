@@ -79,6 +79,13 @@ var sundayStreamResizeStartWidth = 0;
 var sundayStreamResizeHandle = null;
 var sundayStreamGestureState = null;
 var sundayStreamMiniPlayerPosition = null;
+var sundayStreamPlaybackIframe = null;
+var sundayStreamPlaybackOrigin = "";
+var sundayStreamPlaybackConnected = false;
+var sundayStreamPlaybackStateKnown = false;
+var sundayStreamPlaybackPaused = false;
+var sundayStreamPlaybackConnectTimer = 0;
+var sundayStreamPlaybackConnectAttempts = 0;
 var calendarMenuIdCounter = 0;
 var centralThemeMediaQuery = null;
 var centralThemeOverride = "";
@@ -101,6 +108,11 @@ var SUNDAY_STREAM_MINI_WIDTH_STEP = 80;
 var SUNDAY_STREAM_MINI_MOBILE_DEFAULT_WIDTH = 240;
 var SUNDAY_STREAM_MINI_MOBILE_MIN_WIDTH = 220;
 var SUNDAY_STREAM_MINI_MOBILE_BREAKPOINT = 640;
+var SUNDAY_STREAM_MINI_TAP_MOVE_THRESHOLD = 10;
+var SUNDAY_STREAM_MINI_ANIMATION_DURATION_MS = 460;
+var SUNDAY_STREAM_MINI_QUAD_EASING =
+  "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
+var SUNDAY_STREAM_PLAYER_CONNECT_MAX_ATTEMPTS = 24;
 
 if (!CENTRAL_IS_ADMIN_ROUTE) {
   document.addEventListener("DOMContentLoaded", function() {
@@ -1684,9 +1696,13 @@ function renderSundayLivestream(sundaySettings) {
       "<div class=\"sunday-stream-stage\" data-sunday-stream-stage>",
         "<div class=\"sunday-stream-player\" id=\"sunday-stream-player\" data-sunday-stream-player>",
           "<div class=\"sunday-stream-frame\">",
-            "<iframe allow=\"fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
-            "<div class=\"sunday-stream-gesture-surface\" role=\"group\" tabindex=\"0\" aria-label=\"Mini player. Drag to move or pinch to resize.\" title=\"Drag to move. Pinch to resize.\" onpointerdown=\"beginSundayStreamMiniPlayerGesture(event)\" onkeydown=\"handleSundayStreamMiniPlayerMoveKeydown(event)\">",
-              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-return\" aria-label=\"Return player to the live section\" title=\"Back to live\" onclick=\"returnToSundayLivestream()\"><span aria-hidden=\"true\">&#8598;</span></button>",
+            "<iframe allow=\"autoplay; fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
+            "<div class=\"sunday-stream-gesture-surface\" role=\"group\" tabindex=\"0\" aria-label=\"Mini player. Tap to return to the live section, drag to move, or pinch to resize.\" title=\"Tap to return. Drag to move. Pinch to resize.\" onpointerdown=\"beginSundayStreamMiniPlayerGesture(event)\" onkeydown=\"handleSundayStreamMiniPlayerMoveKeydown(event)\">",
+              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-playback\" data-sunday-stream-playback data-playback-state=\"connecting\" aria-label=\"Connecting to livestream controls\" title=\"Connecting to livestream controls\" onclick=\"toggleSundayStreamPlayback(event)\" disabled>",
+                "<span class=\"sunday-stream-playback-icon sunday-stream-playback-play\" aria-hidden=\"true\"></span>",
+                "<span class=\"sunday-stream-playback-icon sunday-stream-playback-pause\" aria-hidden=\"true\"><span></span><span></span></span>",
+                "<span class=\"sunday-stream-playback-connecting\" aria-hidden=\"true\">&middot;&middot;&middot;</span>",
+              "</button>",
               "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-close\" aria-label=\"Close mini player and stop the stream\" title=\"Close and stop\" onclick=\"closeSundayStreamMiniPlayer()\">&times;</button>",
             "</div>",
           "</div>",
@@ -1705,6 +1721,7 @@ function initSundayStreamMiniPlayer_() {
   sundayStreamMiniPlayerWidth = getSundayStreamMiniPlayerDefaultWidth_();
   sundayStreamMiniPlayerPosition = null;
   window.addEventListener("resize", handleSundayStreamMiniViewportChange_);
+  initSundayStreamPlaybackControl_();
   syncSundayStreamMiniPlayer_();
 }
 
@@ -1721,6 +1738,7 @@ function teardownSundayStreamMiniPlayer_() {
 
   stopSundayStreamMiniPlayerResize_();
   stopSundayStreamMiniPlayerGesture_();
+  teardownSundayStreamPlaybackControl_();
   resetSundayStreamMiniPlayerPosition_();
   window.removeEventListener("resize", handleSundayStreamMiniViewportChange_);
   sundayStreamMiniPlayerEnabled = false;
@@ -1795,8 +1813,8 @@ function animateSundayStreamPlayerFromRect_(playerEl, startRect) {
       transform: "translate(0, 0) scale(1, 1)",
     },
   ], {
-    duration: 480,
-    easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+    duration: SUNDAY_STREAM_MINI_ANIMATION_DURATION_MS,
+    easing: SUNDAY_STREAM_MINI_QUAD_EASING,
   });
 
   sundayStreamPlayerAnimation.onfinish = function() {
@@ -1900,8 +1918,8 @@ function closeSundayStreamMiniPlayer() {
       {opacity: 1, transform: "scale(1)"},
       {opacity: 0, transform: "scale(0.94)"},
     ], {
-      duration: 180,
-      easing: "ease-in",
+      duration: 220,
+      easing: SUNDAY_STREAM_MINI_QUAD_EASING,
     });
     sundayStreamPlayerAnimation.onfinish = function() {
       sundayStreamPlayerAnimation = null;
@@ -1911,6 +1929,240 @@ function closeSundayStreamMiniPlayer() {
   }
 
   finishClose();
+}
+
+function initSundayStreamPlaybackControl_() {
+  teardownSundayStreamPlaybackControl_();
+
+  sundayStreamPlaybackIframe = document.querySelector(
+      ".sunday-stream-player iframe",
+  );
+  sundayStreamPlaybackConnected = false;
+  sundayStreamPlaybackStateKnown = false;
+  sundayStreamPlaybackPaused = false;
+  sundayStreamPlaybackConnectAttempts = 0;
+
+  if (!sundayStreamPlaybackIframe) {
+    updateSundayStreamPlaybackButton_();
+    return;
+  }
+
+  sundayStreamPlaybackIframe.addEventListener(
+      "load",
+      handleSundayStreamPlaybackIframeLoad_,
+  );
+  window.addEventListener("message", handleSundayStreamPlaybackMessage_);
+  handleSundayStreamPlaybackIframeLoad_();
+}
+
+function teardownSundayStreamPlaybackControl_() {
+  if (sundayStreamPlaybackConnectTimer) {
+    window.clearTimeout(sundayStreamPlaybackConnectTimer);
+    sundayStreamPlaybackConnectTimer = 0;
+  }
+
+  if (sundayStreamPlaybackIframe) {
+    sundayStreamPlaybackIframe.removeEventListener(
+        "load",
+        handleSundayStreamPlaybackIframeLoad_,
+    );
+  }
+
+  window.removeEventListener("message", handleSundayStreamPlaybackMessage_);
+  sundayStreamPlaybackIframe = null;
+  sundayStreamPlaybackOrigin = "";
+  sundayStreamPlaybackConnected = false;
+  sundayStreamPlaybackStateKnown = false;
+  sundayStreamPlaybackPaused = false;
+  sundayStreamPlaybackConnectAttempts = 0;
+}
+
+function handleSundayStreamPlaybackIframeLoad_() {
+  if (sundayStreamPlaybackConnectTimer) {
+    window.clearTimeout(sundayStreamPlaybackConnectTimer);
+    sundayStreamPlaybackConnectTimer = 0;
+  }
+
+  sundayStreamPlaybackOrigin = getSundayStreamPlaybackOrigin_();
+  sundayStreamPlaybackConnected = false;
+  sundayStreamPlaybackStateKnown = false;
+  sundayStreamPlaybackConnectAttempts = 0;
+  updateSundayStreamPlaybackButton_();
+
+  if (sundayStreamPlaybackOrigin) {
+    sendSundayStreamPlaybackConnect_();
+  }
+}
+
+function getSundayStreamPlaybackOrigin_() {
+  if (!sundayStreamPlaybackIframe) return "";
+
+  try {
+    var streamUrl = new URL(
+        sundayStreamPlaybackIframe.getAttribute("src") || "",
+        window.location.href,
+    );
+
+    if (
+      streamUrl.protocol !== "https:" ||
+      streamUrl.hostname !== "control.resi.io"
+    ) {
+      return "";
+    }
+
+    return streamUrl.origin;
+  } catch (error) {
+    return "";
+  }
+}
+
+function sendSundayStreamPlaybackConnect_() {
+  if (
+    !sundayStreamPlaybackIframe ||
+    !sundayStreamPlaybackIframe.contentWindow ||
+    !sundayStreamPlaybackOrigin ||
+    sundayStreamPlaybackConnected
+  ) {
+    return;
+  }
+
+  sundayStreamPlaybackConnectAttempts += 1;
+  sundayStreamPlaybackIframe.contentWindow.postMessage({
+    kind: "player-connect",
+    origin: window.location.origin,
+    values: ["playing", "paused"],
+    throttleTime: 100,
+  }, sundayStreamPlaybackOrigin);
+
+  if (
+    sundayStreamPlaybackConnectAttempts <
+      SUNDAY_STREAM_PLAYER_CONNECT_MAX_ATTEMPTS
+  ) {
+    sundayStreamPlaybackConnectTimer = window.setTimeout(
+        sendSundayStreamPlaybackConnect_,
+        500,
+    );
+  }
+}
+
+function handleSundayStreamPlaybackMessage_(event) {
+  if (
+    !sundayStreamPlaybackIframe ||
+    event.source !== sundayStreamPlaybackIframe.contentWindow ||
+    event.origin !== sundayStreamPlaybackOrigin ||
+    !event.data ||
+    typeof event.data !== "object"
+  ) {
+    return;
+  }
+
+  if (event.data.kind === "player-ready") {
+    sundayStreamPlaybackConnected = true;
+    if (sundayStreamPlaybackConnectTimer) {
+      window.clearTimeout(sundayStreamPlaybackConnectTimer);
+      sundayStreamPlaybackConnectTimer = 0;
+    }
+    updateSundayStreamPlaybackButton_();
+    return;
+  }
+
+  if (
+    event.data.name === "init-state" ||
+    event.data.name === "paused" ||
+    event.data.name === "playing"
+  ) {
+    applySundayStreamPlaybackSnapshot_(event.data.value);
+    return;
+  }
+
+  if (event.data.name === "getSnapshotResult") {
+    applySundayStreamPlaybackSnapshot_(event.data.body);
+    return;
+  }
+
+  if (event.data.name === "play-result" && event.data.ok === false) {
+    sundayStreamPlaybackPaused = true;
+    sundayStreamPlaybackStateKnown = true;
+    updateSundayStreamPlaybackButton_();
+  }
+}
+
+function applySundayStreamPlaybackSnapshot_(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+
+  if (typeof snapshot.paused === "boolean") {
+    sundayStreamPlaybackPaused = snapshot.paused;
+  } else if (typeof snapshot.playing === "boolean") {
+    sundayStreamPlaybackPaused = !snapshot.playing;
+  } else {
+    return;
+  }
+
+  sundayStreamPlaybackConnected = true;
+  sundayStreamPlaybackStateKnown = true;
+  updateSundayStreamPlaybackButton_();
+}
+
+function toggleSundayStreamPlayback(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (
+    !sundayStreamPlaybackIframe ||
+    !sundayStreamPlaybackIframe.contentWindow ||
+    !sundayStreamPlaybackOrigin ||
+    !sundayStreamPlaybackConnected ||
+    !sundayStreamPlaybackStateKnown
+  ) {
+    return;
+  }
+
+  var previousPausedState = sundayStreamPlaybackPaused;
+  var command = sundayStreamPlaybackPaused ? "play" : "pause";
+  sundayStreamPlaybackPaused = !sundayStreamPlaybackPaused;
+  updateSundayStreamPlaybackButton_();
+
+  try {
+    sundayStreamPlaybackIframe.contentWindow.postMessage({
+      name: command,
+      args: [],
+    }, sundayStreamPlaybackOrigin);
+  } catch (error) {
+    sundayStreamPlaybackPaused = previousPausedState;
+    updateSundayStreamPlaybackButton_();
+  }
+}
+
+function updateSundayStreamPlaybackButton_() {
+  var buttonEl = document.querySelector("[data-sunday-stream-playback]");
+  if (!buttonEl) return;
+
+  if (!sundayStreamPlaybackOrigin) {
+    buttonEl.disabled = true;
+    buttonEl.setAttribute("data-playback-state", "unavailable");
+    buttonEl.setAttribute("aria-label", "Playback controls unavailable");
+    buttonEl.setAttribute("title", "Playback controls unavailable");
+    return;
+  }
+
+  if (!sundayStreamPlaybackConnected || !sundayStreamPlaybackStateKnown) {
+    buttonEl.disabled = true;
+    buttonEl.setAttribute("data-playback-state", "connecting");
+    buttonEl.setAttribute("aria-label", "Connecting to livestream controls");
+    buttonEl.setAttribute("title", "Connecting to livestream controls");
+    return;
+  }
+
+  var nextAction = sundayStreamPlaybackPaused ? "Play" : "Pause";
+  buttonEl.disabled = false;
+  buttonEl.setAttribute(
+      "data-playback-state",
+      sundayStreamPlaybackPaused ? "paused" : "playing",
+  );
+  buttonEl.setAttribute("aria-label", nextAction + " livestream");
+  buttonEl.setAttribute("title", nextAction);
 }
 
 function beginSundayStreamMiniPlayerGesture(event) {
@@ -1943,6 +2195,8 @@ function beginSundayStreamMiniPlayerGesture(event) {
       startRect: playerEl.getBoundingClientRect(),
       startPointerX: event.clientX,
       startPointerY: event.clientY,
+      didMove: false,
+      usedMultiplePointers: false,
     };
 
     window.addEventListener(
@@ -1976,9 +2230,10 @@ function beginSundayStreamMiniPlayerGesture(event) {
     }
   }
 
-  playerEl.classList.add("is-moving");
-
   if (getSundayStreamGesturePointers_().length === 2) {
+    sundayStreamGestureState.didMove = true;
+    sundayStreamGestureState.usedMultiplePointers = true;
+    playerEl.classList.add("is-moving");
     initializeSundayStreamMiniPlayerPinch_();
   }
 }
@@ -1995,6 +2250,10 @@ function handleSundayStreamMiniPlayerGestureMove_(event) {
 
   var pointers = getSundayStreamGesturePointers_();
   if (pointers.length >= 2) {
+    sundayStreamGestureState.didMove = true;
+    sundayStreamGestureState.usedMultiplePointers = true;
+    var playerEl = document.querySelector("[data-sunday-stream-player]");
+    if (playerEl) playerEl.classList.add("is-moving");
     if (sundayStreamGestureState.mode !== "pinch") {
       initializeSundayStreamMiniPlayerPinch_();
     }
@@ -2003,6 +2262,23 @@ function handleSundayStreamMiniPlayerGestureMove_(event) {
   }
 
   if (pointers.length !== 1) return;
+
+  var movementX = pointers[0].x - sundayStreamGestureState.startPointerX;
+  var movementY = pointers[0].y - sundayStreamGestureState.startPointerY;
+  var movementDistance = Math.sqrt(
+      movementX * movementX + movementY * movementY,
+  );
+
+  if (
+    !sundayStreamGestureState.didMove &&
+    movementDistance < SUNDAY_STREAM_MINI_TAP_MOVE_THRESHOLD
+  ) {
+    return;
+  }
+
+  sundayStreamGestureState.didMove = true;
+  var movingPlayerEl = document.querySelector("[data-sunday-stream-player]");
+  if (movingPlayerEl) movingPlayerEl.classList.add("is-moving");
 
   if (sundayStreamGestureState.mode !== "move") {
     initializeSundayStreamMiniPlayerMove_(pointers[0]);
@@ -2107,7 +2383,14 @@ function endSundayStreamMiniPlayerGesturePointer_(event) {
     return;
   }
 
+  var shouldReturnToLivestream = event.type === "pointerup" &&
+    !sundayStreamGestureState.didMove &&
+    !sundayStreamGestureState.usedMultiplePointers;
   stopSundayStreamMiniPlayerGesture_();
+
+  if (shouldReturnToLivestream) {
+    returnToSundayLivestream();
+  }
 }
 
 function stopSundayStreamMiniPlayerGesture_() {
@@ -2171,7 +2454,18 @@ function getSundayStreamGestureCenter_(firstPointer, secondPointer) {
 function handleSundayStreamMiniPlayerMoveKeydown(event) {
   if (
     event.target !== event.currentTarget ||
-    !sundayStreamMiniPlayerEnabled ||
+    !sundayStreamMiniPlayerEnabled
+  ) {
+    return;
+  }
+
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    returnToSundayLivestream();
+    return;
+  }
+
+  if (
     ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(
         event.key,
     ) === -1

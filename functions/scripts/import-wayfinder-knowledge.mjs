@@ -1,4 +1,7 @@
 import admin from "firebase-admin";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import {flattenWayfinderBundles} from "../wayfinder/knowledge.js";
 import {loadWayfinderBundles} from "./wayfinder-bundles.js";
@@ -6,6 +9,8 @@ import {loadWayfinderBundles} from "./wayfinder-bundles.js";
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const allowProduction = args.has("--allow-production");
+const useFirebaseCliAuth = args.has("--firebase-cli-auth");
+let temporaryCredentialDirectory = "";
 const emulatorHostArgument = process.argv.slice(2).find((argument) => {
   return argument.startsWith("--emulator-host=");
 });
@@ -50,7 +55,64 @@ try {
     process.env.GCLOUD_PROJECT ||
     "crosspointe-central";
 
-  admin.initializeApp({projectId: projectId});
+  const appOptions = {projectId: projectId};
+  if (useFirebaseCliAuth) {
+    if (emulatorHost) {
+      throw new Error(
+          "--firebase-cli-auth is only intended for deliberate production " +
+          "imports.",
+      );
+    }
+
+    const configRoot = process.env.XDG_CONFIG_HOME ||
+      path.join(os.homedir(), ".config");
+    const firebaseCliConfigPath = path.join(
+        configRoot,
+        "configstore",
+        "firebase-tools.json",
+    );
+    const firebaseCliConfig = JSON.parse(
+        fs.readFileSync(firebaseCliConfigPath, "utf8"),
+    );
+    const refreshToken = String(
+        firebaseCliConfig.tokens?.refresh_token || "",
+    ).trim();
+    if (!refreshToken) {
+      throw new Error(
+          "No Firebase CLI refresh token was found. Run firebase login first.",
+      );
+    }
+
+    const firebaseToolsApi = await import(
+        "../../node_modules/firebase-tools/lib/api.js"
+    );
+    const clientId = firebaseToolsApi.clientId ||
+      firebaseToolsApi.default?.clientId;
+    const clientSecret = firebaseToolsApi.clientSecret ||
+      firebaseToolsApi.default?.clientSecret;
+    if (typeof clientId !== "function" ||
+        typeof clientSecret !== "function") {
+      throw new Error("The installed Firebase CLI auth helpers are unavailable.");
+    }
+
+    temporaryCredentialDirectory = fs.mkdtempSync(
+        path.join(os.tmpdir(), "wayfinder-firebase-auth-"),
+    );
+    const temporaryCredentialPath = path.join(
+        temporaryCredentialDirectory,
+        "application-default-credentials.json",
+    );
+    fs.writeFileSync(temporaryCredentialPath, JSON.stringify({
+      client_id: clientId(),
+      client_secret: clientSecret(),
+      refresh_token: refreshToken,
+      type: "authorized_user",
+    }), {mode: 0o600});
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = temporaryCredentialPath;
+    appOptions.credential = admin.credential.applicationDefault();
+  }
+
+  admin.initializeApp(appOptions);
   const firestore = admin.firestore();
   const writes = [
     ...result.policies,
@@ -107,4 +169,8 @@ try {
 } catch (error) {
   console.error(error && error.stack || error);
   process.exitCode = 1;
+} finally {
+  if (temporaryCredentialDirectory) {
+    fs.rmSync(temporaryCredentialDirectory, {recursive: true, force: true});
+  }
 }

@@ -820,6 +820,10 @@
     mobileViewportFrame = window.requestAnimationFrame(function() {
       mobileViewportFrame = 0;
       syncMobileViewport_();
+      if (chatInput && document.activeElement === chatInput &&
+        isMobileWayfinderLayout_()) {
+        scrollWayfinderMessages_();
+      }
     });
   }
 

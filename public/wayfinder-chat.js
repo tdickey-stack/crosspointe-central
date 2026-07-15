@@ -25,6 +25,7 @@
   var chatLauncher = null;
   var chatMessages = null;
   var chatInput = null;
+  var mobileViewportFrame = 0;
 
   document.addEventListener("DOMContentLoaded", initializeWayfinderAlpha_);
 
@@ -102,12 +103,25 @@
       }
     });
     chatInput.addEventListener("input", resizeWayfinderInput_);
+    chatInput.addEventListener("focus", scheduleMobileViewportSync_);
+    chatInput.addEventListener("blur", scheduleMobileViewportSync_);
     chatRoot.addEventListener("click", handleWayfinderChatAction_);
     document.addEventListener("keydown", function(event) {
       if (event.key === "Escape" && wayfinderChatState.open) {
         closeWayfinderChat_();
       }
     });
+    window.addEventListener("resize", scheduleMobileViewportSync_);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener(
+          "resize",
+          scheduleMobileViewportSync_,
+      );
+      window.visualViewport.addEventListener(
+          "scroll",
+          scheduleMobileViewportSync_,
+      );
+    }
 
     addTextMessage_(
         "assistant",
@@ -122,8 +136,10 @@
     chatRoot.classList.add("is-open");
     document.body.classList.add("wayfinder-chat-open");
     chatLauncher.setAttribute("aria-expanded", "true");
+    syncMobileViewport_();
     window.setTimeout(function() {
-      chatInput.focus();
+      if (!isMobileWayfinderLayout_()) chatInput.focus();
+      syncMobileViewport_();
       scrollWayfinderMessages_();
     }, 80);
   }
@@ -134,6 +150,7 @@
     chatRoot.classList.remove("is-open");
     document.body.classList.remove("wayfinder-chat-open");
     chatLauncher.setAttribute("aria-expanded", "false");
+    clearMobileViewport_();
     chatLauncher.focus();
   }
 
@@ -789,6 +806,43 @@
     window.requestAnimationFrame(function() {
       chatMessages.scrollTop = chatMessages.scrollHeight;
     });
+  }
+
+  function isMobileWayfinderLayout_() {
+    return window.matchMedia &&
+      window.matchMedia("(max-width: 640px)").matches;
+  }
+
+  function scheduleMobileViewportSync_() {
+    if (mobileViewportFrame) {
+      window.cancelAnimationFrame(mobileViewportFrame);
+    }
+    mobileViewportFrame = window.requestAnimationFrame(function() {
+      mobileViewportFrame = 0;
+      syncMobileViewport_();
+    });
+  }
+
+  function syncMobileViewport_() {
+    if (!chatRoot || !wayfinderChatState.open ||
+      !isMobileWayfinderLayout_() || !window.visualViewport) {
+      clearMobileViewport_();
+      return;
+    }
+    chatRoot.style.setProperty(
+        "--wayfinder-viewport-top",
+        Math.max(0, Math.round(window.visualViewport.offsetTop)) + "px",
+    );
+    chatRoot.style.setProperty(
+        "--wayfinder-viewport-height",
+        Math.max(1, Math.round(window.visualViewport.height)) + "px",
+    );
+  }
+
+  function clearMobileViewport_() {
+    if (!chatRoot) return;
+    chatRoot.style.removeProperty("--wayfinder-viewport-top");
+    chatRoot.style.removeProperty("--wayfinder-viewport-height");
   }
 
   function formatDateTime_(value) {

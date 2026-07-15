@@ -172,6 +172,8 @@
   flex-direction: column;
   gap: 13px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 18px 15px;
   overscroll-behavior: contain;
   background:
@@ -595,10 +597,13 @@
 
   .wayfinder-chat-panel {
     position: fixed;
-    inset: 0;
+    top: var(--wayfinder-viewport-top, 0px);
+    right: 0;
+    bottom: auto;
+    left: 0;
     width: 100%;
-    height: 100dvh;
-    max-height: 100dvh;
+    height: var(--wayfinder-viewport-height, 100dvh);
+    max-height: var(--wayfinder-viewport-height, 100dvh);
     border: 0;
     border-radius: 0;
   }

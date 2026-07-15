@@ -48,7 +48,7 @@ const FOLLOW_UP_QUESTION_PATTERN = new RegExp(
     "^(?:and\\b|also\\b|but\\b|yes\\b|no\\b|what about\\b|how about\\b|" +
     "what if\\b|what other\\b|which\\b|any other\\b|anything else\\b|" +
     "tell me more\\b|more details?\\b|what time\\b|when\\b|where\\b|" +
-    "how long\\b|how do i\\b|how can i\\b|can i\\b|can you\\b|" +
+    "how long\\b|how soon\\b|how do i\\b|how can i\\b|can i\\b|can you\\b|" +
     "could i\\b|" +
     "would i\\b|who\\b|why\\b|" +
     "what do (?:the )?(?:kids|children|students|people|they) do\\b|" +
@@ -777,7 +777,8 @@ function getValidConversationHistory_(body) {
 function buildContextualRetrievalQuestion_(question, history) {
   const currentQuestion = String(question || "").trim();
   const recentContext = (Array.isArray(history) ? history : [])
-      .slice(-3)
+      .filter((message) => message.role === "user")
+      .slice(-2)
       .map((message) => message.content)
       .filter(Boolean);
   if (!recentContext.length ||

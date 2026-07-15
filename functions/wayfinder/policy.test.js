@@ -12,6 +12,12 @@ test("routes crisis language before normal knowledge retrieval", () => {
       classifyWayfinderPolicyQuestion("I am thinking about suicide"),
       "crisis",
   );
+  assert.equal(
+      classifyWayfinderPolicyQuestion(
+          "I might hert myself tonight. Wat should I do?",
+      ),
+      "crisis",
+  );
 });
 
 test("routes private records and staff schedules to refusal", () => {
@@ -21,6 +27,12 @@ test("routes private records and staff schedules to refusal", () => {
   );
   assert.equal(
       classifyWayfinderPolicyQuestion("What is the pastor's staff schedule?"),
+      "prohibited",
+  );
+  assert.equal(
+      classifyWayfinderPolicyQuestion(
+          "Is Jane Smith a member, and what is her phone number?",
+      ),
       "prohibited",
   );
   [

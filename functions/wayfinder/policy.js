@@ -42,12 +42,17 @@ const PROHIBITED_PATTERNS = [
   /\b(?:give|provide|offer) (?:me )?financial advice\b/,
   /\b(?:can|will|would) you counsel me\b/,
   /\bongoing counseling\b/,
+  new RegExp(
+      "\\b(?:his|her|their|someone'?s|person'?s|member'?s)\\s+" +
+      "(?:phone(?: number)?|email(?: address)?|home address)\\b",
+  ),
 ];
 
 export function classifyWayfinderPolicyQuestion(question) {
   const value = normalize_(question);
 
-  if (matchesAny_(value, CRISIS_PATTERNS)) return "crisis";
+  if (matchesAny_(value, CRISIS_PATTERNS) ||
+    matchesLikelyMisspelledCrisis_(value)) return "crisis";
   if (matchesAny_(value, PROHIBITED_PATTERNS)) return "prohibited";
   return "knowledge";
 }
@@ -164,6 +169,58 @@ function matchesAny_(value, patterns) {
 
 function normalize_(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function matchesLikelyMisspelledCrisis_(value) {
+  const tokens = String(value || "").match(/[a-z]+/g) || [];
+  const crisisTerms = ["suicide", "suicidal", "overdose"];
+  if (tokens.some((token) => crisisTerms.some((term) => {
+    return isWithinOneEdit_(token, term);
+  }))) {
+    return true;
+  }
+
+  const selfReferences = new Set([
+    "myself", "ourselves", "yourself", "yourselves", "himself", "herself",
+    "themselves", "self",
+  ]);
+  if (!tokens.some((token) => selfReferences.has(token))) return false;
+  return tokens.some((token) => ["hurt", "harm", "kill"].some((term) => {
+    return isWithinOneEdit_(token, term);
+  }));
+}
+
+function isWithinOneEdit_(leftValue, rightValue) {
+  const left = String(leftValue || "");
+  const right = String(rightValue || "");
+  if (left === right) return true;
+  if (!left || !right || Math.abs(left.length - right.length) > 1) return false;
+
+  if (left.length === right.length) {
+    let differences = 0;
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) differences += 1;
+      if (differences > 1) return false;
+    }
+    return true;
+  }
+
+  const shorter = left.length < right.length ? left : right;
+  const longer = left.length < right.length ? right : left;
+  let shortIndex = 0;
+  let longIndex = 0;
+  let skipped = false;
+  while (shortIndex < shorter.length && longIndex < longer.length) {
+    if (shorter[shortIndex] === longer[longIndex]) {
+      shortIndex += 1;
+      longIndex += 1;
+      continue;
+    }
+    if (skipped) return false;
+    skipped = true;
+    longIndex += 1;
+  }
+  return true;
 }
 
 function isHttpsUrl_(value) {

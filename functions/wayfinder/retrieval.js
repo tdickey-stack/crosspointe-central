@@ -55,6 +55,12 @@ export function rankWayfinderKnowledge(question, entries, options = {}) {
       query,
       tokenizeWayfinderText(query),
   );
+  const entryList = Array.isArray(entries) ? entries : [];
+  const preparedEntries = entryList.map(prepareEntry_);
+  const vocabulary = buildVocabulary_(preparedEntries);
+  const possibleTypoTokens = new Set(queryTokens.filter((token) => {
+    return token.length >= 5 && !vocabulary.has(token);
+  }));
   const limit = Math.max(1, Math.min(Number(options.limit) || 5, 10));
   const minimumScore = Math.max(1, Number(options.minimumScore) || 6);
 
@@ -66,8 +72,10 @@ export function rankWayfinderKnowledge(question, entries, options = {}) {
     };
   }
 
-  const ranked = (Array.isArray(entries) ? entries : [])
-      .map((entry) => scoreEntry_(query, queryTokens, entry))
+  const ranked = preparedEntries
+      .map((entry) => {
+        return scoreEntry_(query, queryTokens, possibleTypoTokens, entry);
+      })
       .filter((result) => result.score >= minimumScore)
       .sort((left, right) => {
         if (right.score !== left.score) return right.score - left.score;
@@ -92,6 +100,13 @@ function expandQuestionTokens_(query, tokens) {
     expanded.add("time");
   }
 
+  const asksReturnFrequency = /\bhow soon\b/.test(query) &&
+    /\b(?:come back|return|after (?:i |we )?visit)\b/.test(query);
+  if (asksReturnFrequency) {
+    expanded.add("often");
+    expanded.add("eligibility");
+  }
+
   return [...expanded];
 }
 
@@ -109,17 +124,17 @@ export function tokenizeWayfinderText(value) {
   return [...new Set(rawTokens)];
 }
 
-function scoreEntry_(query, queryTokens, entry) {
-  const value = entry && typeof entry === "object" ? entry : {};
+function scoreEntry_(query, queryTokens, possibleTypoTokens, preparedEntry) {
+  const value = preparedEntry.value;
   const matchedTerms = new Set();
   let score = 0;
 
-  FIELD_WEIGHTS.forEach(([field, weight]) => {
-    const text = flattenText_(value[field]);
-    const tokens = new Set(tokenizeWayfinderText(text));
-
+  preparedEntry.fields.forEach(({weight, text, tokens}) => {
     queryTokens.forEach((token) => {
-      if (tokens.has(token)) {
+      if (tokens.has(token) || possibleTypoTokens.has(token) &&
+        [...tokens].some((candidate) => {
+          return isLikelySingleCharacterTypo_(token, candidate);
+        })) {
         score += weight;
         matchedTerms.add(token);
       }
@@ -130,9 +145,8 @@ function scoreEntry_(query, queryTokens, entry) {
     }
   });
 
-  const topicTokens = new Set(tokenizeWayfinderText(value.topic));
   queryTokens.forEach((token) => {
-    if (topicTokens.has(token)) {
+    if (preparedEntry.topicTokens.has(token)) {
       score += 4;
       matchedTerms.add(token);
     }
@@ -159,6 +173,33 @@ function scoreEntry_(query, queryTokens, entry) {
     ),
     sourceBundleId: String(value.sourceBundleId || ""),
   };
+}
+
+function prepareEntry_(entry) {
+  const value = entry && typeof entry === "object" ? entry : {};
+  return {
+    value: value,
+    fields: FIELD_WEIGHTS.map(([field, weight]) => {
+      const text = flattenText_(value[field]);
+      return {
+        weight: weight,
+        text: text,
+        tokens: new Set(tokenizeWayfinderText(text)),
+      };
+    }),
+    topicTokens: new Set(tokenizeWayfinderText(value.topic)),
+  };
+}
+
+function buildVocabulary_(preparedEntries) {
+  const vocabulary = new Set();
+  preparedEntries.forEach((entry) => {
+    entry.fields.forEach(({tokens}) => {
+      tokens.forEach((token) => vocabulary.add(token));
+    });
+    entry.topicTokens.forEach((token) => vocabulary.add(token));
+  });
+  return vocabulary;
 }
 
 function getConfidence_(ranked) {
@@ -193,4 +234,43 @@ function arrayOfStrings_(value) {
 
 function normalizeText_(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isLikelySingleCharacterTypo_(leftValue, rightValue) {
+  const left = String(leftValue || "");
+  const right = String(rightValue || "");
+  if (left === right) return true;
+  if (left.length < 5 || right.length < 5 ||
+    Math.abs(left.length - right.length) > 1 || left[0] !== right[0]) {
+    return false;
+  }
+
+  if (left.length === right.length) {
+    const mismatches = [];
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) mismatches.push(index);
+      if (mismatches.length > 2) return false;
+    }
+    if (mismatches.length <= 1) return true;
+    const [first, second] = mismatches;
+    return second === first + 1 &&
+      left[first] === right[second] && left[second] === right[first];
+  }
+
+  const shorter = left.length < right.length ? left : right;
+  const longer = left.length < right.length ? right : left;
+  let shortIndex = 0;
+  let longIndex = 0;
+  let skipped = false;
+  while (shortIndex < shorter.length && longIndex < longer.length) {
+    if (shorter[shortIndex] === longer[longIndex]) {
+      shortIndex += 1;
+      longIndex += 1;
+      continue;
+    }
+    if (skipped) return false;
+    skipped = true;
+    longIndex += 1;
+  }
+  return true;
 }

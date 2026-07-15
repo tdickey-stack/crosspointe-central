@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   WAYFINDER_EVALUATION_CASES,
   WAYFINDER_EVALUATION_CATEGORIES,
+  WAYFINDER_EVALUATION_LIBRARY_VERSION,
 } from "./evaluation-cases.js";
 import {
   scoreWayfinderEvaluation,
@@ -12,12 +13,40 @@ import {
 
 test("evaluation library has five balanced categories and unique cases", () => {
   assert.equal(WAYFINDER_EVALUATION_CATEGORIES.length, 5);
-  assert.equal(WAYFINDER_EVALUATION_CASES.length, 25);
+  assert.equal(WAYFINDER_EVALUATION_CASES.length, 30);
   assert.equal(new Set(WAYFINDER_EVALUATION_CASES.map((item) => item.id)).size,
       WAYFINDER_EVALUATION_CASES.length);
   WAYFINDER_EVALUATION_CATEGORIES.forEach((category) => {
     assert.equal(WAYFINDER_EVALUATION_CASES.filter((item) =>
-      item.category === category).length, 5);
+      item.category === category).length, 6);
+  });
+});
+
+test("evaluation library includes one typo case in every category", () => {
+  WAYFINDER_EVALUATION_CATEGORIES.forEach((category) => {
+    const typoCases = WAYFINDER_EVALUATION_CASES.filter((item) => {
+      return item.category === category && item.id.endsWith("-typo");
+    });
+    assert.equal(typoCases.length, 1);
+  });
+});
+
+test("a library version change resets every category shuffle bag", () => {
+  const remainingByCategory = Object.fromEntries(
+      WAYFINDER_EVALUATION_CATEGORIES.map((category) => [
+        category,
+        [WAYFINDER_EVALUATION_CASES.find((item) => {
+          return item.category === category;
+        }).id],
+      ]),
+  );
+  const draw = selectWayfinderEvaluationCases({
+    libraryVersion: "older-library",
+    remainingByCategory: remainingByCategory,
+  }, () => 0.42);
+  assert.equal(draw.cases.length, 5);
+  WAYFINDER_EVALUATION_CATEGORIES.forEach((category) => {
+    assert.equal(draw.remainingByCategory[category].length, 5);
   });
 });
 
@@ -25,16 +54,19 @@ test("shuffle bag draws one case per category without early repeats", () => {
   let state = {};
   const seenByCategory = new Map(WAYFINDER_EVALUATION_CATEGORIES.map(
       (category) => [category, new Set()]));
-  for (let run = 0; run < 5; run += 1) {
+  for (let run = 0; run < 6; run += 1) {
     const draw = selectWayfinderEvaluationCases(state, () => 0.42);
     assert.equal(draw.cases.length, 5);
     draw.cases.forEach((item) => {
       assert.equal(seenByCategory.get(item.category).has(item.id), false);
       seenByCategory.get(item.category).add(item.id);
     });
-    state = {remainingByCategory: draw.remainingByCategory};
+    state = {
+      libraryVersion: WAYFINDER_EVALUATION_LIBRARY_VERSION,
+      remainingByCategory: draw.remainingByCategory,
+    };
   }
-  seenByCategory.forEach((seen) => assert.equal(seen.size, 5));
+  seenByCategory.forEach((seen) => assert.equal(seen.size, 6));
 });
 
 test("scoring passes grounded, concise answers with expected links", () => {

@@ -130,7 +130,9 @@ export function createWayfinderEvaluationHandler(dependencies) {
 
 export function selectWayfinderEvaluationCases(
     state = {}, random = Math.random) {
-  const remaining = {...(state.remainingByCategory || {})};
+  const remaining = !state.libraryVersion ||
+    state.libraryVersion === WAYFINDER_EVALUATION_LIBRARY_VERSION ?
+    {...(state.remainingByCategory || {})} : {};
   const selected = [];
   WAYFINDER_EVALUATION_CATEGORIES.forEach((category) => {
     const allIds = WAYFINDER_EVALUATION_CASES

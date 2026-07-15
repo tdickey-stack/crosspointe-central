@@ -46,6 +46,40 @@ test("private giving history uses the fixed privacy refusal", async () => {
   assert.doesNotMatch(response.body.answer, /office|email|call|text/i);
 });
 
+test("private member lookup uses the fixed privacy refusal", async () => {
+  let generatorCalls = 0;
+  const response = await runHandler_(
+      "Is Jane Smith a member, and what is her phone number?",
+      async () => {
+        generatorCalls += 1;
+        return null;
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "policy-answer");
+  assert.equal(response.body.policyRoute, "prohibited");
+  assert.equal(response.body.modelUsed, false);
+  assert.equal(generatorCalls, 0);
+});
+
+test("misspelled crisis language still skips Gemini", async () => {
+  let generatorCalls = 0;
+  const response = await runHandler_(
+      "I might hert myself tonight. Wat should I do?",
+      async () => {
+        generatorCalls += 1;
+        return null;
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "policy-answer");
+  assert.equal(response.body.policyRoute, "crisis");
+  assert.equal(generatorCalls, 0);
+  assert.match(response.body.answer, /988/);
+});
+
 test("CARS transmission question uses approved grounded fallback", async () => {
   let generatorCalls = 0;
   const response = await runHandler_(
@@ -193,6 +227,41 @@ test("a child baptism follow-up keeps the baptism context", async () => {
   assert.ok(selectedIds.includes("next-steps-child-teen-baptism"));
   assert.equal(response.body.sourceCards[0].id,
       "next-steps-child-teen-baptism");
+});
+
+test("a how-soon follow-up keeps the Care Center context", async () => {
+  const history = [{
+    role: "user",
+    content: "When is the Care Center open?",
+  }, {
+    role: "assistant",
+    content: "The Care Center has regular public hours listed online.",
+  }];
+  let selectedIds = [];
+  const response = await runHandler_(
+      "How soon can I come back after I visit?",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "Households may receive assistance once every 60 days, " +
+            "up to four times per year.",
+          sourceEntryIds: ["outreach-care-center-eligibility-and-id"],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        };
+      },
+      undefined,
+      undefined,
+      undefined,
+      history,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(selectedIds.includes("outreach-care-center-eligibility-and-id"));
+  assert.equal(
+      response.body.sourceCards[0].id,
+      "outreach-care-center-eligibility-and-id",
+  );
 });
 
 test("weekend event wording always checks live Planning Center data",

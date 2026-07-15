@@ -18,6 +18,7 @@ test("all approved Wayfinder bundles validate", () => {
 const retrievalCases = [
   ["What time is church?", "visiting-sunday-service-times"],
   ["Do I have to dress up for church?", "visiting-what-to-wear"],
+  ["Do I need to drees up for chruch?", "visiting-what-to-wear"],
   [
     "What social media pages does CrossPointe have?",
     "visiting-social-media",
@@ -36,6 +37,7 @@ const retrievalCases = [
   ],
   ["Is there a place to see every small group?", "groups-live-directory"],
   ["How do I get baptized?", "next-steps-request-baptism"],
+  ["How do I get baptisem?", "next-steps-request-baptism"],
   ["When is the food pantry open?", "outreach-care-center-overview-and-hours"],
   [
     "How often can I use the Care Center?",
@@ -68,6 +70,7 @@ const retrievalCases = [
     "staff-mens-ministry-leadership",
   ],
   ["What events are coming up?", "events-general-upcoming"],
+  ["Wat eventt are coming up this week?", "events-general-upcoming"],
   ["What's happening today?", "events-today"],
   ["Are there any women's events?", "events-named-and-ministry-search"],
   [

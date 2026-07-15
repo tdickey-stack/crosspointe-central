@@ -37,6 +37,7 @@ test("builds a grounded structured Gemini request", () => {
 
   assert.equal(request.model, "gemini-3.5-flash");
   assert.equal(request.config.responseMimeType, "application/json");
+  assert.equal(request.config.maxOutputTokens, 512);
   assert.ok(request.config.responseJsonSchema.required.includes(
       "communicationPosture",
   ));
@@ -45,6 +46,7 @@ test("builds a grounded structured Gemini request", () => {
   ));
   assert.equal(request.config.thinkingConfig.thinkingLevel, "MINIMAL");
   assert.equal(prompt.userQuestion, CONTEXT.question);
+  assert.equal(Object.keys(prompt)[0], "APPROVED_CONTEXT");
   assert.equal(prompt.APPROVED_CONTEXT.entries.length, 1);
   assert.deepEqual(prompt.LIVE_EVENT_ANSWER_ORDER, []);
   assert.match(request.config.systemInstruction, /untrusted data/i);
@@ -153,6 +155,83 @@ test("accepts a grounded answer with approved facts", () => {
   assert.deepEqual(output.sourceEntryIds, ["visiting-service-times"]);
   assert.equal(output.communicationPosture, "universal");
   assert.equal(output.postureConfidence, "none");
+});
+
+test("rejects false missing-information claims when facts are approved",
+    () => {
+      assert.throws(() => {
+        validateWayfinderGeminiOutput({
+          answer: "I do not have information in my approved sources about " +
+            "Sunday service times.",
+          sourceEntryIds: ["visiting-service-times"],
+          shouldContactChurch: true,
+          followUpQuestion: "",
+        }, CONTEXT);
+      }, /contradicted available approved information/i);
+    });
+
+test("accepts an availability limit supported by an approved entry", () => {
+  const output = validateWayfinderGeminiOutput({
+    answer: "I don't have information about a matching event in my " +
+      "approved sources.",
+    sourceEntryIds: ["live-events-no-match"],
+    shouldContactChurch: false,
+    followUpQuestion: "",
+  }, {
+    question: "What special event is happening this weekend?",
+    policy: {},
+    entries: [{
+      id: "live-events-no-match",
+      requiredFacts: ["No matching event is currently posted."],
+    }],
+  });
+
+  assert.match(output.answer, /don't have information/i);
+});
+
+test("reuses one Gemini client and reports cache usage", async () => {
+  let clientConstructions = 0;
+  let generationCalls = 0;
+  const usageReports = [];
+  class FakeGoogleGenAI {
+    constructor() {
+      clientConstructions += 1;
+      this.models = {
+        generateContent: async () => {
+          generationCalls += 1;
+          return {
+            text: JSON.stringify({
+              answer: "Sunday services are at 9:00 AM and 10:30 AM.",
+              sourceEntryIds: ["visiting-service-times"],
+              shouldContactChurch: false,
+              followUpQuestion: "",
+              communicationPosture: "universal",
+              postureConfidence: "none",
+            }),
+            usageMetadata: {
+              promptTokenCount: 5000,
+              cachedContentTokenCount: 3200,
+              candidatesTokenCount: 60,
+              totalTokenCount: 5060,
+            },
+          };
+        },
+      };
+    }
+  }
+  const generator = createDeveloperApiWayfinderGenerator({
+    apiKey: "test-key",
+    GoogleGenAIClass: FakeGoogleGenAI,
+    onUsage: (metrics) => usageReports.push(metrics),
+  });
+
+  await generator(CONTEXT);
+  await generator(CONTEXT);
+
+  assert.equal(clientConstructions, 1);
+  assert.equal(generationCalls, 2);
+  assert.equal(usageReports.length, 2);
+  assert.equal(usageReports[0].cachedContentTokenCount, 3200);
 });
 
 test("accepts a supported high-confidence communication posture", () => {

@@ -549,6 +549,75 @@ test("approved static question falls back to verified facts", async () => {
   );
 });
 
+test("approved knowledge and policy are cached for repeated questions",
+    async () => {
+      let knowledgeReads = 0;
+      let policyReads = 0;
+      let currentTime = 1000;
+      const baseFirestore = createFirestore_();
+      const firestore = {
+        collection: () => ({
+          limit: () => ({
+            get: async () => {
+              knowledgeReads += 1;
+              return baseFirestore.collection().limit().get();
+            },
+          }),
+        }),
+        doc: (path) => {
+          const reference = baseFirestore.doc(path);
+          return {
+            get: async () => {
+              if (path === "centralAssistantConfigDraft/document-00") {
+                policyReads += 1;
+              }
+              return reference.get();
+            },
+          };
+        },
+      };
+      const handler = createWayfinderAnswerHandler({
+        firestore: firestore,
+        requireAdminAuth: false,
+        approvedContextCacheTtlMs: 60 * 1000,
+        nowMs: () => currentTime,
+        generateAnswer: async () => ({
+          answer: "Sunday services are at 9:00 AM and 10:30 AM.",
+          sourceEntryIds: ["visiting-sunday-service-times"],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        }),
+      });
+
+      for (let index = 0; index < 2; index += 1) {
+        const response = createResponse_();
+        await handler({
+          method: "POST",
+          headers: {"x-wayfinder-session": "cache-test-session-123"},
+          ip: "127.0.0.31",
+          body: {question: "What time is church?"},
+        }, response);
+        assert.equal(response.statusCode, 200);
+        assert.equal(response.body.mode, "gemini-grounded");
+      }
+
+      assert.equal(knowledgeReads, 1);
+      assert.equal(policyReads, 1);
+
+      currentTime += 60 * 1000 + 1;
+      const refreshedResponse = createResponse_();
+      await handler({
+        method: "POST",
+        headers: {"x-wayfinder-session": "cache-test-session-123"},
+        ip: "127.0.0.31",
+        body: {question: "What time is church?"},
+      }, refreshedResponse);
+
+      assert.equal(refreshedResponse.statusCode, 200);
+      assert.equal(knowledgeReads, 2);
+      assert.equal(policyReads, 2);
+    });
+
 test("active notice is placed ahead of approved knowledge", async () => {
   let selectedIds = [];
   const response = await runHandler_(

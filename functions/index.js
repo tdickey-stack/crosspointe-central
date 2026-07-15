@@ -490,6 +490,9 @@ const WAYFINDER_GEMINI_API_KEY = defineSecret("WAYFINDER_GEMINI_API_KEY");
 const wayfinderGeminiGenerator = createDeveloperApiWayfinderGenerator({
   getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
   model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+  onUsage: (metrics) => {
+    console.info("Wayfinder Gemini usage.", metrics);
+  },
 });
 const wayfinderNoticeDraftGenerator = createWayfinderNoticeDraftGenerator({
   getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),

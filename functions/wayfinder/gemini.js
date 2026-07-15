@@ -11,6 +11,7 @@ const COMMUNICATION_POSTURES = [
   "curious_relevance",
 ];
 const POSTURE_CONFIDENCES = ["none", "high"];
+const WAYFINDER_MAX_OUTPUT_TOKENS = 512;
 
 const WAYFINDER_RESPONSE_SCHEMA = {
   type: "object",
@@ -63,6 +64,25 @@ const INTERNAL_DETAIL_PATTERNS = [
   /\bretrieval score\b/i,
   /\bcentralAssistant(?:Config|Knowledge)/i,
 ];
+const UNGROUNDED_MISSING_INFORMATION_PATTERNS = [
+  new RegExp(
+      "\\b(?:i|we)\\s+(?:do not|don't|cannot|can't)\\s+have\\b.{0,80}" +
+        "\\b(?:approved\\s+)?(?:information|details|sources?|context)\\b",
+      "i",
+  ),
+  new RegExp(
+      "\\b(?:approved\\s+)?(?:information|details|sources?|context)\\b" +
+        ".{0,60}\\b(?:is|are)\\s+(?:not|n't)\\s+" +
+        "(?:available|provided|included)\\b",
+      "i",
+  ),
+];
+const APPROVED_ABSENCE_PATTERN = new RegExp(
+    "\\b(?:no matching|none (?:is|are)|not currently|" +
+      "(?:is|are) not available|(?:do|does) not have|" +
+      "(?:don't|doesn't) have|unknown)\\b",
+    "i",
+);
 
 export function createDeveloperApiWayfinderGenerator(options = {}) {
   const model = String(
@@ -70,6 +90,10 @@ export function createDeveloperApiWayfinderGenerator(options = {}) {
       DEFAULT_WAYFINDER_MODEL,
   ).trim();
   const ClientClass = options.GoogleGenAIClass || GoogleGenAI;
+  const onUsage = typeof options.onUsage === "function" ?
+    options.onUsage : null;
+  let sharedClient = options.client || null;
+  let sharedClientApiKey = "";
 
   return async (context) => {
     const apiKey = String(
@@ -83,14 +107,27 @@ export function createDeveloperApiWayfinderGenerator(options = {}) {
       throw error;
     }
 
-    const client = options.client || new ClientClass({apiKey: apiKey});
+    if (!sharedClient || (!options.client && sharedClientApiKey !== apiKey)) {
+      sharedClient = new ClientClass({apiKey: apiKey});
+      sharedClientApiKey = apiKey;
+    }
+
+    const client = sharedClient;
     const request = buildWayfinderGeminiRequest(context, model);
     let modelResponse;
+    const generationStartedAt = Date.now();
     try {
       modelResponse = await client.models.generateContent(request);
     } catch (error) {
       throw createGeminiRequestError_(error);
     }
+    reportWayfinderUsage_(
+        onUsage,
+        "answer",
+        model,
+        generationStartedAt,
+        modelResponse,
+    );
     const output = parseWayfinderGeminiResponse_(modelResponse);
     try {
       return validateWayfinderGeminiOutput(output, context);
@@ -101,11 +138,19 @@ export function createDeveloperApiWayfinderGenerator(options = {}) {
           output,
       );
       let repairResponse;
+      const repairStartedAt = Date.now();
       try {
         repairResponse = await client.models.generateContent(repairRequest);
       } catch (repairError) {
         throw createGeminiRequestError_(repairError);
       }
+      reportWayfinderUsage_(
+          onUsage,
+          "posture_repair",
+          model,
+          repairStartedAt,
+          repairResponse,
+      );
       return validateWayfinderGeminiOutput(
           parseWayfinderGeminiResponse_(repairResponse),
           context,
@@ -320,19 +365,21 @@ export function buildWayfinderGeminiRequest(context, model) {
       .filter((entry) => entry.id.startsWith("live-event-"))
       .map((entry) => entry.title);
   const contents = JSON.stringify({
-    task: liveEventAnswerOrder.length > 1 ?
-      "Write one grounded Wayfinder answer. Mention live events in the exact " +
-        "order listed in LIVE_EVENT_ANSWER_ORDER." :
-      "Write one grounded Wayfinder answer to the user question.",
-    userQuestion: String(value.question || "").trim(),
-    LIVE_EVENT_ANSWER_ORDER: liveEventAnswerOrder,
-    CONVERSATION_HISTORY: sanitizeConversationHistory_(
-        value.conversationHistory,
-    ),
+    // Keep the large stable policy at the beginning so Gemini's implicit
+    // context cache can reuse the common prefix across different questions.
     APPROVED_CONTEXT: {
       policy: policy,
       entries: entries,
     },
+    task: liveEventAnswerOrder.length > 1 ?
+      "Write one grounded Wayfinder answer. Mention live events in the exact " +
+        "order listed in LIVE_EVENT_ANSWER_ORDER." :
+      "Write one grounded Wayfinder answer to the user question.",
+    LIVE_EVENT_ANSWER_ORDER: liveEventAnswerOrder,
+    CONVERSATION_HISTORY: sanitizeConversationHistory_(
+        value.conversationHistory,
+    ),
+    userQuestion: String(value.question || "").trim(),
   });
 
   return {
@@ -344,7 +391,7 @@ export function buildWayfinderGeminiRequest(context, model) {
       candidateCount: 1,
       // Thinking-capable models count internal reasoning toward this ceiling.
       // The validator still limits the user-visible answer to 1,800 characters.
-      maxOutputTokens: 2048,
+      maxOutputTokens: WAYFINDER_MAX_OUTPUT_TOKENS,
       thinkingConfig: {
         thinkingLevel: "MINIMAL",
         includeThoughts: false,
@@ -388,6 +435,11 @@ export function validateWayfinderGeminiOutput(output, context) {
     );
   }
 
+  validateGroundedAvailabilityClaim_(
+      answer,
+      allowedEntries.filter((entry) => sourceEntryIds.includes(entry.id)),
+  );
+
   if (followUpQuestion.length > 240) {
     throw createModelValidationError_(
         "Gemini returned an invalid follow-up question.",
@@ -424,6 +476,47 @@ export function validateWayfinderGeminiOutput(output, context) {
     communicationPosture: communicationPosture,
     postureConfidence: postureConfidence,
   };
+}
+
+function validateGroundedAvailabilityClaim_(answer, referencedEntries) {
+  const claimsInformationIsMissing =
+    UNGROUNDED_MISSING_INFORMATION_PATTERNS.some((pattern) => {
+      return pattern.test(answer);
+    });
+  if (!claimsInformationIsMissing) return;
+
+  const approvedAnswerText = (Array.isArray(referencedEntries) ?
+    referencedEntries : []).flatMap((entry) => [
+    ...stringArray_(entry.requiredFacts),
+    ...stringArray_(entry.allowedPublicFacts),
+    ...stringArray_(entry.requiredActions),
+  ]).join(" ");
+
+  if (!approvedAnswerText ||
+    APPROVED_ABSENCE_PATTERN.test(approvedAnswerText)) {
+    return;
+  }
+
+  throw createModelValidationError_(
+      "Gemini contradicted available approved information.",
+      "grounding_availability",
+  );
+}
+
+function reportWayfinderUsage_(onUsage, phase, model, startedAt, response) {
+  if (typeof onUsage !== "function") return;
+  const usage = response && response.usageMetadata || {};
+  onUsage({
+    phase: phase,
+    model: model,
+    durationMs: Math.max(0, Date.now() - startedAt),
+    promptTokenCount: Number(usage.promptTokenCount) || 0,
+    cachedContentTokenCount:
+      Number(usage.cachedContentTokenCount) || 0,
+    thoughtsTokenCount: Number(usage.thoughtsTokenCount) || 0,
+    candidatesTokenCount: Number(usage.candidatesTokenCount) || 0,
+    totalTokenCount: Number(usage.totalTokenCount) || 0,
+  });
 }
 
 function validateCommunicationPostureStyle_(answer, posture) {

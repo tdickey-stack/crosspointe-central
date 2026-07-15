@@ -16,6 +16,7 @@ import {
 
 const KNOWLEDGE_COLLECTION = "centralAssistantKnowledgeDraft";
 const POLICY_DOC_PATH = "centralAssistantConfigDraft/document-00";
+const APPROVED_CONTEXT_CACHE_TTL_MS = 60 * 1000;
 const REQUEST_LIMIT = 8;
 const PUBLIC_SESSION_LIMIT = 12;
 const PUBLIC_IP_LIMIT = 30;
@@ -94,6 +95,16 @@ export function createWayfinderAnswerHandler(dependencies) {
   const requireEnabled = dependencies.requireEnabled;
   const publicResponse = dependencies.publicResponse === true;
   const model = String(dependencies.model || "gemini-3.5-flash");
+  const approvedContextCacheTtlMs = Number.isFinite(
+      dependencies.approvedContextCacheTtlMs,
+  ) ? Math.max(0, dependencies.approvedContextCacheTtlMs) :
+    APPROVED_CONTEXT_CACHE_TTL_MS;
+  const loadApprovedContext = createApprovedContextLoader_({
+    firestore: firestore,
+    ttlMs: approvedContextCacheTtlMs,
+    now: typeof dependencies.nowMs === "function" ?
+      dependencies.nowMs : Date.now,
+  });
 
   return async (request, response) => {
     response.set("Cache-Control", "no-store");
@@ -104,14 +115,22 @@ export function createWayfinderAnswerHandler(dependencies) {
     }
 
     try {
-      if (requireAdminAuth) {
-        const authResult = await authenticateWayfinderAdminRequest({
+      const authPromise = requireAdminAuth ?
+        authenticateWayfinderAdminRequest({
           request: request,
           admin: admin,
           firestore: firestore,
           isAllowedAdminEmail: isAllowedAdminEmail,
           getAdminUserDocPath: getAdminUserDocPath,
-        });
+        }) : Promise.resolve(null);
+      const enabledPromise = typeof requireEnabled === "function" ?
+        requireEnabled() : Promise.resolve(true);
+      const [authResult, enabled] = await Promise.all([
+        authPromise,
+        enabledPromise,
+      ]);
+
+      if (requireAdminAuth) {
         enforceRequestRateLimit_(
             "admin:" + authResult.decodedToken.uid,
             REQUEST_LIMIT,
@@ -120,8 +139,7 @@ export function createWayfinderAnswerHandler(dependencies) {
         enforcePublicRateLimit_(request);
       }
 
-      if (typeof requireEnabled === "function" &&
-        await requireEnabled() !== true) {
+      if (enabled !== true) {
         throw createWayfinderAccessError(
             403,
             "Wayfinder is not enabled right now.",
@@ -135,22 +153,20 @@ export function createWayfinderAnswerHandler(dependencies) {
           conversationHistory,
       );
       const [
-        knowledgeSnapshot,
-        policySnapshot,
+        approvedContext,
         activeNotices,
         activeKnowledgeOverrides,
       ] = await Promise.all([
-        firestore.collection(KNOWLEDGE_COLLECTION).limit(250).get(),
-        firestore.doc(POLICY_DOC_PATH).get(),
+        loadApprovedContext(),
         typeof getActiveNotices === "function" ? getActiveNotices() : [],
         typeof getActiveKnowledgeOverrides === "function" ?
           getActiveKnowledgeOverrides() : [],
       ]);
       const entries = applyWayfinderKnowledgeOverrides(
-          getApprovedDraftEntries_(knowledgeSnapshot),
+          approvedContext.entries,
           activeKnowledgeOverrides,
       );
-      const policy = getApprovedDraftPolicy_(policySnapshot);
+      const policy = approvedContext.policy;
 
       if (!policy) {
         throw createWayfinderAccessError(
@@ -346,6 +362,38 @@ export function createWayfinderAnswerHandler(dependencies) {
               "The approved retrieval results are still available in the lab.",
       });
     }
+  };
+}
+
+function createApprovedContextLoader_(options) {
+  const firestore = options.firestore;
+  const ttlMs = options.ttlMs;
+  const now = options.now;
+  let cached = null;
+  let pending = null;
+
+  return async () => {
+    const currentTime = now();
+    if (cached && currentTime - cached.loadedAt < ttlMs) {
+      return cached.value;
+    }
+    if (pending) return pending;
+
+    pending = Promise.all([
+      firestore.collection(KNOWLEDGE_COLLECTION).limit(250).get(),
+      firestore.doc(POLICY_DOC_PATH).get(),
+    ]).then(([knowledgeSnapshot, policySnapshot]) => {
+      const value = {
+        entries: getApprovedDraftEntries_(knowledgeSnapshot),
+        policy: getApprovedDraftPolicy_(policySnapshot),
+      };
+      cached = {value: value, loadedAt: now()};
+      return value;
+    }).finally(() => {
+      pending = null;
+    });
+
+    return pending;
   };
 }
 

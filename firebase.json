@@ -199,63 +199,63 @@
         "source": "/api/calendar-event.ics",
         "function": {
           "functionId": "centralCalendarEvent",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/central-data",
         "function": {
           "functionId": "centralData",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/bootstrap-first-user",
         "function": {
           "functionId": "bootstrapFirstAdminUser",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/publish-preview-content",
         "function": {
           "functionId": "publishPreviewContent",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/wayfinder/prototype-query",
         "function": {
           "functionId": "wayfinderPrototypeQuery",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/wayfinder/generate-answer",
         "function": {
           "functionId": "wayfinderGenerateAnswer",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/wayfinder/notices",
         "function": {
           "functionId": "wayfinderNoticeCommand",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/wayfinder/knowledge-changes",
         "function": {
           "functionId": "wayfinderKnowledgeChange",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/wayfinder/website-index",
         "function": {
           "functionId": "wayfinderWebsiteIndex",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
@@ -269,14 +269,14 @@
         "source": "/api/admin/wayfinder/feedback",
         "function": {
           "functionId": "wayfinderAdminFeedback",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/wayfinder/evaluations",
         "function": {
           "functionId": "wayfinderEvaluations",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
@@ -297,63 +297,63 @@
         "source": "/api/wayfinder/chat",
         "function": {
           "functionId": "wayfinderPublicAnswer",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/wayfinder/feedback",
         "function": {
           "functionId": "wayfinderPublicFeedback",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/submit-change-request",
         "function": {
           "functionId": "submitChangeRequest",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/review-change-request",
         "function": {
           "functionId": "reviewChangeRequest",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/list-users",
         "function": {
           "functionId": "listAdminUsers",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/upsert-user",
         "function": {
           "functionId": "upsertAdminUser",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/delete-user",
         "function": {
           "functionId": "deleteAdminUser",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/admin/claim-invite",
         "function": {
           "functionId": "claimAdminInvite",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {
         "source": "/api/serve-needs/share-interest",
         "function": {
           "functionId": "shareServeNeedInterest",
-          "pinTag": true
+          "pinTag": false
         }
       },
       {

@@ -2406,7 +2406,9 @@ function buildAdminInvitePermissionSummary_(pageAccess) {
       key: config.key,
       label: config.label,
       permission: permission,
-      permissionLabel: ADMIN_PERMISSION_LABELS[permission] || permission,
+      permissionLabel: config.key === "wayfinder" && permission === "view" ?
+        "User" :
+        (ADMIN_PERMISSION_LABELS[permission] || permission),
     };
   }).filter((entry) => entry.permission !== "none");
 }
@@ -5230,6 +5232,14 @@ async function upsertAdminUserRecord_(manager, requestBody, request) {
   const requestedEmail = normalizeAdminEmail_(payload.email);
   const requestedDisplayName = String(payload.displayName || "").trim();
 
+  if (payload.active !== false &&
+    !hasAnyManagedAdminPageAccess_(payload.pageAccess)) {
+    throw createAdminUserManagementError_(
+        "invalid-admin-permissions",
+        "Choose at least one permission before creating an active admin account.",
+    );
+  }
+
   if (!requestedUid && !requestedEmail) {
     throw createAdminUserManagementError_(
         "missing-admin-user-target",
@@ -5800,6 +5810,16 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
   return nextPageAccess;
 }
 
+function hasAnyManagedAdminPageAccess_(pageAccess) {
+  const source = pageAccess && typeof pageAccess === "object" ?
+    pageAccess :
+    {};
+
+  return MANAGED_ADMIN_PAGE_KEYS.some((key) => {
+    return normalizePreviewPermissionValue_(source[key]) !== "none";
+  });
+}
+
 function normalizeManagedAdminUserResponse_(docSnapshot) {
   const data = docSnapshot && typeof docSnapshot.data === "function" ?
     docSnapshot.data() || {} :
@@ -5878,6 +5898,7 @@ function getAdminUserManagementStatusCode_(error) {
   if (error.code === "missing-admin-user-target" ||
     error.code === "admin-user-resolve-failed" ||
     error.code === "invalid-admin-email" ||
+    error.code === "invalid-admin-permissions" ||
     error.code === "self-disable-forbidden" ||
     error.code === "self-delete-forbidden" ||
     error.code === "self-demote-forbidden" ||

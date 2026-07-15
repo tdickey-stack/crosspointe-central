@@ -1575,6 +1575,7 @@ function renderPublicFooter_() {
     "<footer class=\"public-footer\">",
       "<div class=\"wrap public-footer-wrap\">",
         "<nav class=\"public-footer-links\" aria-label=\"Footer links\">",
+          "<a href=\"/about\">About Central</a>",
           "<a href=\"/terms\">Terms of Service</a>",
           "<a href=\"/privacy\">Privacy Policy</a>",
           "<a href=\"https://crosspointetv.churchcenter.com/people/forms/1262753\">Tell Us What You Think of Central</a>",

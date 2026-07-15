@@ -52,8 +52,18 @@ npm run wayfinder:import:emulator
 ```
 
 The importer refuses production access unless the operator deliberately runs
-the lower-level script with `--allow-production`. Production imports should
-not be enabled until the draft review and publishing workflow is designed.
+the lower-level script with `--allow-production`. An authenticated operator can
+reuse an existing Firebase CLI login without creating a service-account key:
+
+```bash
+node functions/scripts/import-wayfinder-knowledge.mjs \
+  --allow-production \
+  --firebase-cli-auth \
+  --project=crosspointe-central
+```
+
+The command still validates every bundle before writing and never prints the
+Firebase CLI refresh token.
 
 ## Draft Firestore collections
 

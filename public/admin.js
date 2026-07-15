@@ -421,6 +421,7 @@
     userDocErrorCode: "",
     bootstrapPending: false,
     bootstrapMessage: "",
+    inviteClaimPending: false,
     adminWhatsNewLoaded: false,
     adminWhatsNewDocExists: false,
     adminWhatsNewData: null,
@@ -636,6 +637,7 @@
     "centralAdminCollapsedSectionsV2";
   var CENTRAL_ADMIN_WHATS_NEW_SEEN_KEY = "central-admin-whats-new-seen-v1";
   var CENTRAL_ADMIN_REDIRECT_SIGN_IN_KEY = "centralAdminRedirectSignInPending";
+  var CENTRAL_ADMIN_INVITE_STORAGE_KEY = "centralAdminPendingInviteV1";
   var DEFAULT_ADMIN_COLLAPSED_SECTION_IDS = [
     "hub-homepage",
     "hub-sunday-mode",
@@ -3175,6 +3177,49 @@
     writeAdminRedirectSignInPending_(false);
   }
 
+  function readStoredAdminInviteParams_() {
+    if (!window.sessionStorage) {
+      return null;
+    }
+
+    try {
+      var storedValue = window.sessionStorage.getItem(
+          CENTRAL_ADMIN_INVITE_STORAGE_KEY,
+      );
+      var storedParams = storedValue ? JSON.parse(storedValue) : null;
+      var inviteId = String(storedParams && storedParams.inviteId || "").trim();
+      var token = String(storedParams && storedParams.token || "").trim();
+
+      return inviteId && token ? {
+        inviteId: inviteId,
+        token: token,
+      } : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeStoredAdminInviteParams_(inviteParams) {
+    if (!window.sessionStorage) {
+      return;
+    }
+
+    try {
+      if (inviteParams && inviteParams.inviteId && inviteParams.token) {
+        window.sessionStorage.setItem(
+            CENTRAL_ADMIN_INVITE_STORAGE_KEY,
+            JSON.stringify({
+              inviteId: String(inviteParams.inviteId).trim(),
+              token: String(inviteParams.token).trim(),
+            }),
+        );
+      } else {
+        window.sessionStorage.removeItem(CENTRAL_ADMIN_INVITE_STORAGE_KEY);
+      }
+    } catch (error) {
+    }
+  }
+
   function isDeleteConfirmSuppressed_() {
     if (adminState.deleteConfirmSuppressedUntil > Date.now()) {
       return true;
@@ -3262,6 +3307,20 @@
     var currentPage = getAdminPageById_(adminState.currentPageId) ||
       getAdminPageById_("overview");
     var visiblePages = getVisibleAdminPages_();
+    var accessIsResolved = !adminState.authLoading && (
+      !adminState.user ||
+      !adminState.userEmailAllowed ||
+      adminState.userDocLoaded
+    );
+
+    if (accessIsResolved && !canAccessAdminPage_(currentPage)) {
+      currentPage = getAdminPageById_("overview");
+      adminState.currentPageId = "overview";
+
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, "", "/admin");
+      }
+    }
     var shellClassName = adminState.sidebarOpen ?
       "central-admin-shell is-sidebar-open" :
       "central-admin-shell is-sidebar-collapsed";
@@ -3773,6 +3832,20 @@
         adminState.bootstrapMessage ?
           renderAdminNote_(adminState.bootstrapMessage) :
           "",
+        "</div>",
+      ].join("");
+    }
+
+    if (adminState.inviteClaimPending) {
+      return [
+        "<div class=\"central-admin-item\">",
+        "<div class=\"central-admin-item-header\">",
+        "<strong>Confirming your admin invitation</strong>",
+        renderStatusPill_("In progress", "is-warn"),
+        "</div>",
+        renderAdminNote_(
+            "Central is connecting the permissions from your invitation to this Google account.",
+        ),
         "</div>",
       ].join("");
     }
@@ -5002,8 +5075,8 @@
   }
 
   function renderWayfinderPagePanel_(currentPage) {
-    var permission = getPageAccessLevel_("integrations");
-    var hasAccess = isActiveAdminUserRecord_() && permission !== "none";
+    var permission = getPageAccessLevel_("wayfinder");
+    var hasAccess = isActiveAdminUserRecord_() && permission === "admin";
     var result = adminState.wayfinderResult;
     var permanentUpdateMode = adminState.wayfinderNoticeModeActive &&
       adminState.wayfinderAdminUpdateType === "permanent";
@@ -5030,7 +5103,7 @@
       "<div class=\"central-admin-page-body\">",
       "<div class=\"central-admin-page-meta\">",
       renderInlineMeta_("Route", currentPage.route),
-      renderInlineMeta_("Access", "Integrations permission"),
+      renderInlineMeta_("Access", "Wayfinder Admin permission"),
       renderInlineMeta_("Mode", "Grounded Gemini prototype"),
       "</div>",
       "<div class=\"wayfinder-lab-notice\">",
@@ -9713,6 +9786,20 @@
         renderAdminNote_(
             "The dashboard is looking for your admin user document at " +
             adminState.userDocPath + ".",
+        ),
+        "</div>",
+      ].join("");
+    }
+
+    if (adminState.inviteClaimPending) {
+      return [
+        "<div class=\"central-admin-item\">",
+        "<div class=\"central-admin-item-header\">",
+        "<strong>Confirming your admin invitation</strong>",
+        renderStatusPill_("In progress", "is-warn"),
+        "</div>",
+        renderAdminNote_(
+            "Central is creating your admin record with the permissions that were included in the invitation.",
         ),
         "</div>",
       ].join("");
@@ -16783,6 +16870,17 @@
     };
   }
 
+  function hasAnyAdminUserPageAccess_(pageAccess) {
+    var normalizedPageAccess = normalizeAdminUserPageAccess_(pageAccess);
+
+    return getManagedAdminPageConfigs_().some(function(pageConfig) {
+      return getAdminUserPageAccessLevel_(
+          normalizedPageAccess,
+          pageConfig.key,
+      ) !== "none";
+    });
+  }
+
   function saveAdminUser_() {
     if (!canManageAdminUsers_()) {
       adminState.adminUsersError =
@@ -16796,6 +16894,16 @@
     if (!payload.uid && !payload.email) {
       adminState.adminUsersError =
         "Enter an email address or a UID before continuing.";
+      renderAdmin_();
+      return;
+    }
+
+    if (payload.active && !hasAnyAdminUserPageAccess_(payload.pageAccess)) {
+      adminState.adminUsersError = [
+        "Choose at least one permission before sending an active admin invite.",
+        "An active account with every permission set to No Access cannot use",
+        "the admin dashboard.",
+      ].join(" ");
       renderAdmin_();
       return;
     }
@@ -17080,14 +17188,16 @@
     var inviteId = String(searchParams.get("invite") || "").trim();
     var token = String(searchParams.get("token") || "").trim();
 
-    if (!inviteId || !token) {
-      return null;
+    if (inviteId && token) {
+      var inviteParams = {
+        inviteId: inviteId,
+        token: token,
+      };
+      writeStoredAdminInviteParams_(inviteParams);
+      return inviteParams;
     }
 
-    return {
-      inviteId: inviteId,
-      token: token,
-    };
+    return readStoredAdminInviteParams_();
   }
 
   function hasAdminInviteQueryParams_() {
@@ -17095,6 +17205,8 @@
   }
 
   function clearAdminInviteQueryParamsFromUrl_() {
+    writeStoredAdminInviteParams_(null);
+
     if (!window.URL || !window.history || !window.history.replaceState) {
       return;
     }
@@ -17125,12 +17237,14 @@
       return;
     }
 
+    adminState.inviteClaimPending = true;
     adminState.infoMessage = "Confirming your Central Admin invitation.";
     adminState.errorMessage = "";
     renderAdmin_();
 
     callClaimAdminInviteEndpoint_(inviteParams)
         .then(function(result) {
+          adminState.inviteClaimPending = false;
           clearAdminInviteQueryParamsFromUrl_();
           adminState.infoMessage = result && result.message ?
             result.message :
@@ -17139,6 +17253,7 @@
           loadAdminUserDoc_();
         })
         .catch(function(error) {
+          adminState.inviteClaimPending = false;
           adminState.infoMessage =
             "We could not confirm this admin invite yet.";
           adminState.errorMessage = error && error.message ?
@@ -17169,12 +17284,13 @@
           adminState.userDocData = snapshot.exists ? snapshot.data() : null;
           adminState.errorMessage = "";
 
+          if (hasAdminInviteQueryParams_()) {
+            claimAdminInvite_();
+            return;
+          }
+
           if (!snapshot.exists) {
             resetAdminWhatsNewState_();
-            if (hasAdminInviteQueryParams_()) {
-              claimAdminInvite_();
-              return;
-            }
             adminState.infoMessage = [
               "Signed in successfully. The next step is creating your admin",
               "access record with the button below.",
@@ -17197,9 +17313,6 @@
 
           adminState.infoMessage =
             "Signed in successfully and matched to your Firestore admin record.";
-          if (hasAdminInviteQueryParams_()) {
-            clearAdminInviteQueryParamsFromUrl_();
-          }
           renderAdmin_();
           loadAdminWhatsNew_();
         })
@@ -17226,6 +17339,7 @@
     adminState.userDocErrorCode = "";
     adminState.bootstrapPending = false;
     adminState.bootstrapMessage = "";
+    adminState.inviteClaimPending = false;
   }
 
   function resetAdminWhatsNewState_() {
@@ -17651,17 +17765,25 @@
   }
 
   function getVisibleAdminPages_() {
-    return ADMIN_PAGES.filter(function(page) {
-      if (page.id === "overview") {
-        return true;
-      }
+    return ADMIN_PAGES.filter(canAccessAdminPage_);
+  }
 
-      if (!isActiveAdminUserRecord_()) {
-        return false;
-      }
+  function canAccessAdminPage_(page) {
+    if (!page || page.id === "overview") {
+      return true;
+    }
 
-      return getPageAccessLevel_(page.pageAccessKey) !== "none";
-    });
+    if (!isActiveAdminUserRecord_()) {
+      return false;
+    }
+
+    var permission = getPageAccessLevel_(page.pageAccessKey);
+
+    if (page.id === "wayfinder") {
+      return permission === "admin";
+    }
+
+    return permission !== "none";
   }
 
   function getPageAccessLevel_(pageAccessKey) {
@@ -17874,6 +17996,10 @@
   }
 
   function getAdminAccessSummaryLabel_() {
+    if (adminState.inviteClaimPending) {
+      return "Confirming invite";
+    }
+
     if (adminState.bootstrapPending) {
       return "Creating admin doc";
     }

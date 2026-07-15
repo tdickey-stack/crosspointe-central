@@ -8,8 +8,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: firebase-${{ github.ref }}
-  cancel-in-progress: true
+  # Both branches deploy to the same Firebase project. Serialize them so a
+  # preview deploy cannot update Cloud Run services while a live deploy is
+  # finalizing pinned Hosting rewrites.
+  group: firebase-crosspointe-central
+  cancel-in-progress: false
 
 permissions:
   contents: read

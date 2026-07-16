@@ -3675,7 +3675,7 @@ async function getCentralCalendarEvents_(roomRules) {
 
   const url =
     "https://api.planningcenteronline.com/calendar/v2/event_instances" +
-    "?include=tags" +
+    "?include=tags,event" +
     "&order=starts_at" +
     "&where[starts_at][gte]=" +
     encodeURIComponent(todayKey + "T00:00:00Z") +
@@ -3685,6 +3685,7 @@ async function getCentralCalendarEvents_(roomRules) {
 
   const data = await fetchPcoJson_(url);
   const tagMap = {};
+  const eventMap = {};
 
   (data.included || []).forEach((item) => {
     if (item.type === "Tag") {
@@ -3692,11 +3693,21 @@ async function getCentralCalendarEvents_(roomRules) {
         item.attributes.name :
         "";
     }
+
+    if (item.type === "Event") {
+      eventMap[item.id] = item.attributes || {};
+    }
   });
 
   const items = await Promise.all(
       (data.data || []).map(async (instance) => {
         const attrs = instance.attributes || {};
+        const eventRef = instance.relationships &&
+          instance.relationships.event &&
+          instance.relationships.event.data;
+        const eventAttrs = eventRef && eventMap[eventRef.id] ?
+          eventMap[eventRef.id] :
+          {};
 
         if (!instanceHasCentralTag_(instance, tagMap)) {
           return null;
@@ -3716,12 +3727,33 @@ async function getCentralCalendarEvents_(roomRules) {
         const endsAt = attrs.published_ends_at || attrs.ends_at || "";
         const endsDate = new Date(endsAt);
         const hasValidEndDate = !Number.isNaN(endsDate.getTime());
+        const rawLocation = String(attrs.location || "").trim();
+        const locationDetails = splitPlanningCenterLocation_(rawLocation);
         const location = rooms.length ?
           rooms.join(", ") :
-          cleanLocation_(attrs.location || "");
-        const title = attrs.name || "Untitled Event";
-        const description = attrs.recurrence_description || "";
+          cleanLocation_(rawLocation);
+        const title = String(attrs.name || "Untitled Event").trim();
+        const description = htmlToPlainText_(
+            eventAttrs.description ||
+            eventAttrs.summary ||
+            attrs.description ||
+            "",
+        );
+        const recurrence = String(
+            attrs.compact_recurrence_description ||
+            attrs.recurrence_description ||
+            "",
+        ).trim();
+        const recurrenceDetails = String(
+            attrs.recurrence_description || recurrence,
+        ).trim();
+        const calendarDescription = [description, recurrenceDetails]
+            .filter(Boolean)
+            .join("\n\n");
         const churchCenterUrl = attrs.church_center_url || "";
+        const registrationUrl = /^https?:\/\//i.test(
+            String(eventAttrs.registration_url || "").trim(),
+        ) ? String(eventAttrs.registration_url).trim() : "";
 
         return {
           active: "TRUE",
@@ -3735,6 +3767,12 @@ async function getCentralCalendarEvents_(roomRules) {
           ),
           location: location,
           description: description,
+          recurrence: recurrence,
+          recurrence_details: recurrenceDetails,
+          venue: locationDetails.venue,
+          address: locationDetails.address,
+          registration_url: registrationUrl,
+          church_center_url: churchCenterUrl,
           button_text: churchCenterUrl ? "Learn More" : "",
           button_url: churchCenterUrl,
           calendar_url: buildGoogleCalendarUrl_({
@@ -3742,7 +3780,7 @@ async function getCentralCalendarEvents_(roomRules) {
             startsAt: startsDate,
             endsAt: endsAt,
             location: location,
-            description: description,
+            description: calendarDescription,
             url: churchCenterUrl,
           }),
           calendar_file_url: buildCalendarFileUrl_({
@@ -3750,10 +3788,12 @@ async function getCentralCalendarEvents_(roomRules) {
             startsAt: startsDate,
             endsAt: endsAt,
             location: location,
-            description: description,
+            description: calendarDescription,
             url: churchCenterUrl,
           }),
-          image_url: "",
+          image_url: String(
+              eventAttrs.image_url || attrs.image_url || "",
+          ).trim(),
           end_date: hasValidEndDate ?
             formatDate_(endsDate, PCO_TIMEZONE) :
             "",
@@ -3803,6 +3843,30 @@ function cleanLocation_(location) {
           "CrossPointe Church",
       )
       .trim();
+}
+
+/**
+ * Splits Planning Center's combined venue and address label.
+ *
+ * @param {string} location Raw Planning Center location.
+ * @return {{venue: string, address: string}} Public location parts.
+ */
+function splitPlanningCenterLocation_(location) {
+  const value = String(location || "").trim();
+  const separator = " - ";
+  const separatorIndex = value.indexOf(separator);
+
+  if (separatorIndex === -1) {
+    return {
+      venue: cleanLocation_(value),
+      address: "",
+    };
+  }
+
+  return {
+    venue: value.slice(0, separatorIndex).trim(),
+    address: value.slice(separatorIndex + separator.length).trim(),
+  };
 }
 
 /**
@@ -4544,13 +4608,21 @@ function toTodayItem_(item) {
   return {
     active: "TRUE",
     title: item.title,
+    date: item.date,
     time: item.time,
     location: item.location,
     description: item.description,
+    recurrence: item.recurrence,
+    recurrence_details: item.recurrence_details,
+    venue: item.venue,
+    address: item.address,
+    registration_url: item.registration_url,
+    church_center_url: item.church_center_url,
     button_text: item.button_text,
     button_url: item.button_url,
     calendar_url: item.calendar_url,
     calendar_file_url: item.calendar_file_url,
+    image_url: item.image_url,
     sort: item.sort,
     source: item.source,
     _dateObj: item._dateObj,
@@ -4566,6 +4638,12 @@ function toUpcomingItem_(item) {
     time: item.time,
     location: item.location,
     description: item.description,
+    recurrence: item.recurrence,
+    recurrence_details: item.recurrence_details,
+    venue: item.venue,
+    address: item.address,
+    registration_url: item.registration_url,
+    church_center_url: item.church_center_url,
     button_text: item.button_text,
     button_url: item.button_url,
     calendar_url: item.calendar_url,

@@ -28,7 +28,7 @@ var CENTRAL_REFRESH_MS = 1200000;
 var CENTRAL_API_URL = "/api/central-data";
 var CENTRAL_HOSTED_WHATS_NEW_URL = "/content/whats-new.json";
 var SERVE_NEED_INTEREST_ENDPOINT = "/api/serve-needs/share-interest";
-var CENTRAL_CACHE_KEY = "central-data-cache-v2";
+var CENTRAL_CACHE_KEY = "central-data-cache-v3";
 var CENTRAL_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 var EXPANDABLE_FLOW_DURATION_MS = 1000;
 var CENTRAL_WHATS_NEW_SEEN_KEY = "central-whats-new-seen-v1";
@@ -63,6 +63,11 @@ var SUNDAY_MODE_MODULE_DEFINITIONS = [
 ];
 var whatsNewEscapeHandler = null;
 var serveNeedInterestEscapeHandler = null;
+var eventDetailsEscapeHandler = null;
+var eventDetailsPreviousFocus = null;
+var eventDetailsCloseTimer = 0;
+var eventDetailItemsByKey = {};
+var eventDetailKeyCounter = 0;
 var serveNeedInterestItemsByKey = {};
 var serveNeedInterestKeyCounter = 0;
 var youVersionReaderModulePromise = null;
@@ -872,6 +877,9 @@ function renderCentral(data) {
   removeWhatsNewModal_();
   teardownSundayStreamMiniPlayer_();
   teardownSundayScripture_();
+  removeEventDetailsModal_();
+  eventDetailItemsByKey = {};
+  eventDetailKeyCounter = 0;
   serveNeedInterestItemsByKey = {};
   serveNeedInterestKeyCounter = 0;
 
@@ -1643,8 +1651,7 @@ function renderToday(items) {
         title: item.title,
         meta: [item.time, item.location].filter(Boolean).join(" • "),
         description: "",
-        buttonText: item.button_text,
-        buttonUrl: item.button_url,
+        buttonHtml: renderEventDetailsButton_(item),
         bottomButtonText: calendarIntegrationsEnabled ? "Add to Calendar" : "",
         bottomButtonUrl: calendarIntegrationsEnabled ? item.calendar_url : "",
         calendarFileUrl: item.calendar_file_url,
@@ -2860,8 +2867,7 @@ function renderEvents(items) {
         title: item.title,
         meta: [item.date, item.time, item.location].filter(Boolean).join(" • "),
         description: "",
-        buttonText: item.button_text,
-        buttonUrl: item.button_url,
+        buttonHtml: renderEventDetailsButton_(item),
         bottomButtonText: calendarIntegrationsEnabled ? "Add to Calendar" : "",
         bottomButtonUrl: calendarIntegrationsEnabled ? item.calendar_url : "",
         calendarFileUrl: item.calendar_file_url,
@@ -2870,6 +2876,242 @@ function renderEvents(items) {
       });
     },
   }), "upcoming-events");
+}
+
+function renderEventDetailsButton_(item) {
+  var eventKey = registerEventDetailsItem_(item);
+  if (!eventKey) return "";
+
+  return [
+    "<button type=\"button\" class=\"btn event-details-open\"",
+      " onclick=\"openEventDetailsModal('",
+      escapeJsString(eventKey),
+      "')\">",
+      escapeHtml(item.button_text || "Learn More"),
+    "</button>",
+  ].join("");
+}
+
+function registerEventDetailsItem_(item) {
+  if (!item) return "";
+
+  var key = "event-detail:" + String(++eventDetailKeyCounter);
+
+  eventDetailItemsByKey[key] = {
+    title: String(item.title || "CrossPointe Event").trim(),
+    date: String(item.date || "").trim(),
+    time: String(item.time || "").trim(),
+    location: String(item.location || "").trim(),
+    venue: String(item.venue || "").trim(),
+    address: String(item.address || "").trim(),
+    description: String(item.description || "").trim(),
+    recurrence: String(item.recurrence || "").trim(),
+    recurrenceDetails: String(item.recurrence_details || "").trim(),
+    registrationUrl: String(item.registration_url || "").trim(),
+    churchCenterUrl: String(
+        item.church_center_url || item.button_url || "",
+    ).trim(),
+    imageUrl: String(item.image_url || "").trim(),
+    calendarUrl: String(item.calendar_url || "").trim(),
+    calendarFileUrl: String(item.calendar_file_url || "").trim(),
+  };
+
+  return key;
+}
+
+function openEventDetailsModal(eventKey) {
+  var item = eventDetailItemsByKey[eventKey];
+  if (!item) return;
+
+  removeEventDetailsModal_();
+  eventDetailsPreviousFocus = document.activeElement;
+
+  var dateBadge = getEventDateBadgeParts_(item.date);
+  var schedule = [item.date, item.time].filter(Boolean).join(" • ");
+  var locationQuery = [item.venue, item.address]
+      .filter(Boolean)
+      .join(", ") || item.location;
+  var mapUrl = locationQuery ?
+    "https://www.google.com/maps/search/?api=1&query=" +
+      encodeURIComponent(locationQuery) :
+    "";
+  var directionsUrl = locationQuery ?
+    "https://www.google.com/maps/dir/?api=1&destination=" +
+      encodeURIComponent(locationQuery) :
+    "";
+  var hasSafeImage = /^https?:\/\//i.test(item.imageUrl);
+  var hasSafeRegistration = /^https?:\/\//i.test(item.registrationUrl);
+  var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
+      currentCentralData,
+  );
+  var modal = document.createElement("div");
+
+  modal.id = "central-event-details-modal";
+  modal.className = "event-details-modal";
+  modal.innerHTML = [
+    "<div class=\"event-details-backdrop\" data-event-details-close=\"true\"></div>",
+    "<article class=\"event-details-card\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"event-details-title\">",
+      "<button type=\"button\" class=\"event-details-close\" aria-label=\"Close event details\" data-event-details-close=\"true\">&times;</button>",
+      "<div class=\"event-details-heading\">",
+        dateBadge ? [
+          "<div class=\"event-details-date\" aria-label=\"", escapeAttr(item.date), "\">",
+            "<span>", escapeHtml(dateBadge.month), "</span>",
+            "<strong>", escapeHtml(dateBadge.day), "</strong>",
+          "</div>",
+        ].join("") : "",
+        "<div class=\"event-details-heading-copy\">",
+          "<div class=\"event-details-kicker\">CrossPointe Event</div>",
+          "<h2 id=\"event-details-title\">", escapeHtml(item.title), "</h2>",
+          item.recurrence ?
+            "<p class=\"event-details-recurrence\">" +
+              escapeHtml(item.recurrence) + "</p>" :
+            "",
+          schedule ?
+            "<p class=\"event-details-schedule\">" +
+              escapeHtml(schedule) + "</p>" :
+            "",
+        "</div>",
+      "</div>",
+      hasSafeImage ? [
+        "<div class=\"event-details-image-wrap\">",
+          "<img class=\"event-details-image\" src=\"", escapeAttr(item.imageUrl),
+            "\" alt=\"\" loading=\"lazy\">",
+        "</div>",
+      ].join("") : "",
+      "<div class=\"event-details-content\">",
+        "<section class=\"event-details-main\" aria-labelledby=\"event-details-about-title\">",
+          "<h3 id=\"event-details-about-title\">Details</h3>",
+          (item.description || item.recurrenceDetails) ?
+            "<p>" + escapeHtml(
+                item.description || item.recurrenceDetails,
+            ) + "</p>" :
+            "<p>More details will be posted here as they become available.</p>",
+        "</section>",
+        (item.location || item.venue || item.address) ? [
+          "<aside class=\"event-details-location\" aria-labelledby=\"event-details-location-title\">",
+            "<div class=\"event-details-location-label\" id=\"event-details-location-title\">Location</div>",
+            item.venue ? "<strong>" + escapeHtml(item.venue) + "</strong>" : "",
+            item.location && item.location !== item.venue ?
+              "<span>" + escapeHtml(item.location) + "</span>" :
+              "",
+            item.address ? "<span>" + escapeHtml(item.address) + "</span>" : "",
+            mapUrl ? [
+              "<div class=\"event-details-map-actions\">",
+                "<a class=\"event-details-map-link\" ", buildLinkAttrs_(mapUrl), ">Show map</a>",
+                "<a class=\"event-details-map-link\" ", buildLinkAttrs_(directionsUrl), ">Get directions</a>",
+              "</div>",
+            ].join("") : "",
+          "</aside>",
+        ].join("") : "",
+      "</div>",
+      "<div class=\"event-details-actions\">",
+        hasSafeRegistration ?
+          button("Register", item.registrationUrl, "btn-primary") :
+          "",
+        calendarIntegrationsEnabled ? calendarButton_(
+            "Add to Calendar",
+            item.calendarUrl,
+            item.calendarFileUrl,
+            item.title,
+        ) : "",
+      "</div>",
+    "</article>",
+  ].join("");
+
+  modal.addEventListener("click", function(event) {
+    if (event.target.closest("[data-event-details-close=\"true\"]")) {
+      closeEventDetailsModal();
+    }
+  });
+
+  eventDetailsEscapeHandler = function(event) {
+    if (event.key === "Escape") {
+      closeEventDetailsModal();
+    }
+  };
+
+  document.addEventListener("keydown", eventDetailsEscapeHandler);
+  document.body.classList.add("modal-open");
+  document.body.appendChild(modal);
+
+  var closeButton = modal.querySelector(".event-details-close");
+  if (closeButton) closeButton.focus();
+}
+
+function closeEventDetailsModal(immediate) {
+  var modal = document.getElementById("central-event-details-modal");
+  var prefersReducedMotion = window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (!modal) {
+    finishEventDetailsModalClose_(null);
+    return;
+  }
+
+  if (immediate || prefersReducedMotion) {
+    finishEventDetailsModalClose_(modal);
+    return;
+  }
+
+  if (modal.classList.contains("event-details-closing")) return;
+
+  modal.classList.add("event-details-closing");
+
+  var card = modal.querySelector(".event-details-card");
+  var finishClose = function(event) {
+    if (event && event.animationName !== "eventDetailsCardLiftOut") return;
+    finishEventDetailsModalClose_(modal);
+  };
+
+  if (card) {
+    card.addEventListener("animationend", finishClose);
+  }
+
+  eventDetailsCloseTimer = window.setTimeout(function() {
+    finishEventDetailsModalClose_(modal);
+  }, 1150);
+}
+
+function finishEventDetailsModalClose_(modal) {
+  if (eventDetailsCloseTimer) {
+    window.clearTimeout(eventDetailsCloseTimer);
+    eventDetailsCloseTimer = 0;
+  }
+
+  if (modal && modal.parentNode) {
+    modal.parentNode.removeChild(modal);
+  }
+
+  if (eventDetailsEscapeHandler) {
+    document.removeEventListener("keydown", eventDetailsEscapeHandler);
+    eventDetailsEscapeHandler = null;
+  }
+
+  document.body.classList.remove("modal-open");
+
+  if (eventDetailsPreviousFocus &&
+    typeof eventDetailsPreviousFocus.focus === "function" &&
+    document.body.contains(eventDetailsPreviousFocus)) {
+    eventDetailsPreviousFocus.focus();
+  }
+
+  eventDetailsPreviousFocus = null;
+}
+
+function removeEventDetailsModal_() {
+  closeEventDetailsModal(true);
+}
+
+function getEventDateBadgeParts_(dateLabel) {
+  var match = String(dateLabel || "").trim()
+      .match(/^([A-Za-z]{3,9})\s+(\d{1,2})/);
+
+  if (!match) return null;
+
+  return {
+    month: match[1].slice(0, 3).toUpperCase(),
+    day: match[2],
+  };
 }
 
 function renderCampaigns(items) {
@@ -3562,7 +3804,9 @@ function section(title, kicker, content, id) {
 }
 
 function card(options) {
-  var hasPrimaryButton = options.buttonText && options.buttonUrl;
+  var primaryButtonHtml = options.buttonHtml ||
+    button(options.buttonText, options.buttonUrl);
+  var hasPrimaryButton = Boolean(primaryButtonHtml);
   var hasBottomButton = options.bottomButtonText && options.bottomButtonUrl;
   var heading = [
     options.meta ?
@@ -3577,7 +3821,7 @@ function card(options) {
       options.description ? "<p>" + escapeHtml(options.description || "") + "</p>" : "",
       hasBottomButton ? [
         "<div class=\"card-actions ", (hasPrimaryButton ? "" : "calendar-only"), "\">",
-          button(options.buttonText, options.buttonUrl),
+          primaryButtonHtml,
           calendarButton_(
               options.bottomButtonText,
               options.bottomButtonUrl,
@@ -3585,7 +3829,7 @@ function card(options) {
               options.title,
           ),
         "</div>",
-      ].join("") : button(options.buttonText, options.buttonUrl),
+      ].join("") : primaryButtonHtml,
     "</article>",
   ].join("");
 }

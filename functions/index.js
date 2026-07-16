@@ -311,7 +311,9 @@ const YOUVERSION_API_BASE_URL = "https://api.youversion.com/v1";
 const YOUVERSION_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const cachedCentralDataByMode = new Map();
-const CENTRAL_DATA_CACHE_KEY = "published";
+const CENTRAL_DATA_ENVIRONMENT_LIVE = "live";
+const CENTRAL_DATA_ENVIRONMENT_DEV = "dev";
+const CENTRAL_DATA_CACHE_KEY_PREFIX = "published:";
 
 function clearCentralDataCache_() {
   cachedCentralDataByMode.clear();
@@ -434,8 +436,10 @@ export const centralData = onRequest(
       }
 
       try {
+        const environment = getCentralDataEnvironment_(request);
+        const cacheKey = CENTRAL_DATA_CACHE_KEY_PREFIX + environment;
         const cachedEntry = cachedCentralDataByMode.get(
-            CENTRAL_DATA_CACHE_KEY,
+            cacheKey,
         ) || null;
 
         if (
@@ -443,17 +447,22 @@ export const centralData = onRequest(
           cachedEntry.data &&
           (Date.now() - cachedEntry.fetchedAt) < CENTRAL_CACHE_TTL_MS
         ) {
+          const refreshedData = await refreshCentralSundayModeData_(
+              cachedEntry.data,
+              environment,
+          );
+          cachedEntry.data = refreshedData;
           response.set("Cache-Control", "no-store");
-          response.status(200).json(cachedEntry.data);
+          response.status(200).json(refreshedData);
           return;
         }
 
-        const combinedData = await buildCentralDataPayload_();
+        const combinedData = await buildCentralDataPayload_(environment);
         const payload = {
           ...combinedData,
           youVersionAppKey: YOUVERSION_APP_KEY,
         };
-        cachedCentralDataByMode.set(CENTRAL_DATA_CACHE_KEY, {
+        cachedCentralDataByMode.set(cacheKey, {
           data: payload,
           fetchedAt: Date.now(),
         });
@@ -2562,7 +2571,7 @@ function getServeNeedInterestNotificationErrorMessage_(error) {
     "leader right now. Please try again in a minute.";
 }
 
-async function buildCentralDataPayload_() {
+async function buildCentralDataPayload_(environment) {
   const [
     settingsOverride,
     sundaySettingsOverride,
@@ -2620,6 +2629,7 @@ async function buildCentralDataPayload_() {
   );
 
   return {
+    environment: environment,
     googleWebClientId: googleWebClientId,
     googleDocsEnabled: googleDocsEnabled,
     calendarIntegrationsEnabled: calendarIntegrationsEnabled,
@@ -2634,6 +2644,7 @@ async function buildCentralDataPayload_() {
         sunday,
         setlist,
         sundaySettings,
+        environment,
     ),
     today: Array.isArray(planningCenterData.events && planningCenterData.events.today) ?
       planningCenterData.events.today :
@@ -2663,6 +2674,33 @@ async function buildCentralDataPayload_() {
     whatsNew: whatsNewOverride.shouldOverride ?
       whatsNewOverride.whatsNew :
       {},
+  };
+}
+
+/**
+ * Refreshes environment-sensitive Sunday controls inside cached public data.
+ *
+ * @param {Object} cachedData Cached Central response payload.
+ * @param {string} environment Resolved Hosting environment.
+ * @return {Promise<Object>} Payload with current Sunday settings and mode.
+ */
+async function refreshCentralSundayModeData_(cachedData, environment) {
+  const sundaySettingsOverride = await getFirestoreSundaySettingsOverride_();
+  const sundaySettings = sundaySettingsOverride.shouldOverride ?
+    sundaySettingsOverride.settings :
+    (cachedData.sundaySettings || {});
+
+  return {
+    ...cachedData,
+    environment: environment,
+    sundaySettings: sundaySettings,
+    sundayMode: getSundayModeData_(
+        cachedData.settings || {},
+        cachedData.sunday || {},
+        Array.isArray(cachedData.setlist) ? cachedData.setlist : [],
+        sundaySettings,
+        environment,
+    ),
   };
 }
 
@@ -2776,7 +2814,7 @@ async function getFirestorePublicMetaGoogleWebClientId_() {
 function getCentralRequestHostname_(request) {
   const forwardedHost = String(
       request && request.headers && request.headers["x-forwarded-host"] || "",
-  ).trim();
+  ).trim().split(",")[0].trim();
   const directHost = String(
       request && request.headers && request.headers.host || "",
   ).trim();
@@ -2784,6 +2822,32 @@ function getCentralRequestHostname_(request) {
   const rawHost = forwardedHost || directHost || hostname;
 
   return rawHost.toLowerCase().replace(/:\d+$/, "");
+}
+
+/**
+ * Resolves the public Central environment from the original request hostname.
+ *
+ * @param {Object} request Incoming HTTPS request.
+ * @return {string} Either the live or dev environment identifier.
+ */
+function getCentralDataEnvironment_(request) {
+  const hostname = getCentralRequestHostname_(request);
+
+  if (isLocalCentralHostname_(hostname)) {
+    return CENTRAL_DATA_ENVIRONMENT_DEV;
+  }
+
+  if (
+    hostname.startsWith("crosspointe-central--dev-") &&
+    (
+      hostname.endsWith(".web.app") ||
+      hostname.endsWith(".firebaseapp.com")
+    )
+  ) {
+    return CENTRAL_DATA_ENVIRONMENT_DEV;
+  }
+
+  return CENTRAL_DATA_ENVIRONMENT_LIVE;
 }
 
 function getCentralRequestProtocol_(request) {
@@ -2935,6 +2999,21 @@ function toCentralSundaySettingsFromFirestoreDoc_(snapshot) {
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "force_sunday_mode");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_mode_start_time");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_mode_end_time");
+  copyTrimmedStringFieldIfPresent_(
+      nextSettings,
+      data,
+      "dev_sunday_mode_override",
+  );
+  copyTrimmedStringFieldIfPresent_(
+      nextSettings,
+      data,
+      "dev_sunday_mode_start_time",
+  );
+  copyTrimmedStringFieldIfPresent_(
+      nextSettings,
+      data,
+      "dev_sunday_mode_end_time",
+  );
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_eyebrow");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_eyebrow_live");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_eyebrow_test");
@@ -4212,13 +4291,26 @@ async function getNextPlanForServiceType_(serviceTypeId) {
   return data.data && data.data.length ? data.data[0] : null;
 }
 
-function getSundayModeData_(settings, sunday, setlist, sundaySettings) {
+function getSundayModeData_(
+    settings,
+    sunday,
+    setlist,
+    sundaySettings,
+    environment,
+) {
   const timezone = settings.timezone || PCO_TIMEZONE || "America/Chicago";
-  const resolvedSundaySettings = withResolvedSundayModeWindowSettings_(
+  const environmentSundaySettings = getSundayModeEnvironmentSettings_(
       sundaySettings,
+      environment,
+  );
+  const resolvedSundaySettings = withResolvedSundayModeWindowSettings_(
+      environmentSundaySettings,
   );
   const now = new Date();
-  const override = getSundayModeOverrideValue_(settings, sundaySettings);
+  const override = getSundayModeOverrideValue_(
+      settings,
+      environmentSundaySettings,
+  );
   const enabled = override === "enabled" ?
     true :
     (
@@ -4231,6 +4323,7 @@ function getSundayModeData_(settings, sunday, setlist, sundaySettings) {
     enabled: enabled,
     forced: override === "enabled",
     override: override,
+    environment: environment,
     timezone: timezone,
     prompts: [
       "What stood out to me?",
@@ -4238,6 +4331,38 @@ function getSundayModeData_(settings, sunday, setlist, sundaySettings) {
       "What will I do this week?",
     ],
     status: buildSundayStatus_(sunday, setlist, timezone, now),
+  };
+}
+
+/**
+ * Selects the Sunday controls belonging to the resolved environment.
+ *
+ * @param {Object} sundaySettings Published Sunday settings document.
+ * @param {string} environment Resolved Hosting environment.
+ * @return {Object} Sunday settings with the correct operational controls.
+ */
+function getSundayModeEnvironmentSettings_(sundaySettings, environment) {
+  const source = sundaySettings && typeof sundaySettings === "object" ?
+    sundaySettings :
+    {};
+
+  if (environment !== CENTRAL_DATA_ENVIRONMENT_DEV) {
+    return source;
+  }
+
+  return {
+    ...source,
+    sunday_mode_override: Object.prototype.hasOwnProperty.call(
+        source,
+        "dev_sunday_mode_override",
+    ) ? source.dev_sunday_mode_override : "auto",
+    force_sunday_mode: false,
+    sunday_mode_start_time: normalizeSundayModeTimeInputValue_(
+        source.dev_sunday_mode_start_time,
+    ) || DEFAULT_SUNDAY_MODE_START_TIME,
+    sunday_mode_end_time: normalizeSundayModeTimeInputValue_(
+        source.dev_sunday_mode_end_time,
+    ) || DEFAULT_SUNDAY_MODE_END_TIME,
   };
 }
 
@@ -10457,14 +10582,49 @@ function buildPublishedHubSundayPayload_(sourceData) {
 }
 
 function buildPublishedSettingsSundayPayload_(sourceData) {
+  const liveSettings = buildPublishedSundayModeEnvironmentPayload_(
+      sourceData,
+      "",
+      "Live page",
+  );
+  const devSettings = buildPublishedSundayModeEnvironmentPayload_(
+      sourceData,
+      "dev_",
+      "Dev preview",
+  );
+
+  return {
+    ...liveSettings,
+    force_sunday_mode: liveSettings.sunday_mode_override === "enabled",
+    ...devSettings,
+  };
+}
+
+/**
+ * Normalizes one environment's Sunday control fields for publication.
+ *
+ * @param {Object} sourceData Submitted Sunday controls.
+ * @param {string} fieldPrefix Environment field prefix.
+ * @param {string} environmentLabel Human-readable validation label.
+ * @return {Object} Normalized environment control fields.
+ */
+function buildPublishedSundayModeEnvironmentPayload_(
+    sourceData,
+    fieldPrefix,
+    environmentLabel,
+) {
+  const overrideField = fieldPrefix + "sunday_mode_override";
+  const startTimeField = fieldPrefix + "sunday_mode_start_time";
+  const endTimeField = fieldPrefix + "sunday_mode_end_time";
+  const fallbackOverride = fieldPrefix ? "" : sourceData.force_sunday_mode;
   const sundayModeOverride = normalizeSundayModeOverrideValue_(
-      sourceData.sunday_mode_override || sourceData.force_sunday_mode,
+      sourceData[overrideField] || fallbackOverride,
   );
   const sundayModeStartTime = normalizeSundayModeTimeInputValue_(
-      sourceData.sunday_mode_start_time,
+      sourceData[startTimeField],
   ) || DEFAULT_SUNDAY_MODE_START_TIME;
   const sundayModeEndTime = normalizeSundayModeTimeInputValue_(
-      sourceData.sunday_mode_end_time,
+      sourceData[endTimeField],
   ) || DEFAULT_SUNDAY_MODE_END_TIME;
 
   if (
@@ -10473,15 +10633,15 @@ function buildPublishedSettingsSundayPayload_(sourceData) {
   ) {
     throw createPreviewPublishError_(
         "invalid-payload",
-        "Sunday Mode end time must be later than the start time.",
+        environmentLabel +
+          " Sunday Mode end time must be later than the start time.",
     );
   }
 
   return {
-    sunday_mode_override: sundayModeOverride,
-    force_sunday_mode: sundayModeOverride === "enabled",
-    sunday_mode_start_time: sundayModeStartTime,
-    sunday_mode_end_time: sundayModeEndTime,
+    [overrideField]: sundayModeOverride,
+    [startTimeField]: sundayModeStartTime,
+    [endTimeField]: sundayModeEndTime,
   };
 }
 

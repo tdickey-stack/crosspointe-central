@@ -164,8 +164,12 @@ areas. Their writes are merged so one area does not erase the others.
 - Sunday Mode presentation: `sunday_eyebrow`, `sunday_heading`,
   `sunday_subheading`, primary/secondary button fields, labels, scripture copy,
   livestream title, and `sunday_modules[]`.
-- Sunday controls: `sunday_mode_override`, `force_sunday_mode`,
+- Live Sunday controls: `sunday_mode_override`, `force_sunday_mode`,
   `sunday_mode_start_time`, and `sunday_mode_end_time`.
+- Dev-preview Sunday controls: `dev_sunday_mode_override`,
+  `dev_sunday_mode_start_time`, and `dev_sunday_mode_end_time`. These fields
+  are used by the Firebase `dev` preview channel and the local emulator, so
+  forcing Sunday Mode in dev does not alter the live page.
 - Integrations: `sunday_livestream_url`, `sunday_livestream_note`,
   `sunday_scripture_bible_id`, `google_web_client_id`,
   `google_docs_enabled`, and `calendar_integrations_enabled`.

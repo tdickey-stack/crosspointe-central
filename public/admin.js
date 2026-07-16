@@ -4849,7 +4849,7 @@
       bodyHtml: [
       renderAdminNote_(
           canEdit ?
-            "These operational settings control when Sunday Mode turns on. Service integrations now live on the Integrations page." :
+            "Live and Dev have separate Sunday Mode controls. Changing one environment will not change the other. Service integrations now live on the Integrations page." :
             "Your current permission level does not allow editing Settings.",
       ),
       adminState.settingsSundayMessage ?
@@ -4860,34 +4860,71 @@
         escapeHtml_(adminState.settingsSundayError) +
         "</p>" :
         "",
+      "<div class=\"central-admin-stack\">",
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\">",
+      "<strong>Live Page</strong>",
+      renderStatusPill_("Production", "is-live"),
+      "</div>",
+      renderAdminNote_(
+          "Controls the live Hosting page. Automatic follows the live Sunday window.",
+      ),
       renderAdminSelectField_({
-        label: "Sunday Mode Override",
+        label: "Live Sunday Mode Override",
         field: "settings-sunday.sunday_mode_override",
         value: draft.sunday_mode_override,
         options: SUNDAY_MODE_OVERRIDE_OPTIONS,
         disabled: !canEdit,
       }),
-      renderAdminNote_(
-          "Use Force Off when you need to work on the standard homepage during Sunday hours. Automatic follows the normal Sunday window.",
-      ),
-      renderAdminNote_(
-          "These times use Central's timezone and only affect the automatic Sunday Mode window.",
-      ),
       "<div class=\"central-admin-form-grid\">",
       renderAdminInputField_({
-        label: "Sunday Mode Start",
+        label: "Live Sunday Mode Start",
         field: "settings-sunday.sunday_mode_start_time",
         value: draft.sunday_mode_start_time,
         type: "time",
         disabled: !canEdit,
       }),
       renderAdminInputField_({
-        label: "Sunday Mode End",
+        label: "Live Sunday Mode End",
         field: "settings-sunday.sunday_mode_end_time",
         value: draft.sunday_mode_end_time,
         type: "time",
         disabled: !canEdit,
       }),
+      "</div>",
+      "</div>",
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\">",
+      "<strong>Dev Preview</strong>",
+      renderStatusPill_("Isolated", "is-safe"),
+      "</div>",
+      renderAdminNote_(
+          "Controls the Firebase dev preview and the local emulator. Force On here is safe for testing and will not turn on Sunday Mode for the live page.",
+      ),
+      renderAdminSelectField_({
+        label: "Dev Sunday Mode Override",
+        field: "settings-sunday.dev_sunday_mode_override",
+        value: draft.dev_sunday_mode_override,
+        options: SUNDAY_MODE_OVERRIDE_OPTIONS,
+        disabled: !canEdit,
+      }),
+      "<div class=\"central-admin-form-grid\">",
+      renderAdminInputField_({
+        label: "Dev Sunday Mode Start",
+        field: "settings-sunday.dev_sunday_mode_start_time",
+        value: draft.dev_sunday_mode_start_time,
+        type: "time",
+        disabled: !canEdit,
+      }),
+      renderAdminInputField_({
+        label: "Dev Sunday Mode End",
+        field: "settings-sunday.dev_sunday_mode_end_time",
+        value: draft.dev_sunday_mode_end_time,
+        type: "time",
+        disabled: !canEdit,
+      }),
+      "</div>",
+      "</div>",
       "</div>",
       "<div class=\"central-admin-action-row\">",
       "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"publish-settings-sunday\"",
@@ -9318,11 +9355,18 @@
         fields: [
           {
             key: "sunday_mode_override",
-            label: "Sunday Mode override",
+            label: "Live Sunday Mode override",
             type: "sunday-mode",
           },
-          {key: "sunday_mode_start_time", label: "Sunday Mode start"},
-          {key: "sunday_mode_end_time", label: "Sunday Mode end"},
+          {key: "sunday_mode_start_time", label: "Live Sunday Mode start"},
+          {key: "sunday_mode_end_time", label: "Live Sunday Mode end"},
+          {
+            key: "dev_sunday_mode_override",
+            label: "Dev Sunday Mode override",
+            type: "sunday-mode",
+          },
+          {key: "dev_sunday_mode_start_time", label: "Dev Sunday Mode start"},
+          {key: "dev_sunday_mode_end_time", label: "Dev Sunday Mode end"},
         ],
       };
     }
@@ -10455,6 +10499,9 @@
       sunday_mode_override: "auto",
       sunday_mode_start_time: DEFAULT_SUNDAY_MODE_START_TIME,
       sunday_mode_end_time: DEFAULT_SUNDAY_MODE_END_TIME,
+      dev_sunday_mode_override: "auto",
+      dev_sunday_mode_start_time: DEFAULT_SUNDAY_MODE_START_TIME,
+      dev_sunday_mode_end_time: DEFAULT_SUNDAY_MODE_END_TIME,
       sunday_livestream_url: "",
       sunday_livestream_note: "",
       sunday_scripture_bible_id: "",
@@ -10758,6 +10805,18 @@
           source.sunday_mode_end_time,
           DEFAULT_SUNDAY_MODE_END_TIME,
       ),
+      dev_sunday_mode_override: normalizeAdminSundayModeOverrideValue_(
+          source.dev_sunday_mode_override,
+          false,
+      ),
+      dev_sunday_mode_start_time: normalizeAdminTimeInputValue_(
+          source.dev_sunday_mode_start_time,
+          DEFAULT_SUNDAY_MODE_START_TIME,
+      ),
+      dev_sunday_mode_end_time: normalizeAdminTimeInputValue_(
+          source.dev_sunday_mode_end_time,
+          DEFAULT_SUNDAY_MODE_END_TIME,
+      ),
       sunday_livestream_url: String(source.sunday_livestream_url || "").trim(),
       sunday_livestream_note: String(source.sunday_livestream_note || "").trim(),
       sunday_scripture_bible_id: String(source.sunday_scripture_bible_id || "").trim(),
@@ -10822,6 +10881,9 @@
       sunday_mode_override: normalized.sunday_mode_override,
       sunday_mode_start_time: normalized.sunday_mode_start_time,
       sunday_mode_end_time: normalized.sunday_mode_end_time,
+      dev_sunday_mode_override: normalized.dev_sunday_mode_override,
+      dev_sunday_mode_start_time: normalized.dev_sunday_mode_start_time,
+      dev_sunday_mode_end_time: normalized.dev_sunday_mode_end_time,
     };
   }
 
@@ -11159,6 +11221,9 @@
       force_sunday_mode: fieldValue.delete(),
       sunday_mode_start_time: fieldValue.delete(),
       sunday_mode_end_time: fieldValue.delete(),
+      dev_sunday_mode_override: fieldValue.delete(),
+      dev_sunday_mode_start_time: fieldValue.delete(),
+      dev_sunday_mode_end_time: fieldValue.delete(),
       sunday_livestream_url: fieldValue.delete(),
       sunday_livestream_note: fieldValue.delete(),
       sunday_scripture_bible_id: fieldValue.delete(),

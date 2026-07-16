@@ -69,6 +69,23 @@ var youVersionReaderModulePromise = null;
 var youVersionReaderStylesLoaded = false;
 var sundayScriptureUnmount = null;
 var sundayScriptureMountRequestId = 0;
+var sundayStreamMiniPlayerEnabled = false;
+var sundayStreamMiniPlayerWidth = 420;
+var sundayStreamPlayerAnimation = null;
+var sundayStreamReturnAnimationFrame = 0;
+var sundayStreamResizePointerId = null;
+var sundayStreamResizeStartX = 0;
+var sundayStreamResizeStartWidth = 0;
+var sundayStreamResizeHandle = null;
+var sundayStreamGestureState = null;
+var sundayStreamMiniPlayerPosition = null;
+var sundayStreamPlaybackIframe = null;
+var sundayStreamPlaybackOrigin = "";
+var sundayStreamPlaybackConnected = false;
+var sundayStreamPlaybackStateKnown = false;
+var sundayStreamPlaybackPaused = false;
+var sundayStreamPlaybackConnectTimer = 0;
+var sundayStreamPlaybackConnectAttempts = 0;
 var calendarMenuIdCounter = 0;
 var centralThemeMediaQuery = null;
 var centralThemeOverride = "";
@@ -84,6 +101,18 @@ var centralHostedWhatsNewConfig = null;
 var centralHostedWhatsNewConfigPromise = null;
 var CENTRAL_LOADER_COLLAPSE_MS = 680;
 var CENTRAL_LOADER_DOOR_MS = 1525;
+var SUNDAY_STREAM_MINI_DEFAULT_WIDTH = 420;
+var SUNDAY_STREAM_MINI_MIN_WIDTH = 240;
+var SUNDAY_STREAM_MINI_MAX_WIDTH = 680;
+var SUNDAY_STREAM_MINI_WIDTH_STEP = 80;
+var SUNDAY_STREAM_MINI_MOBILE_DEFAULT_WIDTH = 240;
+var SUNDAY_STREAM_MINI_MOBILE_MIN_WIDTH = 160;
+var SUNDAY_STREAM_MINI_MOBILE_BREAKPOINT = 640;
+var SUNDAY_STREAM_MINI_TAP_MOVE_THRESHOLD = 10;
+var SUNDAY_STREAM_MINI_ANIMATION_DURATION_MS = 460;
+var SUNDAY_STREAM_MINI_QUAD_EASING =
+  "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
+var SUNDAY_STREAM_PLAYER_CONNECT_MAX_ATTEMPTS = 24;
 
 if (!CENTRAL_IS_ADMIN_ROUTE) {
   document.addEventListener("DOMContentLoaded", function() {
@@ -841,6 +870,7 @@ function isTruthyHostedWhatsNewValue_(value) {
 function renderCentral(data) {
   currentCentralData = data || {};
   removeWhatsNewModal_();
+  teardownSundayStreamMiniPlayer_();
   teardownSundayScripture_();
   serveNeedInterestItemsByKey = {};
   serveNeedInterestKeyCounter = 0;
@@ -853,6 +883,7 @@ function renderCentral(data) {
   if (data.sundayMode && data.sundayMode.enabled) {
     document.getElementById("app").innerHTML = renderSundayPage(data);
     syncCentralThemeToggleUi_(getResolvedCentralTheme_());
+    initSundayStreamMiniPlayer_();
     initSundayNotes(data);
     initSundayScripture(data);
     syncSundayNotesSaveButton_(data);
@@ -1650,17 +1681,1087 @@ function renderSundayLivestream(sundaySettings) {
   return [
     "<article class=\"card sunday-stream-card\" id=\"live\">",
       "<div class=\"sunday-stream-copy\">",
-        "<div class=\"section-kicker\">Live Right Now</div>",
-        "<h3>", escapeHtml((sundaySettings && sundaySettings.sunday_livestream_title) || "Watch Live"), "</h3>",
-        (sundaySettings && sundaySettings.sunday_livestream_note) ?
-          "<p>" + escapeHtml(sundaySettings.sunday_livestream_note) + "</p>" :
-          "",
+        "<div class=\"sunday-stream-copy-main\">",
+          "<div class=\"section-kicker\">Live Right Now</div>",
+          "<h3>", escapeHtml((sundaySettings && sundaySettings.sunday_livestream_title) || "Watch Live"), "</h3>",
+          (sundaySettings && sundaySettings.sunday_livestream_note) ?
+            "<p>" + escapeHtml(sundaySettings.sunday_livestream_note) + "</p>" :
+            "",
+        "</div>",
+        "<button type=\"button\" class=\"sunday-stream-mini-toggle\" aria-controls=\"sunday-stream-player\" aria-pressed=\"false\" onclick=\"toggleSundayStreamMiniPlayer()\">",
+          "<span class=\"sunday-stream-mini-icon\" aria-hidden=\"true\"></span>",
+          "<span data-sunday-stream-toggle-label>Keep Watching</span>",
+        "</button>",
       "</div>",
-      "<div class=\"sunday-stream-frame\">",
-        "<iframe allow=\"fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
+      "<div class=\"sunday-stream-status\" data-sunday-stream-status aria-live=\"polite\"></div>",
+      "<div class=\"sunday-stream-stage\" data-sunday-stream-stage>",
+        "<div class=\"sunday-stream-player\" id=\"sunday-stream-player\" data-sunday-stream-player>",
+          "<div class=\"sunday-stream-frame\">",
+            "<iframe allow=\"autoplay; fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
+            "<div class=\"sunday-stream-gesture-surface\" role=\"group\" tabindex=\"0\" aria-label=\"Mini player. Tap to return to the live section, drag to move, or pinch to resize.\" title=\"Tap to return. Drag to move. Pinch to resize.\" onpointerdown=\"beginSundayStreamMiniPlayerGesture(event)\" onkeydown=\"handleSundayStreamMiniPlayerMoveKeydown(event)\">",
+              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-playback\" data-sunday-stream-playback data-playback-state=\"connecting\" aria-label=\"Connecting to livestream controls\" title=\"Connecting to livestream controls\" onclick=\"toggleSundayStreamPlayback(event)\" disabled>",
+                "<span class=\"sunday-stream-playback-icon sunday-stream-playback-play\" aria-hidden=\"true\"></span>",
+                "<span class=\"sunday-stream-playback-icon sunday-stream-playback-pause\" aria-hidden=\"true\"><span></span><span></span></span>",
+                "<span class=\"sunday-stream-playback-connecting\" aria-hidden=\"true\">&middot;&middot;&middot;</span>",
+              "</button>",
+              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-close\" aria-label=\"Close mini player and stop the stream\" title=\"Close and stop\" onclick=\"closeSundayStreamMiniPlayer()\">&times;</button>",
+            "</div>",
+          "</div>",
+          "<button type=\"button\" class=\"sunday-stream-resize-handle\" aria-label=\"Drag to resize mini player\" title=\"Drag left or right to resize\" onpointerdown=\"beginSundayStreamMiniPlayerResize(event)\" onkeydown=\"handleSundayStreamMiniPlayerResizeKeydown(event)\"><span aria-hidden=\"true\"></span></button>",
+        "</div>",
       "</div>",
     "</article>",
   ].join("");
+}
+
+function initSundayStreamMiniPlayer_() {
+  var stageEl = document.querySelector("[data-sunday-stream-stage]");
+  if (!stageEl) return;
+
+  sundayStreamMiniPlayerEnabled = false;
+  sundayStreamMiniPlayerWidth = getSundayStreamMiniPlayerDefaultWidth_();
+  sundayStreamMiniPlayerPosition = null;
+  window.addEventListener("resize", handleSundayStreamMiniViewportChange_);
+  initSundayStreamPlaybackControl_();
+  syncSundayStreamMiniPlayer_();
+}
+
+function teardownSundayStreamMiniPlayer_() {
+  if (sundayStreamPlayerAnimation) {
+    sundayStreamPlayerAnimation.cancel();
+    sundayStreamPlayerAnimation = null;
+  }
+
+  if (sundayStreamReturnAnimationFrame) {
+    window.cancelAnimationFrame(sundayStreamReturnAnimationFrame);
+    sundayStreamReturnAnimationFrame = 0;
+  }
+
+  stopSundayStreamMiniPlayerResize_();
+  stopSundayStreamMiniPlayerGesture_();
+  teardownSundayStreamPlaybackControl_();
+  resetSundayStreamMiniPlayerPosition_();
+  window.removeEventListener("resize", handleSundayStreamMiniViewportChange_);
+  sundayStreamMiniPlayerEnabled = false;
+  sundayStreamMiniPlayerWidth = getSundayStreamMiniPlayerDefaultWidth_();
+  sundayStreamMiniPlayerPosition = null;
+
+  if (document.body) {
+    document.body.classList.remove("sunday-stream-mini-active");
+  }
+}
+
+function toggleSundayStreamMiniPlayer() {
+  if (sundayStreamMiniPlayerEnabled) {
+    dockSundayStreamMiniPlayer_();
+    return;
+  }
+
+  popOutSundayStreamMiniPlayer_();
+}
+
+function popOutSundayStreamMiniPlayer_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl || sundayStreamMiniPlayerEnabled) return;
+
+  var startRect = playerEl.getBoundingClientRect();
+  cancelSundayStreamPlayerAnimation_();
+  playerEl.classList.add("is-position-animating");
+  sundayStreamMiniPlayerEnabled = true;
+  syncSundayStreamMiniPlayer_();
+  animateSundayStreamPlayerFromRect_(playerEl, startRect);
+}
+
+function dockSundayStreamMiniPlayer_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl || !sundayStreamMiniPlayerEnabled) return;
+
+  var startRect = playerEl.getBoundingClientRect();
+  cancelSundayStreamPlayerAnimation_();
+  playerEl.classList.add("is-position-animating");
+  sundayStreamMiniPlayerEnabled = false;
+  syncSundayStreamMiniPlayer_();
+  animateSundayStreamPlayerFromRect_(playerEl, startRect);
+}
+
+function animateSundayStreamPlayerFromRect_(playerEl, startRect) {
+  var endRect = playerEl.getBoundingClientRect();
+  var canAnimate = typeof playerEl.animate === "function" &&
+    !prefersReducedCentralMotion_() &&
+    startRect.width > 0 &&
+    startRect.height > 0 &&
+    endRect.width > 0 &&
+    endRect.height > 0;
+
+  if (!canAnimate) {
+    playerEl.classList.remove("is-position-animating");
+    return;
+  }
+
+  var translateX = startRect.left - endRect.left;
+  var translateY = startRect.top - endRect.top;
+  var scaleX = startRect.width / endRect.width;
+  var scaleY = startRect.height / endRect.height;
+
+  sundayStreamPlayerAnimation = playerEl.animate([
+    {
+      transformOrigin: "top left",
+      transform: "translate(" + translateX + "px, " + translateY +
+        "px) scale(" + scaleX + ", " + scaleY + ")",
+    },
+    {
+      transformOrigin: "top left",
+      transform: "translate(0, 0) scale(1, 1)",
+    },
+  ], {
+    duration: SUNDAY_STREAM_MINI_ANIMATION_DURATION_MS,
+    easing: SUNDAY_STREAM_MINI_QUAD_EASING,
+  });
+
+  sundayStreamPlayerAnimation.onfinish = function() {
+    sundayStreamPlayerAnimation = null;
+    playerEl.classList.remove("is-position-animating");
+  };
+
+  sundayStreamPlayerAnimation.oncancel = function() {
+    playerEl.classList.remove("is-position-animating");
+  };
+}
+
+function cancelSundayStreamPlayerAnimation_() {
+  if (!sundayStreamPlayerAnimation) return;
+
+  sundayStreamPlayerAnimation.cancel();
+  sundayStreamPlayerAnimation = null;
+}
+
+function prefersReducedCentralMotion_() {
+  return !!(
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function returnToSundayLivestream() {
+  var stageEl = document.querySelector("[data-sunday-stream-stage]");
+  if (!stageEl) return;
+
+  if (sundayStreamReturnAnimationFrame) {
+    window.cancelAnimationFrame(sundayStreamReturnAnimationFrame);
+    sundayStreamReturnAnimationFrame = 0;
+  }
+
+  stageEl.scrollIntoView({
+    behavior: prefersReducedCentralMotion_() ? "auto" : "smooth",
+    block: "center",
+  });
+
+  waitForSundayStreamStageThenDock_(Date.now());
+}
+
+function waitForSundayStreamStageThenDock_(startedAt) {
+  var stageEl = document.querySelector("[data-sunday-stream-stage]");
+  if (!stageEl || !sundayStreamMiniPlayerEnabled) {
+    sundayStreamReturnAnimationFrame = 0;
+    return;
+  }
+
+  var rect = stageEl.getBoundingClientRect();
+  var viewportHeight = window.innerHeight ||
+    document.documentElement.clientHeight || 0;
+  var stageIsReady = rect.top < viewportHeight * 0.72 &&
+    rect.bottom > viewportHeight * 0.28;
+
+  if (stageIsReady || Date.now() - startedAt > 1600) {
+    sundayStreamReturnAnimationFrame = 0;
+    dockSundayStreamMiniPlayer_();
+    return;
+  }
+
+  sundayStreamReturnAnimationFrame = window.requestAnimationFrame(function() {
+    waitForSundayStreamStageThenDock_(startedAt);
+  });
+}
+
+function closeSundayStreamMiniPlayer() {
+  var iframeEl = document.querySelector(".sunday-stream-player iframe");
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  var streamUrl = iframeEl ? iframeEl.getAttribute("src") : "";
+
+  if (sundayStreamReturnAnimationFrame) {
+    window.cancelAnimationFrame(sundayStreamReturnAnimationFrame);
+    sundayStreamReturnAnimationFrame = 0;
+  }
+
+  cancelSundayStreamPlayerAnimation_();
+
+  var finishClose = function() {
+    sundayStreamMiniPlayerEnabled = false;
+    syncSundayStreamMiniPlayer_();
+
+    if (iframeEl && streamUrl) {
+      iframeEl.setAttribute("src", "about:blank");
+      window.setTimeout(function() {
+        if (iframeEl.isConnected) {
+          iframeEl.setAttribute("src", streamUrl);
+        }
+      }, 0);
+    }
+  };
+
+  if (
+    playerEl &&
+    sundayStreamMiniPlayerEnabled &&
+    typeof playerEl.animate === "function" &&
+    !prefersReducedCentralMotion_()
+  ) {
+    sundayStreamPlayerAnimation = playerEl.animate([
+      {opacity: 1, transform: "scale(1)"},
+      {opacity: 0, transform: "scale(0.94)"},
+    ], {
+      duration: 220,
+      easing: SUNDAY_STREAM_MINI_QUAD_EASING,
+    });
+    sundayStreamPlayerAnimation.onfinish = function() {
+      sundayStreamPlayerAnimation = null;
+      finishClose();
+    };
+    return;
+  }
+
+  finishClose();
+}
+
+function initSundayStreamPlaybackControl_() {
+  teardownSundayStreamPlaybackControl_();
+
+  sundayStreamPlaybackIframe = document.querySelector(
+      ".sunday-stream-player iframe",
+  );
+  sundayStreamPlaybackConnected = false;
+  sundayStreamPlaybackStateKnown = false;
+  sundayStreamPlaybackPaused = false;
+  sundayStreamPlaybackConnectAttempts = 0;
+
+  if (!sundayStreamPlaybackIframe) {
+    updateSundayStreamPlaybackButton_();
+    return;
+  }
+
+  sundayStreamPlaybackIframe.addEventListener(
+      "load",
+      handleSundayStreamPlaybackIframeLoad_,
+  );
+  window.addEventListener("message", handleSundayStreamPlaybackMessage_);
+  handleSundayStreamPlaybackIframeLoad_();
+}
+
+function teardownSundayStreamPlaybackControl_() {
+  if (sundayStreamPlaybackConnectTimer) {
+    window.clearTimeout(sundayStreamPlaybackConnectTimer);
+    sundayStreamPlaybackConnectTimer = 0;
+  }
+
+  if (sundayStreamPlaybackIframe) {
+    sundayStreamPlaybackIframe.removeEventListener(
+        "load",
+        handleSundayStreamPlaybackIframeLoad_,
+    );
+  }
+
+  window.removeEventListener("message", handleSundayStreamPlaybackMessage_);
+  sundayStreamPlaybackIframe = null;
+  sundayStreamPlaybackOrigin = "";
+  sundayStreamPlaybackConnected = false;
+  sundayStreamPlaybackStateKnown = false;
+  sundayStreamPlaybackPaused = false;
+  sundayStreamPlaybackConnectAttempts = 0;
+}
+
+function handleSundayStreamPlaybackIframeLoad_() {
+  if (sundayStreamPlaybackConnectTimer) {
+    window.clearTimeout(sundayStreamPlaybackConnectTimer);
+    sundayStreamPlaybackConnectTimer = 0;
+  }
+
+  sundayStreamPlaybackOrigin = getSundayStreamPlaybackOrigin_();
+  sundayStreamPlaybackConnected = false;
+  sundayStreamPlaybackStateKnown = false;
+  sundayStreamPlaybackConnectAttempts = 0;
+  updateSundayStreamPlaybackButton_();
+
+  if (sundayStreamPlaybackOrigin) {
+    sendSundayStreamPlaybackConnect_();
+  }
+}
+
+function getSundayStreamPlaybackOrigin_() {
+  if (!sundayStreamPlaybackIframe) return "";
+
+  try {
+    var streamUrl = new URL(
+        sundayStreamPlaybackIframe.getAttribute("src") || "",
+        window.location.href,
+    );
+
+    if (
+      streamUrl.protocol !== "https:" ||
+      streamUrl.hostname !== "control.resi.io"
+    ) {
+      return "";
+    }
+
+    return streamUrl.origin;
+  } catch (error) {
+    return "";
+  }
+}
+
+function sendSundayStreamPlaybackConnect_() {
+  if (
+    !sundayStreamPlaybackIframe ||
+    !sundayStreamPlaybackIframe.contentWindow ||
+    !sundayStreamPlaybackOrigin ||
+    sundayStreamPlaybackConnected
+  ) {
+    return;
+  }
+
+  sundayStreamPlaybackConnectAttempts += 1;
+  sundayStreamPlaybackIframe.contentWindow.postMessage({
+    kind: "player-connect",
+    origin: window.location.origin,
+    values: ["playing", "paused"],
+    throttleTime: 100,
+  }, sundayStreamPlaybackOrigin);
+
+  if (
+    sundayStreamPlaybackConnectAttempts <
+      SUNDAY_STREAM_PLAYER_CONNECT_MAX_ATTEMPTS
+  ) {
+    sundayStreamPlaybackConnectTimer = window.setTimeout(
+        sendSundayStreamPlaybackConnect_,
+        500,
+    );
+  }
+}
+
+function handleSundayStreamPlaybackMessage_(event) {
+  if (
+    !sundayStreamPlaybackIframe ||
+    event.source !== sundayStreamPlaybackIframe.contentWindow ||
+    event.origin !== sundayStreamPlaybackOrigin ||
+    !event.data ||
+    typeof event.data !== "object"
+  ) {
+    return;
+  }
+
+  if (event.data.kind === "player-ready") {
+    sundayStreamPlaybackConnected = true;
+    if (sundayStreamPlaybackConnectTimer) {
+      window.clearTimeout(sundayStreamPlaybackConnectTimer);
+      sundayStreamPlaybackConnectTimer = 0;
+    }
+    updateSundayStreamPlaybackButton_();
+    return;
+  }
+
+  if (
+    event.data.name === "init-state" ||
+    event.data.name === "paused" ||
+    event.data.name === "playing"
+  ) {
+    applySundayStreamPlaybackSnapshot_(event.data.value);
+    return;
+  }
+
+  if (event.data.name === "getSnapshotResult") {
+    applySundayStreamPlaybackSnapshot_(event.data.body);
+    return;
+  }
+
+  if (event.data.name === "play-result" && event.data.ok === false) {
+    sundayStreamPlaybackPaused = true;
+    sundayStreamPlaybackStateKnown = true;
+    updateSundayStreamPlaybackButton_();
+  }
+}
+
+function applySundayStreamPlaybackSnapshot_(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+
+  if (typeof snapshot.paused === "boolean") {
+    sundayStreamPlaybackPaused = snapshot.paused;
+  } else if (typeof snapshot.playing === "boolean") {
+    sundayStreamPlaybackPaused = !snapshot.playing;
+  } else {
+    return;
+  }
+
+  sundayStreamPlaybackConnected = true;
+  sundayStreamPlaybackStateKnown = true;
+  updateSundayStreamPlaybackButton_();
+}
+
+function toggleSundayStreamPlayback(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (
+    !sundayStreamPlaybackIframe ||
+    !sundayStreamPlaybackIframe.contentWindow ||
+    !sundayStreamPlaybackOrigin ||
+    !sundayStreamPlaybackConnected ||
+    !sundayStreamPlaybackStateKnown
+  ) {
+    return;
+  }
+
+  var previousPausedState = sundayStreamPlaybackPaused;
+  var command = sundayStreamPlaybackPaused ? "play" : "pause";
+  sundayStreamPlaybackPaused = !sundayStreamPlaybackPaused;
+  updateSundayStreamPlaybackButton_();
+
+  try {
+    sundayStreamPlaybackIframe.contentWindow.postMessage({
+      name: command,
+      args: [],
+    }, sundayStreamPlaybackOrigin);
+  } catch (error) {
+    sundayStreamPlaybackPaused = previousPausedState;
+    updateSundayStreamPlaybackButton_();
+  }
+}
+
+function updateSundayStreamPlaybackButton_() {
+  var buttonEl = document.querySelector("[data-sunday-stream-playback]");
+  if (!buttonEl) return;
+
+  if (!sundayStreamPlaybackOrigin) {
+    buttonEl.disabled = true;
+    buttonEl.setAttribute("data-playback-state", "unavailable");
+    buttonEl.setAttribute("aria-label", "Playback controls unavailable");
+    buttonEl.setAttribute("title", "Playback controls unavailable");
+    return;
+  }
+
+  if (!sundayStreamPlaybackConnected || !sundayStreamPlaybackStateKnown) {
+    buttonEl.disabled = true;
+    buttonEl.setAttribute("data-playback-state", "connecting");
+    buttonEl.setAttribute("aria-label", "Connecting to livestream controls");
+    buttonEl.setAttribute("title", "Connecting to livestream controls");
+    return;
+  }
+
+  var nextAction = sundayStreamPlaybackPaused ? "Play" : "Pause";
+  buttonEl.disabled = false;
+  buttonEl.setAttribute(
+      "data-playback-state",
+      sundayStreamPlaybackPaused ? "paused" : "playing",
+  );
+  buttonEl.setAttribute("aria-label", nextAction + " livestream");
+  buttonEl.setAttribute("title", nextAction);
+}
+
+function beginSundayStreamMiniPlayerGesture(event) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  var targetEl = event.target;
+
+  if (
+    !playerEl ||
+    !sundayStreamMiniPlayerEnabled ||
+    (targetEl && targetEl.closest && targetEl.closest("button"))
+  ) {
+    return;
+  }
+
+  if (
+    sundayStreamGestureState &&
+    getSundayStreamGesturePointers_().length >= 2
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  cancelSundayStreamPlayerAnimation_();
+
+  if (!sundayStreamGestureState) {
+    sundayStreamGestureState = {
+      handle: event.currentTarget,
+      pointers: {},
+      mode: "move",
+      startRect: playerEl.getBoundingClientRect(),
+      startPointerX: event.clientX,
+      startPointerY: event.clientY,
+      didMove: false,
+      usedMultiplePointers: false,
+    };
+
+    window.addEventListener(
+        "pointermove",
+        handleSundayStreamMiniPlayerGestureMove_,
+    );
+    window.addEventListener(
+        "pointerup",
+        endSundayStreamMiniPlayerGesturePointer_,
+    );
+    window.addEventListener(
+        "pointercancel",
+        endSundayStreamMiniPlayerGesturePointer_,
+    );
+    window.addEventListener("blur", stopSundayStreamMiniPlayerGesture_);
+  }
+
+  sundayStreamGestureState.pointers[String(event.pointerId)] = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+  };
+
+  if (
+    sundayStreamGestureState.handle &&
+    typeof sundayStreamGestureState.handle.setPointerCapture === "function"
+  ) {
+    try {
+      sundayStreamGestureState.handle.setPointerCapture(event.pointerId);
+    } catch (error) {
+    }
+  }
+
+  if (getSundayStreamGesturePointers_().length === 2) {
+    sundayStreamGestureState.didMove = true;
+    sundayStreamGestureState.usedMultiplePointers = true;
+    playerEl.classList.add("is-moving");
+    initializeSundayStreamMiniPlayerPinch_();
+  }
+}
+
+function handleSundayStreamMiniPlayerGestureMove_(event) {
+  if (!sundayStreamGestureState) return;
+
+  var pointerKey = String(event.pointerId);
+  if (!sundayStreamGestureState.pointers[pointerKey]) return;
+
+  event.preventDefault();
+  sundayStreamGestureState.pointers[pointerKey].x = event.clientX;
+  sundayStreamGestureState.pointers[pointerKey].y = event.clientY;
+
+  var pointers = getSundayStreamGesturePointers_();
+  if (pointers.length >= 2) {
+    sundayStreamGestureState.didMove = true;
+    sundayStreamGestureState.usedMultiplePointers = true;
+    var playerEl = document.querySelector("[data-sunday-stream-player]");
+    if (playerEl) playerEl.classList.add("is-moving");
+    if (sundayStreamGestureState.mode !== "pinch") {
+      initializeSundayStreamMiniPlayerPinch_();
+    }
+    applySundayStreamMiniPlayerPinch_(pointers[0], pointers[1]);
+    return;
+  }
+
+  if (pointers.length !== 1) return;
+
+  var movementX = pointers[0].x - sundayStreamGestureState.startPointerX;
+  var movementY = pointers[0].y - sundayStreamGestureState.startPointerY;
+  var movementDistance = Math.sqrt(
+      movementX * movementX + movementY * movementY,
+  );
+
+  if (
+    !sundayStreamGestureState.didMove &&
+    movementDistance < SUNDAY_STREAM_MINI_TAP_MOVE_THRESHOLD
+  ) {
+    return;
+  }
+
+  sundayStreamGestureState.didMove = true;
+  var movingPlayerEl = document.querySelector("[data-sunday-stream-player]");
+  if (movingPlayerEl) movingPlayerEl.classList.add("is-moving");
+
+  if (sundayStreamGestureState.mode !== "move") {
+    initializeSundayStreamMiniPlayerMove_(pointers[0]);
+  }
+
+  setSundayStreamMiniPlayerPosition_(
+      sundayStreamGestureState.startRect.left +
+        pointers[0].x - sundayStreamGestureState.startPointerX,
+      sundayStreamGestureState.startRect.top +
+        pointers[0].y - sundayStreamGestureState.startPointerY,
+  );
+}
+
+function initializeSundayStreamMiniPlayerMove_(pointer) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl || !sundayStreamGestureState || !pointer) return;
+
+  sundayStreamGestureState.mode = "move";
+  sundayStreamGestureState.startRect = playerEl.getBoundingClientRect();
+  sundayStreamGestureState.startPointerX = pointer.x;
+  sundayStreamGestureState.startPointerY = pointer.y;
+  playerEl.classList.remove("is-gesture-resizing");
+}
+
+function initializeSundayStreamMiniPlayerPinch_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  var pointers = getSundayStreamGesturePointers_();
+  if (!playerEl || !sundayStreamGestureState || pointers.length < 2) return;
+
+  var rect = playerEl.getBoundingClientRect();
+  var center = getSundayStreamGestureCenter_(pointers[0], pointers[1]);
+
+  sundayStreamGestureState.mode = "pinch";
+  sundayStreamGestureState.startRect = rect;
+  sundayStreamGestureState.startWidth = rect.width;
+  sundayStreamGestureState.startDistance = Math.max(
+      10,
+      getSundayStreamGestureDistance_(pointers[0], pointers[1]),
+  );
+  sundayStreamGestureState.startGestureCenter = center;
+  sundayStreamGestureState.startPlayerCenter = {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+  playerEl.classList.add("is-gesture-resizing");
+}
+
+function applySundayStreamMiniPlayerPinch_(firstPointer, secondPointer) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (
+    !playerEl ||
+    !sundayStreamGestureState ||
+    sundayStreamGestureState.mode !== "pinch"
+  ) {
+    return;
+  }
+
+  var distance = getSundayStreamGestureDistance_(
+      firstPointer,
+      secondPointer,
+  );
+  var center = getSundayStreamGestureCenter_(firstPointer, secondPointer);
+  var widthScale = distance / sundayStreamGestureState.startDistance;
+  var desiredCenterX = sundayStreamGestureState.startPlayerCenter.x +
+    center.x - sundayStreamGestureState.startGestureCenter.x;
+  var desiredCenterY = sundayStreamGestureState.startPlayerCenter.y +
+    center.y - sundayStreamGestureState.startGestureCenter.y;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamGestureState.startWidth * widthScale,
+  );
+  applySundayStreamMiniPlayerWidth_();
+
+  var resizedRect = playerEl.getBoundingClientRect();
+  setSundayStreamMiniPlayerPosition_(
+      desiredCenterX - resizedRect.width / 2,
+      desiredCenterY - resizedRect.height / 2,
+  );
+}
+
+function endSundayStreamMiniPlayerGesturePointer_(event) {
+  if (!sundayStreamGestureState) return;
+
+  var pointerKey = String(event.pointerId);
+  if (!sundayStreamGestureState.pointers[pointerKey]) return;
+
+  delete sundayStreamGestureState.pointers[pointerKey];
+
+  if (
+    sundayStreamGestureState.handle &&
+    typeof sundayStreamGestureState.handle.releasePointerCapture === "function"
+  ) {
+    try {
+      sundayStreamGestureState.handle.releasePointerCapture(event.pointerId);
+    } catch (error) {
+    }
+  }
+
+  var pointers = getSundayStreamGesturePointers_();
+  if (pointers.length) {
+    initializeSundayStreamMiniPlayerMove_(pointers[0]);
+    return;
+  }
+
+  var shouldReturnToLivestream = event.type === "pointerup" &&
+    !sundayStreamGestureState.didMove &&
+    !sundayStreamGestureState.usedMultiplePointers;
+  stopSundayStreamMiniPlayerGesture_();
+
+  if (shouldReturnToLivestream) {
+    returnToSundayLivestream();
+  }
+}
+
+function stopSundayStreamMiniPlayerGesture_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+
+  if (
+    sundayStreamGestureState &&
+    sundayStreamGestureState.handle &&
+    typeof sundayStreamGestureState.handle.releasePointerCapture === "function"
+  ) {
+    getSundayStreamGesturePointers_().forEach(function(pointer) {
+      try {
+        sundayStreamGestureState.handle.releasePointerCapture(pointer.id);
+      } catch (error) {
+      }
+    });
+  }
+
+  window.removeEventListener(
+      "pointermove",
+      handleSundayStreamMiniPlayerGestureMove_,
+  );
+  window.removeEventListener(
+      "pointerup",
+      endSundayStreamMiniPlayerGesturePointer_,
+  );
+  window.removeEventListener(
+      "pointercancel",
+      endSundayStreamMiniPlayerGesturePointer_,
+  );
+  window.removeEventListener("blur", stopSundayStreamMiniPlayerGesture_);
+
+  if (playerEl) {
+    playerEl.classList.remove("is-moving", "is-gesture-resizing");
+  }
+
+  sundayStreamGestureState = null;
+}
+
+function getSundayStreamGesturePointers_() {
+  if (!sundayStreamGestureState) return [];
+
+  return Object.keys(sundayStreamGestureState.pointers).map(function(key) {
+    return sundayStreamGestureState.pointers[key];
+  });
+}
+
+function getSundayStreamGestureDistance_(firstPointer, secondPointer) {
+  var deltaX = secondPointer.x - firstPointer.x;
+  var deltaY = secondPointer.y - firstPointer.y;
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+}
+
+function getSundayStreamGestureCenter_(firstPointer, secondPointer) {
+  return {
+    x: (firstPointer.x + secondPointer.x) / 2,
+    y: (firstPointer.y + secondPointer.y) / 2,
+  };
+}
+
+function handleSundayStreamMiniPlayerMoveKeydown(event) {
+  if (
+    event.target !== event.currentTarget ||
+    !sundayStreamMiniPlayerEnabled
+  ) {
+    return;
+  }
+
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    returnToSundayLivestream();
+    return;
+  }
+
+  if (
+    ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(
+        event.key,
+    ) === -1
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl) return;
+
+  var rect = playerEl.getBoundingClientRect();
+  var step = event.shiftKey ? 40 : 16;
+  var deltaX = event.key === "ArrowLeft" ? -step :
+    (event.key === "ArrowRight" ? step : 0);
+  var deltaY = event.key === "ArrowUp" ? -step :
+    (event.key === "ArrowDown" ? step : 0);
+
+  setSundayStreamMiniPlayerPosition_(
+      rect.left + deltaX,
+      rect.top + deltaY,
+  );
+}
+
+function resizeSundayStreamMiniPlayer(direction) {
+  if (!sundayStreamMiniPlayerEnabled) return;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamMiniPlayerWidth +
+      Number(direction || 0) * SUNDAY_STREAM_MINI_WIDTH_STEP,
+  );
+  applySundayStreamMiniPlayerWidth_();
+}
+
+function beginSundayStreamMiniPlayerResize(event) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (
+    !playerEl ||
+    !sundayStreamMiniPlayerEnabled ||
+    window.innerWidth <= 640
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  cancelSundayStreamPlayerAnimation_();
+  sundayStreamResizePointerId = event.pointerId;
+  sundayStreamResizeStartX = event.clientX;
+  sundayStreamResizeStartWidth = playerEl.getBoundingClientRect().width;
+  sundayStreamResizeHandle = event.currentTarget;
+  playerEl.classList.add("is-resizing");
+
+  if (typeof sundayStreamResizeHandle.setPointerCapture === "function") {
+    sundayStreamResizeHandle.setPointerCapture(event.pointerId);
+  }
+
+  window.addEventListener("pointermove", handleSundayStreamMiniPlayerResize_);
+  window.addEventListener("pointerup", endSundayStreamMiniPlayerResize_);
+  window.addEventListener("pointercancel", endSundayStreamMiniPlayerResize_);
+}
+
+function handleSundayStreamMiniPlayerResize_(event) {
+  if (event.pointerId !== sundayStreamResizePointerId) return;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamResizeStartWidth +
+      sundayStreamResizeStartX -
+      event.clientX,
+  );
+  applySundayStreamMiniPlayerWidth_();
+}
+
+function endSundayStreamMiniPlayerResize_(event) {
+  if (
+    event &&
+    sundayStreamResizePointerId !== null &&
+    event.pointerId !== sundayStreamResizePointerId
+  ) {
+    return;
+  }
+
+  stopSundayStreamMiniPlayerResize_();
+}
+
+function stopSundayStreamMiniPlayerResize_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+
+  if (
+    sundayStreamResizeHandle &&
+    sundayStreamResizePointerId !== null &&
+    typeof sundayStreamResizeHandle.releasePointerCapture === "function"
+  ) {
+    try {
+      sundayStreamResizeHandle.releasePointerCapture(
+          sundayStreamResizePointerId,
+      );
+    } catch (error) {
+    }
+  }
+
+  window.removeEventListener("pointermove", handleSundayStreamMiniPlayerResize_);
+  window.removeEventListener("pointerup", endSundayStreamMiniPlayerResize_);
+  window.removeEventListener("pointercancel", endSundayStreamMiniPlayerResize_);
+
+  if (playerEl) {
+    playerEl.classList.remove("is-resizing");
+  }
+
+  sundayStreamResizePointerId = null;
+  sundayStreamResizeStartX = 0;
+  sundayStreamResizeStartWidth = 0;
+  sundayStreamResizeHandle = null;
+}
+
+function handleSundayStreamMiniPlayerResizeKeydown(event) {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+
+  event.preventDefault();
+  resizeSundayStreamMiniPlayer(event.key === "ArrowLeft" ? 1 : -1);
+}
+
+function getSundayStreamMiniPlayerDefaultWidth_() {
+  if (isSundayStreamMiniMobileViewport_()) {
+    return clampSundayStreamMiniPlayerWidth_(
+        SUNDAY_STREAM_MINI_MOBILE_DEFAULT_WIDTH,
+    );
+  }
+
+  return SUNDAY_STREAM_MINI_DEFAULT_WIDTH;
+}
+
+function isSundayStreamMiniMobileViewport_() {
+  return (window.innerWidth || 0) <=
+    SUNDAY_STREAM_MINI_MOBILE_BREAKPOINT;
+}
+
+function getSundayStreamMiniPlayerMinimumWidth_() {
+  if (!isSundayStreamMiniMobileViewport_()) {
+    return SUNDAY_STREAM_MINI_MIN_WIDTH;
+  }
+
+  var viewportWidth = window.innerWidth ||
+    SUNDAY_STREAM_MINI_MOBILE_DEFAULT_WIDTH + 28;
+
+  return Math.min(
+      SUNDAY_STREAM_MINI_MOBILE_MIN_WIDTH,
+      Math.max(160, viewportWidth - 28),
+  );
+}
+
+function getSundayStreamMiniPlayerMaximumWidth_() {
+  var viewportWidth = window.innerWidth || SUNDAY_STREAM_MINI_MAX_WIDTH;
+  var minimumWidth = getSundayStreamMiniPlayerMinimumWidth_();
+  var viewportMargin = isSundayStreamMiniMobileViewport_() ? 28 : 40;
+  var maximumWidth = viewportWidth - viewportMargin;
+
+  if (!isSundayStreamMiniMobileViewport_()) {
+    maximumWidth = Math.min(SUNDAY_STREAM_MINI_MAX_WIDTH, maximumWidth);
+  }
+
+  return Math.max(minimumWidth, maximumWidth);
+}
+
+function clampSundayStreamMiniPlayerWidth_(width) {
+  var minimumWidth = getSundayStreamMiniPlayerMinimumWidth_();
+  var maximumWidth = getSundayStreamMiniPlayerMaximumWidth_();
+
+  return Math.max(
+      minimumWidth,
+      Math.min(maximumWidth, Math.round(Number(width) || 0)),
+  );
+}
+
+function setSundayStreamMiniPlayerPosition_(left, top) {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl || !sundayStreamMiniPlayerEnabled) return;
+
+  var rect = playerEl.getBoundingClientRect();
+  var viewportWidth = window.innerWidth || rect.right;
+  var viewportHeight = window.innerHeight || rect.bottom;
+  var edge = 8;
+  var maximumLeft = Math.max(edge, viewportWidth - rect.width - edge);
+  var maximumTop = Math.max(edge, viewportHeight - rect.height - edge);
+  var resolvedLeft = Math.max(edge, Math.min(maximumLeft, Number(left) || 0));
+  var resolvedTop = Math.max(edge, Math.min(maximumTop, Number(top) || 0));
+
+  sundayStreamMiniPlayerPosition = {
+    left: resolvedLeft,
+    top: resolvedTop,
+  };
+  playerEl.classList.add("has-custom-position");
+  playerEl.style.left = resolvedLeft + "px";
+  playerEl.style.top = resolvedTop + "px";
+  playerEl.style.right = "auto";
+  playerEl.style.bottom = "auto";
+}
+
+function constrainSundayStreamMiniPlayerPosition_() {
+  if (!sundayStreamMiniPlayerPosition) return;
+
+  setSundayStreamMiniPlayerPosition_(
+      sundayStreamMiniPlayerPosition.left,
+      sundayStreamMiniPlayerPosition.top,
+  );
+}
+
+function resetSundayStreamMiniPlayerPosition_(playerEl) {
+  var resolvedPlayerEl = playerEl ||
+    document.querySelector("[data-sunday-stream-player]");
+
+  sundayStreamMiniPlayerPosition = null;
+  if (!resolvedPlayerEl) return;
+
+  resolvedPlayerEl.classList.remove("has-custom-position");
+  resolvedPlayerEl.style.removeProperty("left");
+  resolvedPlayerEl.style.removeProperty("top");
+  resolvedPlayerEl.style.removeProperty("right");
+  resolvedPlayerEl.style.removeProperty("bottom");
+}
+
+function handleSundayStreamMiniViewportChange_() {
+  if (!sundayStreamMiniPlayerEnabled) return;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamMiniPlayerWidth,
+  );
+  applySundayStreamMiniPlayerWidth_();
+  constrainSundayStreamMiniPlayerPosition_();
+}
+
+function applySundayStreamMiniPlayerWidth_() {
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  if (!playerEl) return;
+
+  sundayStreamMiniPlayerWidth = clampSundayStreamMiniPlayerWidth_(
+      sundayStreamMiniPlayerWidth,
+  );
+  playerEl.style.setProperty(
+      "--sunday-stream-mini-width",
+      sundayStreamMiniPlayerWidth + "px",
+  );
+
+  constrainSundayStreamMiniPlayerPosition_();
+}
+
+function syncSundayStreamMiniPlayer_() {
+  var cardEl = document.getElementById("live");
+  var playerEl = document.querySelector("[data-sunday-stream-player]");
+  var stageEl = document.querySelector("[data-sunday-stream-stage]");
+  var toggleEl = document.querySelector(".sunday-stream-mini-toggle");
+  var labelEl = document.querySelector("[data-sunday-stream-toggle-label]");
+  var statusEl = document.querySelector("[data-sunday-stream-status]");
+  var shouldFloat = sundayStreamMiniPlayerEnabled;
+
+  if (cardEl) {
+    cardEl.classList.toggle("is-mini-player-active", shouldFloat);
+  }
+
+  if (playerEl) {
+    if (!shouldFloat) {
+      stopSundayStreamMiniPlayerGesture_();
+      resetSundayStreamMiniPlayerPosition_(playerEl);
+    }
+    playerEl.classList.toggle("is-floating", shouldFloat);
+  }
+
+  if (stageEl) {
+    stageEl.classList.toggle("has-floating-player", shouldFloat);
+  }
+
+  if (document.body) {
+    document.body.classList.toggle("sunday-stream-mini-active", shouldFloat);
+  }
+
+  if (toggleEl) {
+    toggleEl.classList.toggle("is-enabled", sundayStreamMiniPlayerEnabled);
+    toggleEl.setAttribute(
+        "aria-pressed",
+        sundayStreamMiniPlayerEnabled ? "true" : "false",
+    );
+  }
+
+  if (labelEl) {
+    labelEl.textContent = sundayStreamMiniPlayerEnabled ?
+      "Return Player" :
+      "Keep Watching";
+  }
+
+  if (statusEl) {
+    statusEl.textContent = sundayStreamMiniPlayerEnabled ?
+      "The mini player is active. Keep browsing while you watch." :
+      "";
+  }
+
+  applySundayStreamMiniPlayerWidth_();
 }
 
 function renderSundayScriptureCard(sunday, sundaySettings) {

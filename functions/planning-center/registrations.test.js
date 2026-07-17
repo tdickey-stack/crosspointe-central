@@ -128,8 +128,9 @@ function buildPayload() {
         type: "SignupLocation",
         id: "signup-location-1",
         attributes: {
-          name: "Falls Creek",
-          full_formatted_address: "Davis, Oklahoma",
+          name: "CrossPointe Church",
+          subpremise: "Event Hall",
+          formatted_address: "2601 24th Ave SE\nNorman, OK 73071",
         },
       },
       {
@@ -152,13 +153,19 @@ function buildPayload() {
 test("returns only open Central-category signups", () => {
   const signups = getCentralRegistrationSignups(buildPayload(), {
     categoryName: "Central",
+    now: "2026-07-01T12:00:00Z",
   });
 
   assert.equal(signups.length, 1);
   assert.equal(signups[0].id, "signup-1");
   assert.equal(signups[0].title, "Student Camp");
   assert.equal(signups[0].description, "Join us for camp.");
-  assert.equal(signups[0].location, "Falls Creek");
+  assert.equal(signups[0].location, "Event Hall");
+  assert.equal(signups[0].venue, "CrossPointe Church");
+  assert.equal(
+      signups[0].address,
+      "2601 24th Ave SE\nNorman, OK 73071",
+  );
   assert.equal(signups[0].price_label, "Free–$125");
   assert.equal(signups[0].status, "waitlist");
   assert.equal(signups[0].status_label, "Waitlist available");
@@ -172,23 +179,37 @@ test("never exposes attendee or person resources", () => {
   assert.doesNotMatch(output, /Private Attendee/);
 });
 
-test("rejects closed, archived, and unsafe-url signups", () => {
+test("shows closing-soon and closed states until the event ends", () => {
+  const closingSoonPayload = buildPayload();
+  closingSoonPayload.data[0].attributes.at_maximum_capacity = false;
+  const closingSoon = getCentralRegistrationSignups(closingSoonPayload, {
+    now: "2026-07-26T12:00:00Z",
+  });
+
+  assert.equal(closingSoon[0].status, "closing-soon");
+  assert.equal(closingSoon[0].status_label, "Registration closing soon");
+
+  const closed = getCentralRegistrationSignups(buildPayload(), {
+    now: "2026-08-02T12:00:00Z",
+  });
+
+  assert.equal(closed[0].status, "closed");
+  assert.equal(closed[0].status_label, "Registration closed");
+
+  const eventEnded = getCentralRegistrationSignups(buildPayload(), {
+    now: "2026-08-12T18:00:01Z",
+  });
+
+  assert.deepEqual(eventEnded, []);
+});
+
+test("rejects archived and unsafe-url signups", () => {
   const payload = buildPayload();
   const centralCategory = {
     categories: {data: [{type: "Category", id: "category-central"}]},
   };
 
   payload.data = [
-    {
-      type: "Signup",
-      id: "closed",
-      attributes: {
-        name: "Closed",
-        new_registration_url: "https://example.com/closed",
-        closed: true,
-      },
-      relationships: centralCategory,
-    },
     {
       type: "Signup",
       id: "archived",
@@ -211,5 +232,7 @@ test("rejects closed, archived, and unsafe-url signups", () => {
     },
   ];
 
-  assert.deepEqual(getCentralRegistrationSignups(payload), []);
+  assert.deepEqual(getCentralRegistrationSignups(payload, {
+    now: "2026-07-01T12:00:00Z",
+  }), []);
 });

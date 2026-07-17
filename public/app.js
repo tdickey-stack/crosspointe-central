@@ -2941,73 +2941,61 @@ function renderEvents(items) {
 
 function renderRegistrations(items) {
   if (!items || !items.length) return "";
+  var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
+      currentCentralData,
+  );
 
   return section(
       "Register for an Event",
       "Save Your Spot",
-      [
-        "<div class=\"registration-section-note\">",
-          "<strong>Central stays open while you register.</strong>",
-          "<span>Your registration opens securely in Church Center in a new ",
-            "tab. Central does not collect or store your registration ",
-            "information.</span>",
-        "</div>",
-        renderExpandableGroup({
-          id: "registrations-grid",
-          items: items,
-          containerClass: "grid three registrations-grid",
-          desktopLimit: 6,
-          moreLabel: "See More Registrations",
-          lessLabel: "See Fewer Registrations",
-          renderItem: renderRegistrationCard_,
-        }),
-      ].join(""),
+      renderExpandableGroup({
+        id: "registrations-grid",
+        items: items,
+        containerClass: "grid three registrations-grid",
+        desktopLimit: 6,
+        moreLabel: "See More Registrations",
+        lessLabel: "See Fewer Registrations",
+        renderItem: function(item) {
+          return renderRegistrationCard_(item, calendarIntegrationsEnabled);
+        },
+      }),
       "registrations",
   );
 }
 
-function renderRegistrationCard_(item) {
+function renderRegistrationCard_(item, calendarIntegrationsEnabled) {
   var registrationUrl = String(item && item.registration_url || "").trim();
   if (!/^https?:\/\//i.test(registrationUrl)) return "";
 
-  var imageUrl = String(item.image_url || "").trim();
-  var hasImage = /^https:\/\//i.test(imageUrl);
-  var status = String(item.status || "open").trim().toLowerCase();
-  var statusClass = status === "waitlist" ? " is-waitlist" :
-    status === "full" ? " is-full" : " is-open";
-  var schedule = [item.date, item.time].filter(Boolean).join(" • ");
-  var meta = [schedule, item.location, item.price_label]
-      .filter(Boolean)
-      .join(" • ");
+  return card({
+    title: item.title,
+    meta: [item.date, item.time, item.location].filter(Boolean).join(" • "),
+    description: "",
+    preHeadingHtml: renderRegistrationStatus_(item),
+    buttonHtml: renderEventDetailsButton_(item),
+    bottomButtonText: calendarIntegrationsEnabled ? "Add to Calendar" : "",
+    bottomButtonUrl: calendarIntegrationsEnabled ? item.calendar_url : "",
+    calendarFileUrl: item.calendar_file_url,
+    extraClass: "event-card registration-event-card",
+  });
+}
+
+function renderRegistrationStatus_(item) {
+  var status = String(item && item.status || "open").trim().toLowerCase();
+  var allowedStatuses = [
+    "open",
+    "closing-soon",
+    "closed",
+    "waitlist",
+    "full",
+  ];
+
+  if (allowedStatuses.indexOf(status) === -1) status = "open";
 
   return [
-    "<article class=\"card registration-card\">",
-      hasImage ? [
-        "<div class=\"registration-card-image\">",
-          "<img src=\"", escapeAttr(imageUrl),
-            "\" alt=\"\" loading=\"lazy\">",
-        "</div>",
-      ].join("") : "",
-      "<div class=\"registration-card-body\">",
-        "<div class=\"registration-status", statusClass, "\">",
-          escapeHtml(item.status_label || "Registration open"),
-        "</div>",
-        meta ? "<div class=\"meta\">" + escapeHtml(meta) + "</div>" : "",
-        "<h3>", escapeHtml(item.title || "Event Registration"), "</h3>",
-        item.description ?
-          "<p>" + escapeHtml(item.description) + "</p>" : "",
-        item.close_date ?
-          "<div class=\"registration-close-date\">Registration closes " +
-            escapeHtml(item.close_date) + "</div>" : "",
-        "<a class=\"btn btn-primary registration-cta\" ",
-          buildLinkAttrs_(registrationUrl), ">",
-          escapeHtml(item.button_text || "Register in Church Center"),
-        "</a>",
-        "<div class=\"registration-handoff-note\">",
-          "Opens Church Center in a new tab",
-        "</div>",
-      "</div>",
-    "</article>",
+    "<div class=\"registration-status is-", escapeAttr(status), "\">",
+      escapeHtml(item && item.status_label || "Registration open"),
+    "</div>",
   ].join("");
 }
 
@@ -3051,6 +3039,14 @@ function registerEventDetailsItem_(item) {
     imageUrl: String(item.image_url || "").trim(),
     calendarUrl: String(item.calendar_url || "").trim(),
     calendarFileUrl: String(item.calendar_file_url || "").trim(),
+    isRegistrationEvent: item.source === "Planning Center Registrations",
+    registrationStatus: String(item.status || "").trim(),
+    registrationStatusLabel: String(item.status_label || "").trim(),
+    registrationButtonText: String(
+        item.registration_button_text || "Register in Church Center",
+    ).trim(),
+    priceLabel: String(item.price_label || "").trim(),
+    closeLabel: String(item.close_label || "").trim(),
   };
 
   return key;
@@ -3079,6 +3075,13 @@ function openEventDetailsModal(eventKey) {
   var hasSafeImage = /^https?:\/\//i.test(item.imageUrl);
   var usesHeadingThumbnail = hasSafeImage && item.featured;
   var hasSafeRegistration = /^https?:\/\//i.test(item.registrationUrl);
+  var registrationFacts = item.isRegistrationEvent ? [
+    item.priceLabel ? {label: "Price", value: item.priceLabel} : null,
+    item.closeLabel ? {
+      label: "Registration closes",
+      value: item.closeLabel,
+    } : null,
+  ].filter(Boolean) : [];
   var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
       currentCentralData,
   );
@@ -3098,7 +3101,14 @@ function openEventDetailsModal(eventKey) {
           "</div>",
         ].join("") : "",
         "<div class=\"event-details-heading-copy\">",
-          "<div class=\"event-details-kicker\">CrossPointe Event</div>",
+          "<div class=\"event-details-kicker\">",
+            item.isRegistrationEvent ? "Registration Event" :
+              "CrossPointe Event",
+          "</div>",
+          item.registrationStatusLabel ? renderRegistrationStatus_({
+            status: item.registrationStatus,
+            status_label: item.registrationStatusLabel,
+          }) : "",
           "<h2 id=\"event-details-title\">", escapeHtml(item.title), "</h2>",
           item.recurrence ?
             "<p class=\"event-details-recurrence\">" +
@@ -3131,14 +3141,32 @@ function openEventDetailsModal(eventKey) {
                 item.description || item.recurrenceDetails,
             ) + "</p>" :
             "<p>More details will be posted here as they become available.</p>",
+          registrationFacts.length ? [
+            "<dl class=\"registration-modal-facts\">",
+              registrationFacts.map(function(fact) {
+                return [
+                  "<div>",
+                    "<dt>", escapeHtml(fact.label), "</dt>",
+                    "<dd>", escapeHtml(fact.value), "</dd>",
+                  "</div>",
+                ].join("");
+              }).join(""),
+            "</dl>",
+          ].join("") : "",
         "</section>",
         (item.location || item.venue || item.address) ? [
           "<aside class=\"event-details-location\" aria-labelledby=\"event-details-location-title\">",
             "<div class=\"event-details-location-label\" id=\"event-details-location-title\">Location</div>",
-            item.venue ? "<strong>" + escapeHtml(item.venue) + "</strong>" : "",
-            item.location && item.location !== item.venue ?
-              "<span>" + escapeHtml(item.location) + "</span>" :
-              "",
+            item.isRegistrationEvent && item.location ?
+              "<strong>" + escapeHtml(item.location) + "</strong>" :
+              item.venue ?
+                "<strong>" + escapeHtml(item.venue) + "</strong>" : "",
+            item.isRegistrationEvent && item.venue &&
+              item.venue !== item.location ?
+              "<span>" + escapeHtml(item.venue) + "</span>" :
+              !item.isRegistrationEvent && item.location &&
+                item.location !== item.venue ?
+                "<span>" + escapeHtml(item.location) + "</span>" : "",
             item.address ? "<span>" + escapeHtml(item.address) + "</span>" : "",
             mapUrl ? [
               "<div class=\"event-details-map-actions\">",
@@ -3151,7 +3179,17 @@ function openEventDetailsModal(eventKey) {
       "</div>",
       "<div class=\"event-details-actions\">",
         hasSafeRegistration && !item.featured ?
-          button("Register", item.registrationUrl, "btn-primary") :
+          item.isRegistrationEvent ? [
+            "<div class=\"registration-modal-action\">",
+              button(
+                  item.registrationButtonText,
+                  item.registrationUrl,
+                  "btn-primary",
+              ),
+              "<span>Opens Church Center in a new tab</span>",
+            "</div>",
+          ].join("") :
+            button("Register", item.registrationUrl, "btn-primary") :
           "",
         calendarIntegrationsEnabled ? calendarButton_(
             "Add to Calendar",
@@ -3954,6 +3992,7 @@ function card(options) {
   var hasPrimaryButton = Boolean(primaryButtonHtml);
   var hasBottomButton = options.bottomButtonText && options.bottomButtonUrl;
   var heading = [
+    options.preHeadingHtml || "",
     options.meta ?
       "<div class=\"meta\">" + escapeHtml(options.meta) + "</div>" :
       "",

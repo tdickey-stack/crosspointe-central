@@ -1114,52 +1114,9 @@ h1 {
   flex-direction: column;
 }
 
-.registration-section-note {
-  display: grid;
-  gap: 4px;
-  margin: 0 0 16px;
-  padding: 15px 17px;
-  border: 1px solid color-mix(in srgb, var(--cp-red) 24%, var(--cp-border));
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--cp-red) 5%, var(--cp-surface));
-  color: var(--cp-muted);
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-
-.registration-section-note strong {
-  color: var(--cp-text);
-}
-
-.registration-card {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0;
-}
-
-.registration-card-image {
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  background: var(--cp-surface-soft);
-}
-
-.registration-card-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.registration-card-body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 22px;
-}
-
 .registration-status {
   display: inline-flex;
+  align-self: flex-start;
   align-items: center;
   min-height: 26px;
   margin-bottom: 12px;
@@ -1178,9 +1135,15 @@ h1 {
   color: #147237;
 }
 
+.registration-status.is-closing-soon,
 .registration-status.is-waitlist {
   background: color-mix(in srgb, #b46b00 13%, var(--cp-surface));
   color: #9a5c00;
+}
+
+.registration-status.is-closed {
+  background: color-mix(in srgb, var(--cp-red) 13%, var(--cp-surface));
+  color: #b42318;
 }
 
 .registration-status.is-full {
@@ -1191,34 +1154,13 @@ h1 {
   color: #72d596;
 }
 
+[data-theme="dark"] .registration-status.is-closing-soon,
 [data-theme="dark"] .registration-status.is-waitlist {
   color: #f0b85f;
 }
 
-.registration-card-body p {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-}
-
-.registration-close-date {
-  margin-top: 12px;
-  color: var(--cp-muted);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.card.registration-card .registration-cta {
-  margin-top: auto;
-}
-
-.registration-handoff-note {
-  width: 100%;
-  margin-top: 16px;
-  color: var(--cp-muted);
-  font-size: 0.72rem;
-  text-align: center;
+[data-theme="dark"] .registration-status.is-closed {
+  color: #ff8a80;
 }
 
 .event-card .card-actions {
@@ -1584,6 +1526,47 @@ h1 {
 .event-details-actions .event-calendar-menu {
   right: auto;
   left: 0;
+}
+
+.registration-modal-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 22px 0 0;
+}
+
+.registration-modal-facts > div {
+  min-width: 150px;
+  padding: 12px 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: 14px;
+  background: var(--cp-surface-soft);
+}
+
+.registration-modal-facts dt {
+  color: var(--cp-muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.registration-modal-facts dd {
+  margin: 4px 0 0;
+  color: var(--cp-text-strong);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.registration-modal-action {
+  display: grid;
+  gap: 6px;
+}
+
+.registration-modal-action > span {
+  color: var(--cp-muted);
+  font-size: 0.7rem;
+  text-align: center;
 }
 
 @media screen and (max-width: 720px) {
@@ -2519,14 +2502,6 @@ body.modal-open {
   .card {
     padding: 18px;
     border-radius: 18px;
-  }
-
-  .registration-card {
-    padding: 0;
-  }
-
-  .registration-card-body {
-    padding: 18px;
   }
 
   .card.featured {

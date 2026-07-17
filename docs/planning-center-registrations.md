@@ -60,16 +60,22 @@ The Registrations module is enabled by default on the standard homepage and is
 available, but disabled by default, in Sunday Mode. Admins can reorder or
 disable it with the existing Hub module editor.
 
-Each signup card can show:
+Registration signups use the same compact card pattern as other Central events.
+The card shows the date, time, `SignupLocation.subpremise` room label, a Learn
+More button, and the existing Google/Apple/Outlook Add to Calendar menu.
+
+The Learn More modal can show:
 
 - open, waitlist, or full status;
-- date, time, and public location;
+- date, time, room, venue, and public address;
 - free or paid price range;
 - registration close date; and
-- a direct Church Center registration link.
+- a direct Church Center registration link with an explicit new-tab note.
 
-The section explicitly tells users that Church Center opens in a new tab and
-that Central does not collect or store their registration information.
+Seven days before `close_at`, an otherwise open signup changes to
+`Registration closing soon`. After `close_at`, it remains visible as
+`Registration closed` until its final signup time ends. After the event ends,
+Central removes the signup automatically.
 
 ## Verification
 

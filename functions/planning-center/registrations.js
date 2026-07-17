@@ -29,6 +29,8 @@ export const CENTRAL_REGISTRATION_SIGNUP_FIELDS = [
  */
 export function getCentralRegistrationSignups(payload, options = {}) {
   const categoryName = String(options.categoryName || "Central").trim();
+  const requestedNow = new Date(options.now || Date.now());
+  const now = Number.isNaN(requestedNow.getTime()) ? new Date() : requestedNow;
   if (!categoryName) return [];
 
   const included = payload && Array.isArray(payload.included) ?
@@ -46,6 +48,7 @@ export function getCentralRegistrationSignups(payload, options = {}) {
           selectionTypeMap,
           signupTimeMap,
           signupLocationMap,
+          now,
         });
       })
       .filter(Boolean)
@@ -92,8 +95,6 @@ function buildCentralRegistrationSignup_(signup, context) {
 
   if (
     attrs.archived === true ||
-    attrs.closed === true ||
-    attrs.open === false ||
     !registrationUrl ||
     !categoryNames.includes(context.categoryName)
   ) {
@@ -115,9 +116,38 @@ function buildCentralRegistrationSignup_(signup, context) {
       "signup_location",
       context.signupLocationMap,
   );
+  const startsAt = getIncludedDateAttribute_(nextSignupTime, "starts_at");
+  const endsAt = getIncludedDateAttribute_(nextSignupTime, "ends_at");
+  const allDay = Boolean(
+      nextSignupTime && nextSignupTime.attributes &&
+      nextSignupTime.attributes.all_day,
+  );
+  const openAt = normalizeIsoDate_(attrs.open_at);
+  const closeAt = normalizeIsoDate_(attrs.close_at);
+  const location = getPublicLocationDetails_(signupLocation);
+  const eventEnd = getEventEndDate_(startsAt, endsAt, allDay);
+  const openDate = new Date(openAt || "");
+  const closeDate = new Date(closeAt || "");
+  const hasOpenDate = !Number.isNaN(openDate.getTime());
+  const hasCloseDate = !Number.isNaN(closeDate.getTime());
+
+  if (eventEnd && eventEnd.getTime() <= context.now.getTime()) return null;
+  if (attrs.open === false && hasOpenDate &&
+    openDate.getTime() > context.now.getTime()) {
+    return null;
+  }
+
   const isAtCapacity = attrs.at_maximum_capacity === true;
   const offersWaitlist = selectionTypes.some((selectionType) => {
     return selectionType.waitlist === true;
+  });
+  const status = getRegistrationStatus_({
+    now: context.now,
+    closeDate,
+    hasCloseDate,
+    closed: attrs.closed === true || attrs.open === false,
+    isAtCapacity,
+    offersWaitlist,
   });
 
   return {
@@ -126,23 +156,68 @@ function buildCentralRegistrationSignup_(signup, context) {
     description: htmlToPlainText_(attrs.description),
     image_url: getSafeHttpUrl_(attrs.logo_url),
     registration_url: registrationUrl,
-    open_at: normalizeIsoDate_(attrs.open_at),
-    close_at: normalizeIsoDate_(attrs.close_at),
-    starts_at: getIncludedDateAttribute_(nextSignupTime, "starts_at"),
-    ends_at: getIncludedDateAttribute_(nextSignupTime, "ends_at"),
-    all_day: Boolean(
-        nextSignupTime && nextSignupTime.attributes &&
-        nextSignupTime.attributes.all_day,
-    ),
-    location: getPublicLocation_(signupLocation),
+    open_at: openAt,
+    close_at: closeAt,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    all_day: allDay,
+    location: location.room,
+    venue: location.venue,
+    address: location.address,
     price_label: getPriceLabel_(selectionTypes),
-    status: isAtCapacity ? (offersWaitlist ? "waitlist" : "full") : "open",
-    status_label: isAtCapacity ?
-      (offersWaitlist ? "Waitlist available" : "Registration full") :
-      "Registration open",
+    status: status.id,
+    status_label: status.label,
     selection_types: selectionTypes,
     source: "Planning Center Registrations",
   };
+}
+
+/**
+ * Determines the public registration state shown by Central.
+ *
+ * @param {Object} context Status inputs.
+ * @return {{id: string, label: string}} Public status.
+ */
+function getRegistrationStatus_(context) {
+  if (context.closed ||
+    (context.hasCloseDate &&
+      context.closeDate.getTime() <= context.now.getTime())) {
+    return {id: "closed", label: "Registration closed"};
+  }
+
+  if (context.isAtCapacity) {
+    return context.offersWaitlist ?
+      {id: "waitlist", label: "Waitlist available"} :
+      {id: "full", label: "Registration full"};
+  }
+
+  const closingSoonMs = 7 * 24 * 60 * 60 * 1000;
+  if (context.hasCloseDate &&
+    context.closeDate.getTime() - context.now.getTime() <= closingSoonMs) {
+    return {id: "closing-soon", label: "Registration closing soon"};
+  }
+
+  return {id: "open", label: "Registration open"};
+}
+
+/**
+ * Resolves the moment after which an event should leave Central.
+ *
+ * @param {string} startsAt Event start.
+ * @param {string} endsAt Event end.
+ * @param {boolean} allDay Whether this is an all-day event.
+ * @return {Date|null} Event end or null without a usable event time.
+ */
+function getEventEndDate_(startsAt, endsAt, allDay) {
+  const endDate = new Date(endsAt || "");
+  if (!Number.isNaN(endDate.getTime())) return endDate;
+
+  const startDate = new Date(startsAt || "");
+  if (Number.isNaN(startDate.getTime())) return null;
+
+  return new Date(
+      startDate.getTime() + (allDay ? 24 : 1) * 60 * 60 * 1000,
+  );
 }
 
 /**
@@ -264,19 +339,25 @@ function normalizeIsoDate_(value) {
 }
 
 /**
- * Selects the public signup location label.
+ * Selects the public room, venue, and address for a signup.
  *
  * @param {Object|null} signupLocation SignupLocation resource.
- * @return {string} Public location label.
+ * @return {{room: string, venue: string, address: string}} Location details.
  */
-function getPublicLocation_(signupLocation) {
+function getPublicLocationDetails_(signupLocation) {
   const attrs = signupLocation && signupLocation.attributes || {};
-  return String(
-      attrs.name ||
-      attrs.full_formatted_address ||
-      attrs.formatted_address ||
-      "",
+  const venue = String(attrs.name || "").trim();
+  const room = String(
+      attrs.subpremise || venue || attrs.full_formatted_address || "",
   ).trim();
+
+  return {
+    room,
+    venue,
+    address: String(
+        attrs.formatted_address || attrs.full_formatted_address || "",
+    ).trim(),
+  };
 }
 
 /**

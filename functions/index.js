@@ -3821,7 +3821,7 @@ async function getCentralRegistrationSignups_() {
     "price_currency_symbol,price_formatted,publicly_available,waitlist" +
     "&fields[SignupTime]=all_day,ends_at,starts_at" +
     "&fields[SignupLocation]=formatted_address,full_formatted_address," +
-    "location_type,name,url" +
+    "location_type,name,subpremise,url" +
     "&per_page=100";
   const data = await fetchPcoJson_(url);
 
@@ -3829,10 +3829,26 @@ async function getCentralRegistrationSignups_() {
     categoryName: PCO_CENTRAL_REGISTRATION_CATEGORY_NAME,
   }).map((signup) => {
     const startsDate = new Date(signup.starts_at || "");
+    const endsDate = new Date(signup.ends_at || "");
     const closeDate = new Date(signup.close_at || "");
     const hasStartDate = !Number.isNaN(startsDate.getTime());
+    const hasEndDate = !Number.isNaN(endsDate.getTime());
     const hasCloseDate = !Number.isNaN(closeDate.getTime());
     const status = String(signup.status || "open");
+    const closeLabel = hasCloseDate ?
+      formatDate_(closeDate, PCO_TIMEZONE) + " at " +
+        formatTime_(closeDate, PCO_TIMEZONE) : "";
+    const calendarLocation = [
+      signup.location,
+      signup.venue,
+      signup.address,
+    ].filter((value, index, values) => {
+      return value && values.indexOf(value) === index;
+    }).join(", ");
+    const calendarDescription = [
+      signup.description,
+      closeLabel ? "Registration closes " + closeLabel + "." : "",
+    ].filter(Boolean).join("\n\n");
 
     return {
       id: signup.id,
@@ -3843,17 +3859,37 @@ async function getCentralRegistrationSignups_() {
       time: hasStartDate && !signup.all_day ?
         formatTimeRange_(startsDate, signup.ends_at, PCO_TIMEZONE) : "",
       location: signup.location,
+      venue: signup.venue,
+      address: signup.address,
       image_url: signup.image_url,
       registration_url: signup.registration_url,
       price_label: signup.price_label,
       status: status,
       status_label: signup.status_label,
       close_date: hasCloseDate ? formatDate_(closeDate, PCO_TIMEZONE) : "",
-      button_text: status === "waitlist" ?
+      close_label: closeLabel,
+      button_text: "Learn More",
+      registration_button_text: status === "waitlist" ?
         "Join Waitlist in Church Center" :
-        status === "full" ?
+        status === "full" || status === "closed" ?
           "View in Church Center" :
           "Register in Church Center",
+      calendar_url: hasStartDate ? buildGoogleCalendarUrl_({
+        title: signup.title,
+        startsAt: startsDate,
+        endsAt: hasEndDate ? endsDate : signup.ends_at,
+        location: calendarLocation,
+        description: calendarDescription,
+        url: signup.registration_url,
+      }) : "",
+      calendar_file_url: hasStartDate ? buildCalendarFileUrl_({
+        title: signup.title,
+        startsAt: startsDate,
+        endsAt: hasEndDate ? endsDate : signup.ends_at,
+        location: calendarLocation,
+        description: calendarDescription,
+        url: signup.registration_url,
+      }) : "",
       source: signup.source,
     };
   });

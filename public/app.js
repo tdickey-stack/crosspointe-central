@@ -28,7 +28,7 @@ var CENTRAL_REFRESH_MS = 1200000;
 var CENTRAL_API_URL = "/api/central-data";
 var CENTRAL_HOSTED_WHATS_NEW_URL = "/content/whats-new.json";
 var SERVE_NEED_INTEREST_ENDPOINT = "/api/serve-needs/share-interest";
-var CENTRAL_CACHE_KEY = "central-data-cache-v3";
+var CENTRAL_CACHE_KEY = "central-data-cache-v4";
 var CENTRAL_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 var EXPANDABLE_FLOW_DURATION_MS = 1000;
 var CENTRAL_WHATS_NEW_SEEN_KEY = "central-whats-new-seen-v1";
@@ -43,6 +43,7 @@ var HOMEPAGE_MODULE_DEFINITIONS = [
   {id: "today", label: "Today", defaultEnabled: true},
   {id: "sunday", label: "This Sunday", defaultEnabled: true},
   {id: "events", label: "Events", defaultEnabled: true},
+  {id: "registrations", label: "Registrations", defaultEnabled: true},
   {id: "campaigns", label: "Campaigns", defaultEnabled: true},
   {id: "nextSteps", label: "Next Steps", defaultEnabled: true},
   {id: "serveNeeds", label: "Serve Needs", defaultEnabled: true},
@@ -56,6 +57,7 @@ var SUNDAY_MODE_MODULE_DEFINITIONS = [
   {id: "scriptureNotes", label: "Scripture + Notes", defaultEnabled: true},
   {id: "today", label: "Today", defaultEnabled: true},
   {id: "events", label: "Events", defaultEnabled: true},
+  {id: "registrations", label: "Registrations", defaultEnabled: false},
   {id: "campaigns", label: "Campaigns", defaultEnabled: false},
   {id: "nextSteps", label: "Next Steps", defaultEnabled: false},
   {id: "serveNeeds", label: "Serve Needs", defaultEnabled: false},
@@ -1103,6 +1105,10 @@ function renderHomepageModuleById_(moduleId, data) {
     return renderEvents(data.events || []);
   }
 
+  if (moduleId === "registrations") {
+    return renderRegistrations(data.registrations || []);
+  }
+
   if (moduleId === "campaigns") {
     return renderCampaigns(data.campaigns || []);
   }
@@ -1220,6 +1226,10 @@ function renderSundayModeModuleById_(moduleId, data, quickLinks, services, servi
 
   if (moduleId === "events") {
     return renderEvents(data.events || []);
+  }
+
+  if (moduleId === "registrations") {
+    return renderRegistrations(data.registrations || []);
   }
 
   if (moduleId === "campaigns") {
@@ -2927,6 +2937,78 @@ function renderEvents(items) {
       });
     },
   }), "upcoming-events");
+}
+
+function renderRegistrations(items) {
+  if (!items || !items.length) return "";
+
+  return section(
+      "Register for an Event",
+      "Save Your Spot",
+      [
+        "<div class=\"registration-section-note\">",
+          "<strong>Central stays open while you register.</strong>",
+          "<span>Your registration opens securely in Church Center in a new ",
+            "tab. Central does not collect or store your registration ",
+            "information.</span>",
+        "</div>",
+        renderExpandableGroup({
+          id: "registrations-grid",
+          items: items,
+          containerClass: "grid three registrations-grid",
+          desktopLimit: 6,
+          moreLabel: "See More Registrations",
+          lessLabel: "See Fewer Registrations",
+          renderItem: renderRegistrationCard_,
+        }),
+      ].join(""),
+      "registrations",
+  );
+}
+
+function renderRegistrationCard_(item) {
+  var registrationUrl = String(item && item.registration_url || "").trim();
+  if (!/^https?:\/\//i.test(registrationUrl)) return "";
+
+  var imageUrl = String(item.image_url || "").trim();
+  var hasImage = /^https:\/\//i.test(imageUrl);
+  var status = String(item.status || "open").trim().toLowerCase();
+  var statusClass = status === "waitlist" ? " is-waitlist" :
+    status === "full" ? " is-full" : " is-open";
+  var schedule = [item.date, item.time].filter(Boolean).join(" • ");
+  var meta = [schedule, item.location, item.price_label]
+      .filter(Boolean)
+      .join(" • ");
+
+  return [
+    "<article class=\"card registration-card\">",
+      hasImage ? [
+        "<div class=\"registration-card-image\">",
+          "<img src=\"", escapeAttr(imageUrl),
+            "\" alt=\"\" loading=\"lazy\">",
+        "</div>",
+      ].join("") : "",
+      "<div class=\"registration-card-body\">",
+        "<div class=\"registration-status", statusClass, "\">",
+          escapeHtml(item.status_label || "Registration open"),
+        "</div>",
+        meta ? "<div class=\"meta\">" + escapeHtml(meta) + "</div>" : "",
+        "<h3>", escapeHtml(item.title || "Event Registration"), "</h3>",
+        item.description ?
+          "<p>" + escapeHtml(item.description) + "</p>" : "",
+        item.close_date ?
+          "<div class=\"registration-close-date\">Registration closes " +
+            escapeHtml(item.close_date) + "</div>" : "",
+        "<a class=\"btn btn-primary registration-cta\" ",
+          buildLinkAttrs_(registrationUrl), ">",
+          escapeHtml(item.button_text || "Register in Church Center"),
+        "</a>",
+        "<div class=\"registration-handoff-note\">",
+          "Opens Church Center in a new tab",
+        "</div>",
+      "</div>",
+    "</article>",
+  ].join("");
 }
 
 function renderEventDetailsButton_(item) {

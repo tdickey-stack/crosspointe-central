@@ -28,6 +28,7 @@ The canonical Firestore path map, document shapes, and content/admin upsert
 flows are documented in:
 
 - `docs/backend-data-schema.md`
+- `docs/planning-center-registrations.md`
 
 First-admin setup and older editor-specific examples remain in:
 

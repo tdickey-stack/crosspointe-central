@@ -1114,6 +1114,113 @@ h1 {
   flex-direction: column;
 }
 
+.registration-section-note {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 15px 17px;
+  border: 1px solid color-mix(in srgb, var(--cp-red) 24%, var(--cp-border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--cp-red) 5%, var(--cp-surface));
+  color: var(--cp-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.registration-section-note strong {
+  color: var(--cp-text);
+}
+
+.registration-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.registration-card-image {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--cp-surface-soft);
+}
+
+.registration-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.registration-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 22px;
+}
+
+.registration-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  margin-bottom: 12px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--cp-surface-soft);
+  color: var(--cp-muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.registration-status.is-open {
+  background: color-mix(in srgb, #16803c 12%, var(--cp-surface));
+  color: #147237;
+}
+
+.registration-status.is-waitlist {
+  background: color-mix(in srgb, #b46b00 13%, var(--cp-surface));
+  color: #9a5c00;
+}
+
+.registration-status.is-full {
+  background: color-mix(in srgb, var(--cp-muted) 14%, var(--cp-surface));
+}
+
+[data-theme="dark"] .registration-status.is-open {
+  color: #72d596;
+}
+
+[data-theme="dark"] .registration-status.is-waitlist {
+  color: #f0b85f;
+}
+
+.registration-card-body p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.registration-close-date {
+  margin-top: 12px;
+  color: var(--cp-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.card.registration-card .registration-cta {
+  margin-top: auto;
+}
+
+.registration-handoff-note {
+  width: 100%;
+  margin-top: 16px;
+  color: var(--cp-muted);
+  font-size: 0.72rem;
+  text-align: center;
+}
+
 .event-card .card-actions {
   display: flex;
   align-items: flex-end;
@@ -2412,6 +2519,14 @@ body.modal-open {
   .card {
     padding: 18px;
     border-radius: 18px;
+  }
+
+  .registration-card {
+    padding: 0;
+  }
+
+  .registration-card-body {
+    padding: 18px;
   }
 
   .card.featured {

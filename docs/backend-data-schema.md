@@ -100,11 +100,20 @@ have equivalent persisted draft collections.
 | `centralServeNeeds/root/interests/{submissionId}` | Public Serve Needs interest submissions and notification status |
 | `mail/{mailId}` | Legacy/optional mail-delivery status source watched by a trigger; the collection name can be changed with `CENTRAL_MAIL_COLLECTION_PATH` |
 
-Planning Center events, today's schedule, the Central Featured event, and setlists
-are fetched at runtime; they are not currently maintained as the primary
-Firestore content collections. The featured event is the next future instance
-tagged both `Central` and `Central Featured`; its description and image come
-directly from the parent Planning Center event.
+Planning Center events, today's schedule, the Central Featured event,
+Registrations signups, and setlists are fetched at runtime; they are not
+currently maintained as the primary Firestore content collections. The
+featured event is the next future instance tagged both `Central` and
+`Central Featured`; its description and image come directly from the parent
+Planning Center event.
+
+The public Registrations feed is restricted to open signups in the configured
+`PCO_CENTRAL_REGISTRATION_CATEGORY_NAME` category (default: `Central`). Central
+requests only signup configuration, public selection types, the next signup
+time, and the public signup location. It does not request or persist Planning
+Center attendee, registration, person, emergency-contact, form-answer, or
+payment resources. The final registration is completed on the hosted Church
+Center signup page.
 The repo-hosted `public/content/whats-new.json` is checked before the Firestore
 What's New fallback documents.
 

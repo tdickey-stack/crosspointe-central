@@ -1008,6 +1008,10 @@ h1 {
   box-shadow: var(--cp-shadow);
 }
 
+.hero-featured-event + .content .banner {
+  margin-top: -36px;
+}
+
 .banner h2 {
   margin: 0 0 6px;
   font-size: 1.2rem;
@@ -2372,6 +2376,10 @@ body.modal-open {
     padding: 18px;
     border-left-width: 6px;
     border-radius: 18px;
+  }
+
+  .hero-featured-event + .content .banner {
+    margin-top: -20px;
   }
 
   .section {

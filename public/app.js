@@ -905,10 +905,11 @@ function renderCentral(data) {
       s.homepage_modules,
       HOMEPAGE_MODULE_DEFINITIONS,
   );
+  var featuredEventCard = renderFeaturedEventHeroCard_(data, s);
 
   document.getElementById("app").innerHTML = [
     "<div class=\"central\">",
-      "<header class=\"hero\">",
+      "<header class=\"hero", featuredEventCard ? " hero-featured-event" : "", "\">",
         "<div class=\"wrap\">",
           "<div class=\"hero-topbar\">",
             "<div class=\"eyebrow\">",
@@ -926,11 +927,7 @@ function renderCentral(data) {
                 button(s.secondary_button_text, s.secondary_button_url, "btn-secondary"),
               "</div>",
             "</div>",
-            "<div class=\"countdown-card\">",
-              "<small>" + escapeHtml(s.countdown_label || "Next Up") + "</small>",
-              "<strong>" + escapeHtml(s.countdown_title || "Sunday Worship") + "</strong>",
-              "<p id=\"central-countdown\" data-countdown-datetime=\"" + escapeAttr(s.countdown_datetime || "") + "\">Loading countdown...</p>",
-            "</div>",
+            featuredEventCard || renderHomepageCountdownCard_(s),
           "</div>",
         "</div>",
       "</header>",
@@ -949,6 +946,60 @@ function renderCentral(data) {
   startCountdown();
   maybeShowWhatsNew_(data);
   finalizeCentralLoader_();
+}
+
+function renderHomepageCountdownCard_(settings) {
+  var s = settings || {};
+
+  return [
+    "<div class=\"countdown-card\">",
+      "<small>" + escapeHtml(s.countdown_label || "Next Up") + "</small>",
+      "<strong>" + escapeHtml(s.countdown_title || "Sunday Worship") + "</strong>",
+      "<p id=\"central-countdown\" data-countdown-datetime=\"" +
+        escapeAttr(s.countdown_datetime || "") +
+        "\">Loading countdown...</p>",
+    "</div>",
+  ].join("");
+}
+
+function renderFeaturedEventHeroCard_(data, settings) {
+  var enabled = normalizeCentralBooleanValue_(
+      settings && settings.featured_event_enabled,
+      false,
+  );
+  var item = data && data.featuredEvent ? data.featuredEvent : null;
+  var title = String(item && item.title || "").trim();
+  var imageUrl = String(item && item.image_url || "").trim();
+
+  if (!enabled || !item || !title || !/^https:\/\//i.test(imageUrl)) {
+    return "";
+  }
+
+  var eventKey = registerEventDetailsItem_(item);
+  if (!eventKey) return "";
+
+  var schedule = [item.date, item.time].filter(Boolean).join(" • ");
+  return [
+    "<article class=\"featured-event-card\" aria-labelledby=\"featured-event-title\">",
+      "<div class=\"featured-event-media\">",
+        "<img src=\"", escapeAttr(imageUrl),
+          "\" alt=\"\" loading=\"eager\" fetchpriority=\"high\">",
+      "</div>",
+      "<div class=\"featured-event-body\">",
+        "<div class=\"featured-event-copy\">",
+          "<span class=\"featured-event-badge\">Featured Event</span>",
+          "<h2 id=\"featured-event-title\">", escapeHtml(title), "</h2>",
+          schedule ?
+            "<p class=\"featured-event-schedule\">" +
+              escapeHtml(schedule) + "</p>" : "",
+        "</div>",
+        "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
+          " onclick=\"openEventDetailsModal('",
+          escapeJsString(eventKey),
+          "')\">View Event</button>",
+      "</div>",
+    "</article>",
+  ].join("");
 }
 
 function normalizeCentralModuleConfig_(sourceItems, definitions) {
@@ -2892,6 +2943,12 @@ function renderEventDetailsButton_(item) {
   ].join("");
 }
 
+function getEventModalRecurrence_(value) {
+  var recurrence = String(value || "").trim();
+  if (/^does not repeat[.!]?$/i.test(recurrence)) return "";
+  return recurrence;
+}
+
 function registerEventDetailsItem_(item) {
   if (!item) return "";
 
@@ -2905,12 +2962,10 @@ function registerEventDetailsItem_(item) {
     venue: String(item.venue || "").trim(),
     address: String(item.address || "").trim(),
     description: String(item.description || "").trim(),
-    recurrence: String(item.recurrence || "").trim(),
-    recurrenceDetails: String(item.recurrence_details || "").trim(),
+    recurrence: getEventModalRecurrence_(item.recurrence),
+    recurrenceDetails: getEventModalRecurrence_(item.recurrence_details),
+    featured: item.featured === "TRUE",
     registrationUrl: String(item.registration_url || "").trim(),
-    churchCenterUrl: String(
-        item.church_center_url || item.button_url || "",
-    ).trim(),
     imageUrl: String(item.image_url || "").trim(),
     calendarUrl: String(item.calendar_url || "").trim(),
     calendarFileUrl: String(item.calendar_file_url || "").trim(),
@@ -2940,6 +2995,7 @@ function openEventDetailsModal(eventKey) {
       encodeURIComponent(locationQuery) :
     "";
   var hasSafeImage = /^https?:\/\//i.test(item.imageUrl);
+  var usesHeadingThumbnail = hasSafeImage && item.featured;
   var hasSafeRegistration = /^https?:\/\//i.test(item.registrationUrl);
   var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
       currentCentralData,
@@ -2953,7 +3009,7 @@ function openEventDetailsModal(eventKey) {
     "<article class=\"event-details-card\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"event-details-title\">",
       "<button type=\"button\" class=\"event-details-close\" aria-label=\"Close event details\" data-event-details-close=\"true\">&times;</button>",
       "<div class=\"event-details-heading\">",
-        dateBadge ? [
+        dateBadge && !usesHeadingThumbnail ? [
           "<div class=\"event-details-date\" aria-label=\"", escapeAttr(item.date), "\">",
             "<span>", escapeHtml(dateBadge.month), "</span>",
             "<strong>", escapeHtml(dateBadge.day), "</strong>",
@@ -2971,8 +3027,15 @@ function openEventDetailsModal(eventKey) {
               escapeHtml(schedule) + "</p>" :
             "",
         "</div>",
+        usesHeadingThumbnail ? [
+          "<div class=\"event-details-heading-image-wrap\">",
+            "<img class=\"event-details-heading-image\" src=\"",
+              escapeAttr(item.imageUrl),
+              "\" alt=\"\" loading=\"eager\">",
+          "</div>",
+        ].join("") : "",
       "</div>",
-      hasSafeImage ? [
+      hasSafeImage && !usesHeadingThumbnail ? [
         "<div class=\"event-details-image-wrap\">",
           "<img class=\"event-details-image\" src=\"", escapeAttr(item.imageUrl),
             "\" alt=\"\" loading=\"lazy\">",
@@ -3005,7 +3068,7 @@ function openEventDetailsModal(eventKey) {
         ].join("") : "",
       "</div>",
       "<div class=\"event-details-actions\">",
-        hasSafeRegistration ?
+        hasSafeRegistration && !item.featured ?
           button("Register", item.registrationUrl, "btn-primary") :
           "",
         calendarIntegrationsEnabled ? calendarButton_(

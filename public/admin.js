@@ -4341,6 +4341,15 @@
         escapeHtml_(adminState.hubSettingsError) +
         "</p>" :
         "",
+      renderAdminCheckboxField_({
+        label: "Show the Central Featured event in the homepage hero",
+        field: "hub-settings.featured_event_enabled",
+        checked: draft.featured_event_enabled,
+        disabled: !canEdit,
+      }),
+      renderAdminNote_(
+          "When enabled, the next Planning Center event tagged Central and Central Featured replaces the Sunday countdown. A valid event image is required; otherwise Central keeps the countdown visible.",
+      ),
       "<div class=\"central-admin-form-grid\">",
       renderAdminInputField_({
         label: "Site Title",
@@ -10470,6 +10479,7 @@
       countdown_label: "",
       countdown_title: "",
       countdown_datetime: "",
+      featured_event_enabled: false,
       homepage_modules: createDefaultHubHomepageModules_(),
     };
   }
@@ -10715,6 +10725,10 @@
       countdown_label: String(source.countdown_label || "").trim(),
       countdown_title: String(source.countdown_title || "").trim(),
       countdown_datetime: formatDateTimeLocalValue_(source.countdown_datetime),
+      featured_event_enabled: normalizeAdminBooleanValue_(
+          source.featured_event_enabled,
+          false,
+      ),
       homepage_modules: normalizeHubModuleItems_(
           source.homepage_modules,
           HUB_HOMEPAGE_MODULE_DEFINITIONS,
@@ -11137,6 +11151,7 @@
       countdown_label: payload.countdown_label,
       countdown_title: payload.countdown_title,
       countdown_datetime: payload.countdown_datetime,
+      featured_event_enabled: payload.featured_event_enabled,
       homepage_modules: payload.homepage_modules,
       updatedAt: fieldValue.serverTimestamp(),
     };

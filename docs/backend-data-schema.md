@@ -100,8 +100,11 @@ have equivalent persisted draft collections.
 | `centralServeNeeds/root/interests/{submissionId}` | Public Serve Needs interest submissions and notification status |
 | `mail/{mailId}` | Legacy/optional mail-delivery status source watched by a trigger; the collection name can be changed with `CENTRAL_MAIL_COLLECTION_PATH` |
 
-Planning Center events, today's schedule, and setlists are fetched at runtime;
-they are not currently maintained as the primary Firestore content collections.
+Planning Center events, today's schedule, the Central Featured event, and setlists
+are fetched at runtime; they are not currently maintained as the primary
+Firestore content collections. The featured event is the next future instance
+tagged both `Central` and `Central Featured`; its description and image come
+directly from the parent Planning Center event.
 The repo-hosted `public/content/whats-new.json` is checked before the Firestore
 What's New fallback documents.
 
@@ -150,6 +153,7 @@ secondary_button_url
 countdown_label
 countdown_title
 countdown_datetime
+featured_event_enabled
 homepage_modules[]
 ```
 

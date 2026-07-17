@@ -1528,6 +1528,10 @@ h1 {
   left: 0;
 }
 
+.event-details-actions.has-registration-action {
+  align-items: flex-start;
+}
+
 .registration-modal-facts {
   display: flex;
   flex-wrap: wrap;
@@ -1561,6 +1565,12 @@ h1 {
 .registration-modal-action {
   display: grid;
   gap: 6px;
+}
+
+.registration-modal-action > .btn {
+  width: auto;
+  min-height: 42px;
+  margin: 0;
 }
 
 .registration-modal-action > span {

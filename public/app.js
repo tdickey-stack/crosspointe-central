@@ -3177,7 +3177,9 @@ function openEventDetailsModal(eventKey) {
           "</aside>",
         ].join("") : "",
       "</div>",
-      "<div class=\"event-details-actions\">",
+      "<div class=\"event-details-actions",
+        item.isRegistrationEvent ? " has-registration-action" : "",
+        "\">",
         hasSafeRegistration && !item.featured ?
           item.isRegistrationEvent ? [
             "<div class=\"registration-modal-action\">",

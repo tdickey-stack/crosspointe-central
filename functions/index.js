@@ -36,6 +36,10 @@ import {
 import {createWayfinderPlanningCenterRetriever} from
   "./wayfinder/planning-center.js";
 import {
+  findPlanningCenterTagId,
+  getCentralFeaturedEventCandidates,
+} from "./planning-center/featured-event.js";
+import {
   createWayfinderNoticeCommandHandler,
   createWayfinderNoticeDraftGenerator,
   getActiveWayfinderNotices,
@@ -278,6 +282,8 @@ const PCO_APP_ID = process.env.PCO_APP_ID || "";
 const PCO_SECRET = process.env.PCO_SECRET || "";
 const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
 const PCO_CENTRAL_TAG_NAME = process.env.PCO_CENTRAL_TAG_NAME || "Central";
+const PCO_CENTRAL_FEATURED_TAG_NAME =
+  process.env.PCO_CENTRAL_FEATURED_TAG_NAME || "Central Featured";
 const PCO_WAYFINDER_PRIORITY_TAG_NAME =
   process.env.PCO_WAYFINDER_PRIORITY_TAG_NAME || "Wayfinder Priority";
 const PCO_CALENDAR_LOOKAHEAD_DAYS = parsePositiveInt_(
@@ -2655,6 +2661,7 @@ async function buildCentralDataPayload_(environment) {
     ) ?
       planningCenterData.events.upcoming :
       [],
+    featuredEvent: planningCenterData.featuredEvent || null,
     roomRules: roomRules,
     campaigns: campaignsOverride.shouldOverride ?
       campaignsOverride.items :
@@ -2948,6 +2955,11 @@ function toCentralSettingsFromFirestoreDoc_(snapshot) {
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "countdown_label");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "countdown_title");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "countdown_datetime");
+  copyBooleanFieldIfPresent_(
+      nextSettings,
+      data,
+      "featured_event_enabled",
+  );
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "timezone");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "sunday_mode_override");
   copyTrimmedStringFieldIfPresent_(nextSettings, data, "force_sunday_mode");
@@ -3611,14 +3623,17 @@ async function getPlanningCenterDataSafely_(roomRules) {
         today: [],
         upcoming: [],
       },
+      featuredEvent: null,
       setlist: [],
     };
   }
 
-  const [eventsResult, setlistResult] = await Promise.allSettled([
-    getCentralCalendarEvents_(roomRules),
-    getPlanningCenterSetlist_(),
-  ]);
+  const [eventsResult, featuredEventResult, setlistResult] =
+    await Promise.allSettled([
+      getCentralCalendarEvents_(roomRules),
+      getCentralFeaturedEvent_(roomRules),
+      getPlanningCenterSetlist_(),
+    ]);
 
   if (eventsResult.status === "rejected") {
     console.error("Planning Center calendar sync failed.", eventsResult.reason);
@@ -3628,11 +3643,20 @@ async function getPlanningCenterDataSafely_(roomRules) {
     console.error("Planning Center setlist sync failed.", setlistResult.reason);
   }
 
+  if (featuredEventResult.status === "rejected") {
+    console.error(
+        "Planning Center featured-event sync failed.",
+        featuredEventResult.reason,
+    );
+  }
+
   return {
     events: eventsResult.status === "fulfilled" ? eventsResult.value : {
       today: [],
       upcoming: [],
     },
+    featuredEvent: featuredEventResult.status === "fulfilled" ?
+      featuredEventResult.value : null,
     setlist: setlistResult.status === "fulfilled" ? setlistResult.value : [],
   };
 }
@@ -3702,12 +3726,6 @@ async function getCentralCalendarEvents_(roomRules) {
   const items = await Promise.all(
       (data.data || []).map(async (instance) => {
         const attrs = instance.attributes || {};
-        const eventRef = instance.relationships &&
-          instance.relationships.event &&
-          instance.relationships.event.data;
-        const eventAttrs = eventRef && eventMap[eventRef.id] ?
-          eventMap[eventRef.id] :
-          {};
 
         if (!instanceHasCentralTag_(instance, tagMap)) {
           return null;
@@ -3720,87 +3738,16 @@ async function getCentralCalendarEvents_(roomRules) {
         if (Number.isNaN(startsDate.getTime())) return null;
         if (dateKey_(startsDate, PCO_TIMEZONE) < todayKey) return null;
 
-        const rooms = await getEventInstanceRooms_(
-            instance.id,
-            Array.isArray(roomRules) ? roomRules : [],
-        );
-        const endsAt = attrs.published_ends_at || attrs.ends_at || "";
-        const endsDate = new Date(endsAt);
-        const hasValidEndDate = !Number.isNaN(endsDate.getTime());
-        const rawLocation = String(attrs.location || "").trim();
-        const locationDetails = splitPlanningCenterLocation_(rawLocation);
-        const location = rooms.length ?
-          rooms.join(", ") :
-          cleanLocation_(rawLocation);
-        const title = String(attrs.name || "Untitled Event").trim();
-        const description = htmlToPlainText_(
-            eventAttrs.description ||
-            eventAttrs.summary ||
-            attrs.description ||
-            "",
-        );
-        const recurrence = String(
-            attrs.compact_recurrence_description ||
-            attrs.recurrence_description ||
-            "",
-        ).trim();
-        const recurrenceDetails = String(
-            attrs.recurrence_description || recurrence,
-        ).trim();
-        const calendarDescription = [description, recurrenceDetails]
-            .filter(Boolean)
-            .join("\n\n");
-        const churchCenterUrl = attrs.church_center_url || "";
-        const registrationUrl = /^https?:\/\//i.test(
-            String(eventAttrs.registration_url || "").trim(),
-        ) ? String(eventAttrs.registration_url).trim() : "";
+        const eventRef = instance.relationships &&
+          instance.relationships.event &&
+          instance.relationships.event.data;
 
-        return {
-          active: "TRUE",
-          featured: "FALSE",
-          title: title,
-          date: formatDate_(startsDate, PCO_TIMEZONE),
-          time: formatTimeRange_(
-              startsDate,
-              endsAt,
-              PCO_TIMEZONE,
-          ),
-          location: location,
-          description: description,
-          recurrence: recurrence,
-          recurrence_details: recurrenceDetails,
-          venue: locationDetails.venue,
-          address: locationDetails.address,
-          registration_url: registrationUrl,
-          church_center_url: churchCenterUrl,
-          button_text: churchCenterUrl ? "Learn More" : "",
-          button_url: churchCenterUrl,
-          calendar_url: buildGoogleCalendarUrl_({
-            title: title,
-            startsAt: startsDate,
-            endsAt: endsAt,
-            location: location,
-            description: calendarDescription,
-            url: churchCenterUrl,
-          }),
-          calendar_file_url: buildCalendarFileUrl_({
-            title: title,
-            startsAt: startsDate,
-            endsAt: endsAt,
-            location: location,
-            description: calendarDescription,
-            url: churchCenterUrl,
-          }),
-          image_url: String(
-              eventAttrs.image_url || attrs.image_url || "",
-          ).trim(),
-          end_date: hasValidEndDate ?
-            formatDate_(endsDate, PCO_TIMEZONE) :
-            "",
-          sort: 50,
-          source: "Planning Center",
-          _dateObj: startsDate,
-        };
+        return buildCentralCalendarItem_(
+            instance,
+            eventRef && eventMap[eventRef.id] ? eventMap[eventRef.id] : {},
+            roomRules,
+            false,
+        );
       }),
   );
 
@@ -3822,6 +3769,147 @@ async function getCentralCalendarEvents_(roomRules) {
   return {
     today: today.map(removePrivateDate_),
     upcoming: upcoming.map(removePrivateDate_),
+  };
+}
+
+/**
+ * Retrieves the next Planning Center event carrying both Central tags.
+ *
+ * @param {Array<Object>} roomRules Published room-name transformation rules.
+ * @return {Promise<Object|null>} Sanitized featured event or null.
+ */
+async function getCentralFeaturedEvent_(roomRules) {
+  const tags = await fetchPcoJson_(
+      "https://api.planningcenteronline.com/calendar/v2/tags?per_page=100",
+  );
+  const featuredTagId = findPlanningCenterTagId(
+      tags,
+      PCO_CENTRAL_FEATURED_TAG_NAME,
+  );
+
+  if (!featuredTagId) return null;
+
+  const url =
+    "https://api.planningcenteronline.com/calendar/v2/tags/" +
+    encodeURIComponent(featuredTagId) +
+    "/event_instances?filter=future&include=event,tags" +
+    "&order=starts_at&per_page=100";
+  const data = await fetchPcoJson_(url);
+  const candidates = getCentralFeaturedEventCandidates(data, {
+    centralTagName: PCO_CENTRAL_TAG_NAME,
+    featuredTagName: PCO_CENTRAL_FEATURED_TAG_NAME,
+  });
+
+  for (const candidate of candidates) {
+    const item = await buildCentralCalendarItem_(
+        candidate.instance,
+        candidate.eventAttributes,
+        roomRules,
+        true,
+    );
+
+    if (item) return removePrivateDate_(toUpcomingItem_(item));
+  }
+
+  return null;
+}
+
+/**
+ * Converts a Planning Center event instance into Central's public event shape.
+ *
+ * @param {Object} instance Planning Center event instance.
+ * @param {Object} eventAttrs Parent event attributes.
+ * @param {Array<Object>} roomRules Published room-name transformation rules.
+ * @param {boolean} featured Whether this is Central's featured event.
+ * @return {Promise<Object|null>} Sanitized public event.
+ */
+async function buildCentralCalendarItem_(
+    instance,
+    eventAttrs,
+    roomRules,
+    featured,
+) {
+  const attrs = instance && instance.attributes || {};
+  const startsAt = attrs.published_starts_at || attrs.starts_at || "";
+  const startsDate = new Date(startsAt);
+
+  if (!instance || !instance.id || Number.isNaN(startsDate.getTime())) {
+    return null;
+  }
+
+  const rooms = await getEventInstanceRooms_(
+      instance.id,
+      Array.isArray(roomRules) ? roomRules : [],
+  );
+  const endsAt = attrs.published_ends_at || attrs.ends_at || "";
+  const endsDate = new Date(endsAt);
+  const hasValidEndDate = !Number.isNaN(endsDate.getTime());
+  const rawLocation = String(attrs.location || "").trim();
+  const locationDetails = splitPlanningCenterLocation_(rawLocation);
+  const location = rooms.length ?
+    rooms.join(", ") : cleanLocation_(rawLocation);
+  const title = String(attrs.name || "Untitled Event").trim();
+  const description = htmlToPlainText_(
+      eventAttrs.description ||
+      eventAttrs.summary ||
+      attrs.description ||
+      "",
+  );
+  const recurrence = String(
+      attrs.compact_recurrence_description ||
+      attrs.recurrence_description ||
+      "",
+  ).trim();
+  const recurrenceDetails = String(
+      attrs.recurrence_description || recurrence,
+  ).trim();
+  const calendarDescription = [description, recurrenceDetails]
+      .filter(Boolean)
+      .join("\n\n");
+  const churchCenterUrl = attrs.church_center_url || "";
+  const registrationUrl = /^https?:\/\//i.test(
+      String(eventAttrs.registration_url || "").trim(),
+  ) ? String(eventAttrs.registration_url).trim() : "";
+
+  return {
+    active: "TRUE",
+    featured: featured ? "TRUE" : "FALSE",
+    title: title,
+    date: formatDate_(startsDate, PCO_TIMEZONE),
+    time: formatTimeRange_(startsDate, endsAt, PCO_TIMEZONE),
+    location: location,
+    description: description,
+    recurrence: recurrence,
+    recurrence_details: recurrenceDetails,
+    venue: locationDetails.venue,
+    address: locationDetails.address,
+    registration_url: registrationUrl,
+    church_center_url: churchCenterUrl,
+    button_text: churchCenterUrl ? "Learn More" : "",
+    button_url: churchCenterUrl,
+    calendar_url: buildGoogleCalendarUrl_({
+      title: title,
+      startsAt: startsDate,
+      endsAt: endsAt,
+      location: location,
+      description: calendarDescription,
+      url: churchCenterUrl,
+    }),
+    calendar_file_url: buildCalendarFileUrl_({
+      title: title,
+      startsAt: startsDate,
+      endsAt: endsAt,
+      location: location,
+      description: calendarDescription,
+      url: churchCenterUrl,
+    }),
+    image_url: String(
+        eventAttrs.image_url || attrs.image_url || "",
+    ).trim(),
+    end_date: hasValidEndDate ? formatDate_(endsDate, PCO_TIMEZONE) : "",
+    sort: 50,
+    source: "Planning Center",
+    _dateObj: startsDate,
   };
 }
 
@@ -10607,6 +10695,9 @@ function buildPublishedHubSettingsPayload_(sourceData) {
     countdown_datetime: trimFirestoreStringValue_(
         sourceData.countdown_datetime,
     ),
+    featured_event_enabled: normalizeOptionalBooleanConfigValue_(
+        sourceData.featured_event_enabled,
+    ) === true,
     homepage_modules: normalizeModuleConfigPayload_(
         sourceData.homepage_modules,
         HOMEPAGE_MODULE_DEFINITIONS,

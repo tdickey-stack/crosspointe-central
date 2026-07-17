@@ -539,6 +539,18 @@ a {
   padding: 56px 20px 36px;
 }
 
+.hero-featured-event {
+  padding-top: 40px;
+  padding-bottom: 28px;
+}
+
+.hero-featured-event .hero-grid {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(500px, 0.95fr);
+  gap: 18px;
+  margin-top: 20px;
+}
+
 .hero-topbar {
   display: flex;
   align-items: flex-start;
@@ -756,6 +768,125 @@ h1 {
   display: block;
   font-size: 1.8rem;
   line-height: 1.1;
+}
+
+/*
+ * Previous compact vertical Featured Event layout, retained for rollback:
+ *
+ * .hero-featured-event .hero-grid {
+ *   grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.85fr);
+ *   gap: 28px;
+ * }
+ *
+ * .featured-event-card {
+ *   width: 100%;
+ *   max-width: 360px;
+ *   justify-self: end;
+ * }
+ *
+ * .featured-event-media {
+ *   aspect-ratio: 16 / 9;
+ * }
+ *
+ * .featured-event-body {
+ *   display: grid;
+ *   grid-template-columns: minmax(0, 1fr) auto;
+ *   align-items: end;
+ *   gap: 12px;
+ *   padding: 10px 12px;
+ * }
+ *
+ * .featured-event-cta {
+ *   min-height: 38px;
+ *   padding: 0 12px;
+ * }
+ */
+
+.featured-event-card {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.4fr) minmax(200px, 1fr);
+  width: 100%;
+  max-width: 520px;
+  justify-self: end;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--cp-radius);
+  background: var(--cp-surface);
+  color: var(--cp-text-strong);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.featured-event-media {
+  position: relative;
+  align-self: center;
+  width: calc(100% - 24px);
+  margin: 12px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--cp-dark);
+}
+
+.featured-event-media img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.featured-event-badge {
+  display: inline-flex;
+  margin-bottom: 5px;
+  padding: 5px 8px;
+  border: 1px solid rgba(239, 59, 45, 0.28);
+  border-radius: 999px;
+  background: rgba(239, 59, 45, 0.12);
+  color: var(--cp-red);
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.featured-event-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 14px;
+}
+
+.featured-event-copy {
+  min-width: 0;
+}
+
+.featured-event-body h2 {
+  margin: 0;
+  font-size: clamp(0.95rem, 1.25vw, 1.1rem);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.hero .featured-event-body p {
+  max-width: none;
+  margin: 5px 0 0;
+  color: var(--cp-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.hero .featured-event-body .featured-event-schedule {
+  color: var(--cp-text-strong);
+  font-weight: 850;
+}
+
+.featured-event-cta {
+  width: 100%;
+  min-height: 38px;
+  margin-top: auto;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 #central-countdown {
@@ -1181,6 +1312,23 @@ h1 {
   min-width: 0;
 }
 
+.event-details-heading-image-wrap {
+  width: 220px;
+  flex: 0 0 220px;
+  overflow: hidden;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: var(--cp-surface-soft);
+  aspect-ratio: 16 / 9;
+}
+
+.event-details-heading-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .event-details-kicker,
 .event-details-location-label {
   color: var(--cp-red);
@@ -1360,6 +1508,10 @@ h1 {
 
   .event-details-heading h2 {
     font-size: clamp(1.7rem, 8vw, 2.5rem);
+  }
+
+  .event-details-heading-image-wrap {
+    display: none;
   }
 
   .event-details-recurrence,
@@ -2129,11 +2281,16 @@ body.modal-open {
       padding-top: 14px;
     }
 
-    .hero {
+  .hero {
       padding: 36px 18px 30px;
       background:
       radial-gradient(circle at top right, rgba(239, 59, 45, 0.42), transparent 18rem),
       linear-gradient(150deg, var(--cp-dark) 0%, var(--cp-darker) 100%);
+  }
+
+  .hero.hero-featured-event {
+    padding-top: 28px;
+    padding-bottom: 24px;
   }
 
   .hero-grid {
@@ -2141,6 +2298,12 @@ body.modal-open {
     gap: 22px;
     align-items: stretch;
     margin-top: 24px;
+  }
+
+  .hero-featured-event .hero-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-top: 18px;
   }
 
   h1 {
@@ -2178,6 +2341,25 @@ body.modal-open {
 
   .countdown-card strong {
     font-size: 1.45rem;
+  }
+
+  .featured-event-card {
+    display: block;
+    max-width: none;
+    justify-self: stretch;
+    border-radius: 18px;
+  }
+
+  .featured-event-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 12px;
+    padding: 10px 12px;
+  }
+
+  .featured-event-cta {
+    width: auto;
   }
 
   .content {

@@ -3,7 +3,7 @@
   "description": "Cloud Functions for Firebase",
   "scripts": {
     "lint": "eslint .",
-    "test:wayfinder": "node --test wayfinder/*.test.js",
+    "test:wayfinder": "node --test planning-center/*.test.js wayfinder/*.test.js",
     "wayfinder:validate": "node scripts/validate-wayfinder-knowledge.mjs",
     "wayfinder:query": "node scripts/query-wayfinder-knowledge.mjs",
     "wayfinder:import:dry-run": "node scripts/import-wayfinder-knowledge.mjs --dry-run",

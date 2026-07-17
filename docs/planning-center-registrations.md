@@ -77,6 +77,10 @@ Seven days before `close_at`, an otherwise open signup changes to
 `Registration closed` until its final signup time ends. After the event ends,
 Central removes the signup automatically.
 
+As a feed safety boundary, Central only returns registration events whose next
+signup time begins within the next 30 days. Signups farther out—or without a
+usable signup time—remain hidden until they enter that rolling window.
+
 ## Verification
 
 Run the focused mapper tests:

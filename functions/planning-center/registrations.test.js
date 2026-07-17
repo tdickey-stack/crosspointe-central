@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CENTRAL_REGISTRATION_LOOKAHEAD_DAYS,
   CENTRAL_REGISTRATION_SIGNUP_FIELDS,
   getCentralRegistrationSignups,
 } from "./registrations.js";
@@ -153,7 +154,7 @@ function buildPayload() {
 test("returns only open Central-category signups", () => {
   const signups = getCentralRegistrationSignups(buildPayload(), {
     categoryName: "Central",
-    now: "2026-07-01T12:00:00Z",
+    now: "2026-07-17T12:00:00Z",
   });
 
   assert.equal(signups.length, 1);
@@ -201,6 +202,28 @@ test("shows closing-soon and closed states until the event ends", () => {
   });
 
   assert.deepEqual(eventEnded, []);
+});
+
+test("shows registration events only within the next 30 days", () => {
+  assert.equal(CENTRAL_REGISTRATION_LOOKAHEAD_DAYS, 30);
+
+  const outsideWindow = getCentralRegistrationSignups(buildPayload(), {
+    now: "2026-07-11T13:59:59Z",
+  });
+  assert.deepEqual(outsideWindow, []);
+
+  const atWindowBoundary = getCentralRegistrationSignups(buildPayload(), {
+    now: "2026-07-11T14:00:00Z",
+  });
+  assert.equal(atWindowBoundary.length, 1);
+
+  const missingDatePayload = buildPayload();
+  missingDatePayload.included = missingDatePayload.included.filter((item) => {
+    return item.type !== "SignupTime";
+  });
+  assert.deepEqual(getCentralRegistrationSignups(missingDatePayload, {
+    now: "2026-07-17T12:00:00Z",
+  }), []);
 });
 
 test("rejects archived and unsafe-url signups", () => {

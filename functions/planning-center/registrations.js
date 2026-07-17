@@ -1,3 +1,21 @@
+export const CENTRAL_REGISTRATION_SIGNUP_FIELDS = [
+  "archived",
+  "at_maximum_capacity",
+  "categories",
+  "close_at",
+  "closed",
+  "description",
+  "logo_url",
+  "maximum_capacity",
+  "name",
+  "new_registration_url",
+  "next_signup_time",
+  "open",
+  "open_at",
+  "selection_types",
+  "signup_location",
+];
+
 /**
  * Selects public Planning Center signups approved for Central.
  *

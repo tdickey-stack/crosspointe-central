@@ -1,7 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {getCentralRegistrationSignups} from "./registrations.js";
+import {
+  CENTRAL_REGISTRATION_SIGNUP_FIELDS,
+  getCentralRegistrationSignups,
+} from "./registrations.js";
+
+test("requests every signup relationship required by the public card", () => {
+  assert.deepEqual(
+      CENTRAL_REGISTRATION_SIGNUP_FIELDS.filter((field) => {
+        return [
+          "categories",
+          "next_signup_time",
+          "selection_types",
+          "signup_location",
+        ].includes(field);
+      }),
+      [
+        "categories",
+        "next_signup_time",
+        "selection_types",
+        "signup_location",
+      ],
+  );
+});
 
 /**
  * Creates a Registrations response containing public and private resources.

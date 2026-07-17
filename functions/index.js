@@ -39,7 +39,10 @@ import {
   findPlanningCenterTagId,
   getCentralFeaturedEventCandidates,
 } from "./planning-center/featured-event.js";
-import {getCentralRegistrationSignups} from
+import {
+  CENTRAL_REGISTRATION_SIGNUP_FIELDS,
+  getCentralRegistrationSignups,
+} from
   "./planning-center/registrations.js";
 import {
   createWayfinderNoticeCommandHandler,
@@ -3811,9 +3814,7 @@ async function getCentralRegistrationSignups_() {
     "https://api.planningcenteronline.com/registrations/v2/signups" +
     "?filter=unarchived" +
     "&include=categories,next_signup_time,selection_types,signup_location" +
-    "&fields[Signup]=archived,at_maximum_capacity,close_at,closed," +
-    "description,logo_url,maximum_capacity,name,new_registration_url,open," +
-    "open_at" +
+    "&fields[Signup]=" + CENTRAL_REGISTRATION_SIGNUP_FIELDS.join(",") +
     "&fields[Category]=name" +
     "&fields[SelectionType]=at_maximum_capacity,available_capacity," +
     "maximum_capacity,name,price_cents,price_currency," +

@@ -9933,9 +9933,14 @@
     }
 
     return [
+      "<div class=\"central-admin-session-actions\">",
+      "<a href=\"/\" class=\"central-admin-link-button is-secondary central-admin-back-link\">",
+      "Back to Central",
+      "</a>",
       "<button type=\"button\" class=\"is-secondary\" data-admin-action=\"sign-out\">",
       "Sign Out",
       "</button>",
+      "</div>",
     ].join("");
   }
 

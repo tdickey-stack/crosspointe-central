@@ -221,6 +221,12 @@
       defaultEnabled: true,
     },
     {
+      id: "registrations",
+      label: "Registrations",
+      description: "Public signups from Planning Center Registrations.",
+      defaultEnabled: true,
+    },
+    {
       id: "campaigns",
       label: "Campaigns",
       description: "Church-wide campaigns and featured calls to action.",
@@ -287,6 +293,12 @@
       label: "Events",
       description: "Upcoming events pulled in automatically from Planning Center.",
       defaultEnabled: true,
+    },
+    {
+      id: "registrations",
+      label: "Registrations",
+      description: "Public signups from Planning Center Registrations.",
+      defaultEnabled: false,
     },
     {
       id: "campaigns",
@@ -6196,9 +6208,12 @@
     return renderCollapsibleAdminSection_({
       id: "integrations-planning-center",
       title: "Planning Center",
-      pillHtml: renderStatusPill_("More settings coming", "is-live"),
+      pillHtml: renderStatusPill_("Public signups only", "is-safe"),
       bodyHtml: renderAdminNote_(
-          "Additional Planning Center controls will live here as the integration grows.",
+          "Central imports public event and signup details from Planning Center. " +
+          "Only Registrations signups in the configured Central category are " +
+          "shown. Attendees, people, form answers, emergency contacts, and " +
+          "payments are never requested or stored by Central.",
       ),
     });
   }

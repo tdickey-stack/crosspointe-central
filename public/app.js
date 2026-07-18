@@ -28,7 +28,7 @@ var CENTRAL_REFRESH_MS = 1200000;
 var CENTRAL_API_URL = "/api/central-data";
 var CENTRAL_HOSTED_WHATS_NEW_URL = "/content/whats-new.json";
 var SERVE_NEED_INTEREST_ENDPOINT = "/api/serve-needs/share-interest";
-var CENTRAL_CACHE_KEY = "central-data-cache-v3";
+var CENTRAL_CACHE_KEY = "central-data-cache-v4";
 var CENTRAL_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 var EXPANDABLE_FLOW_DURATION_MS = 1000;
 var CENTRAL_WHATS_NEW_SEEN_KEY = "central-whats-new-seen-v1";
@@ -43,6 +43,7 @@ var HOMEPAGE_MODULE_DEFINITIONS = [
   {id: "today", label: "Today", defaultEnabled: true},
   {id: "sunday", label: "This Sunday", defaultEnabled: true},
   {id: "events", label: "Events", defaultEnabled: true},
+  {id: "registrations", label: "Registrations", defaultEnabled: true},
   {id: "campaigns", label: "Campaigns", defaultEnabled: true},
   {id: "nextSteps", label: "Next Steps", defaultEnabled: true},
   {id: "serveNeeds", label: "Serve Needs", defaultEnabled: true},
@@ -56,6 +57,7 @@ var SUNDAY_MODE_MODULE_DEFINITIONS = [
   {id: "scriptureNotes", label: "Scripture + Notes", defaultEnabled: true},
   {id: "today", label: "Today", defaultEnabled: true},
   {id: "events", label: "Events", defaultEnabled: true},
+  {id: "registrations", label: "Registrations", defaultEnabled: false},
   {id: "campaigns", label: "Campaigns", defaultEnabled: false},
   {id: "nextSteps", label: "Next Steps", defaultEnabled: false},
   {id: "serveNeeds", label: "Serve Needs", defaultEnabled: false},
@@ -963,22 +965,14 @@ function renderHomepageCountdownCard_(settings) {
 }
 
 function renderFeaturedEventHeroCard_(data, settings) {
-  var enabled = normalizeCentralBooleanValue_(
-      settings && settings.featured_event_enabled,
-      false,
-  );
-  var item = data && data.featuredEvent ? data.featuredEvent : null;
-  var title = String(item && item.title || "").trim();
-  var imageUrl = String(item && item.image_url || "").trim();
+  var featuredEvent = getFeaturedEventContext_(data, settings);
+  if (!featuredEvent) return "";
 
-  if (!enabled || !item || !title || !/^https:\/\//i.test(imageUrl)) {
-    return "";
-  }
+  var eventKey = featuredEvent.eventKey;
+  var title = featuredEvent.title;
+  var imageUrl = featuredEvent.imageUrl;
+  var schedule = featuredEvent.schedule;
 
-  var eventKey = registerEventDetailsItem_(item);
-  if (!eventKey) return "";
-
-  var schedule = [item.date, item.time].filter(Boolean).join(" • ");
   return [
     "<article class=\"featured-event-card\" aria-labelledby=\"featured-event-title\">",
       "<div class=\"featured-event-media\">",
@@ -996,6 +990,63 @@ function renderFeaturedEventHeroCard_(data, settings) {
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " onclick=\"openEventDetailsModal('",
           escapeJsString(eventKey),
+          "')\">View Event</button>",
+      "</div>",
+    "</article>",
+  ].join("");
+}
+
+function getFeaturedEventContext_(data, settings) {
+  var enabled = normalizeCentralBooleanValue_(
+      settings && settings.featured_event_enabled,
+      false,
+  );
+  var item = data && data.featuredEvent ? data.featuredEvent : null;
+  var title = String(item && item.title || "").trim();
+  var imageUrl = String(item && item.image_url || "").trim();
+
+  if (!enabled || !item || !title || !/^https:\/\//i.test(imageUrl)) {
+    return "";
+  }
+
+  var eventKey = registerEventDetailsItem_(item);
+  if (!eventKey) return null;
+
+  return {
+    item: item,
+    eventKey: eventKey,
+    title: title,
+    imageUrl: imageUrl,
+    schedule: [item.date, item.time].filter(Boolean).join(" • "),
+  };
+}
+
+function renderSundayFeaturedEventCard_(data, settings) {
+  var featuredEvent = getFeaturedEventContext_(data, settings);
+  if (!featuredEvent) return "";
+
+  return [
+    "<article class=\"featured-event-card sunday-featured-event-card\"",
+      " aria-labelledby=\"sunday-featured-event-title\">",
+      "<div class=\"featured-event-media\">",
+        "<img src=\"", escapeAttr(featuredEvent.imageUrl),
+          "\" alt=\"\" loading=\"eager\" fetchpriority=\"high\">",
+      "</div>",
+      "<div class=\"featured-event-body\">",
+        "<div class=\"featured-event-copy\">",
+          "<span class=\"featured-event-badge\">Featured Event</span>",
+          "<h2 id=\"sunday-featured-event-title\">",
+            escapeHtml(featuredEvent.title),
+          "</h2>",
+          featuredEvent.schedule ?
+            "<p class=\"featured-event-schedule\">" +
+              escapeHtml(featuredEvent.schedule) + "</p>" : "",
+        "</div>",
+        "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
+          " aria-label=\"View featured event: ",
+          escapeAttr(featuredEvent.title), "\"",
+          " onclick=\"openEventDetailsModal('",
+          escapeJsString(featuredEvent.eventKey),
           "')\">View Event</button>",
       "</div>",
     "</article>",
@@ -1101,6 +1152,10 @@ function renderHomepageModuleById_(moduleId, data) {
 
   if (moduleId === "events") {
     return renderEvents(data.events || []);
+  }
+
+  if (moduleId === "registrations") {
+    return renderRegistrations(data.registrations || []);
   }
 
   if (moduleId === "campaigns") {
@@ -1220,6 +1275,10 @@ function renderSundayModeModuleById_(moduleId, data, quickLinks, services, servi
 
   if (moduleId === "events") {
     return renderEvents(data.events || []);
+  }
+
+  if (moduleId === "registrations") {
+    return renderRegistrations(data.registrations || []);
   }
 
   if (moduleId === "campaigns") {
@@ -1556,12 +1615,12 @@ function renderSundayPage(data) {
   var secondaryButtonText = sundaySettings.sunday_secondary_button_text || fallbackSecondaryText;
   var secondaryButtonUrl = sundaySettings.sunday_secondary_button_url || fallbackSecondaryUrl;
 
-  var statusLabel = sundaySettings.sunday_status_label || "Status";
   var speakerLabel = sundaySettings.sunday_speaker_label || "Speaker";
   var scriptureLabel = sundaySettings.sunday_scripture_label || "Scripture";
   var scriptureReference = String(
       sundaySettings.sunday_scripture_reference || sunday.scripture || "",
   ).trim();
+  var featuredEventCard = renderSundayFeaturedEventCard_(data, s);
 
   return [
     "<div class=\"central sunday-experience\">",
@@ -1587,11 +1646,6 @@ function renderSundayPage(data) {
           "</div>",
           "<div class=\"sunday-status-grid\">",
             "<article class=\"sunday-status-card\">",
-              "<small>" + escapeHtml(statusLabel) + "</small>",
-              "<strong>" + escapeHtml(heroStatus.badge || "Sunday Morning") + "</strong>",
-              "<span>" + escapeHtml(heroStatus.title || "Central is ready for today.") + "</span>",
-            "</article>",
-            "<article class=\"sunday-status-card\">",
               "<small>" + escapeHtml(speakerLabel) + "</small>",
               "<strong>" + escapeHtml(sunday.speaker || "CrossPointe") + "</strong>",
               "<span>" + escapeHtml(sunday.series || "Sunday Worship") + "</span>",
@@ -1605,6 +1659,7 @@ function renderSundayPage(data) {
                 "</article>",
               ].join("") :
               "",
+            featuredEventCard,
           "</div>",
         "</div>",
       "</header>",
@@ -2929,6 +2984,66 @@ function renderEvents(items) {
   }), "upcoming-events");
 }
 
+function renderRegistrations(items) {
+  if (!items || !items.length) return "";
+  var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
+      currentCentralData,
+  );
+
+  return section(
+      "Register for an Event",
+      "Save Your Spot",
+      renderExpandableGroup({
+        id: "registrations-grid",
+        items: items,
+        containerClass: "grid three registrations-grid",
+        desktopLimit: 6,
+        moreLabel: "See More Registrations",
+        lessLabel: "See Fewer Registrations",
+        renderItem: function(item) {
+          return renderRegistrationCard_(item, calendarIntegrationsEnabled);
+        },
+      }),
+      "registrations",
+  );
+}
+
+function renderRegistrationCard_(item, calendarIntegrationsEnabled) {
+  var registrationUrl = String(item && item.registration_url || "").trim();
+  if (!/^https?:\/\//i.test(registrationUrl)) return "";
+
+  return card({
+    title: item.title,
+    meta: [item.date, item.time, item.location].filter(Boolean).join(" • "),
+    description: "",
+    preHeadingHtml: renderRegistrationStatus_(item),
+    buttonHtml: renderEventDetailsButton_(item),
+    bottomButtonText: calendarIntegrationsEnabled ? "Add to Calendar" : "",
+    bottomButtonUrl: calendarIntegrationsEnabled ? item.calendar_url : "",
+    calendarFileUrl: item.calendar_file_url,
+    extraClass: "event-card registration-event-card",
+  });
+}
+
+function renderRegistrationStatus_(item) {
+  var status = String(item && item.status || "open").trim().toLowerCase();
+  var allowedStatuses = [
+    "open",
+    "closing-soon",
+    "closed",
+    "waitlist",
+    "full",
+  ];
+
+  if (allowedStatuses.indexOf(status) === -1) status = "open";
+
+  return [
+    "<div class=\"registration-status is-", escapeAttr(status), "\">",
+      escapeHtml(item && item.status_label || "Registration open"),
+    "</div>",
+  ].join("");
+}
+
 function renderEventDetailsButton_(item) {
   var eventKey = registerEventDetailsItem_(item);
   if (!eventKey) return "";
@@ -2969,6 +3084,14 @@ function registerEventDetailsItem_(item) {
     imageUrl: String(item.image_url || "").trim(),
     calendarUrl: String(item.calendar_url || "").trim(),
     calendarFileUrl: String(item.calendar_file_url || "").trim(),
+    isRegistrationEvent: item.source === "Planning Center Registrations",
+    registrationStatus: String(item.status || "").trim(),
+    registrationStatusLabel: String(item.status_label || "").trim(),
+    registrationButtonText: String(
+        item.registration_button_text || "Register in Church Center",
+    ).trim(),
+    priceLabel: String(item.price_label || "").trim(),
+    closeLabel: String(item.close_label || "").trim(),
   };
 
   return key;
@@ -2997,6 +3120,13 @@ function openEventDetailsModal(eventKey) {
   var hasSafeImage = /^https?:\/\//i.test(item.imageUrl);
   var usesHeadingThumbnail = hasSafeImage && item.featured;
   var hasSafeRegistration = /^https?:\/\//i.test(item.registrationUrl);
+  var registrationFacts = item.isRegistrationEvent ? [
+    item.priceLabel ? {label: "Price", value: item.priceLabel} : null,
+    item.closeLabel ? {
+      label: "Registration closes",
+      value: item.closeLabel,
+    } : null,
+  ].filter(Boolean) : [];
   var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
       currentCentralData,
   );
@@ -3016,7 +3146,14 @@ function openEventDetailsModal(eventKey) {
           "</div>",
         ].join("") : "",
         "<div class=\"event-details-heading-copy\">",
-          "<div class=\"event-details-kicker\">CrossPointe Event</div>",
+          "<div class=\"event-details-kicker\">",
+            item.isRegistrationEvent ? "Registration Event" :
+              "CrossPointe Event",
+          "</div>",
+          item.registrationStatusLabel ? renderRegistrationStatus_({
+            status: item.registrationStatus,
+            status_label: item.registrationStatusLabel,
+          }) : "",
           "<h2 id=\"event-details-title\">", escapeHtml(item.title), "</h2>",
           item.recurrence ?
             "<p class=\"event-details-recurrence\">" +
@@ -3049,14 +3186,32 @@ function openEventDetailsModal(eventKey) {
                 item.description || item.recurrenceDetails,
             ) + "</p>" :
             "<p>More details will be posted here as they become available.</p>",
+          registrationFacts.length ? [
+            "<dl class=\"registration-modal-facts\">",
+              registrationFacts.map(function(fact) {
+                return [
+                  "<div>",
+                    "<dt>", escapeHtml(fact.label), "</dt>",
+                    "<dd>", escapeHtml(fact.value), "</dd>",
+                  "</div>",
+                ].join("");
+              }).join(""),
+            "</dl>",
+          ].join("") : "",
         "</section>",
         (item.location || item.venue || item.address) ? [
           "<aside class=\"event-details-location\" aria-labelledby=\"event-details-location-title\">",
             "<div class=\"event-details-location-label\" id=\"event-details-location-title\">Location</div>",
-            item.venue ? "<strong>" + escapeHtml(item.venue) + "</strong>" : "",
-            item.location && item.location !== item.venue ?
-              "<span>" + escapeHtml(item.location) + "</span>" :
-              "",
+            item.isRegistrationEvent && item.location ?
+              "<strong>" + escapeHtml(item.location) + "</strong>" :
+              item.venue ?
+                "<strong>" + escapeHtml(item.venue) + "</strong>" : "",
+            item.isRegistrationEvent && item.venue &&
+              item.venue !== item.location ?
+              "<span>" + escapeHtml(item.venue) + "</span>" :
+              !item.isRegistrationEvent && item.location &&
+                item.location !== item.venue ?
+                "<span>" + escapeHtml(item.location) + "</span>" : "",
             item.address ? "<span>" + escapeHtml(item.address) + "</span>" : "",
             mapUrl ? [
               "<div class=\"event-details-map-actions\">",
@@ -3067,9 +3222,21 @@ function openEventDetailsModal(eventKey) {
           "</aside>",
         ].join("") : "",
       "</div>",
-      "<div class=\"event-details-actions\">",
+      "<div class=\"event-details-actions",
+        item.isRegistrationEvent ? " has-registration-action" : "",
+        "\">",
         hasSafeRegistration && !item.featured ?
-          button("Register", item.registrationUrl, "btn-primary") :
+          item.isRegistrationEvent ? [
+            "<div class=\"registration-modal-action\">",
+              button(
+                  item.registrationButtonText,
+                  item.registrationUrl,
+                  "btn-primary",
+              ),
+              "<span>Opens Church Center in a new tab</span>",
+            "</div>",
+          ].join("") :
+            button("Register", item.registrationUrl, "btn-primary") :
           "",
         calendarIntegrationsEnabled ? calendarButton_(
             "Add to Calendar",
@@ -3872,6 +4039,7 @@ function card(options) {
   var hasPrimaryButton = Boolean(primaryButtonHtml);
   var hasBottomButton = options.bottomButtonText && options.bottomButtonUrl;
   var heading = [
+    options.preHeadingHtml || "",
     options.meta ?
       "<div class=\"meta\">" + escapeHtml(options.meta) + "</div>" :
       "",

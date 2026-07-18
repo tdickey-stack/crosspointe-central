@@ -40,6 +40,11 @@ import {
   getCentralFeaturedEventCandidates,
 } from "./planning-center/featured-event.js";
 import {
+  CENTRAL_REGISTRATION_SIGNUP_FIELDS,
+  getCentralRegistrationSignups,
+} from
+  "./planning-center/registrations.js";
+import {
   createWayfinderNoticeCommandHandler,
   createWayfinderNoticeDraftGenerator,
   getActiveWayfinderNotices,
@@ -140,6 +145,7 @@ const HOMEPAGE_MODULE_DEFINITIONS = [
   {id: "today", defaultEnabled: true},
   {id: "sunday", defaultEnabled: true},
   {id: "events", defaultEnabled: true},
+  {id: "registrations", defaultEnabled: true},
   {id: "campaigns", defaultEnabled: true},
   {id: "nextSteps", defaultEnabled: true},
   {id: "serveNeeds", defaultEnabled: true},
@@ -153,6 +159,7 @@ const SUNDAY_MODE_MODULE_DEFINITIONS = [
   {id: "scriptureNotes", defaultEnabled: true},
   {id: "today", defaultEnabled: true},
   {id: "events", defaultEnabled: true},
+  {id: "registrations", defaultEnabled: false},
   {id: "campaigns", defaultEnabled: false},
   {id: "nextSteps", defaultEnabled: false},
   {id: "serveNeeds", defaultEnabled: false},
@@ -284,6 +291,8 @@ const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
 const PCO_CENTRAL_TAG_NAME = process.env.PCO_CENTRAL_TAG_NAME || "Central";
 const PCO_CENTRAL_FEATURED_TAG_NAME =
   process.env.PCO_CENTRAL_FEATURED_TAG_NAME || "Central Featured";
+const PCO_CENTRAL_REGISTRATION_CATEGORY_NAME =
+  process.env.PCO_CENTRAL_REGISTRATION_CATEGORY_NAME || "Central";
 const PCO_WAYFINDER_PRIORITY_TAG_NAME =
   process.env.PCO_WAYFINDER_PRIORITY_TAG_NAME || "Wayfinder Priority";
 const PCO_CALENDAR_LOOKAHEAD_DAYS = parsePositiveInt_(
@@ -2661,6 +2670,9 @@ async function buildCentralDataPayload_(environment) {
     ) ?
       planningCenterData.events.upcoming :
       [],
+    registrations: Array.isArray(planningCenterData.registrations) ?
+      planningCenterData.registrations :
+      [],
     featuredEvent: planningCenterData.featuredEvent || null,
     roomRules: roomRules,
     campaigns: campaignsOverride.shouldOverride ?
@@ -3623,14 +3635,21 @@ async function getPlanningCenterDataSafely_(roomRules) {
         today: [],
         upcoming: [],
       },
+      registrations: [],
       featuredEvent: null,
       setlist: [],
     };
   }
 
-  const [eventsResult, featuredEventResult, setlistResult] =
+  const [
+    eventsResult,
+    registrationsResult,
+    featuredEventResult,
+    setlistResult,
+  ] =
     await Promise.allSettled([
       getCentralCalendarEvents_(roomRules),
+      getCentralRegistrationSignups_(),
       getCentralFeaturedEvent_(roomRules),
       getPlanningCenterSetlist_(),
     ]);
@@ -3641,6 +3660,13 @@ async function getPlanningCenterDataSafely_(roomRules) {
 
   if (setlistResult.status === "rejected") {
     console.error("Planning Center setlist sync failed.", setlistResult.reason);
+  }
+
+  if (registrationsResult.status === "rejected") {
+    console.error(
+        "Planning Center registrations sync failed.",
+        registrationsResult.reason,
+    );
   }
 
   if (featuredEventResult.status === "rejected") {
@@ -3655,6 +3681,8 @@ async function getPlanningCenterDataSafely_(roomRules) {
       today: [],
       upcoming: [],
     },
+    registrations: registrationsResult.status === "fulfilled" ?
+      registrationsResult.value : [],
     featuredEvent: featuredEventResult.status === "fulfilled" ?
       featuredEventResult.value : null,
     setlist: setlistResult.status === "fulfilled" ? setlistResult.value : [],
@@ -3770,6 +3798,101 @@ async function getCentralCalendarEvents_(roomRules) {
     today: today.map(removePrivateDate_),
     upcoming: upcoming.map(removePrivateDate_),
   };
+}
+
+/**
+ * Retrieves public, Central-approved Planning Center Registrations signups.
+ *
+ * The request is intentionally limited to signup configuration resources. It
+ * never requests attendees, registrations, people, emergency contacts, or
+ * form answers.
+ *
+ * @return {Promise<Array<Object>>} Sanitized public signup cards.
+ */
+async function getCentralRegistrationSignups_() {
+  const url =
+    "https://api.planningcenteronline.com/registrations/v2/signups" +
+    "?filter=unarchived" +
+    "&include=categories,next_signup_time,selection_types,signup_location" +
+    "&fields[Signup]=" + CENTRAL_REGISTRATION_SIGNUP_FIELDS.join(",") +
+    "&fields[Category]=name" +
+    "&fields[SelectionType]=at_maximum_capacity,available_capacity," +
+    "maximum_capacity,name,price_cents,price_currency," +
+    "price_currency_symbol,price_formatted,publicly_available,waitlist" +
+    "&fields[SignupTime]=all_day,ends_at,starts_at" +
+    "&fields[SignupLocation]=formatted_address,full_formatted_address," +
+    "location_type,name,subpremise,url" +
+    "&per_page=100";
+  const data = await fetchPcoJson_(url);
+
+  return getCentralRegistrationSignups(data, {
+    categoryName: PCO_CENTRAL_REGISTRATION_CATEGORY_NAME,
+  }).map((signup) => {
+    const startsDate = new Date(signup.starts_at || "");
+    const endsDate = new Date(signup.ends_at || "");
+    const closeDate = new Date(signup.close_at || "");
+    const hasStartDate = !Number.isNaN(startsDate.getTime());
+    const hasEndDate = !Number.isNaN(endsDate.getTime());
+    const hasCloseDate = !Number.isNaN(closeDate.getTime());
+    const status = String(signup.status || "open");
+    const closeLabel = hasCloseDate ?
+      formatDate_(closeDate, PCO_TIMEZONE) + " at " +
+        formatTime_(closeDate, PCO_TIMEZONE) : "";
+    const calendarLocation = [
+      signup.location,
+      signup.venue,
+      signup.address,
+    ].filter((value, index, values) => {
+      return value && values.indexOf(value) === index;
+    }).join(", ");
+    const calendarDescription = [
+      signup.description,
+      closeLabel ? "Registration closes " + closeLabel + "." : "",
+    ].filter(Boolean).join("\n\n");
+
+    return {
+      id: signup.id,
+      active: "TRUE",
+      title: signup.title,
+      description: signup.description,
+      date: hasStartDate ? formatDate_(startsDate, PCO_TIMEZONE) : "",
+      time: hasStartDate && !signup.all_day ?
+        formatTimeRange_(startsDate, signup.ends_at, PCO_TIMEZONE) : "",
+      location: signup.location,
+      venue: signup.venue,
+      address: signup.address,
+      image_url: signup.image_url,
+      registration_url: signup.registration_url,
+      price_label: signup.price_label,
+      status: status,
+      status_label: signup.status_label,
+      close_date: hasCloseDate ? formatDate_(closeDate, PCO_TIMEZONE) : "",
+      close_label: closeLabel,
+      button_text: "Learn More",
+      registration_button_text: status === "waitlist" ?
+        "Join Waitlist in Church Center" :
+        status === "full" || status === "closed" ?
+          "View in Church Center" :
+          "Register in Church Center",
+      calendar_url: hasStartDate ? buildGoogleCalendarUrl_({
+        title: signup.title,
+        startsAt: startsDate,
+        endsAt: hasEndDate ? endsDate : signup.ends_at,
+        location: calendarLocation,
+        description: calendarDescription,
+        url: signup.registration_url,
+      }) : "",
+      calendar_file_url: hasStartDate ? buildCalendarFileUrl_({
+        title: signup.title,
+        startsAt: startsDate,
+        endsAt: hasEndDate ? endsDate : signup.ends_at,
+        location: calendarLocation,
+        description: calendarDescription,
+        url: signup.registration_url,
+      }) : "",
+      source: signup.source,
+    };
+  });
 }
 
 /**

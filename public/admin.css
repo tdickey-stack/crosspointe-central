@@ -1278,6 +1278,18 @@
   justify-content: flex-end;
 }
 
+[data-app-route="admin"] .central-admin-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-app-route="admin"] .central-admin-back-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 [data-app-route="admin"] .central-admin-page-body {
   display: grid;
   gap: 16px;
@@ -2378,7 +2390,13 @@
   }
 
   [data-app-route="admin"] .central-admin-hero-top {
+    flex-direction: column;
     align-items: flex-start;
+  }
+
+  [data-app-route="admin"] .central-admin-auth-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   [data-app-route="admin"] .central-admin-nav a:hover,

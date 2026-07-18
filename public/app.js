@@ -965,22 +965,14 @@ function renderHomepageCountdownCard_(settings) {
 }
 
 function renderFeaturedEventHeroCard_(data, settings) {
-  var enabled = normalizeCentralBooleanValue_(
-      settings && settings.featured_event_enabled,
-      false,
-  );
-  var item = data && data.featuredEvent ? data.featuredEvent : null;
-  var title = String(item && item.title || "").trim();
-  var imageUrl = String(item && item.image_url || "").trim();
+  var featuredEvent = getFeaturedEventContext_(data, settings);
+  if (!featuredEvent) return "";
 
-  if (!enabled || !item || !title || !/^https:\/\//i.test(imageUrl)) {
-    return "";
-  }
+  var eventKey = featuredEvent.eventKey;
+  var title = featuredEvent.title;
+  var imageUrl = featuredEvent.imageUrl;
+  var schedule = featuredEvent.schedule;
 
-  var eventKey = registerEventDetailsItem_(item);
-  if (!eventKey) return "";
-
-  var schedule = [item.date, item.time].filter(Boolean).join(" • ");
   return [
     "<article class=\"featured-event-card\" aria-labelledby=\"featured-event-title\">",
       "<div class=\"featured-event-media\">",
@@ -998,6 +990,63 @@ function renderFeaturedEventHeroCard_(data, settings) {
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " onclick=\"openEventDetailsModal('",
           escapeJsString(eventKey),
+          "')\">View Event</button>",
+      "</div>",
+    "</article>",
+  ].join("");
+}
+
+function getFeaturedEventContext_(data, settings) {
+  var enabled = normalizeCentralBooleanValue_(
+      settings && settings.featured_event_enabled,
+      false,
+  );
+  var item = data && data.featuredEvent ? data.featuredEvent : null;
+  var title = String(item && item.title || "").trim();
+  var imageUrl = String(item && item.image_url || "").trim();
+
+  if (!enabled || !item || !title || !/^https:\/\//i.test(imageUrl)) {
+    return "";
+  }
+
+  var eventKey = registerEventDetailsItem_(item);
+  if (!eventKey) return null;
+
+  return {
+    item: item,
+    eventKey: eventKey,
+    title: title,
+    imageUrl: imageUrl,
+    schedule: [item.date, item.time].filter(Boolean).join(" • "),
+  };
+}
+
+function renderSundayFeaturedEventCard_(data, settings) {
+  var featuredEvent = getFeaturedEventContext_(data, settings);
+  if (!featuredEvent) return "";
+
+  return [
+    "<article class=\"featured-event-card sunday-featured-event-card\"",
+      " aria-labelledby=\"sunday-featured-event-title\">",
+      "<div class=\"featured-event-media\">",
+        "<img src=\"", escapeAttr(featuredEvent.imageUrl),
+          "\" alt=\"\" loading=\"eager\" fetchpriority=\"high\">",
+      "</div>",
+      "<div class=\"featured-event-body\">",
+        "<div class=\"featured-event-copy\">",
+          "<span class=\"featured-event-badge\">Featured Event</span>",
+          "<h2 id=\"sunday-featured-event-title\">",
+            escapeHtml(featuredEvent.title),
+          "</h2>",
+          featuredEvent.schedule ?
+            "<p class=\"featured-event-schedule\">" +
+              escapeHtml(featuredEvent.schedule) + "</p>" : "",
+        "</div>",
+        "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
+          " aria-label=\"View featured event: ",
+          escapeAttr(featuredEvent.title), "\"",
+          " onclick=\"openEventDetailsModal('",
+          escapeJsString(featuredEvent.eventKey),
           "')\">View Event</button>",
       "</div>",
     "</article>",
@@ -1566,12 +1615,12 @@ function renderSundayPage(data) {
   var secondaryButtonText = sundaySettings.sunday_secondary_button_text || fallbackSecondaryText;
   var secondaryButtonUrl = sundaySettings.sunday_secondary_button_url || fallbackSecondaryUrl;
 
-  var statusLabel = sundaySettings.sunday_status_label || "Status";
   var speakerLabel = sundaySettings.sunday_speaker_label || "Speaker";
   var scriptureLabel = sundaySettings.sunday_scripture_label || "Scripture";
   var scriptureReference = String(
       sundaySettings.sunday_scripture_reference || sunday.scripture || "",
   ).trim();
+  var featuredEventCard = renderSundayFeaturedEventCard_(data, s);
 
   return [
     "<div class=\"central sunday-experience\">",
@@ -1597,11 +1646,6 @@ function renderSundayPage(data) {
           "</div>",
           "<div class=\"sunday-status-grid\">",
             "<article class=\"sunday-status-card\">",
-              "<small>" + escapeHtml(statusLabel) + "</small>",
-              "<strong>" + escapeHtml(heroStatus.badge || "Sunday Morning") + "</strong>",
-              "<span>" + escapeHtml(heroStatus.title || "Central is ready for today.") + "</span>",
-            "</article>",
-            "<article class=\"sunday-status-card\">",
               "<small>" + escapeHtml(speakerLabel) + "</small>",
               "<strong>" + escapeHtml(sunday.speaker || "CrossPointe") + "</strong>",
               "<span>" + escapeHtml(sunday.series || "Sunday Worship") + "</span>",
@@ -1615,6 +1659,7 @@ function renderSundayPage(data) {
                 "</article>",
               ].join("") :
               "",
+            featuredEventCard,
           "</div>",
         "</div>",
       "</header>",

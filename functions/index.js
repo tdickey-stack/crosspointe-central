@@ -6,6 +6,7 @@ import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import {onRequest} from "firebase-functions/v2/https";
 import {defineSecret} from "firebase-functions/params";
 
+import {mergePreviewSingletonPayload} from "./preview-publish.js";
 import {createWayfinderAnswerHandler} from "./wayfinder/answer.js";
 import {
   createWayfinderAlphaAccessHandler,
@@ -6899,7 +6900,7 @@ async function publishPreviewSectionPayload_(
     publisher,
 ) {
   if (section === "hubSettings") {
-    return publishPreviewSingletonPayload_({
+    return publishPreviewMergedSingletonPayload_({
       publishedDocPath: CENTRAL_PUBLIC_SETTINGS_DOC_PATH,
       payload: payload,
       message: "Homepage published.",
@@ -7024,10 +7025,10 @@ async function publishPreviewMergedSingletonPayload_(config) {
   const existingData = publishedSnapshot.exists ?
     publishedSnapshot.data() || {} :
     {};
-  const mergedPayload = {
-    ...existingData,
-    ...(config.payload || {}),
-  };
+  const mergedPayload = mergePreviewSingletonPayload(
+      existingData,
+      config.payload,
+  );
   const docPayload = withPreviewPublishMetadata_(
       mergedPayload,
       existingData,

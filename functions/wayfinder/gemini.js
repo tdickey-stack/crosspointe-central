@@ -352,12 +352,17 @@ export function buildWayfinderGeminiRequest(context, model) {
       "policies, ministries, or contact information.",
     "A live event's main link is for event details. Do not describe it as " +
       "registration unless an approved fact explicitly says registration.",
-    "Do not put URLs or Markdown links in the answer. Approved links are " +
-      "shown separately as source cards. Refer to a helpful link naturally " +
-      "as being linked below, but do not name unrelated platforms.",
+    "Do not put URLs or Markdown links in the answer. Approved links and " +
+      "event actions are shown separately. Refer to a helpful action " +
+      "naturally as being below, but do not name unrelated platforms.",
+    "For a live event, refer to one event-details button below. Do not " +
+      "direct the person to separate website and Church Center detail " +
+      "pages. If the " +
+      "approved event action includes registration, the event details modal " +
+      "will show that one registration action.",
     "Do not say 'I have provided,' 'I have included,' 'I have added,' or " +
       "formally announce link buttons. When needed, simply say that the " +
-      "relevant link is below.",
+      "relevant action is below.",
     "Use only sourceEntryIds that appear in APPROVED_CONTEXT.entries.",
     "Return JSON matching the required schema.",
   ].join("\n");

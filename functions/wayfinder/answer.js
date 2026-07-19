@@ -513,6 +513,22 @@ function buildAnswerSourceCards_(
     });
   }
   if (!publicResponse) return cards;
+  const selectedEventTitles = new Set(cards
+      .filter((card) => card.topic === "live_events")
+      .map((card) => normalizeEventActionTitle_(card.title))
+      .filter(Boolean));
+  if (selectedEventTitles.size) {
+    entries.forEach((entry) => {
+      if (existingIds.has(entry.id) || entry.topic !== "live_events" ||
+        !Array.isArray(entry.approvedActions) ||
+        !entry.approvedActions.length ||
+        !selectedEventTitles.has(normalizeEventActionTitle_(entry.title))) {
+        return;
+      }
+      cards.push(buildEntrySourceCard_(entry));
+      existingIds.add(entry.id);
+    });
+  }
   const requiredLinkRules = [
     {
       intent: PRAYER_FORM_QUESTION_PATTERN,
@@ -543,11 +559,18 @@ function buildAnswerSourceCards_(
   return cards;
 }
 
+function normalizeEventActionTitle_(value) {
+  return String(value || "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+}
+
 function sendWayfinderSuccess_(response, payload, publicResponse) {
   if (!publicResponse) {
     response.status(200).json(payload);
     return;
   }
+  const actions = buildPublicEventActions_(payload && payload.sourceCards);
   response.status(200).json({
     ok: payload && payload.ok === true,
     responseId: crypto.randomUUID(),
@@ -558,7 +581,9 @@ function sendWayfinderSuccess_(response, payload, publicResponse) {
         payload && payload.sourceCards,
         payload && payload.question,
         payload && payload.conversationHistory,
+        actions.length > 0,
     ),
+    actions: actions,
   });
 }
 
@@ -570,10 +595,16 @@ function normalizePublicAnswer_(value) {
       );
 }
 
-function buildPublicActionLinks_(sourceCards, question, history) {
+function buildPublicActionLinks_(
+    sourceCards,
+    question,
+    history,
+    hideEventDetailLinks = false,
+) {
   const links = [];
   const seenUrls = new Set();
   (Array.isArray(sourceCards) ? sourceCards : []).forEach((card) => {
+    if (hideEventDetailLinks && card && card.topic === "live_events") return;
     const cardLinks = card && Array.isArray(card.links) ? card.links : [];
     cardLinks.forEach((link) => {
       const label = String(link && link.label || "Learn more").trim()
@@ -585,6 +616,65 @@ function buildPublicActionLinks_(sourceCards, question, history) {
     });
   });
   return selectQuestionSpecificLinks_(links, question, history);
+}
+
+function buildPublicEventActions_(sourceCards) {
+  const actions = [];
+  const seenIds = new Set();
+
+  (Array.isArray(sourceCards) ? sourceCards : []).forEach((card) => {
+    const cardActions = card && Array.isArray(card.actions) ?
+      card.actions : [];
+    cardActions.forEach((action) => {
+      if (actions.length >= 3) return;
+      const normalized = normalizePublicEventAction_(action);
+      if (!normalized || seenIds.has(normalized.id)) return;
+      seenIds.add(normalized.id);
+      actions.push(normalized);
+    });
+  });
+
+  return actions;
+}
+
+function normalizePublicEventAction_(action) {
+  if (!action || action.type !== "event_details" || !action.event) {
+    return null;
+  }
+  const event = action.event;
+  const title = boundedPublicActionText_(event.title, 160);
+  const date = boundedPublicActionText_(event.date, 80);
+  if (!title || !date) return null;
+  const id = boundedPublicActionText_(
+      action.id || title.toLowerCase() + ":" + date.toLowerCase(),
+      160,
+  );
+  if (!id) return null;
+  const registrationUrl = getSafePublicActionUrl_(event.registrationUrl);
+
+  return {
+    type: "event_details",
+    id: id,
+    label: boundedPublicActionText_(action.label, 80) || "View event",
+    event: {
+      title: title,
+      date: date,
+      time: boundedPublicActionText_(event.time, 80),
+      location: boundedPublicActionText_(event.location, 240),
+      venue: boundedPublicActionText_(event.venue, 240),
+      address: boundedPublicActionText_(event.address, 300),
+      description: boundedPublicActionText_(event.description, 1200),
+      recurrence: boundedPublicActionText_(event.recurrence, 500),
+      imageUrl: getSafePublicActionUrl_(event.imageUrl),
+      registrationUrl: registrationUrl,
+      registrationLabel: registrationUrl ?
+        boundedPublicActionText_(event.registrationLabel, 80) : "",
+    },
+  };
+}
+
+function boundedPublicActionText_(value, maxLength) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
 function selectQuestionSpecificLinks_(links, question, history) {
@@ -688,7 +778,8 @@ function selectQuestionSpecificLinks_(links, question, history) {
 function getSafePublicActionUrl_(value) {
   try {
     const url = new URL(String(value || ""));
-    return url.protocol === "https:" ? url.toString() : "";
+    return url.protocol === "https:" && !url.username && !url.password ?
+      url.toString().slice(0, 1000) : "";
   } catch (error) {
     return "";
   }

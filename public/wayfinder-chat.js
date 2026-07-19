@@ -189,6 +189,7 @@
               question: question,
               answer: answer,
             },
+            result.actions,
         );
         if (followUpQuestion) {
           addTextMessage_("assistant", followUpQuestion, "follow-up");
@@ -278,6 +279,16 @@
   }
 
   function handleWayfinderChatAction_(event) {
+    var eventActionButton = event.target.closest(
+        "[data-wayfinder-event-action]",
+    );
+    if (eventActionButton) {
+      openWayfinderEventAction_(
+          eventActionButton.getAttribute("data-message-id") || "",
+          Number(eventActionButton.getAttribute("data-action-index")),
+      );
+      return;
+    }
     var ratingButton = event.target.closest(
         "[data-wayfinder-feedback-rating]",
     );
@@ -330,6 +341,18 @@
     }).finally(function() {
       setWayfinderBusy_(false);
     });
+  }
+
+  function openWayfinderEventAction_(messageId, actionIndex) {
+    var message = findWayfinderMessage_(messageId);
+    var actions = message && message.data &&
+      Array.isArray(message.data.actions) ? message.data.actions : [];
+    var action = Number.isInteger(actionIndex) ? actions[actionIndex] : null;
+    if (!action || action.type !== "event_details" || !action.event ||
+      typeof window.openWayfinderEventDetailsModal !== "function") return;
+
+    closeWayfinderChat_();
+    window.openWayfinderEventDetailsModal(action.event);
   }
 
   function callPublicWayfinder_(payload) {
@@ -404,6 +427,7 @@
           reason: reason,
           note: note,
           links: data.links || [],
+          actions: data.actions || [],
         }),
       });
     }).then(parseWayfinderResponse_).then(function(result) {
@@ -524,12 +548,13 @@
       ) !== -1;
   }
 
-  function addTextMessage_(role, text, tone, links, feedback) {
+  function addTextMessage_(role, text, tone, links, feedback, actions) {
     addStructuredMessage_("text", {
       role: role,
       text: String(text || ""),
       tone: String(tone || ""),
       links: Array.isArray(links) ? links : [],
+      actions: Array.isArray(actions) ? actions : [],
       feedback: feedback && feedback.responseId ? {
         responseId: String(feedback.responseId),
         question: String(feedback.question || "").slice(0, 500),
@@ -588,7 +613,7 @@
       role === "assistant" ?
         "<img src=\"/loader-icon.svg\" alt=\"\">" : "",
       "<div>", renderParagraphs_(data.text),
-      renderWayfinderActionLinks_(data.links),
+      renderWayfinderActionLinks_(data.links, data.actions, message.id),
       renderWayfinderFeedback_(message), "</div></article>",
     ].join("");
   }
@@ -643,7 +668,7 @@
     ].join("");
   }
 
-  function renderWayfinderActionLinks_(links) {
+  function renderWayfinderActionLinks_(links, actions, messageId) {
     var safeLinks = (Array.isArray(links) ? links : []).slice(0, 6)
         .map(function(link) {
           var label = String(link && link.label || "Learn more").trim();
@@ -651,9 +676,27 @@
           return label && url ? {label: label, url: url} : null;
         })
         .filter(Boolean);
-    if (!safeLinks.length) return "";
+    var safeActions = (Array.isArray(actions) ? actions : []).slice(0, 3)
+        .map(function(action, index) {
+          var label = String(action && action.label || "View event").trim();
+          var eventData = action && action.event;
+          return action && action.type === "event_details" && eventData &&
+            String(eventData.title || "").trim() &&
+            String(eventData.date || "").trim() ? {
+              label: label.slice(0, 80),
+              index: index,
+            } : null;
+        })
+        .filter(Boolean);
+    if (!safeLinks.length && !safeActions.length) return "";
     return [
       "<div class=\"wayfinder-chat-action-links\">",
+      safeActions.map(function(action) {
+        return "<button type=\"button\" data-wayfinder-event-action=\"true\"" +
+          " data-message-id=\"" + escapeAttr_(messageId) +
+          "\" data-action-index=\"" + escapeAttr_(String(action.index)) +
+          "\">" + escapeHtml_(action.label) + "</button>";
+      }).join(""),
       safeLinks.map(function(link) {
         return "<a href=\"" + escapeAttr_(link.url) +
           "\" target=\"_blank\" rel=\"noopener noreferrer\">" +

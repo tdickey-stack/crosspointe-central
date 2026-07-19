@@ -39,6 +39,11 @@ test("ranks website Featured Events while keeping PCO details", async () => {
           tag_("central", "Central"),
           tag_("priority", "Wayfinder Priority"),
           tag_("private", "Staff"),
+          parentEvent_("2", {
+            registration_url:
+              "https://crosspointetv.churchcenter.com/registrations/" +
+              "events/starting-pointe",
+          }),
         ],
         links: {next: null},
       };
@@ -50,6 +55,10 @@ test("ranks website Featured Events while keeping PCO details", async () => {
         name: "Starting Pointe",
         normalizedName: "starting pointe",
         startsAt: "2026-07-14T23:00:00.000Z",
+        registrationAction: {
+          label: "Sign Up on the Website",
+          url: "https://registration.example.com/starting-pointe",
+        },
         url: "https://www.crosspointe.tv/event/starting-pointe",
       }],
     }),
@@ -66,11 +75,22 @@ test("ranks website Featured Events while keeping PCO details", async () => {
   assert.match(result.entries[0].requiredFacts.join(" "), /Event Hall/);
   assert.match(result.entries[0].requiredActions.join(" "),
       /before events that are not featured/);
+  assert.equal(result.entries[0].approvedActions.length, 1);
+  assert.equal(
+      result.entries[0].approvedActions[0].event.registrationUrl,
+      "https://crosspointetv.churchcenter.com/registrations/" +
+        "events/starting-pointe",
+  );
+  assert.equal(
+      result.entries[0].approvedActions[0].event.registrationLabel,
+      "Register in Church Center",
+  );
   assert.equal(
       result.entries.some((entry) => /Private/.test(entry.title)),
       false,
   );
   assert.match(requestedUrls[0], /where%5Bstarts_at%5D%5Blte%5D/);
+  assert.match(requestedUrls[0], /include=tags%2Cevent/);
 });
 
 test("ignores featured website events that are absent from PCO", async () => {
@@ -459,10 +479,15 @@ function event_(id, name, startsAt, tagIds) {
     },
     relationships: {
       tags: {data: tagIds.map((tagId) => ({type: "Tag", id: tagId}))},
+      event: {data: {type: "Event", id}},
     },
   };
 }
 
 function tag_(id, name) {
   return {type: "Tag", id, attributes: {name}};
+}
+
+function parentEvent_(id, attributes) {
+  return {type: "Event", id, attributes: attributes || {}};
 }

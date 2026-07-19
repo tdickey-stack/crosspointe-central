@@ -1,10 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import {mergePreviewSingletonPayload} from "../preview-publish.js";
 import {
   createWayfinderAlphaAccessHandler,
   createWayfinderAlphaSettingsHandler,
 } from "./alpha-access.js";
+
+test("homepage publishing preserves the Wayfinder alpha setting", () => {
+  const result = mergePreviewSingletonPayload(
+      {
+        hero_heading: "Old heading",
+        wayfinder_enabled: true,
+        wayfinder_access_mode: "admin_session_alpha",
+      },
+      {
+        hero_heading: "New heading",
+      },
+  );
+
+  assert.equal(result.hero_heading, "New heading");
+  assert.equal(result.wayfinder_enabled, true);
+  assert.equal(result.wayfinder_access_mode, "admin_session_alpha");
+});
 
 test("enabled alpha allows a user with Wayfinder permission", async () => {
   const store = createStore_({enabled: true, permission: "view"});

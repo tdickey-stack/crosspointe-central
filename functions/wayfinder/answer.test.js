@@ -812,6 +812,87 @@ test("public answer exposes links without source data", async () => {
   assert.equal(Object.hasOwn(response.body, "sourceCards"), false);
 });
 
+test("public event answer exposes one modal action without detail links",
+    async () => {
+      const response = createResponse_();
+      const eventAction = {
+        type: "event_details",
+        id: "featured-event:imani-milele",
+        label: "View Imani Milele Worship Night",
+        event: {
+          title: "Imani Milele Worship Night",
+          date: "Jul 27, 2026",
+          time: "6:30 PM - 8:00 PM",
+          location: "The Pointe",
+          venue: "The Pointe",
+          description: "A joy-filled evening of music and worship.",
+          registrationUrl: "https://registration.example.com/imani",
+          registrationLabel: "Sign Up Today!",
+        },
+      };
+      const handler = createWayfinderAnswerHandler({
+        firestore: createFirestore_(),
+        requireAdminAuth: false,
+        publicResponse: true,
+        retrieveLiveContext: async () => ({
+          statuses: {planning_center_event: "ok"},
+          entries: [{
+            id: "live-event-imani-one",
+            topic: "live_events",
+            title: "Imani Milele Worship Night",
+            responseMode: "guided",
+            requiredFacts: ["Imani Milele is July 27 at 6:30 PM."],
+            approvedLinks: [{
+              label: "Planning Center event",
+              url: "https://crosspointetv.churchcenter.com/calendar/event/1",
+            }],
+            approvedActions: [eventAction],
+          }, {
+            id: "live-event-imani-two",
+            topic: "live_events",
+            title: "Imani Milele Worship Night",
+            responseMode: "guided",
+            requiredFacts: ["Doors open at 5:30 PM."],
+            approvedLinks: [{
+              label: "Website event",
+              url: "https://www.crosspointe.tv/event/imani-milele",
+            }],
+            approvedActions: [eventAction],
+          }],
+        }),
+        generateAnswer: async () => ({
+          answer: "Imani Milele Worship Night begins at 6:30 PM.",
+          sourceEntryIds: [
+            "live-event-imani-one",
+            "live-event-imani-two",
+          ],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        }),
+      });
+
+      await handler({
+        method: "POST",
+        headers: {"x-wayfinder-session": "public-event-action-test"},
+        ip: "127.0.0.41",
+        body: {question: "What events are coming up?"},
+      }, response);
+
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(response.body.links, []);
+      assert.equal(
+          response.body.actions.length,
+          1,
+          JSON.stringify(response.body),
+      );
+      assert.equal(response.body.actions[0].type, "event_details");
+      assert.equal(
+          response.body.actions[0].event.registrationUrl,
+          "https://registration.example.com/imani",
+      );
+      assert.equal(Object.hasOwn(response.body, "sourceCards"), false);
+    });
+
 test("public livestream answer keeps the Church Online link", async () => {
   const response = createResponse_();
   const handler = createWayfinderAnswerHandler({

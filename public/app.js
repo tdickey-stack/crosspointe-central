@@ -3058,6 +3058,33 @@ function renderEventDetailsButton_(item) {
   ].join("");
 }
 
+function openWayfinderEventDetailsModal(event) {
+  if (!event || typeof event !== "object") return false;
+
+  var eventKey = registerEventDetailsItem_({
+    title: String(event.title || "").trim(),
+    date: String(event.date || "").trim(),
+    time: String(event.time || "").trim(),
+    location: String(event.location || "").trim(),
+    venue: String(event.venue || "").trim(),
+    address: String(event.address || "").trim(),
+    description: String(event.description || "").trim(),
+    recurrence: String(event.recurrence || "").trim(),
+    recurrence_details: String(event.recurrence || "").trim(),
+    registration_url: String(event.registrationUrl || "").trim(),
+    registration_button_text: String(
+        event.registrationLabel || "Register",
+    ).trim(),
+    image_url: String(event.imageUrl || "").trim(),
+    featured: "FALSE",
+    source: "Wayfinder Event",
+  });
+
+  if (!eventKey) return false;
+  openEventDetailsModal(eventKey);
+  return true;
+}
+
 function getEventModalRecurrence_(value) {
   var recurrence = String(value || "").trim();
   if (/^does not repeat[.!]?$/i.test(recurrence)) return "";
@@ -3236,7 +3263,11 @@ function openEventDetailsModal(eventKey) {
               "<span>Opens Church Center in a new tab</span>",
             "</div>",
           ].join("") :
-            button("Register", item.registrationUrl, "btn-primary") :
+            button(
+                item.registrationButtonText || "Register",
+                item.registrationUrl,
+                "btn-primary",
+            ) :
           "",
         calendarIntegrationsEnabled ? calendarButton_(
             "Add to Calendar",

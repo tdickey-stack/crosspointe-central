@@ -35,9 +35,13 @@ const retriever = createWayfinderPlanningCenterRetriever({
   },
 });
 
-const [events, groups] = await Promise.all([
+const [events, converge, groups] = await Promise.all([
   retriever({
     question: "What events are coming up?",
+    sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
+  }),
+  retriever({
+    question: "What is Converge 2026?",
     sourceTypes: [WAYFINDER_PCO_SOURCE_TYPES.events],
   }),
   retriever({
@@ -50,7 +54,23 @@ console.log(JSON.stringify({
   eventStatus: events.statuses[WAYFINDER_PCO_SOURCE_TYPES.events],
   eventResults: events.entries.map((entry) => ({
     title: entry.title,
-    facts: entry.requiredFacts,
+    actionIds: (entry.approvedActions || []).map((action) => action.id),
+  })),
+  convergeStatus: converge.statuses[WAYFINDER_PCO_SOURCE_TYPES.events],
+  convergeResults: converge.entries.map((entry) => ({
+    title: entry.title,
+    actions: (entry.approvedActions || []).map((action) => ({
+      id: action.id,
+      label: action.label,
+      event: {
+        title: action.event?.title,
+        date: action.event?.date,
+        time: action.event?.time,
+        location: action.event?.location,
+        registrationUrl: action.event?.registrationUrl,
+        registrationLabel: action.event?.registrationLabel,
+      },
+    })),
   })),
   groupStatus: groups.statuses[WAYFINDER_PCO_SOURCE_TYPES.groups],
   groupTitles: groups.entries.map((entry) => entry.title),

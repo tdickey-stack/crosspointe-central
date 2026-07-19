@@ -29,6 +29,15 @@ test("reads and sanitizes the public Featured Events identities", async () => {
               content: {blocks: [{
                 type: "paragraph",
                 data: {text: "<p>A relaxed night to connect &amp; grow.</p>"},
+              }, {
+                type: "buttons",
+                data: {buttons: [{
+                  text: "Learn More",
+                  url: "https://example.com/details",
+                }, {
+                  text: "Sign Up Today!",
+                  url: "https://registration.example.com/mens-night",
+                }]},
               }]},
               privateNote: "unused",
             },
@@ -59,6 +68,10 @@ test("reads and sanitizes the public Featured Events identities", async () => {
     normalizedName: "mens night",
     startsAt: "2026-07-20T22:30:00.000Z",
     description: "A relaxed night to connect & grow.",
+    registrationAction: {
+      label: "Sign Up Today!",
+      url: "https://registration.example.com/mens-night",
+    },
     url: "https://www.crosspointe.tv/event/mens-night",
   }]);
   assert.match(requests[1].url, /startTime=2026-07-12T15%3A00%3A00.000Z/);
@@ -126,6 +139,10 @@ test("builds a temporary grounded entry for a named Featured Event", () => {
       normalizedName: "converge 2026",
       startsAt: "2026-07-30T17:00:00.000Z",
       description: "A music camp for children to learn and perform.",
+      registrationAction: {
+        label: "Sign Up Today!",
+        url: "https://ru.edu/converge",
+      },
       url: "https://www.crosspointe.tv/event/converge-2026",
     }],
   }, "What is Converge?");

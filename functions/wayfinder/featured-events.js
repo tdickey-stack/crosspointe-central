@@ -4,6 +4,11 @@ const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 8000;
 const MAX_HTML_LENGTH = 2_000_000;
 const MAX_FEATURED_EVENTS = 50;
+const REGISTRATION_CTA_PATTERN = new RegExp(
+    "\\b(?:register|registration|sign\\s*up|signup|tickets?|apply|rsvp|" +
+    "waitlist)\\b",
+    "i",
+);
 
 /**
  * Builds a cached reader for the public Featured Events section.
@@ -141,6 +146,9 @@ function sanitizeFeaturedEvent_(row) {
     normalizedName,
     startsAt: startsAt.toISOString(),
     description: extractFeaturedContentText_(row && row.content),
+    registrationAction: extractFeaturedRegistrationAction_(
+        row && row.content,
+    ),
     url: "https://www.crosspointe.tv/event/" + slug,
   };
 }
@@ -153,6 +161,36 @@ function extractFeaturedContentText_(content) {
     return block && block.data && typeof block.data.text === "string" ?
       block.data.text : "";
   }).filter(Boolean).join(" "), 900);
+}
+
+function extractFeaturedRegistrationAction_(content) {
+  const blocks = content && Array.isArray(content.blocks) ?
+    content.blocks.slice(0, 30) : [];
+
+  for (const block of blocks) {
+    const buttons = block && block.data && Array.isArray(block.data.buttons) ?
+      block.data.buttons.slice(0, 5) : [];
+    for (const button of buttons) {
+      const label = cleanText_(button && button.text, 80);
+      const url = approvedRegistrationUrl_(button && button.url);
+      if (label && url && REGISTRATION_CTA_PATTERN.test(label)) {
+        return {label, url};
+      }
+    }
+  }
+
+  return null;
+}
+
+function approvedRegistrationUrl_(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol !== "https:" || !url.hostname ||
+      url.username || url.password) return "";
+    return url.toString().slice(0, 1000);
+  } catch (error) {
+    return "";
+  }
 }
 
 /**

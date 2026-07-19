@@ -124,7 +124,7 @@ async function retrieveEvents_(context) {
   }
   const end = new Date(current.getTime() + lookaheadDays * 86400000);
   const url = new URL("/calendar/v2/event_instances", API_ORIGIN);
-  url.searchParams.set("include", "tags");
+  url.searchParams.set("include", "tags,event");
   url.searchParams.set("order", "starts_at");
   url.searchParams.set("where[starts_at][gte]", current.toISOString());
   url.searchParams.set("where[starts_at][lte]", end.toISOString());
@@ -134,9 +134,17 @@ async function retrieveEvents_(context) {
   const tagMap = buildIncludedMap_(pages, "Tag", (item) => {
     return String(item.attributes && item.attributes.name || "").trim();
   });
+  const eventMap = buildIncludedMap_(pages, "Event", (item) => {
+    return item.attributes || {};
+  });
   const tokens = meaningfulTokens_(question);
   const candidates = pages.flatMap((page) => page.data || [])
-      .map((instance) => normalizeEvent_(instance, tagMap, current))
+      .map((instance) => normalizeEvent_(
+          instance,
+          tagMap,
+          eventMap,
+          current,
+      ))
       .filter(Boolean)
       .filter((event) => event.tags.includes(context.centralTagName) ||
         isFeaturedEventMatch_(event, context.featured, context.timezone))
@@ -276,7 +284,7 @@ async function retrieveGroups_({question, fetchJson}) {
   return {status: "ok", entries: selected};
 }
 
-function normalizeEvent_(instance, tagMap, current) {
+function normalizeEvent_(instance, tagMap, eventMap, current) {
   const attrs = instance && instance.attributes || {};
   const startsAt = new Date(attrs.published_starts_at || attrs.starts_at || "");
   if (!instance || !instance.id || Number.isNaN(startsAt.getTime()) ||
@@ -289,21 +297,39 @@ function normalizeEvent_(instance, tagMap, current) {
     instance.relationships.tags.data : [];
   const tags = tagRefs.map((reference) => tagMap.get(String(reference.id)))
       .filter(Boolean);
+  const eventReference = instance && instance.relationships &&
+    instance.relationships.event && instance.relationships.event.data;
+  const eventAttrs = eventReference ?
+    eventMap.get(String(eventReference.id)) || {} : {};
   const name = cleanPublicText_(attrs.name || "Untitled Event", 200);
-  const description = cleanPublicText_(attrs.recurrence_description || "", 500);
+  const description = cleanPublicText_(
+      eventAttrs.description || eventAttrs.summary || "",
+      900,
+  );
+  const recurrence = cleanPublicText_(attrs.recurrence_description || "", 500);
   const location = cleanEventLocation_(attrs.location);
   const url = approvedPublicUrl_(attrs.church_center_url);
+  const registrationUrl = approvedExternalActionUrl_(
+      eventAttrs.registration_url,
+  );
+  const imageUrl = approvedExternalActionUrl_(
+      eventAttrs.image_url || attrs.image_url,
+  );
 
   return {
     id: String(instance.id),
     name,
     description,
+    recurrence,
     location,
     startsAt,
     endsAt: Number.isNaN(endsAt.getTime()) ? null : endsAt,
     url,
+    registrationUrl,
+    imageUrl,
     tags,
-    searchText: [name, description, location, ...tags].join(" ").toLowerCase(),
+    searchText: [name, description, recurrence, location, ...tags]
+        .join(" ").toLowerCase(),
   };
 }
 
@@ -367,7 +393,12 @@ function buildEventEntry_(event, rawRooms, timezone, featuredEvent = null) {
   }
   facts.push(location ? "The listed location is " + location + "." :
     "A location has not been posted yet.");
-  if (event.description) facts.push("Public event note: " + event.description);
+  if (event.recurrence) {
+    facts.push("Public event note: " + event.recurrence);
+  }
+  if (event.description) {
+    facts.push("Public event description: " + event.description);
+  }
   if (featuredDescription) {
     facts.push("Public Featured Event description: " + featuredDescription);
   }
@@ -395,7 +426,56 @@ function buildEventEntry_(event, rawRooms, timezone, featuredEvent = null) {
       "link unless the approved facts explicitly identify registration.",
     ],
     approvedLinks: event.url ? [{label: displayName, url: event.url}] : [],
+    approvedActions: [buildEventDetailsAction_(
+        event,
+        location,
+        displayName,
+        featuredDescription,
+        featuredEvent,
+        timezone,
+    )],
     liveSource: {type: EVENT_SOURCE, sourceId: event.id},
+  };
+}
+
+function buildEventDetailsAction_(
+    event,
+    location,
+    displayName,
+    featuredDescription,
+    featuredEvent,
+    timezone,
+) {
+  const featuredRegistration = featuredEvent &&
+    featuredEvent.registrationAction || null;
+  const registrationUrl = event.registrationUrl ||
+    approvedExternalActionUrl_(featuredRegistration &&
+      featuredRegistration.url);
+  const registrationLabel = event.registrationUrl ?
+    (/churchcenter\.com$/i.test(new URL(event.registrationUrl).hostname) ?
+      "Register in Church Center" : "Register") :
+    cleanPublicText_(featuredRegistration && featuredRegistration.label, 80);
+  const identity = featuredEvent ?
+    "featured-event:" + normalizeFeaturedEventName(displayName) :
+    "planning-center-event:" + safeId_(event.id);
+
+  return {
+    type: "event_details",
+    id: identity,
+    label: cleanPublicText_("View " + displayName, 80),
+    event: {
+      title: displayName,
+      date: formatEventModalDate_(event.startsAt, timezone),
+      time: formatEventTimeRange_(event.startsAt, event.endsAt, timezone),
+      location: location,
+      venue: location,
+      address: "",
+      description: featuredDescription || event.description,
+      recurrence: event.recurrence,
+      imageUrl: event.imageUrl,
+      registrationUrl: registrationUrl,
+      registrationLabel: registrationUrl ? registrationLabel : "",
+    },
   };
 }
 
@@ -654,12 +734,29 @@ function formatEventDate_(date, timezone) {
   }).format(date);
 }
 
+function formatEventModalDate_(date, timezone) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
 function formatEventTime_(date, timezone) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatEventTimeRange_(startsAt, endsAt, timezone) {
+  const start = formatEventTime_(startsAt, timezone);
+  if (!(endsAt instanceof Date) || Number.isNaN(endsAt.getTime())) {
+    return start;
+  }
+  return start + " - " + formatEventTime_(endsAt, timezone);
 }
 
 function cleanPublicText_(value, maxLength) {
@@ -687,6 +784,17 @@ function approvedPublicUrl_(value) {
       url.hostname !== "crosspointe.tv" &&
       url.hostname !== "www.crosspointe.tv") return "";
     return url.toString();
+  } catch (error) {
+    return "";
+  }
+}
+
+function approvedExternalActionUrl_(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol !== "https:" || !url.hostname ||
+      url.username || url.password) return "";
+    return url.toString().slice(0, 1000);
   } catch (error) {
     return "";
   }

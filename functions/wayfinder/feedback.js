@@ -65,6 +65,7 @@ export function createWayfinderPublicFeedbackHandler(dependencies) {
         reason: feedback.reason,
         note: feedback.note,
         links: feedback.links,
+        actions: feedback.actions,
         status: feedback.rating === "helpful" ? "recorded" : "new",
         source: "public_chat",
         updatedAt: now,
@@ -199,6 +200,7 @@ function validatePublicFeedback_(body) {
     reason: reason,
     note: note,
     links: sanitizeFeedbackLinks_(value.links),
+    actions: sanitizeFeedbackActions_(value.actions),
   };
 }
 
@@ -234,6 +236,44 @@ function sanitizeFeedbackLinks_(links) {
       .filter(Boolean);
 }
 
+function sanitizeFeedbackActions_(actions) {
+  return (Array.isArray(actions) ? actions : []).slice(0, 3)
+      .map((action) => {
+        if (!action || action.type !== "event_details" || !action.event) {
+          return null;
+        }
+        const event = action.event;
+        const title = String(event.title || "").trim().slice(0, 160);
+        const date = String(event.date || "").trim().slice(0, 80);
+        if (!title || !date) return null;
+        const registrationUrl = sanitizeFeedbackUrl_(event.registrationUrl);
+        return {
+          type: "event_details",
+          id: String(action.id || "").trim().slice(0, 160),
+          label: String(action.label || "View event").trim().slice(0, 80),
+          event: {
+            title: title,
+            date: date,
+            time: String(event.time || "").trim().slice(0, 80),
+            registrationUrl: registrationUrl,
+            registrationLabel: registrationUrl ?
+              String(event.registrationLabel || "").trim().slice(0, 80) : "",
+          },
+        };
+      })
+      .filter(Boolean);
+}
+
+function sanitizeFeedbackUrl_(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" && !url.username && !url.password ?
+      url.toString().slice(0, 1000) : "";
+  } catch (error) {
+    return "";
+  }
+}
+
 async function listWayfinderFeedback_(firestore) {
   const snapshot = await firestore.collection(FEEDBACK_COLLECTION)
       .orderBy("createdAt", "desc")
@@ -250,6 +290,7 @@ async function listWayfinderFeedback_(firestore) {
       reason: String(data.reason || ""),
       note: String(data.note || ""),
       links: sanitizeFeedbackLinks_(data.links),
+      actions: sanitizeFeedbackActions_(data.actions),
       status: String(data.status || "new"),
       createdAt: toIsoString_(data.createdAt),
       updatedAt: toIsoString_(data.updatedAt),

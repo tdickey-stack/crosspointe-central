@@ -222,7 +222,8 @@
   margin-top: 10px;
 }
 
-.wayfinder-chat-action-links a {
+.wayfinder-chat-action-links a,
+.wayfinder-chat-action-links button {
   display: inline-flex;
   align-items: center;
   min-height: 32px;
@@ -237,8 +238,15 @@
   text-decoration: none;
 }
 
+.wayfinder-chat-action-links button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .wayfinder-chat-action-links a:hover,
-.wayfinder-chat-action-links a:focus-visible {
+.wayfinder-chat-action-links a:focus-visible,
+.wayfinder-chat-action-links button:hover,
+.wayfinder-chat-action-links button:focus-visible {
   border-color: var(--cp-red);
   background: rgba(239, 59, 45, 0.14);
 }

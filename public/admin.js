@@ -5526,6 +5526,7 @@
       "<h4>", escapeHtml_(item.question), "</h4>",
       "<p class=\"wayfinder-feedback-answer\">",
       escapeHtml_(item.answer), "</p>",
+      renderWayfinderFeedbackTargets_(item),
       item.note ? "<p class=\"wayfinder-feedback-note\"><strong>Tester note:</strong> " +
         escapeHtml_(item.note) + "</p>" : "",
       item.status === "recorded" ? "" : [
@@ -5536,6 +5537,40 @@
       reviewed ? "Reopen" : "Mark Reviewed", "</button>",
       ].join(""),
       "</article>",
+    ].join("");
+  }
+
+  function renderWayfinderFeedbackTargets_(item) {
+    var targets = [];
+    (Array.isArray(item.actions) ? item.actions : []).forEach(function(action) {
+      if (!action || action.type !== "event_details" || !action.event) return;
+      var eventData = action.event;
+      targets.push(
+          "Event modal: " + String(eventData.title || action.label || "Event"),
+      );
+      if (eventData.registrationUrl) {
+        targets.push(
+            "Registration action: " +
+            String(eventData.registrationLabel || "Register") + " — " +
+            String(eventData.registrationUrl),
+        );
+      }
+    });
+    (Array.isArray(item.links) ? item.links : []).forEach(function(link) {
+      if (!link || !link.url) return;
+      targets.push(
+          "External link: " + String(link.label || "Learn more") + " — " +
+          String(link.url),
+      );
+    });
+    if (!targets.length) return "";
+
+    return [
+      "<div class=\"central-admin-footer-note\"><strong>Response actions</strong><ul>",
+      targets.map(function(target) {
+        return "<li>" + escapeHtml_(target) + "</li>";
+      }).join(""),
+      "</ul></div>",
     ].join("");
   }
 

@@ -21,6 +21,19 @@ test("public feedback stores a bounded helpful rating", async () => {
       answer: "Services are at 9:00 and 10:30 AM.",
       rating: "helpful",
       links: [],
+      actions: [{
+        type: "event_details",
+        id: "featured-event:converge-2026",
+        label: "View Converge 2026",
+        event: {
+          title: "Converge 2026",
+          date: "Jul 30, 2026",
+          time: "12:00 PM",
+          registrationUrl: "https://ru.edu/converge",
+          registrationLabel: "Sign Up Today!",
+          description: "This larger field is intentionally not stored.",
+        },
+      }],
     },
   }, response);
 
@@ -28,6 +41,18 @@ test("public feedback stores a bounded helpful rating", async () => {
   assert.equal(writes.length, 1);
   assert.equal(writes[0].data.rating, "helpful");
   assert.equal(writes[0].data.status, "recorded");
+  assert.deepEqual(writes[0].data.actions, [{
+    type: "event_details",
+    id: "featured-event:converge-2026",
+    label: "View Converge 2026",
+    event: {
+      title: "Converge 2026",
+      date: "Jul 30, 2026",
+      time: "12:00 PM",
+      registrationUrl: "https://ru.edu/converge",
+      registrationLabel: "Sign Up Today!",
+    },
+  }]);
   assert.equal("ip" in writes[0].data, false);
   assert.equal("email" in writes[0].data, false);
 });

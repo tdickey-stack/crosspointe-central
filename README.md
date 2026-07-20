@@ -66,14 +66,21 @@ Quick syntax check:
 pnpm run check:syntax
 ```
 
-## Environment Variables
+## Functions Configuration
 
-Local Functions environment variables live in:
+Non-sensitive local Functions settings live in:
 
 - `functions/.env.example`
-- `functions/.env` for real local values
+- `functions/.env` for local values
 
-Do not commit `functions/.env`.
+Sensitive local emulator values live in:
+
+- `functions/.secret.local.example`
+- `functions/.secret.local` for real local values
+
+Deployed sensitive values live in Google Cloud Secret Manager. Do not commit
+either local values file. See `docs/functions-secrets.md` for setup, rotation,
+and developer handoff instructions.
 
 ## GitHub Deployment
 
@@ -91,7 +98,8 @@ The workflow expects these GitHub repository secrets:
 - `FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL`
   The full JSON for a Google service account that can deploy Hosting, Functions, and Firestore rules for the `crosspointe-central` Firebase project.
 - `FIREBASE_FUNCTIONS_ENV`
-  The full multi-line contents of `functions/.env`.
+  The non-sensitive multi-line contents of `functions/.env`. Server secrets are
+  not included; deployed functions receive them from Secret Manager.
 
 Detailed setup steps live in:
 

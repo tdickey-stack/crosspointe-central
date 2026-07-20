@@ -32,12 +32,16 @@ This project is now set up around the Gmail API with:
 - scope: `https://www.googleapis.com/auth/gmail.send`
 - delivery path: Cloud Functions calls the Gmail API directly
 
-These Function env vars now power delivery:
+These Functions settings power delivery:
 
 - `CENTRAL_GMAIL_CLIENT_ID`
+- `CENTRAL_GMAIL_SENDER_EMAIL`
+
+The following sensitive values live in Google Cloud Secret Manager in deployed
+functions and in `functions/.secret.local` during local emulator testing:
+
 - `CENTRAL_GMAIL_CLIENT_SECRET`
 - `CENTRAL_GMAIL_REFRESH_TOKEN`
-- `CENTRAL_GMAIL_SENDER_EMAIL`
 
 The refresh token should be generated for the same mailbox that sends the mail,
 and the OAuth client should only request `gmail.send`.
@@ -68,3 +72,8 @@ The script prints:
 - the exact localhost redirect URI to add to your OAuth client
 - the Google authorization URL to open in a browser
 - the resulting refresh token after Google redirects back locally
+
+Store the new client secret and refresh token in Secret Manager before
+deploying. For local emulator testing only, put them in
+`functions/.secret.local`. Do not add either value to `functions/.env` or a
+GitHub Actions secret.

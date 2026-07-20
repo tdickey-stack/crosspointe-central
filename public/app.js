@@ -972,6 +972,7 @@ function renderFeaturedEventHeroCard_(data, settings) {
   var title = featuredEvent.title;
   var imageUrl = featuredEvent.imageUrl;
   var schedule = featuredEvent.schedule;
+  var doorsOpenTime = featuredEvent.doorsOpenTime;
 
   return [
     "<article class=\"featured-event-card\" aria-labelledby=\"featured-event-title\">",
@@ -986,6 +987,9 @@ function renderFeaturedEventHeroCard_(data, settings) {
           schedule ?
             "<p class=\"featured-event-schedule\">" +
               escapeHtml(schedule) + "</p>" : "",
+          doorsOpenTime ?
+            "<p class=\"featured-event-doors-open\"><strong>Doors Open:</strong> " +
+              escapeHtml(doorsOpenTime) + "</p>" : "",
         "</div>",
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " onclick=\"openEventDetailsModal('",
@@ -1018,6 +1022,7 @@ function getFeaturedEventContext_(data, settings) {
     title: title,
     imageUrl: imageUrl,
     schedule: [item.date, item.time].filter(Boolean).join(" • "),
+    doorsOpenTime: String(item.doors_open_time || "").trim(),
   };
 }
 
@@ -1041,6 +1046,9 @@ function renderSundayFeaturedEventCard_(data, settings) {
           featuredEvent.schedule ?
             "<p class=\"featured-event-schedule\">" +
               escapeHtml(featuredEvent.schedule) + "</p>" : "",
+          featuredEvent.doorsOpenTime ?
+            "<p class=\"featured-event-doors-open\"><strong>Doors Open:</strong> " +
+              escapeHtml(featuredEvent.doorsOpenTime) + "</p>" : "",
         "</div>",
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " aria-label=\"View featured event: ",
@@ -3100,6 +3108,7 @@ function registerEventDetailsItem_(item) {
     title: String(item.title || "CrossPointe Event").trim(),
     date: String(item.date || "").trim(),
     time: String(item.time || "").trim(),
+    doorsOpenTime: String(item.doors_open_time || "").trim(),
     location: String(item.location || "").trim(),
     venue: String(item.venue || "").trim(),
     address: String(item.address || "").trim(),
@@ -3189,6 +3198,10 @@ function openEventDetailsModal(eventKey) {
           schedule ?
             "<p class=\"event-details-schedule\">" +
               escapeHtml(schedule) + "</p>" :
+            "",
+          item.doorsOpenTime ?
+            "<p class=\"event-details-doors-open\"><strong>Doors Open:</strong> " +
+              escapeHtml(item.doorsOpenTime) + "</p>" :
             "",
         "</div>",
         usesHeadingThumbnail ? [

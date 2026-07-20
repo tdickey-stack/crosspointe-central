@@ -20,6 +20,89 @@ export function findPlanningCenterTagId(payload, tagName) {
 }
 
 /**
+ * Resolves the public Doors Open and main event times from a Calendar payload.
+ *
+ * @param {Object} payload Planning Center event-times response.
+ * @param {Object} options Event title and main-time naming options.
+ * @return {Object} Structured event schedule timestamps.
+ */
+export function getPlanningCenterEventSchedule(payload, options = {}) {
+  const mainTimeName = normalizeEventTimeName_(
+      options.mainTimeName || "Event Time",
+  );
+  const eventTitle = normalizeEventTimeName_(options.eventTitle);
+  const publicEventTimes = (
+    payload && Array.isArray(payload.data) ? payload.data : []
+  ).filter((item) => {
+    const attrs = item && item.attributes || {};
+    const startsAt = new Date(String(attrs.starts_at || ""));
+
+    return item && item.type === "EventTime" &&
+      attrs.visible_on_widget_and_ical !== false &&
+      !Number.isNaN(startsAt.getTime());
+  });
+  const findByName = (name) => {
+    if (!name) return null;
+    return publicEventTimes.find((item) => {
+      return normalizeEventTimeName_(item.attributes.name) === name;
+    }) || null;
+  };
+  const doorsOpen = findByName("doors open");
+  const mainEventTime = findByName(mainTimeName) ||
+    findByName(eventTitle) ||
+    publicEventTimes.find((item) => {
+      const name = normalizeEventTimeName_(item.attributes.name);
+      return !["doors open", "setup", "teardown"].includes(name);
+    }) || null;
+  const mainAttrs = mainEventTime && mainEventTime.attributes || {};
+  const doorsAttrs = doorsOpen && doorsOpen.attributes || {};
+
+  return {
+    doorsOpenStartsAt: String(doorsAttrs.starts_at || "").trim(),
+    eventStartsAt: String(mainAttrs.starts_at || "").trim(),
+    eventEndsAt: String(mainAttrs.ends_at || "").trim(),
+  };
+}
+
+/**
+ * Normalizes a Planning Center event-time name for exact comparison.
+ *
+ * @param {string} value Event-time name.
+ * @return {string} Normalized name.
+ */
+function normalizeEventTimeName_(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+/**
+ * Extracts an explicit Doors Open time from public event copy.
+ *
+ * This is a fallback for Planning Center events whose Calendar API schedule
+ * omits the custom named time while the public description still contains it.
+ *
+ * @param {string} value Public event description.
+ * @return {string} Normalized time label or an empty string.
+ */
+export function findDoorsOpenTimeInText(value) {
+  const pattern = new RegExp(
+      "\\bdoors\\s+open\\s*(?:at|:|-)?\\s*" +
+      "(\\d{1,2})(?::(\\d{2}))?\\s*" +
+      "(a\\.?m\\.?|p\\.?m\\.?)(?![a-z])",
+      "i",
+  );
+  const match = String(value || "").match(pattern);
+
+  if (!match) return "";
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return "";
+
+  return String(hour) + ":" + String(minute).padStart(2, "0") + " " +
+    String(match[3]).replace(/\./g, "").toUpperCase();
+}
+
+/**
  * Selects future event instances carrying both public Central tags.
  *
  * @param {Object} payload Planning Center event-instances response.

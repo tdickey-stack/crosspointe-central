@@ -37,8 +37,10 @@ import {
 import {createWayfinderPlanningCenterRetriever} from
   "./wayfinder/planning-center.js";
 import {
+  findDoorsOpenTimeInText,
   findPlanningCenterTagId,
   getCentralFeaturedEventCandidates,
+  getPlanningCenterEventSchedule,
 } from "./planning-center/featured-event.js";
 import {
   CENTRAL_REGISTRATION_SIGNUP_FIELDS,
@@ -3954,31 +3956,46 @@ async function buildCentralCalendarItem_(
     featured,
 ) {
   const attrs = instance && instance.attributes || {};
-  const startsAt = attrs.published_starts_at || attrs.starts_at || "";
-  const startsDate = new Date(startsAt);
+  const fallbackStartsAt = attrs.published_starts_at || attrs.starts_at || "";
+  const fallbackEndsAt = attrs.published_ends_at || attrs.ends_at || "";
+  const fallbackStartsDate = new Date(fallbackStartsAt);
 
-  if (!instance || !instance.id || Number.isNaN(startsDate.getTime())) {
+  if (
+    !instance ||
+    !instance.id ||
+    Number.isNaN(fallbackStartsDate.getTime())
+  ) {
     return null;
   }
 
-  const rooms = await getEventInstanceRooms_(
-      instance.id,
-      Array.isArray(roomRules) ? roomRules : [],
-  );
-  const endsAt = attrs.published_ends_at || attrs.ends_at || "";
-  const endsDate = new Date(endsAt);
-  const hasValidEndDate = !Number.isNaN(endsDate.getTime());
-  const rawLocation = String(attrs.location || "").trim();
-  const locationDetails = splitPlanningCenterLocation_(rawLocation);
-  const location = rooms.length ?
-    rooms.join(", ") : cleanLocation_(rawLocation);
-  const title = String(attrs.name || "Untitled Event").trim();
   const description = htmlToPlainText_(
       eventAttrs.description ||
       eventAttrs.summary ||
       attrs.description ||
       "",
   );
+  const title = String(attrs.name || "Untitled Event").trim();
+  const [rooms, eventSchedule] = await Promise.all([
+    getEventInstanceRooms_(
+        instance.id,
+        Array.isArray(roomRules) ? roomRules : [],
+    ),
+    featured ? getEventInstanceSchedule_(instance.id, title) : {},
+  ]);
+  const startsAt = String(eventSchedule.eventStartsAt || fallbackStartsAt);
+  const endsAt = String(eventSchedule.eventEndsAt || fallbackEndsAt);
+  const startsDate = new Date(startsAt);
+  const endsDate = new Date(endsAt);
+  const hasValidEndDate = !Number.isNaN(endsDate.getTime());
+  const rawLocation = String(attrs.location || "").trim();
+  const locationDetails = splitPlanningCenterLocation_(rawLocation);
+  const location = rooms.length ?
+    rooms.join(", ") : cleanLocation_(rawLocation);
+  const doorsOpenStartsAt = new Date(eventSchedule.doorsOpenStartsAt || "");
+  const namedDoorsOpenTime = !Number.isNaN(doorsOpenStartsAt.getTime()) ?
+    formatTime_(doorsOpenStartsAt, PCO_TIMEZONE) : "";
+  const doorsOpenTime = namedDoorsOpenTime ||
+    findDoorsOpenTimeInText(description);
   const recurrence = String(
       attrs.compact_recurrence_description ||
       attrs.recurrence_description ||
@@ -4001,6 +4018,7 @@ async function buildCentralCalendarItem_(
     title: title,
     date: formatDate_(startsDate, PCO_TIMEZONE),
     time: formatTimeRange_(startsDate, endsAt, PCO_TIMEZONE),
+    doors_open_time: doorsOpenTime,
     location: location,
     description: description,
     recurrence: recurrence,
@@ -4405,6 +4423,35 @@ async function getEventInstanceRooms_(instanceId, roomRules) {
       .filter(Boolean);
 
   return applyRoomRules_(rawRooms, roomRules);
+}
+
+/**
+ * Retrieves the public Doors Open and main times for an event instance.
+ *
+ * @param {string} instanceId Planning Center event-instance ID.
+ * @param {string} eventTitle Planning Center event title.
+ * @return {Promise<Object>} Structured event schedule timestamps.
+ */
+async function getEventInstanceSchedule_(instanceId, eventTitle) {
+  const url =
+    "https://api.planningcenteronline.com/calendar/v2/event_instances/" +
+    encodeURIComponent(instanceId) +
+    "/event_times?order=starts_at&per_page=100";
+
+  try {
+    const data = await fetchPcoJson_(url);
+    return getPlanningCenterEventSchedule(data, {
+      eventTitle,
+      mainTimeName: "Event Time",
+    });
+  } catch (error) {
+    console.warn(
+        "Planning Center event schedule could not be loaded for instance " +
+        String(instanceId || "") + ".",
+        error,
+    );
+    return {};
+  }
 }
 
 function applyRoomRules_(rawRooms, roomRules) {
@@ -4848,6 +4895,7 @@ function toUpcomingItem_(item) {
     title: item.title,
     date: item.date,
     time: item.time,
+    doors_open_time: item.doors_open_time,
     location: item.location,
     description: item.description,
     recurrence: item.recurrence,

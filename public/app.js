@@ -972,6 +972,7 @@ function renderFeaturedEventHeroCard_(data, settings) {
   var title = featuredEvent.title;
   var imageUrl = featuredEvent.imageUrl;
   var schedule = featuredEvent.schedule;
+  var doorsOpenTime = featuredEvent.doorsOpenTime;
 
   return [
     "<article class=\"featured-event-card\" aria-labelledby=\"featured-event-title\">",
@@ -983,6 +984,9 @@ function renderFeaturedEventHeroCard_(data, settings) {
         "<div class=\"featured-event-copy\">",
           "<span class=\"featured-event-badge\">Featured Event</span>",
           "<h2 id=\"featured-event-title\">", escapeHtml(title), "</h2>",
+          doorsOpenTime ?
+            "<p class=\"featured-event-doors-open\"><strong>Doors Open:</strong> " +
+              escapeHtml(doorsOpenTime) + "</p>" : "",
           schedule ?
             "<p class=\"featured-event-schedule\">" +
               escapeHtml(schedule) + "</p>" : "",
@@ -1018,6 +1022,7 @@ function getFeaturedEventContext_(data, settings) {
     title: title,
     imageUrl: imageUrl,
     schedule: [item.date, item.time].filter(Boolean).join(" • "),
+    doorsOpenTime: String(item.doors_open_time || "").trim(),
   };
 }
 
@@ -1038,6 +1043,9 @@ function renderSundayFeaturedEventCard_(data, settings) {
           "<h2 id=\"sunday-featured-event-title\">",
             escapeHtml(featuredEvent.title),
           "</h2>",
+          featuredEvent.doorsOpenTime ?
+            "<p class=\"featured-event-doors-open\"><strong>Doors Open:</strong> " +
+              escapeHtml(featuredEvent.doorsOpenTime) + "</p>" : "",
           featuredEvent.schedule ?
             "<p class=\"featured-event-schedule\">" +
               escapeHtml(featuredEvent.schedule) + "</p>" : "",
@@ -3100,6 +3108,7 @@ function registerEventDetailsItem_(item) {
     title: String(item.title || "CrossPointe Event").trim(),
     date: String(item.date || "").trim(),
     time: String(item.time || "").trim(),
+    doorsOpenTime: String(item.doors_open_time || "").trim(),
     location: String(item.location || "").trim(),
     venue: String(item.venue || "").trim(),
     address: String(item.address || "").trim(),
@@ -3185,6 +3194,10 @@ function openEventDetailsModal(eventKey) {
           item.recurrence ?
             "<p class=\"event-details-recurrence\">" +
               escapeHtml(item.recurrence) + "</p>" :
+            "",
+          item.doorsOpenTime ?
+            "<p class=\"event-details-doors-open\"><strong>Doors Open:</strong> " +
+              escapeHtml(item.doorsOpenTime) + "</p>" :
             "",
           schedule ?
             "<p class=\"event-details-schedule\">" +

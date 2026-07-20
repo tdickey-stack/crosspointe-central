@@ -881,6 +881,16 @@ h1 {
   font-weight: 850;
 }
 
+.featured-event-body .featured-event-doors-open {
+  color: var(--cp-text);
+}
+
+.featured-event-doors-open strong {
+  margin-right: 3px;
+  color: var(--cp-red);
+  font-weight: 900;
+}
+
 .featured-event-cta {
   width: 100%;
   min-height: 38px;
@@ -1412,6 +1422,19 @@ h1 {
   color: var(--cp-muted);
 }
 
+.event-details-doors-open {
+  margin: 4px 0 0;
+  color: var(--cp-text);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.event-details-doors-open strong {
+  margin-right: 4px;
+  color: var(--cp-red);
+  font-weight: 900;
+}
+
 .event-details-image-wrap {
   margin: 0 34px;
   overflow: hidden;
@@ -1619,7 +1642,8 @@ h1 {
   }
 
   .event-details-recurrence,
-  .event-details-schedule {
+  .event-details-schedule,
+  .event-details-doors-open {
     font-size: 0.9rem;
   }
 

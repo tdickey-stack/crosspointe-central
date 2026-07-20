@@ -984,12 +984,12 @@ function renderFeaturedEventHeroCard_(data, settings) {
         "<div class=\"featured-event-copy\">",
           "<span class=\"featured-event-badge\">Featured Event</span>",
           "<h2 id=\"featured-event-title\">", escapeHtml(title), "</h2>",
-          schedule ?
-            "<p class=\"featured-event-schedule\">" +
-              escapeHtml(schedule) + "</p>" : "",
           doorsOpenTime ?
             "<p class=\"featured-event-doors-open\"><strong>Doors Open:</strong> " +
               escapeHtml(doorsOpenTime) + "</p>" : "",
+          schedule ?
+            "<p class=\"featured-event-schedule\">" +
+              escapeHtml(schedule) + "</p>" : "",
         "</div>",
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " onclick=\"openEventDetailsModal('",
@@ -1043,12 +1043,12 @@ function renderSundayFeaturedEventCard_(data, settings) {
           "<h2 id=\"sunday-featured-event-title\">",
             escapeHtml(featuredEvent.title),
           "</h2>",
-          featuredEvent.schedule ?
-            "<p class=\"featured-event-schedule\">" +
-              escapeHtml(featuredEvent.schedule) + "</p>" : "",
           featuredEvent.doorsOpenTime ?
             "<p class=\"featured-event-doors-open\"><strong>Doors Open:</strong> " +
               escapeHtml(featuredEvent.doorsOpenTime) + "</p>" : "",
+          featuredEvent.schedule ?
+            "<p class=\"featured-event-schedule\">" +
+              escapeHtml(featuredEvent.schedule) + "</p>" : "",
         "</div>",
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " aria-label=\"View featured event: ",
@@ -3195,13 +3195,13 @@ function openEventDetailsModal(eventKey) {
             "<p class=\"event-details-recurrence\">" +
               escapeHtml(item.recurrence) + "</p>" :
             "",
-          schedule ?
-            "<p class=\"event-details-schedule\">" +
-              escapeHtml(schedule) + "</p>" :
-            "",
           item.doorsOpenTime ?
             "<p class=\"event-details-doors-open\"><strong>Doors Open:</strong> " +
               escapeHtml(item.doorsOpenTime) + "</p>" :
+            "",
+          schedule ?
+            "<p class=\"event-details-schedule\">" +
+              escapeHtml(schedule) + "</p>" :
             "",
         "</div>",
         usesHeadingThumbnail ? [

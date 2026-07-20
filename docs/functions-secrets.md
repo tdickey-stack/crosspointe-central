@@ -135,8 +135,23 @@ links do not need to match production.
 ```
 
 5. Verify one admin invitation and one Serve Needs notification.
-6. Revoke the old refresh token and delete the old OAuth client secret only
-   after both mail paths pass.
+6. Disable the old OAuth client secret, verify mail again, and then delete that
+   old client secret.
+
+If the old refresh token was exposed, its retirement requires a second,
+controlled authorization reset. Google token revocation removes the OAuth
+grant for the project and invalidates the replacement refresh token too. Do
+not revoke the old token after step 3 and assume the replacement will continue
+working. Instead, plan a short mail outage and perform this sequence:
+
+1. Revoke the existing Google authorization grant.
+2. Immediately run `pnpm run gmail:token` again using the current client secret.
+3. Store the newly issued `CENTRAL_GMAIL_REFRESH_TOKEN` in Secret Manager.
+4. Redeploy `upsertAdminUser` and `shareServeNeedInterest`.
+5. Verify token exchange and send a test message.
+
+See Google's OAuth token-revocation documentation for the project-wide grant
+behavior: https://developers.google.com/identity/protocols/oauth2/web-server#tokenrevoke
 
 ### 4. Remove old copies
 

@@ -8,7 +8,7 @@
     "wayfinder:query": "node scripts/query-wayfinder-knowledge.mjs",
     "wayfinder:import:dry-run": "node scripts/import-wayfinder-knowledge.mjs --dry-run",
     "wayfinder:import:emulator": "node scripts/import-wayfinder-knowledge.mjs --emulator-host=127.0.0.1:8080 --project=crosspointe-central",
-    "wayfinder:pco-check": "node --env-file=.env scripts/check-wayfinder-planning-center.mjs",
+    "wayfinder:pco-check": "node --env-file-if-exists=.env --env-file-if-exists=.secret.local scripts/check-wayfinder-planning-center.mjs",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",

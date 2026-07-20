@@ -52,11 +52,13 @@ This is broader than ideal, but it is the fastest way to get the existing workfl
 
 Treat that file like a password. Do not commit it to Git. Do not paste it into chat.
 
-## Secret 2: Functions Environment File
+## Secret 2: Non-Sensitive Functions Environment File
 
 This is the exact full content of your local `functions/.env` file.
 
 The workflow writes that secret back into `functions/.env` during deployment.
+Sensitive server credentials must not be included in this file. They are stored
+in Google Cloud Secret Manager and bound to only the functions that use them.
 
 The expected keys are shown in:
 
@@ -66,15 +68,14 @@ At the time of writing, those keys are:
 
 - `CENTRAL_GOOGLE_WEB_CLIENT_ID`
 - `CENTRAL_GMAIL_CLIENT_ID`
-- `CENTRAL_GMAIL_CLIENT_SECRET`
-- `CENTRAL_GMAIL_REFRESH_TOKEN`
 - `CENTRAL_GMAIL_SENDER_EMAIL`
 - `CENTRAL_ADMIN_URL`
 - `CENTRAL_ADMIN_INVITE_TTL_DAYS`
-- `PCO_APP_ID`
-- `PCO_SECRET`
 - `PCO_TIMEZONE`
 - `PCO_CENTRAL_TAG_NAME`
+- `PCO_CENTRAL_FEATURED_TAG_NAME`
+- `PCO_CENTRAL_REGISTRATION_CATEGORY_NAME`
+- `PCO_WAYFINDER_PRIORITY_TAG_NAME`
 - `PCO_CALENDAR_LOOKAHEAD_DAYS`
 - `PCO_SERVICE_TYPES`
 - `SUNDAY_MODE_START_HOUR`
@@ -87,6 +88,9 @@ Important:
 
 - Use the real local `functions/.env`, not the example file by itself.
 - Paste the full file contents into the GitHub secret exactly as multi-line text.
+- Do not include `PCO_APP_ID`, `PCO_SECRET`, Gmail client secrets, refresh
+  tokens, or any other server credential.
+- Follow `docs/functions-secrets.md` to create and rotate deployed secrets.
 
 ## Add The Secrets To GitHub
 

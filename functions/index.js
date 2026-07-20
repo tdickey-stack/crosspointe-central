@@ -128,10 +128,6 @@ const CENTRAL_GOOGLE_WEB_CLIENT_ID =
   trimEnvString_(process.env.CENTRAL_GOOGLE_WEB_CLIENT_ID) || "";
 const CENTRAL_GMAIL_CLIENT_ID =
   trimEnvString_(process.env.CENTRAL_GMAIL_CLIENT_ID) || "";
-const CENTRAL_GMAIL_CLIENT_SECRET =
-  trimEnvString_(process.env.CENTRAL_GMAIL_CLIENT_SECRET) || "";
-const CENTRAL_GMAIL_REFRESH_TOKEN =
-  trimEnvString_(process.env.CENTRAL_GMAIL_REFRESH_TOKEN) || "";
 const CENTRAL_GMAIL_SENDER_EMAIL =
   trimEnvString_(process.env.CENTRAL_GMAIL_SENDER_EMAIL) || "";
 const CENTRAL_ADMIN_URL =
@@ -288,8 +284,21 @@ const DEFAULT_CENTRAL_ROOM_RULES = [
   },
 ];
 
-const PCO_APP_ID = process.env.PCO_APP_ID || "";
-const PCO_SECRET = process.env.PCO_SECRET || "";
+// Sensitive server credentials live in Google Cloud Secret Manager. Each
+// secret is bound only to the deployed functions that need it below.
+const CENTRAL_GMAIL_CLIENT_SECRET =
+  defineSecret("CENTRAL_GMAIL_CLIENT_SECRET");
+const CENTRAL_GMAIL_REFRESH_TOKEN =
+  defineSecret("CENTRAL_GMAIL_REFRESH_TOKEN");
+const PCO_APP_ID = defineSecret("PCO_APP_ID");
+const PCO_SECRET = defineSecret("PCO_SECRET");
+const CENTRAL_CALENDAR_SIGNING_KEY =
+  defineSecret("CENTRAL_CALENDAR_SIGNING_KEY");
+const GMAIL_SECRETS = [
+  CENTRAL_GMAIL_CLIENT_SECRET,
+  CENTRAL_GMAIL_REFRESH_TOKEN,
+];
+const PLANNING_CENTER_SECRETS = [PCO_APP_ID, PCO_SECRET];
 const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
 const PCO_CENTRAL_TAG_NAME = process.env.PCO_CENTRAL_TAG_NAME || "Central";
 const PCO_CENTRAL_FEATURED_TAG_NAME =
@@ -322,6 +331,8 @@ const SUNDAY_SERVICE_DURATION_MINUTES = parsePositiveInt_(
     75,
 );
 
+// The YouVersion browser SDK requires this app identifier in the client. It is
+// intentionally public and must not be treated as a server-only secret.
 const YOUVERSION_APP_KEY = process.env.YOUVERSION_APP_KEY || "";
 const YOUVERSION_DEFAULT_BIBLE_ID =
   process.env.YOUVERSION_DEFAULT_BIBLE_ID || "3034";
@@ -444,6 +455,10 @@ export const centralData = onRequest(
     {
       region: "us-central1",
       cors: true,
+      secrets: [
+        ...PLANNING_CENTER_SECRETS,
+        CENTRAL_CALENDAR_SIGNING_KEY,
+      ],
     },
     async (request, response) => {
       if (request.method !== "GET") {
@@ -602,6 +617,7 @@ export const wayfinderFeaturedEventHealth = onRequest(
       cors: true,
       timeoutSeconds: 60,
       memory: "256MiB",
+      secrets: PLANNING_CENTER_SECRETS,
     },
     createWayfinderFeaturedEventHealthHandler({
       admin,
@@ -658,7 +674,7 @@ export const wayfinderEvaluations = onRequest(
       cors: true,
       timeoutSeconds: 300,
       memory: "512MiB",
-      secrets: [WAYFINDER_GEMINI_API_KEY],
+      secrets: [WAYFINDER_GEMINI_API_KEY, ...PLANNING_CENTER_SECRETS],
     },
     createWayfinderEvaluationHandler({
       admin: admin,
@@ -677,7 +693,7 @@ export const wayfinderGenerateAnswer = onRequest(
       cors: true,
       timeoutSeconds: 60,
       memory: "256MiB",
-      secrets: [WAYFINDER_GEMINI_API_KEY],
+      secrets: [WAYFINDER_GEMINI_API_KEY, ...PLANNING_CENTER_SECRETS],
     },
     createWayfinderAnswerHandler({
       admin: admin,
@@ -732,7 +748,7 @@ export const wayfinderPublicAnswer = onRequest(
       cors: true,
       timeoutSeconds: 60,
       memory: "256MiB",
-      secrets: [WAYFINDER_GEMINI_API_KEY],
+      secrets: [WAYFINDER_GEMINI_API_KEY, ...PLANNING_CENTER_SECRETS],
     },
     createWayfinderAnswerHandler({
       admin: admin,
@@ -823,6 +839,7 @@ export const centralCalendarEvent = onRequest(
     {
       region: "us-central1",
       cors: true,
+      secrets: [CENTRAL_CALENDAR_SIGNING_KEY],
     },
     (request, response) => {
       if (request.method !== "GET") {
@@ -1143,6 +1160,7 @@ export const upsertAdminUser = onRequest(
     {
       region: "us-central1",
       cors: true,
+      secrets: GMAIL_SECRETS,
     },
     async (request, response) => {
       if (request.method !== "POST") {
@@ -1672,6 +1690,7 @@ export const shareServeNeedInterest = onRequest(
     {
       region: "us-central1",
       cors: true,
+      secrets: GMAIL_SECRETS,
     },
     async (request, response) => {
       if (request.method !== "POST") {
@@ -2188,13 +2207,21 @@ async function sendCentralEmail_(options) {
 }
 
 function getCentralGmailConfig_() {
+  const clientSecret = trimEnvString_(
+      CENTRAL_GMAIL_CLIENT_SECRET.value(),
+  );
+  const refreshToken = trimEnvString_(
+      CENTRAL_GMAIL_REFRESH_TOKEN.value(),
+  );
+
   if (!CENTRAL_GMAIL_CLIENT_ID ||
-    !CENTRAL_GMAIL_CLIENT_SECRET ||
-    !CENTRAL_GMAIL_REFRESH_TOKEN ||
+    !clientSecret ||
+    !refreshToken ||
     !CENTRAL_GMAIL_SENDER_EMAIL) {
     const error = new Error(
         "Central Gmail API is not configured yet. Add the client ID, " +
-        "client secret, refresh token, and sender email to functions/.env.",
+        "client secret, refresh token, and sender email to the local " +
+        "Functions configuration.",
     );
     error.code = "gmail-config-missing";
     throw error;
@@ -2208,8 +2235,8 @@ function getCentralGmailConfig_() {
 
   return {
     clientId: CENTRAL_GMAIL_CLIENT_ID,
-    clientSecret: CENTRAL_GMAIL_CLIENT_SECRET,
-    refreshToken: CENTRAL_GMAIL_REFRESH_TOKEN,
+    clientSecret: clientSecret,
+    refreshToken: refreshToken,
     senderEmail: CENTRAL_GMAIL_SENDER_EMAIL,
   };
 }
@@ -3693,15 +3720,33 @@ async function getPlanningCenterDataSafely_(roomRules) {
 }
 
 function hasPlanningCenterCredentials_() {
-  return !!(PCO_APP_ID && PCO_SECRET);
+  const credentials = getPlanningCenterCredentials_();
+  return !!(credentials.appId && credentials.secret);
+}
+
+/**
+ * Reads the Planning Center credentials bound to the current function.
+ *
+ * @return {{appId: string, secret: string}} Planning Center credentials.
+ */
+function getPlanningCenterCredentials_() {
+  return {
+    appId: trimEnvString_(PCO_APP_ID.value()),
+    secret: trimEnvString_(PCO_SECRET.value()),
+  };
 }
 
 async function fetchPcoJson_(url) {
-  if (!hasPlanningCenterCredentials_()) {
-    throw new Error("Missing PCO_APP_ID or PCO_SECRET in functions/.env.");
+  const credentials = getPlanningCenterCredentials_();
+  if (!credentials.appId || !credentials.secret) {
+    throw new Error(
+        "Missing PCO_APP_ID or PCO_SECRET in Functions secrets.",
+    );
   }
 
-  const token = Buffer.from(PCO_APP_ID + ":" + PCO_SECRET).toString("base64");
+  const token = Buffer.from(
+      credentials.appId + ":" + credentials.secret,
+  ).toString("base64");
 
   const response = await fetch(url, {
     method: "GET",
@@ -4242,11 +4287,14 @@ function decodeCalendarEventToken_(rawToken, rawSignature) {
  * @return {string} URL-safe token signature.
  */
 function signCalendarEventToken_(token) {
-  if (!PCO_SECRET) return "";
+  const signingSecret = trimEnvString_(
+      CENTRAL_CALENDAR_SIGNING_KEY.value(),
+  );
+  if (!signingSecret) return "";
 
   const signingKey = crypto.createHash("sha256")
       .update("crosspointe-central-calendar-event\0")
-      .update(PCO_SECRET)
+      .update(signingSecret)
       .digest();
 
   return crypto.createHmac("sha256", signingKey)

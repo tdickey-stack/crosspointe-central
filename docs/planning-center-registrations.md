@@ -50,9 +50,10 @@ The default category is configured in `functions/.env.example`:
 PCO_CENTRAL_REGISTRATION_CATEGORY_NAME=Central
 ```
 
-The Functions runtime continues to use the existing `PCO_APP_ID` and
-`PCO_SECRET`. The Planning Center user associated with those credentials must
-have access to the approved Registrations signups.
+The Functions runtime reads `PCO_APP_ID` and `PCO_SECRET` from Google Cloud
+Secret Manager. Local emulator testing reads the same names from
+`functions/.secret.local`. The Planning Center user associated with those
+credentials must have access to the approved Registrations signups.
 
 ## Central Experience
 

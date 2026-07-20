@@ -133,7 +133,6 @@ const server = http.createServer(async (request, response) => {
     }
 
     const refreshToken = String(tokenBody.refresh_token || "").trim();
-    const accessToken = String(tokenBody.access_token || "").trim();
 
     if (!refreshToken) {
       throw new Error(
@@ -151,15 +150,13 @@ const server = http.createServer(async (request, response) => {
     console.log("");
     console.log("Refresh token generated successfully.");
     console.log("");
-    console.log("Add these to functions/.env and your FIREBASE_FUNCTIONS_ENV secret:");
+    console.log("Store the client secret and refresh token in Secret Manager.");
+    console.log("For local emulator testing only, use functions/.secret.local.");
     console.log("");
     console.log("CENTRAL_GMAIL_CLIENT_ID=" + clientId);
     console.log("CENTRAL_GMAIL_CLIENT_SECRET=<your-client-secret>");
     console.log("CENTRAL_GMAIL_REFRESH_TOKEN=" + refreshToken);
     console.log("CENTRAL_GMAIL_SENDER_EMAIL=" + senderEmail);
-    console.log("");
-    console.log("Access token preview (not needed long-term):");
-    console.log(accessToken);
     shutdown_(0);
   } catch (exchangeError) {
     response.writeHead(500, {"Content-Type": "text/html; charset=utf-8"});

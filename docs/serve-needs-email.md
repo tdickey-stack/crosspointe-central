@@ -77,3 +77,9 @@ Store the new client secret and refresh token in Secret Manager before
 deploying. For local emulator testing only, put them in
 `functions/.secret.local`. Do not add either value to `functions/.env` or a
 GitHub Actions secret.
+
+If an existing refresh token is considered exposed, remember that Google token
+revocation invalidates the project's authorization grant, including other
+refresh tokens already issued for that grant. Plan a short mail outage: revoke
+the grant, immediately generate and store a fresh token, redeploy the two
+Gmail-bound functions, and test sending again.

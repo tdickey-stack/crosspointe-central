@@ -3605,6 +3605,13 @@
       "<input type=\"text\" maxlength=\"180\" value=\"", escapeAttr_(item.title),
       "\" data-admin-bulletin-event-id=\"", escapeAttr_(item.id),
       "\" data-admin-bulletin-event-field=\"title\"></label>",
+      "<label class=\"central-admin-field\"><span>Printed Room / Location</span>",
+      "<input type=\"text\" maxlength=\"240\" value=\"", escapeAttr_(item.location),
+      "\" data-admin-bulletin-event-id=\"", escapeAttr_(item.id),
+      "\" data-admin-bulletin-event-field=\"location\">",
+      "<small class=\"central-admin-field-hint\">Planning Center default: ",
+      escapeHtml_(item.sourceLocation || "No room provided"),
+      ". Enter another room to override it for this bulletin.</small></label>",
       "<label class=\"central-admin-field\"><span>Printed Description</span>",
       "<textarea rows=\"5\" maxlength=\"1200\" data-admin-bulletin-event-id=\"",
       escapeAttr_(item.id), "\" data-admin-bulletin-event-field=\"description\">",
@@ -4541,8 +4548,37 @@
 
   function renderBulletinSettingsEditor_(canSave) {
     var giving = adminState.bulletinDraft.giving || {};
+    var headings = adminState.bulletinDraft.headings || {};
 
     return [
+      "<div class=\"central-admin-bulletin-editor-grid central-admin-bulletin-settings-grid\">",
+      "<div class=\"central-admin-item central-admin-bulletin-headings\">",
+      "<div class=\"central-admin-item-header\"><strong>Page Headings</strong>",
+      renderStatusPill_(canSave ? "Editable" : "Read only", canSave ? "is-safe" : "is-warn"),
+      "</div>",
+      "<div class=\"central-admin-form-grid central-admin-bulletin-heading-fields\">",
+      renderAdminTextareaField_({
+        label: "Front Page Heading",
+        field: "bulletin.headings.frontHeading",
+        value: headings.frontHeading,
+        rows: 2,
+        maxLength: 80,
+        wide: true,
+        hint: "Use a line break to control where the printed heading wraps.",
+      }),
+      renderAdminInputField_({
+        label: "Back Page Eyebrow",
+        field: "bulletin.headings.backEyebrow",
+        value: headings.backEyebrow,
+        maxLength: 50,
+      }),
+      renderAdminInputField_({
+        label: "Back Page Heading",
+        field: "bulletin.headings.backHeading",
+        value: headings.backHeading,
+        maxLength: 80,
+      }),
+      "</div></div>",
       "<div class=\"central-admin-item central-admin-bulletin-settings\">",
       "<div class=\"central-admin-item-header\"><strong>Bulletin Details</strong>",
       renderStatusPill_(canSave ? "Admin only" : "Read only", canSave ? "is-safe" : "is-warn"),
@@ -4559,6 +4595,7 @@
       renderBulletinMoneyInput_("Annual Budget", "annualBudget", giving.annualBudget),
       renderBulletinMoneyInput_("Year-to-Date Giving", "yearToDateGiving", giving.yearToDateGiving),
       "</div></div>",
+      "</div>",
     ].join("");
   }
 
@@ -4794,10 +4831,13 @@
     var campaigns = getSelectedBulletinCampaigns_();
     var serveNeed = getSelectedBulletinServeNeed_();
     var giving = adminState.bulletinDraft.giving || {};
+    var headings = adminState.bulletinDraft.headings || {};
 
     return [
       renderBulletinBrandHeader_(),
-      "<div class=\"central-bulletin-heading\"><h1>This Week at<br>CrossPointe</h1></div>",
+      "<div class=\"central-bulletin-heading\"><h1>",
+      renderBulletinHeadingText_(headings.frontHeading),
+      "</h1></div>",
       featured ? [
         "<section class=\"central-bulletin-card central-bulletin-featured\">",
         featuredImageUrl ? [
@@ -4810,7 +4850,7 @@
         featured.doors_open_time ? "<p class=\"central-bulletin-featured-time\">Doors Open " + escapeHtml_(featured.doors_open_time) + "</p>" : "",
         "<p class=\"central-bulletin-featured-time\">", escapeHtml_([featured.date, featured.time].filter(Boolean).join(" - ")), "</p>",
         featured.includeDescription && featured.description ?
-          "<div class=\"central-bulletin-description central-bulletin-markdown\">" +
+          "<div class=\"central-bulletin-description central-bulletin-body-copy central-bulletin-markdown\">" +
             renderAdminMarkdownLite_(featured.description) + "</div>" :
           "",
         "</section>",
@@ -4820,7 +4860,8 @@
         campaigns.map(function(item) {
           return "<div class=\"central-bulletin-campaign\"><span class=\"central-bulletin-campaign-icon\">+</span><div><strong>" +
             escapeHtml_(item.title || "Campaign") + "</strong>" +
-            (item.description ? "<p>" + escapeHtml_(item.description) + "</p>" : "") +
+            (item.description ? "<p class=\"central-bulletin-body-copy\">" +
+              escapeHtml_(item.description) + "</p>" : "") +
             "</div></div>";
         }).join(""),
         "</section>",
@@ -4828,7 +4869,9 @@
       serveNeed ? [
         "<section class=\"central-bulletin-card central-bulletin-serve\"><div><span class=\"central-bulletin-label\">Serve Opportunity</span><h3>",
         escapeHtml_(serveNeed.need || serveNeed.title || "Serve at CrossPointe"),
-        "</h3>", serveNeed.description ? "<p>" + escapeHtml_(serveNeed.description) + "</p>" : "", "</div>",
+        "</h3>", serveNeed.description ?
+          "<p class=\"central-bulletin-body-copy\">" +
+            escapeHtml_(serveNeed.description) + "</p>" : "", "</div>",
         "<span class=\"central-bulletin-serve-cta\">Learn more at<br><strong>central.crosspointe.tv</strong></span></section>",
       ].join("") : "",
       "<section class=\"central-bulletin-card central-bulletin-giving\"><span class=\"central-bulletin-label\">Generosity</span>",
@@ -4850,18 +4893,20 @@
     var events = getBulletinEventDraftsInWindow_().filter(function(item) {
       return item.included;
     });
-    var midpoint = Math.ceil(events.length / 2);
-    var leftEvents = events.slice(0, midpoint);
-    var rightEvents = events.slice(midpoint);
+    var eventColumns = splitBulletinEventsIntoColumns_(events);
+    var leftEvents = eventColumns.left;
+    var rightEvents = eventColumns.right;
     var maxRows = Math.max(leftEvents.length, rightEvents.length);
     var densityClass = getBulletinEventDensityClass_(maxRows);
     var serviceDate = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
     var endDate = new Date(serviceDate.getTime());
+    var headings = adminState.bulletinDraft.headings || {};
     endDate.setUTCDate(endDate.getUTCDate() + 13);
 
     return [
-      "<div class=\"central-bulletin-back-heading\"><span class=\"central-bulletin-label\">See You There</span>",
-      "<h1>The Next Two Weeks</h1><strong>",
+      "<div class=\"central-bulletin-back-heading\"><span class=\"central-bulletin-label\">",
+      escapeHtml_(headings.backEyebrow), "</span>",
+      "<h1>", renderBulletinHeadingText_(headings.backHeading), "</h1><strong>",
       escapeHtml_(formatBulletinDateRange_(serviceDate, endDate)),
       "</strong></div>",
       "<div class=\"central-bulletin-event-columns",
@@ -4894,6 +4939,48 @@
     return " is-fitted is-stretched";
   }
 
+  function splitBulletinEventsIntoColumns_(events) {
+    var items = Array.isArray(events) ? events : [];
+    if (items.length < 2) {
+      return {left: items.slice(), right: []};
+    }
+
+    var weights = items.map(getBulletinEventLayoutWeight_);
+    var totalWeight = weights.reduce(function(total, weight) {
+      return total + weight;
+    }, 0);
+    var leftWeight = 0;
+    var bestIndex = 1;
+    var bestDifference = Infinity;
+
+    for (var index = 1; index < items.length; index += 1) {
+      leftWeight += weights[index - 1];
+      var difference = Math.abs(totalWeight - (leftWeight * 2));
+      if (difference < bestDifference) {
+        bestDifference = difference;
+        bestIndex = index;
+      }
+    }
+
+    return {
+      left: items.slice(0, bestIndex),
+      right: items.slice(bestIndex),
+    };
+  }
+
+  function getBulletinEventLayoutWeight_(item) {
+    var source = item || {};
+    var titleLines = Math.max(1, Math.ceil(String(source.title || "").length / 25));
+    var metaLength = String(source.time || "").length +
+      String(source.location || "").length;
+    var metaLines = Math.max(1, Math.ceil(metaLength / 31));
+    var descriptionLines = source.includeDescription && source.description ?
+      Math.ceil(String(source.description).length / 42) :
+      0;
+
+    return 3 + (titleLines * 1.35) + metaLines + (descriptionLines * 0.9);
+  }
+
   function renderBulletinPrintEvent_(item) {
     var date = parseBulletinDate_(item.date);
     var weekday = new Intl.DateTimeFormat("en-US", {timeZone: "UTC", weekday: "short"}).format(date).toUpperCase();
@@ -4912,15 +4999,17 @@
       escapeHtml_(weekday), "</small></div>",
       "<div class=\"central-bulletin-event-copy\">",
       "<p class=\"central-bulletin-event-meta\">",
-      item.time ? "<span>" + escapeHtml_(item.time) + "</span>" : "",
+      item.time ? [
+        "<span class=\"central-bulletin-event-meta-time\">",
+        escapeHtml_(item.time), "</span>",
+      ].join("") : "",
       item.location ? [
         "<span class=\"central-bulletin-event-meta-location\">",
-        item.time ? " &bull; " : "",
         escapeHtml_(item.location), "</span>",
       ].join("") : "",
       "</p><h3>", escapeHtml_(item.title), "</h3>",
       description ?
-        "<div class=\"central-bulletin-event-description central-bulletin-markdown\">" +
+        "<div class=\"central-bulletin-event-description central-bulletin-body-copy central-bulletin-markdown\">" +
           renderAdminMarkdownLite_(description) + "</div>" :
         "",
       "</div></article>",
@@ -11283,6 +11372,11 @@
   function createEmptyBulletinDraft_() {
     return {
       serviceDate: getDefaultSundayDateInputValue_(),
+      headings: {
+        frontHeading: "This Week at\nCrossPointe",
+        backEyebrow: "See You There",
+        backHeading: "The Next Two Weeks",
+      },
       giving: {
         monthlyBudget: 0,
         monthToDateGiving: 0,
@@ -11307,13 +11401,38 @@
       {};
     var data = centralData || {};
     var draft = createEmptyBulletinDraft_();
+    var savedHeadings = source.headings &&
+      typeof source.headings === "object" ? source.headings : {};
     var savedGiving = source.giving || {};
     var currentFeatured = data.featuredEvent || null;
     var savedFeatured = source.featuredEvent || {};
     var savedEventsById = {};
 
-    draft.serviceDate = normalizeSundayDateInputValue_(source.serviceDate) ||
-      getDefaultSundayDateInputValue_();
+    var automaticServiceDate = getDefaultSundayDateInputValue_();
+    var savedServiceDate = normalizeSundayDateInputValue_(source.serviceDate);
+    draft.serviceDate = savedServiceDate &&
+      savedServiceDate >= automaticServiceDate ?
+      savedServiceDate : automaticServiceDate;
+    draft.headings = {
+      frontHeading: normalizeBulletinHeadingText_(
+          savedHeadings.frontHeading,
+          "This Week at\nCrossPointe",
+          80,
+          2,
+      ),
+      backEyebrow: normalizeBulletinHeadingText_(
+          savedHeadings.backEyebrow,
+          "See You There",
+          50,
+          1,
+      ),
+      backHeading: normalizeBulletinHeadingText_(
+          savedHeadings.backHeading,
+          "The Next Two Weeks",
+          80,
+          2,
+      ),
+    };
     draft.giving = {
       monthlyBudget: normalizeBulletinMoney_(savedGiving.monthlyBudget),
       monthToDateGiving: normalizeBulletinMoney_(
@@ -11356,6 +11475,8 @@
           id,
       );
       var saved = savedEventsById[id] || {};
+      var sourceLocation = String(item.location || item.venue || "").trim();
+      var savedLocation = String(saved.location || "").trim();
       var defaultWeekTwoStart = parseBulletinDate_(draft.serviceDate);
       defaultWeekTwoStart.setUTCDate(defaultWeekTwoStart.getUTCDate() + 7);
       return {
@@ -11372,7 +11493,8 @@
         date: String(item.date || ""),
         time: String(item.time || ""),
         doors_open_time: String(item.doors_open_time || ""),
-        location: String(item.location || item.venue || ""),
+        location: savedLocation || sourceLocation,
+        sourceLocation: sourceLocation,
       };
     });
 
@@ -11581,6 +11703,10 @@
     if (fieldName.indexOf("giving.") === 0) {
       adminState.bulletinDraft.giving[fieldName.replace("giving.", "")] =
         normalizeBulletinMoney_(value);
+    } else if (fieldName.indexOf("headings.") === 0) {
+      adminState.bulletinDraft.headings[
+          fieldName.replace("headings.", "")
+      ] = value;
     } else if (fieldName.indexOf("featured.") === 0) {
       adminState.bulletinDraft.featuredEvent[
           fieldName.replace("featured.", "")
@@ -11629,6 +11755,26 @@
     var draft = adminState.bulletinDraft;
     return {
       serviceDate: normalizeSundayDateInputValue_(draft.serviceDate),
+      headings: {
+        frontHeading: normalizeBulletinHeadingText_(
+            draft.headings.frontHeading,
+            "This Week at\nCrossPointe",
+            80,
+            2,
+        ),
+        backEyebrow: normalizeBulletinHeadingText_(
+            draft.headings.backEyebrow,
+            "See You There",
+            50,
+            1,
+        ),
+        backHeading: normalizeBulletinHeadingText_(
+            draft.headings.backHeading,
+            "The Next Two Weeks",
+            80,
+            2,
+        ),
+      },
       giving: {
         monthlyBudget: normalizeBulletinMoney_(draft.giving.monthlyBudget),
         monthToDateGiving: normalizeBulletinMoney_(
@@ -11650,6 +11796,7 @@
           id: item.id,
           title: String(item.title || "").trim(),
           description: String(item.description || "").trim(),
+          location: String(item.location || "").trim(),
           included: item.included !== false,
           includeDescription: item.includeDescription !== false,
         };
@@ -11735,6 +11882,30 @@
       currency: "USD",
       maximumFractionDigits: 0,
     }).format(normalizeBulletinMoney_(value));
+  }
+
+  function normalizeBulletinHeadingText_(
+      value,
+      fallbackValue,
+      maxLength,
+      maxLines,
+  ) {
+    var normalized = String(value == null ? "" : value)
+        .replace(/\r\n?/g, "\n")
+        .split("\n")
+        .map(function(line) {
+          return line.replace(/\s+/g, " ").trim();
+        })
+        .filter(Boolean)
+        .slice(0, Math.max(1, Number(maxLines) || 1))
+        .join("\n")
+        .trim();
+    var fallback = String(fallbackValue || "").trim();
+    return (normalized || fallback).slice(0, Number(maxLength) || 80);
+  }
+
+  function renderBulletinHeadingText_(value) {
+    return escapeHtml_(String(value || "")).replace(/\n/g, "<br>");
   }
 
   function parseBulletinDate_(value) {

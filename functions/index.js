@@ -11499,6 +11499,8 @@ function normalizeBulletinModePayload_(sourceData) {
   const givingSource = source.giving && typeof source.giving === "object" ?
     source.giving :
     {};
+  const headingsSource = source.headings &&
+    typeof source.headings === "object" ? source.headings : {};
   const featuredSource = source.featuredEvent &&
     typeof source.featuredEvent === "object" ?
     source.featuredEvent :
@@ -11510,6 +11512,26 @@ function normalizeBulletinModePayload_(sourceData) {
 
   return {
     serviceDate: normalizeThisSundayDateValue_(source.serviceDate),
+    headings: {
+      frontHeading: normalizeBulletinModeHeading_(
+          headingsSource.frontHeading,
+          "This Week at\nCrossPointe",
+          80,
+          2,
+      ),
+      backEyebrow: normalizeBulletinModeHeading_(
+          headingsSource.backEyebrow,
+          "See You There",
+          50,
+          1,
+      ),
+      backHeading: normalizeBulletinModeHeading_(
+          headingsSource.backHeading,
+          "The Next Two Weeks",
+          80,
+          2,
+      ),
+    },
     giving: {
       monthlyBudget: normalizeBulletinDollarValue_(
           givingSource.monthlyBudget,
@@ -11541,6 +11563,7 @@ function normalizeBulletinModePayload_(sourceData) {
         id: normalizeBulletinModeText_(item.id, 160),
         title: normalizeBulletinModeText_(item.title, 180),
         description: normalizeBulletinModeText_(item.description, 1200),
+        location: normalizeBulletinModeText_(item.location, 240),
         included: item.included !== false,
         includeDescription: item.includeDescription !== false,
       };
@@ -11557,6 +11580,24 @@ function normalizeBulletinModeText_(value, maxLength) {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, maxLength);
+}
+
+function normalizeBulletinModeHeading_(
+    value,
+    fallbackValue,
+    maxLength,
+    maxLines,
+) {
+  const normalized = String(value == null ? "" : value)
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .slice(0, Math.max(1, Number(maxLines) || 1))
+      .join("\n")
+      .trim();
+  const fallback = String(fallbackValue || "").trim();
+  return (normalized || fallback).slice(0, Number(maxLength) || 80);
 }
 
 function normalizeBulletinDollarValue_(value) {

@@ -246,6 +246,13 @@
         }
       },
       {
+        "source": "/api/admin/bulletin-mode",
+        "function": {
+          "functionId": "bulletinMode",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/admin/wayfinder/prototype-query",
         "function": {
           "functionId": "wayfinderPrototypeQuery",

@@ -19,6 +19,7 @@
   var HOSTED_WHATS_NEW_CONFIG_URL = "/content/whats-new.json";
   var FIRST_ADMIN_BOOTSTRAP_ENDPOINT = "/api/admin/bootstrap-first-user";
   var PUBLISH_PREVIEW_CONTENT_ENDPOINT = "/api/admin/publish-preview-content";
+  var BULLETIN_MODE_ENDPOINT = "/api/admin/bulletin-mode";
   var SUBMIT_CHANGE_REQUEST_ENDPOINT = "/api/admin/submit-change-request";
   var REVIEW_CHANGE_REQUEST_ENDPOINT = "/api/admin/review-change-request";
   var LIST_ADMIN_USERS_ENDPOINT = "/api/admin/list-users";
@@ -103,6 +104,15 @@
       summary: "Main Central homepage copy plus the Sunday-mode hero and labels that belong on the Hub page.",
       collectionPath: DRAFT_HUB_SETTINGS_DOC_PATH,
       status: "Preview workflow",
+    },
+    {
+      id: "bulletin",
+      label: "Bulletin Mode",
+      route: "/admin/bulletin",
+      pageAccessKey: "bulletin",
+      summary: "Build a two-sided, two-up half-letter insert from current Central content.",
+      collectionPath: "centralAdmin/root/public/bulletinMode",
+      status: "Print workflow",
     },
     {
       id: "sunday",
@@ -327,6 +337,7 @@
   ];
   var FIRST_ADMIN_PAGE_ACCESS = {
     hub: "admin",
+    bulletin: "admin",
     settings: "admin",
     integrations: "admin",
     wayfinder: "admin",
@@ -621,6 +632,15 @@
     hubSundayDraft: createEmptyHubSundayDraft_(),
     hubSundayError: "",
     hubSundayMessage: "",
+    bulletinLoaded: false,
+    bulletinLoading: false,
+    bulletinSaving: false,
+    bulletinCentralData: null,
+    bulletinDraft: createEmptyBulletinDraft_(),
+    bulletinEditingEventId: "",
+    bulletinEventFilter: "week1",
+    bulletinError: "",
+    bulletinMessage: "",
     sundayLoaded: false,
     sundayLoading: false,
     sundayCurrent: null,
@@ -676,6 +696,8 @@
   var appEl = null;
   var adminThemeMediaQuery = null;
   var adminThemeOverride = "";
+  var adminPrintThemeLocked = false;
+  var adminThemeBeforePrint = "";
   var adminSortDragSection = "";
   var adminSortDragDocId = "";
   var adminSortDropDocId = "";
@@ -709,6 +731,8 @@
     appEl.addEventListener("dragend", handleAdminDragEnd_);
     document.addEventListener("keydown", handleAdminKeyDown_);
     window.addEventListener("popstate", handleAdminPopState_);
+    window.addEventListener("beforeprint", beginAdminPrintThemeLock_);
+    window.addEventListener("afterprint", endAdminPrintThemeLock_);
 
     renderAdmin_();
     initializeFirebaseFoundation_();
@@ -738,13 +762,36 @@
   }
 
   function handleAdminThemeMediaChange_(event) {
-    if (adminThemeOverride) {
+    if (
+      adminThemeOverride ||
+      adminPrintThemeLocked ||
+      (window.matchMedia && window.matchMedia("print").matches)
+    ) {
       return;
     }
 
     applyAdminTheme_(
         event && event.matches ? CENTRAL_THEME_DARK : CENTRAL_THEME_LIGHT,
     );
+  }
+
+  function beginAdminPrintThemeLock_() {
+    if (!adminPrintThemeLocked) {
+      adminThemeBeforePrint = getResolvedAdminTheme_();
+    }
+
+    adminPrintThemeLocked = true;
+    applyAdminTheme_(adminThemeBeforePrint);
+  }
+
+  function endAdminPrintThemeLock_() {
+    var themeToRestore = adminThemeBeforePrint;
+    adminPrintThemeLocked = false;
+    adminThemeBeforePrint = "";
+
+    if (isValidAdminTheme_(themeToRestore)) {
+      applyAdminTheme_(themeToRestore);
+    }
   }
 
   function readStoredAdminTheme_() {
@@ -1113,6 +1160,60 @@
       if (action === "bootstrap-first-admin") {
         event.preventDefault();
         bootstrapFirstAdminUser_();
+        return;
+      }
+
+      if (action === "save-bulletin") {
+        event.preventDefault();
+        saveBulletinMode_();
+        return;
+      }
+
+      if (action === "print-bulletin") {
+        event.preventDefault();
+        printBulletin_();
+        return;
+      }
+
+      if (action === "refresh-bulletin") {
+        event.preventDefault();
+        adminState.bulletinEditingEventId = "";
+        adminState.bulletinLoaded = false;
+        adminState.bulletinError = "";
+        resetCurrentCentralDataCache_();
+        loadBulletinMode_();
+        return;
+      }
+
+      if (action === "edit-bulletin-event") {
+        event.preventDefault();
+        adminState.bulletinEditingEventId =
+          button.getAttribute("data-admin-bulletin-event-id") || "";
+        renderAdmin_();
+        return;
+      }
+
+      if (action === "close-bulletin-event-editor") {
+        event.preventDefault();
+        adminState.bulletinEditingEventId = "";
+        renderAdmin_();
+        return;
+      }
+
+      if (action === "filter-bulletin-events") {
+        event.preventDefault();
+        adminState.bulletinEventFilter =
+          button.getAttribute("data-admin-bulletin-filter") || "week1";
+        renderAdmin_();
+        return;
+      }
+
+      if (action === "bulk-bulletin-events") {
+        event.preventDefault();
+        updateBulletinEventBulkInclusion_(
+            button.getAttribute("data-admin-bulletin-bulk") || "",
+        );
+        renderAdmin_();
         return;
       }
 
@@ -1652,6 +1753,13 @@
         closeDeleteConfirm_();
         return;
       }
+    }
+
+    var bulletinChoice = event.target.closest("[data-admin-bulletin-choice]");
+    if (bulletinChoice) {
+      updateBulletinChoice_(bulletinChoice);
+      renderAdmin_();
+      return;
     }
 
     var navLink = event.target.closest("[data-admin-nav]");
@@ -2532,6 +2640,23 @@
   }
 
   function handleAdminInput_(event) {
+    var bulletinEventId = event.target.getAttribute(
+        "data-admin-bulletin-event-id",
+    );
+    var bulletinEventField = event.target.getAttribute(
+        "data-admin-bulletin-event-field",
+    );
+    if (bulletinEventId && bulletinEventField) {
+      updateBulletinEventField_(
+          bulletinEventId,
+          bulletinEventField,
+          event.target.type === "checkbox" ?
+            !!event.target.checked :
+            event.target.value,
+      );
+      return;
+    }
+
     var field = event.target.getAttribute("data-admin-field");
     var nextValue = event.target.type === "checkbox" ?
       !!event.target.checked :
@@ -2549,6 +2674,17 @@
       adminState.wayfinderQuestion = String(nextValue || "");
       adminState.wayfinderError = "";
       adminState.wayfinderAnswerError = "";
+      return;
+    }
+
+    if (field.indexOf("bulletin.") === 0) {
+      updateBulletinDraftField_(field.replace("bulletin.", ""), nextValue);
+      if (field === "bulletin.serviceDate" ||
+        field === "bulletin.serveNeedId" ||
+        field === "bulletin.featured.includeDescription" ||
+        event.type === "change") {
+        renderAdmin_();
+      }
       return;
     }
 
@@ -3343,7 +3479,11 @@
       renderAdminSidebar_(currentPage, visiblePages),
       renderAdminMain_(currentPage),
       renderDeleteConfirmModal_(),
+      renderBulletinEventEditorModal_(currentPage),
       "</div>",
+      currentPage.id === "bulletin" && adminState.bulletinLoaded ?
+        renderBulletinPrintRoot_() :
+        "",
     ].join("");
 
     maybeLoadCurrentPageData_();
@@ -3425,6 +3565,57 @@
       "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"confirm-delete-confirm\">",
       escapeHtml_(adminState.deleteConfirmConfirmLabel || "Delete Item"),
       "</button>",
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+  }
+
+  function renderBulletinEventEditorModal_(currentPage) {
+    if (
+      !currentPage ||
+      currentPage.id !== "bulletin" ||
+      !adminState.bulletinEditingEventId
+    ) {
+      return "";
+    }
+
+    var item = (adminState.bulletinDraft.events || []).find(function(eventItem) {
+      return eventItem.id === adminState.bulletinEditingEventId;
+    });
+    if (!item) {
+      return "";
+    }
+
+    return [
+      "<div class=\"central-admin-modal central-admin-bulletin-event-modal\" role=\"presentation\">",
+      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-bulletin-event-editor\" aria-label=\"Close event editor\"></button>",
+      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-bulletin-event-modal-title\">",
+      "<div class=\"central-admin-modal-copy\">",
+      "<span class=\"central-admin-kicker\">Bulletin Event</span>",
+      "<h3 id=\"central-admin-bulletin-event-modal-title\">",
+      escapeHtml_(item.title || "Untitled Event"),
+      "</h3>",
+      "<p>",
+      escapeHtml_([item.date, item.time, item.location].filter(Boolean).join(" · ")),
+      "</p>",
+      "</div>",
+      "<div class=\"central-admin-bulletin-event-modal-fields\">",
+      "<label class=\"central-admin-field\"><span>Printed Title</span>",
+      "<input type=\"text\" maxlength=\"180\" value=\"", escapeAttr_(item.title),
+      "\" data-admin-bulletin-event-id=\"", escapeAttr_(item.id),
+      "\" data-admin-bulletin-event-field=\"title\"></label>",
+      "<label class=\"central-admin-field\"><span>Printed Description</span>",
+      "<textarea rows=\"5\" maxlength=\"1200\" data-admin-bulletin-event-id=\"",
+      escapeAttr_(item.id), "\" data-admin-bulletin-event-field=\"description\">",
+      escapeHtml_(item.description), "</textarea>",
+      "<small class=\"central-admin-field-hint\">Formatting: **bold**, *italics*, headings, and - or 1. lists. Line breaks are preserved.</small></label>",
+      "<label class=\"central-admin-checkbox central-admin-modal-checkbox\"><input type=\"checkbox\" data-admin-bulletin-event-id=\"",
+      escapeAttr_(item.id), "\" data-admin-bulletin-event-field=\"includeDescription\"",
+      item.includeDescription ? " checked" : "", "><span>Include full description</span></label>",
+      "</div>",
+      "<div class=\"central-admin-action-row central-admin-modal-actions\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"close-bulletin-event-editor\">Done</button>",
       "</div>",
       "</div>",
       "</div>",
@@ -3627,6 +3818,10 @@
 
     if (currentPage.id === "hub") {
       return renderHubPagePanel_(currentPage);
+    }
+
+    if (currentPage.id === "bulletin") {
+      return renderBulletinPagePanel_(currentPage);
     }
 
     if (currentPage.id === "quick-links") {
@@ -3944,6 +4139,10 @@
 
     if (page.id === "hub") {
       return "Homepage content and Sunday-mode copy.";
+    }
+
+    if (page.id === "bulletin") {
+      return "A print-ready half-letter Sunday insert.";
     }
 
     if (page.id === "quick-links") {
@@ -4266,6 +4465,475 @@
         "</div>",
       ].join("") : "",
       "</article>",
+    ].join("");
+  }
+
+  function renderBulletinPagePanel_(currentPage) {
+    var permission = getPageAccessLevel_("bulletin");
+    var canSave = isEditorLevelPermission_(permission);
+
+    if (adminState.bulletinLoading && !adminState.bulletinLoaded) {
+      return [
+        "<section class=\"central-admin-panel\">",
+        "<div class=\"central-admin-panel-header\"><div>",
+        "<h3>", escapeHtml_(currentPage.label), "</h3>",
+        "<p>", escapeHtml_(currentPage.summary), "</p>",
+        "</div>", renderStatusPill_("Loading", "is-live"), "</div>",
+        "<div class=\"central-admin-page-body\">",
+        renderAdminNote_(
+            "Loading the current Central content and saved bulletin settings.",
+        ),
+        "</div></section>",
+      ].join("");
+    }
+
+    if (adminState.bulletinError && !adminState.bulletinLoaded) {
+      return [
+        "<section class=\"central-admin-panel\">",
+        "<div class=\"central-admin-panel-header\"><div>",
+        "<h3>", escapeHtml_(currentPage.label), "</h3>",
+        "<p>", escapeHtml_(currentPage.summary), "</p>",
+        "</div>", renderStatusPill_("Load failed", "is-warn"), "</div>",
+        "<div class=\"central-admin-page-body\">",
+        renderAdminNote_(adminState.bulletinError),
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-bulletin\">Try Again</button>",
+        "</div></section>",
+      ].join("");
+    }
+
+    return [
+      "<section class=\"central-admin-panel central-admin-bulletin-panel\">",
+      "<div class=\"central-admin-panel-header\"><div>",
+      "<h3>", escapeHtml_(currentPage.label), "</h3>",
+      "<p>", escapeHtml_(currentPage.summary), "</p>",
+      "</div>", renderStatusPill_("2-up duplex", "is-safe"), "</div>",
+      "<div class=\"central-admin-page-body\">",
+      "<div class=\"central-admin-page-meta\">",
+      renderInlineMeta_("Paper", "US Letter landscape"),
+      renderInlineMeta_("Duplex", "Flip on short edge"),
+      renderInlineMeta_("Cut", "Center line"),
+      "</div>",
+      adminState.bulletinMessage ?
+        renderAdminNote_(adminState.bulletinMessage) :
+        "",
+      adminState.bulletinError ?
+        "<p class=\"central-admin-note\">" +
+          escapeHtml_(adminState.bulletinError) + "</p>" :
+        "",
+      renderBulletinSettingsEditor_(canSave),
+      renderBulletinContentEditor_(canSave),
+      "<div class=\"central-admin-action-row central-admin-bulletin-actions\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-bulletin\"",
+      !canSave || adminState.bulletinSaving ? " disabled" : "",
+      ">",
+      adminState.bulletinSaving ? "Saving..." : "Save Bulletin Settings",
+      "</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"print-bulletin\">Print / Save PDF</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-bulletin\">Refresh Central Content</button>",
+      "</div>",
+      renderAdminNote_(
+          "In the print dialog, choose two-sided printing, flip on the short edge, and 100% scale. Save as PDF uses the same imposed layout.",
+      ),
+      renderBulletinPreview_(),
+      "</div></section>",
+    ].join("");
+  }
+
+  function renderBulletinSettingsEditor_(canSave) {
+    var giving = adminState.bulletinDraft.giving || {};
+
+    return [
+      "<div class=\"central-admin-item central-admin-bulletin-settings\">",
+      "<div class=\"central-admin-item-header\"><strong>Bulletin Details</strong>",
+      renderStatusPill_(canSave ? "Admin only" : "Read only", canSave ? "is-safe" : "is-warn"),
+      "</div>",
+      "<div class=\"central-admin-form-grid\">",
+      renderAdminInputField_({
+        label: "Sunday Date",
+        field: "bulletin.serviceDate",
+        value: adminState.bulletinDraft.serviceDate,
+        type: "date",
+      }),
+      renderBulletinMoneyInput_("Monthly Budget", "monthlyBudget", giving.monthlyBudget),
+      renderBulletinMoneyInput_("Month-to-Date Giving", "monthToDateGiving", giving.monthToDateGiving),
+      renderBulletinMoneyInput_("Annual Budget", "annualBudget", giving.annualBudget),
+      renderBulletinMoneyInput_("Year-to-Date Giving", "yearToDateGiving", giving.yearToDateGiving),
+      "</div></div>",
+    ].join("");
+  }
+
+  function renderBulletinMoneyInput_(label, fieldName, value) {
+    return renderAdminInputField_({
+      label: label,
+      field: "bulletin.giving." + fieldName,
+      value: String(value || ""),
+      type: "number",
+      placeholder: "0",
+    });
+  }
+
+  function renderBulletinContentEditor_(canSave) {
+    var data = adminState.bulletinCentralData || {};
+    var featured = getBulletinFeaturedEvent_();
+    var events = getBulletinEventDraftsInWindow_();
+    var visibleEvents = getFilteredBulletinEventDrafts_(events);
+    var selectedEventCount = events.filter(function(item) {
+      return item.included;
+    }).length;
+    var weekOneCount = events.filter(function(item) {
+      return getBulletinEventWeek_(item) === "week1";
+    }).length;
+    var weekTwoCount = events.length - weekOneCount;
+    var campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
+    var serveNeeds = Array.isArray(data.serveNeeds) ? data.serveNeeds : [];
+
+    return [
+      "<div class=\"central-admin-bulletin-editor-grid\">",
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\"><strong>Featured Event</strong>",
+      renderStatusPill_(featured ? "From Central" : "Not available", featured ? "is-safe" : "is-warn"),
+      "</div>",
+      featured ? [
+        renderAdminInputField_({
+          label: "Printed Title",
+          field: "bulletin.featured.title",
+          value: featured.title,
+          maxLength: 180,
+        }),
+        renderAdminTextareaField_({
+          label: "Printed Description",
+          field: "bulletin.featured.description",
+          value: featured.description,
+          rows: 3,
+          maxLength: 1200,
+          hint: "Formatting: **bold**, *italics*, headings, and - or 1. lists. Line breaks are preserved.",
+        }),
+        renderAdminCheckboxField_({
+          label: "Include full description",
+          field: "bulletin.featured.includeDescription",
+          checked: featured.includeDescription,
+        }),
+      ].join("") : renderAdminNote_(
+          "No current Featured Event is available in the Central feed.",
+      ),
+      "</div>",
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong>",
+      renderStatusPill_("Live sources", "is-live"), "</div>",
+      "<p class=\"central-admin-note\">Choose up to three campaigns and one Serve Opportunity for the printed front.</p>",
+      "<div class=\"central-admin-bulletin-choice-list\">",
+      campaigns.length ? campaigns.map(function(item) {
+        var checked = adminState.bulletinDraft.campaignIds.indexOf(String(item.id || "")) !== -1;
+        return renderBulletinChoice_(
+            "campaign",
+            item.id,
+            item.title || "Untitled campaign",
+            checked,
+            false,
+        );
+      }).join("") : renderAdminNote_("No active campaigns are available."),
+      "</div>",
+      "<label class=\"central-admin-field\"><span>Serve Opportunity</span>",
+      "<select data-admin-field=\"bulletin.serveNeedId\"",
+      canSave ? "" : " disabled", ">",
+      "<option value=\"\">None</option>",
+      serveNeeds.map(function(item) {
+        var id = String(item.id || "");
+        return "<option value=\"" + escapeAttr_(id) + "\"" +
+          (adminState.bulletinDraft.serveNeedId === id ? " selected" : "") +
+          ">" + escapeHtml_(item.need || item.title || "Untitled need") +
+          "</option>";
+      }).join(""),
+      "</select></label>",
+      "</div>",
+      "</div>",
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\"><strong>Next Two Weeks</strong>",
+      renderStatusPill_(
+          String(selectedEventCount) + " selected · " +
+          String(events.length) + " available",
+          selectedEventCount ? "is-safe" : "is-warn",
+      ),
+      "</div>",
+      renderAdminNote_(
+          "Week 1 is the default print selection for new bulletins. Week 2 stays available for events that need more advance notice. Featured Event is excluded automatically.",
+      ),
+      events.length ?
+        renderBulletinEventFilterBar_(
+            events.length,
+            weekOneCount,
+            weekTwoCount,
+            selectedEventCount,
+        ) +
+        (visibleEvents.length ?
+          "<div class=\"central-admin-bulletin-events-grid\">" +
+            visibleEvents.map(renderBulletinEventEditor_).join("") +
+          "</div>" :
+          renderAdminNote_("No events match this view.")) :
+        renderAdminNote_("No non-featured Central events fall in this bulletin window."),
+      "</div>",
+    ].join("");
+  }
+
+  function renderBulletinEventFilterBar_(
+      totalCount,
+      weekOneCount,
+      weekTwoCount,
+      includedCount,
+  ) {
+    var filters = [
+      {id: "week1", label: "Week 1", count: weekOneCount},
+      {id: "week2", label: "Week 2", count: weekTwoCount},
+      {id: "included", label: "Included", count: includedCount},
+      {id: "all", label: "All 14 Days", count: totalCount},
+    ];
+
+    return [
+      "<div class=\"central-admin-bulletin-event-toolbar\">",
+      "<div class=\"central-admin-bulletin-event-filters\" role=\"group\" aria-label=\"Filter bulletin events\">",
+      filters.map(function(filter) {
+        var active = adminState.bulletinEventFilter === filter.id;
+        return [
+          "<button type=\"button\" class=\"central-admin-bulletin-filter",
+          active ? " is-active" : "",
+          "\" data-admin-action=\"filter-bulletin-events\" data-admin-bulletin-filter=\"",
+          escapeAttr_(filter.id), "\" aria-pressed=\"", active ? "true" : "false", "\">",
+          escapeHtml_(filter.label), " <span>", String(filter.count), "</span></button>",
+        ].join("");
+      }).join(""),
+      "</div>",
+      "<div class=\"central-admin-bulletin-event-bulk\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"include\">Include Visible</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"exclude\">Exclude Visible</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"week1-default\">Reset to Week 1</button>",
+      "</div>",
+      "</div>",
+    ].join("");
+  }
+
+  function renderBulletinChoice_(type, id, label, checked, radio) {
+    return [
+      "<label class=\"central-admin-checkbox\">",
+      "<input type=\"", radio ? "radio" : "checkbox", "\" data-admin-bulletin-choice=\"",
+      escapeAttr_(type), "\" data-admin-doc-id=\"", escapeAttr_(String(id || "")), "\"",
+      checked ? " checked" : "", ">",
+      "<span>", escapeHtml_(label), "</span></label>",
+    ].join("");
+  }
+
+  function renderBulletinEventEditor_(item) {
+    return [
+      "<article class=\"central-admin-bulletin-event-editor",
+      item.included ? "" : " is-excluded",
+      "\">",
+      "<div class=\"central-admin-bulletin-event-top\">",
+      "<div class=\"central-admin-bulletin-event-schedule\">",
+      "<span class=\"central-admin-bulletin-event-date\">",
+      escapeHtml_(item.date || "Date unavailable"),
+      "</span>",
+      "<strong>", escapeHtml_(item.time || "Time unavailable"), "</strong>",
+      item.location ? "<small>" + escapeHtml_(item.location) + "</small>" : "",
+      "</div>",
+      renderBulletinChoice_("event", item.id, "Include", item.included, false),
+      "</div>",
+      "<div class=\"central-admin-bulletin-event-copy\">",
+      "<h4>", escapeHtml_(item.title || "Untitled Event"), "</h4>",
+      item.description ?
+        "<p>" + escapeHtml_(item.description) + "</p>" :
+        "<p class=\"is-empty\">No description from Planning Center.</p>",
+      "</div>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-event-edit\" data-admin-action=\"edit-bulletin-event\" data-admin-bulletin-event-id=\"",
+      escapeAttr_(item.id), "\">Edit Print Copy</button>",
+      "</article>",
+    ].join("");
+  }
+
+  function renderBulletinPreview_() {
+    return [
+      "<div class=\"central-admin-bulletin-preview-header\"><div>",
+      "<span class=\"central-admin-kicker\">Live Preview</span>",
+      "<h3>Half-letter insert</h3>",
+      "</div>", renderStatusPill_("Front + Back", "is-safe"), "</div>",
+      "<div class=\"central-admin-bulletin-preview-grid\">",
+      renderBulletinPanel_("front", true),
+      renderBulletinPanel_("back", true),
+      "</div>",
+    ].join("");
+  }
+
+  function renderBulletinPrintRoot_() {
+    return [
+      "<div class=\"central-bulletin-print-root\" aria-hidden=\"true\">",
+      "<section class=\"central-bulletin-sheet central-bulletin-sheet-front\">",
+      renderBulletinPanel_("front", false),
+      renderBulletinPanel_("front", false),
+      "</section>",
+      "<section class=\"central-bulletin-sheet central-bulletin-sheet-back\">",
+      renderBulletinPanel_("back", false),
+      renderBulletinPanel_("back", false),
+      "</section></div>",
+    ].join("");
+  }
+
+  function renderBulletinPanel_(side, preview) {
+    var className = "central-bulletin-panel central-bulletin-panel-" + side;
+    if (preview) {
+      className += " is-preview";
+    }
+
+    return [
+      "<article class=\"", className, "\">",
+      side === "front" ? renderBulletinFront_() : renderBulletinBack_(),
+      "</article>",
+    ].join("");
+  }
+
+  function renderBulletinFront_() {
+    var featured = getBulletinFeaturedEvent_();
+    var featuredImageUrl = getBulletinFeaturedImageUrl_(featured);
+    var campaigns = getSelectedBulletinCampaigns_();
+    var serveNeed = getSelectedBulletinServeNeed_();
+    var giving = adminState.bulletinDraft.giving || {};
+
+    return [
+      renderBulletinBrandHeader_(),
+      "<div class=\"central-bulletin-heading\"><h1>This Week at<br>CrossPointe</h1></div>",
+      featured ? [
+        "<section class=\"central-bulletin-card central-bulletin-featured\">",
+        featuredImageUrl ? [
+          "<div class=\"central-bulletin-featured-media\">",
+          "<img src=\"", escapeAttr_(featuredImageUrl),
+          "\" alt=\"\"></div>",
+        ].join("") : "",
+        "<span class=\"central-bulletin-label\">Featured Event</span>",
+        "<h2>", escapeHtml_(featured.title), "</h2>",
+        featured.doors_open_time ? "<p class=\"central-bulletin-featured-time\">Doors Open " + escapeHtml_(featured.doors_open_time) + "</p>" : "",
+        "<p class=\"central-bulletin-featured-time\">", escapeHtml_([featured.date, featured.time].filter(Boolean).join(" - ")), "</p>",
+        featured.includeDescription && featured.description ?
+          "<div class=\"central-bulletin-description central-bulletin-markdown\">" +
+            renderAdminMarkdownLite_(featured.description) + "</div>" :
+          "",
+        "</section>",
+      ].join("") : "",
+      campaigns.length ? [
+        "<section class=\"central-bulletin-card central-bulletin-campaigns\"><span class=\"central-bulletin-label\">Current Campaigns</span>",
+        campaigns.map(function(item) {
+          return "<div class=\"central-bulletin-campaign\"><span class=\"central-bulletin-campaign-icon\">+</span><div><strong>" +
+            escapeHtml_(item.title || "Campaign") + "</strong>" +
+            (item.description ? "<p>" + escapeHtml_(item.description) + "</p>" : "") +
+            "</div></div>";
+        }).join(""),
+        "</section>",
+      ].join("") : "",
+      serveNeed ? [
+        "<section class=\"central-bulletin-card central-bulletin-serve\"><div><span class=\"central-bulletin-label\">Serve Opportunity</span><h3>",
+        escapeHtml_(serveNeed.need || serveNeed.title || "Serve at CrossPointe"),
+        "</h3>", serveNeed.description ? "<p>" + escapeHtml_(serveNeed.description) + "</p>" : "", "</div>",
+        "<span class=\"central-bulletin-serve-cta\">Learn more at<br><strong>central.crosspointe.tv</strong></span></section>",
+      ].join("") : "",
+      "<section class=\"central-bulletin-card central-bulletin-giving\"><span class=\"central-bulletin-label\">Generosity</span>",
+      "<div class=\"central-bulletin-giving-grid\">",
+      renderBulletinGivingStat_("Monthly Budget", giving.monthlyBudget),
+      renderBulletinGivingStat_("MTD Giving", giving.monthToDateGiving),
+      renderBulletinGivingStat_("Annual Budget", giving.annualBudget),
+      renderBulletinGivingStat_("YTD Giving", giving.yearToDateGiving),
+      "</div><p class=\"central-bulletin-giving-link\">Give securely at <strong>crosspointe.tv/give</strong></p></section>",
+    ].join("");
+  }
+
+  function renderBulletinGivingStat_(label, value) {
+    return "<div><span>" + escapeHtml_(label) + "</span><strong>" +
+      escapeHtml_(formatBulletinCurrency_(value)) + "</strong></div>";
+  }
+
+  function renderBulletinBack_() {
+    var events = getBulletinEventDraftsInWindow_().filter(function(item) {
+      return item.included;
+    });
+    var midpoint = Math.ceil(events.length / 2);
+    var leftEvents = events.slice(0, midpoint);
+    var rightEvents = events.slice(midpoint);
+    var maxRows = Math.max(leftEvents.length, rightEvents.length);
+    var densityClass = getBulletinEventDensityClass_(maxRows);
+    var serviceDate = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
+    var endDate = new Date(serviceDate.getTime());
+    endDate.setUTCDate(endDate.getUTCDate() + 13);
+
+    return [
+      "<div class=\"central-bulletin-back-heading\"><span class=\"central-bulletin-label\">See You There</span>",
+      "<h1>The Next Two Weeks</h1><strong>",
+      escapeHtml_(formatBulletinDateRange_(serviceDate, endDate)),
+      "</strong></div>",
+      "<div class=\"central-bulletin-event-columns",
+      densityClass, "\"><div>",
+      leftEvents.map(renderBulletinPrintEvent_).join(""),
+      "</div><div>",
+      rightEvents.map(renderBulletinPrintEvent_).join(""),
+      "</div></div>",
+      "<section class=\"central-bulletin-back-cta\"><img class=\"central-bulletin-qr\" src=\"/central-bulletin-qr.png\" alt=\"QR code for central.crosspointe.tv\"><div>",
+      "<span class=\"central-bulletin-label\">Full Details + Next Steps</span>",
+      "<p>Visit <strong>central.crosspointe.tv</strong></p>",
+      "<small>Times, locations, and events are subject to change. Visit the website for updates.</small>",
+      "</div></section>",
+    ].join("");
+  }
+
+  function getBulletinEventDensityClass_(maxRows) {
+    if (maxRows > 10) {
+      return " is-fitted is-overflow-density";
+    }
+    if (maxRows > 8) {
+      return " is-fitted is-max-density";
+    }
+    if (maxRows > 6) {
+      return " is-fitted is-ultra-dense";
+    }
+    if (maxRows > 4) {
+      return " is-fitted is-stretched is-dense";
+    }
+    return " is-fitted is-stretched";
+  }
+
+  function renderBulletinPrintEvent_(item) {
+    var date = parseBulletinDate_(item.date);
+    var weekday = new Intl.DateTimeFormat("en-US", {timeZone: "UTC", weekday: "short"}).format(date).toUpperCase();
+    var month = new Intl.DateTimeFormat("en-US", {timeZone: "UTC", month: "short"}).format(date).toUpperCase();
+    var day = String(date.getUTCDate());
+    var description = item.includeDescription && item.description ?
+      String(item.description).trim() : "";
+    var eventClass = "central-bulletin-event " +
+      (description ? "has-description" : "is-compact");
+
+    return [
+      "<article class=\"", eventClass, "\">",
+      "<div class=\"central-bulletin-event-date\" aria-label=\"",
+      escapeAttr_(item.date), "\"><span>", escapeHtml_(month),
+      "</span><strong>", escapeHtml_(day), "</strong><small>",
+      escapeHtml_(weekday), "</small></div>",
+      "<div class=\"central-bulletin-event-copy\">",
+      "<p class=\"central-bulletin-event-meta\">",
+      item.time ? "<span>" + escapeHtml_(item.time) + "</span>" : "",
+      item.location ? [
+        "<span class=\"central-bulletin-event-meta-location\">",
+        item.time ? " &bull; " : "",
+        escapeHtml_(item.location), "</span>",
+      ].join("") : "",
+      "</p><h3>", escapeHtml_(item.title), "</h3>",
+      description ?
+        "<div class=\"central-bulletin-event-description central-bulletin-markdown\">" +
+          renderAdminMarkdownLite_(description) + "</div>" :
+        "",
+      "</div></article>",
+    ].join("");
+  }
+
+  function renderBulletinBrandHeader_() {
+    return [
+      "<header class=\"central-bulletin-brand-header\"><div class=\"central-bulletin-brand\">",
+      "<img src=\"/favicon.svg\" alt=\"\"><div><strong>CrossPointe</strong><span>Central</span></div></div>",
+      "<strong class=\"central-bulletin-sunday-date\">Sunday, ",
+      escapeHtml_(formatBulletinLongDate_(adminState.bulletinDraft.serviceDate)),
+      "</strong></header>",
     ].join("");
   }
 
@@ -6762,11 +7430,14 @@
       "<span>", escapeHtml_(config.label || ""), "</span>",
       "<textarea data-admin-field=\"", escapeAttr_(config.field || ""), "\" rows=\"",
       escapeAttr_(String(config.rows || 3)), "\"",
+      config.maxLength ? " maxlength=\"" + escapeAttr_(String(config.maxLength)) + "\"" : "",
       config.placeholder ? " placeholder=\"" + escapeAttr_(config.placeholder) + "\"" : "",
       config.disabled ? " disabled" : "",
       ">",
       escapeHtml_(config.value || ""),
       "</textarea>",
+      config.hint ? "<small class=\"central-admin-field-hint\">" +
+        escapeHtml_(config.hint) + "</small>" : "",
       "</label>",
     ].join("");
   }
@@ -9987,6 +10658,11 @@
       return;
     }
 
+    if (adminState.currentPageId === "bulletin") {
+      loadBulletinModeIfNeeded_();
+      return;
+    }
+
     if (adminState.currentPageId === "quick-links") {
       loadQuickLinksIfNeeded_();
       return;
@@ -10051,6 +10727,51 @@
     }
 
     loadHub_();
+  }
+
+  function loadBulletinModeIfNeeded_() {
+    if (!adminState.user || !isActiveAdminUserRecord_()) {
+      return;
+    }
+
+    if (adminState.bulletinLoaded || adminState.bulletinLoading) {
+      return;
+    }
+
+    loadBulletinMode_();
+  }
+
+  function loadBulletinMode_() {
+    adminState.bulletinLoading = true;
+    adminState.bulletinError = "";
+    renderAdmin_();
+
+    callBulletinModeEndpoint_("GET").then(function(result) {
+      var centralData = Object.assign({}, result && result.content || {});
+      var bulletinEvents = result && result.events || {};
+      if (Array.isArray(bulletinEvents.today)) {
+        centralData.today = bulletinEvents.today;
+      }
+      if (Array.isArray(bulletinEvents.upcoming)) {
+        centralData.events = bulletinEvents.upcoming;
+      }
+      adminState.bulletinLoading = false;
+      adminState.bulletinLoaded = true;
+      adminState.bulletinCentralData = centralData;
+      adminState.bulletinDraft = normalizeBulletinDraft_(
+          result && result.config,
+          adminState.bulletinCentralData,
+      );
+      adminState.bulletinMessage = "";
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.bulletinLoading = false;
+      adminState.bulletinLoaded = false;
+      adminState.bulletinError = error && error.message ?
+        error.message :
+        "Unable to load Bulletin Mode.";
+      renderAdmin_();
+    });
   }
 
   function loadSundayIfNeeded_() {
@@ -10557,6 +11278,503 @@
       sunday_scripture_helper_text: "",
       sunday_modules: createDefaultHubSundayModules_(),
     };
+  }
+
+  function createEmptyBulletinDraft_() {
+    return {
+      serviceDate: getDefaultSundayDateInputValue_(),
+      giving: {
+        monthlyBudget: 0,
+        monthToDateGiving: 0,
+        annualBudget: 0,
+        yearToDateGiving: 0,
+      },
+      featuredEvent: {
+        id: "",
+        title: "",
+        description: "",
+        includeDescription: true,
+      },
+      events: [],
+      campaignIds: [],
+      serveNeedId: "",
+    };
+  }
+
+  function normalizeBulletinDraft_(savedConfig, centralData) {
+    var source = savedConfig && typeof savedConfig === "object" ?
+      savedConfig :
+      {};
+    var data = centralData || {};
+    var draft = createEmptyBulletinDraft_();
+    var savedGiving = source.giving || {};
+    var currentFeatured = data.featuredEvent || null;
+    var savedFeatured = source.featuredEvent || {};
+    var savedEventsById = {};
+
+    draft.serviceDate = normalizeSundayDateInputValue_(source.serviceDate) ||
+      getDefaultSundayDateInputValue_();
+    draft.giving = {
+      monthlyBudget: normalizeBulletinMoney_(savedGiving.monthlyBudget),
+      monthToDateGiving: normalizeBulletinMoney_(
+          savedGiving.monthToDateGiving,
+      ),
+      annualBudget: normalizeBulletinMoney_(savedGiving.annualBudget),
+      yearToDateGiving: normalizeBulletinMoney_(
+          savedGiving.yearToDateGiving,
+      ),
+    };
+
+    if (currentFeatured) {
+      var featuredId = getBulletinItemId_(currentFeatured);
+      var savedFeaturedMatches = !savedFeatured.id ||
+        savedFeatured.id === featuredId;
+      draft.featuredEvent = {
+        id: featuredId,
+        title: savedFeaturedMatches && savedFeatured.title ?
+          String(savedFeatured.title) :
+          String(currentFeatured.title || ""),
+        description: savedFeaturedMatches && savedFeatured.description ?
+          String(savedFeatured.description) :
+          String(currentFeatured.description || ""),
+        includeDescription: savedFeaturedMatches ?
+          savedFeatured.includeDescription !== false :
+          true,
+      };
+    }
+
+    (Array.isArray(source.events) ? source.events : []).forEach(function(item) {
+      if (item && item.id) {
+        savedEventsById[String(item.id)] = item;
+      }
+    });
+
+    draft.events = getBulletinSourceEvents_(data).map(function(item) {
+      var id = getBulletinItemId_(item);
+      var hasSavedEvent = Object.prototype.hasOwnProperty.call(
+          savedEventsById,
+          id,
+      );
+      var saved = savedEventsById[id] || {};
+      var defaultWeekTwoStart = parseBulletinDate_(draft.serviceDate);
+      defaultWeekTwoStart.setUTCDate(defaultWeekTwoStart.getUTCDate() + 7);
+      return {
+        id: id,
+        title: saved.title ? String(saved.title) : String(item.title || ""),
+        description: Object.prototype.hasOwnProperty.call(saved, "description") ?
+          String(saved.description || "") :
+          String(item.description || ""),
+        included: hasSavedEvent ?
+          saved.included !== false :
+          parseBulletinDate_(item.date).getTime() <
+            defaultWeekTwoStart.getTime(),
+        includeDescription: saved.includeDescription !== false,
+        date: String(item.date || ""),
+        time: String(item.time || ""),
+        doors_open_time: String(item.doors_open_time || ""),
+        location: String(item.location || item.venue || ""),
+      };
+    });
+
+    var campaignIds = Array.isArray(source.campaignIds) ?
+      source.campaignIds.map(String) :
+      [];
+    draft.campaignIds = campaignIds.length ? campaignIds :
+      (Array.isArray(data.campaigns) ? data.campaigns : [])
+          .slice(0, 3)
+          .map(function(item) {
+            return String(item.id || "");
+          })
+          .filter(Boolean);
+    draft.serveNeedId = String(source.serveNeedId || "") ||
+      String(data.serveNeeds && data.serveNeeds[0] &&
+        data.serveNeeds[0].id || "");
+
+    return draft;
+  }
+
+  function getBulletinSourceEvents_(data) {
+    var source = data || {};
+    var featured = source.featuredEvent || null;
+    var events = [];
+    var seen = {};
+
+    (Array.isArray(source.today) ? source.today : [])
+        .concat(Array.isArray(source.events) ? source.events : [])
+        .forEach(function(item) {
+      var id = getBulletinItemId_(item);
+      if (!id || isBulletinFeaturedSourceEvent_(item, featured) || seen[id]) {
+        return;
+      }
+          seen[id] = true;
+          events.push(item);
+        });
+
+    return events.sort(function(left, right) {
+      return parseBulletinDate_(left.date).getTime() -
+        parseBulletinDate_(right.date).getTime();
+    });
+  }
+
+  function isBulletinFeaturedSourceEvent_(item, featured) {
+    if (!item || !featured) {
+      return false;
+    }
+
+    var itemId = String(item.id || "").trim();
+    var featuredId = String(featured.id || "").trim();
+    if (itemId && featuredId && itemId === featuredId) {
+      return true;
+    }
+
+    var itemChurchCenterUrl = String(item.church_center_url || "").trim();
+    var featuredChurchCenterUrl = String(
+        featured.church_center_url || "",
+    ).trim();
+    if (
+      itemChurchCenterUrl &&
+      featuredChurchCenterUrl &&
+      itemChurchCenterUrl === featuredChurchCenterUrl
+    ) {
+      return true;
+    }
+
+    var itemTitle = String(item.title || "").trim();
+    var featuredTitle = String(featured.title || "").trim();
+    var datesMatch = String(item.date || "").trim() ===
+      String(featured.date || "").trim();
+    if (!datesMatch) {
+      return false;
+    }
+
+    if (itemTitle === featuredTitle) {
+      return true;
+    }
+
+    var itemTokens = getBulletinTitleTokens_(itemTitle);
+    var featuredTokens = getBulletinTitleTokens_(featuredTitle);
+    var shorterTokens = itemTokens.length <= featuredTokens.length ?
+      itemTokens : featuredTokens;
+    var longerTokens = itemTokens.length <= featuredTokens.length ?
+      featuredTokens : itemTokens;
+
+    return shorterTokens.length >= 3 && shorterTokens.every(function(token) {
+      return longerTokens.indexOf(token) !== -1;
+    });
+  }
+
+  function getBulletinTitleTokens_(title) {
+    return String(title || "")
+        .toLowerCase()
+        .replace(/['’]s\b/g, "")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+  }
+
+  function getBulletinItemId_(item) {
+    var source = item || {};
+    return String(source.id || [
+      source.title,
+      source.date,
+      source.time,
+    ].filter(Boolean).join("|"));
+  }
+
+  function getBulletinFeaturedEvent_() {
+    var data = adminState.bulletinCentralData || {};
+    var source = data.featuredEvent;
+    if (!source) {
+      return null;
+    }
+
+    return Object.assign({}, source, adminState.bulletinDraft.featuredEvent || {});
+  }
+
+  function getBulletinFeaturedImageUrl_(featured) {
+    var imageUrl = String(featured && featured.image_url || "").trim();
+    return /^https:\/\//i.test(imageUrl) ? imageUrl : "";
+  }
+
+  function getBulletinEventDraftsInWindow_() {
+    var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
+    var end = new Date(start.getTime());
+    end.setUTCDate(end.getUTCDate() + 13);
+
+    return (adminState.bulletinDraft.events || []).filter(function(item) {
+      var date = parseBulletinDate_(item.date);
+      return date.getTime() >= start.getTime() &&
+        date.getTime() <= end.getTime();
+    });
+  }
+
+  function getBulletinEventWeek_(item) {
+    var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
+    var weekTwoStart = new Date(start.getTime());
+    weekTwoStart.setUTCDate(weekTwoStart.getUTCDate() + 7);
+    return parseBulletinDate_(item && item.date).getTime() <
+      weekTwoStart.getTime() ? "week1" : "week2";
+  }
+
+  function getFilteredBulletinEventDrafts_(events) {
+    var source = Array.isArray(events) ?
+      events :
+      getBulletinEventDraftsInWindow_();
+    var filter = String(adminState.bulletinEventFilter || "week1");
+
+    if (filter === "included") {
+      return source.filter(function(item) {
+        return item.included;
+      });
+    }
+
+    if (filter === "week1" || filter === "week2") {
+      return source.filter(function(item) {
+        return getBulletinEventWeek_(item) === filter;
+      });
+    }
+
+    return source;
+  }
+
+  function updateBulletinEventBulkInclusion_(mode) {
+    var events = getBulletinEventDraftsInWindow_();
+
+    if (mode === "week1-default") {
+      events.forEach(function(item) {
+        item.included = getBulletinEventWeek_(item) === "week1";
+      });
+      adminState.bulletinEventFilter = "week1";
+      return;
+    }
+
+    if (mode !== "include" && mode !== "exclude") {
+      return;
+    }
+
+    var shouldInclude = mode === "include";
+    getFilteredBulletinEventDrafts_(events).forEach(function(item) {
+      item.included = shouldInclude;
+    });
+  }
+
+  function getSelectedBulletinCampaigns_() {
+    var data = adminState.bulletinCentralData || {};
+    var selectedIds = adminState.bulletinDraft.campaignIds || [];
+    return (Array.isArray(data.campaigns) ? data.campaigns : [])
+        .filter(function(item) {
+          return selectedIds.indexOf(String(item.id || "")) !== -1;
+        })
+        .slice(0, 3);
+  }
+
+  function getSelectedBulletinServeNeed_() {
+    var data = adminState.bulletinCentralData || {};
+    return (Array.isArray(data.serveNeeds) ? data.serveNeeds : [])
+        .find(function(item) {
+          return String(item.id || "") === adminState.bulletinDraft.serveNeedId;
+        }) || null;
+  }
+
+  function updateBulletinDraftField_(fieldName, value) {
+    if (fieldName.indexOf("giving.") === 0) {
+      adminState.bulletinDraft.giving[fieldName.replace("giving.", "")] =
+        normalizeBulletinMoney_(value);
+    } else if (fieldName.indexOf("featured.") === 0) {
+      adminState.bulletinDraft.featuredEvent[
+          fieldName.replace("featured.", "")
+      ] = value;
+    } else {
+      adminState.bulletinDraft[fieldName] = value;
+    }
+    adminState.bulletinError = "";
+    adminState.bulletinMessage = "";
+  }
+
+  function updateBulletinEventField_(eventId, fieldName, value) {
+    var item = (adminState.bulletinDraft.events || []).find(function(eventItem) {
+      return eventItem.id === eventId;
+    });
+    if (!item) {
+      return;
+    }
+    item[fieldName] = value;
+    adminState.bulletinError = "";
+    adminState.bulletinMessage = "";
+  }
+
+  function updateBulletinChoice_(input) {
+    var choiceType = input.getAttribute("data-admin-bulletin-choice") || "";
+    var id = input.getAttribute("data-admin-doc-id") || "";
+
+    if (choiceType === "campaign") {
+      var ids = adminState.bulletinDraft.campaignIds.slice();
+      var index = ids.indexOf(id);
+      if (input.checked && index === -1 && ids.length < 3) {
+        ids.push(id);
+      } else if (!input.checked && index !== -1) {
+        ids.splice(index, 1);
+      }
+      adminState.bulletinDraft.campaignIds = ids;
+      return;
+    }
+
+    if (choiceType === "event") {
+      updateBulletinEventField_(id, "included", !!input.checked);
+    }
+  }
+
+  function buildBulletinModePayload_() {
+    var draft = adminState.bulletinDraft;
+    return {
+      serviceDate: normalizeSundayDateInputValue_(draft.serviceDate),
+      giving: {
+        monthlyBudget: normalizeBulletinMoney_(draft.giving.monthlyBudget),
+        monthToDateGiving: normalizeBulletinMoney_(
+            draft.giving.monthToDateGiving,
+        ),
+        annualBudget: normalizeBulletinMoney_(draft.giving.annualBudget),
+        yearToDateGiving: normalizeBulletinMoney_(
+            draft.giving.yearToDateGiving,
+        ),
+      },
+      featuredEvent: {
+        id: String(draft.featuredEvent.id || ""),
+        title: String(draft.featuredEvent.title || "").trim(),
+        description: String(draft.featuredEvent.description || "").trim(),
+        includeDescription: draft.featuredEvent.includeDescription !== false,
+      },
+      events: (draft.events || []).map(function(item) {
+        return {
+          id: item.id,
+          title: String(item.title || "").trim(),
+          description: String(item.description || "").trim(),
+          included: item.included !== false,
+          includeDescription: item.includeDescription !== false,
+        };
+      }),
+      campaignIds: draft.campaignIds.slice(0, 3),
+      serveNeedId: String(draft.serveNeedId || ""),
+    };
+  }
+
+  function saveBulletinMode_() {
+    if (!isEditorLevelPermission_(getPageAccessLevel_("bulletin"))) {
+      adminState.bulletinError =
+        "Your current access level does not allow saving Bulletin Mode.";
+      renderAdmin_();
+      return;
+    }
+
+    adminState.bulletinSaving = true;
+    adminState.bulletinError = "";
+    renderAdmin_();
+
+    callBulletinModeEndpoint_("POST", buildBulletinModePayload_())
+        .then(function(result) {
+          adminState.bulletinSaving = false;
+          adminState.bulletinMessage = result && result.message ?
+            result.message :
+            "Bulletin Mode settings saved.";
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.bulletinSaving = false;
+          adminState.bulletinError = error && error.message ?
+            error.message :
+            "Unable to save Bulletin Mode settings.";
+          renderAdmin_();
+        });
+  }
+
+  function printBulletin_() {
+    renderAdmin_();
+
+    var images = appEl ? Array.prototype.slice.call(
+        appEl.querySelectorAll(".central-bulletin-print-root img"),
+    ) : [];
+    var imageWaits = images.map(function(image) {
+      if (image.complete) {
+        return Promise.resolve();
+      }
+
+      return new Promise(function(resolve) {
+        var timeoutId = window.setTimeout(resolve, 3000);
+        image.addEventListener("load", function() {
+          window.clearTimeout(timeoutId);
+          resolve();
+        }, {once: true});
+        image.addEventListener("error", function() {
+          window.clearTimeout(timeoutId);
+          resolve();
+        }, {once: true});
+      });
+    });
+
+    Promise.all(imageWaits).then(function() {
+      beginAdminPrintThemeLock_();
+
+      try {
+        window.print();
+      } catch (error) {
+        endAdminPrintThemeLock_();
+        throw error;
+      }
+    });
+  }
+
+  function normalizeBulletinMoney_(value) {
+    var parsed = Number(String(value == null ? "" : value).replace(/[$,\s]/g, ""));
+    return isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : 0;
+  }
+
+  function formatBulletinCurrency_(value) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(normalizeBulletinMoney_(value));
+  }
+
+  function parseBulletinDate_(value) {
+    var normalized = normalizeSundayDateInputValue_(value);
+    if (normalized) {
+      var parts = normalized.split("-");
+      return new Date(Date.UTC(
+          Number(parts[0]),
+          Number(parts[1]) - 1,
+          Number(parts[2]),
+          12,
+      ));
+    }
+
+    var parsed = new Date(String(value || "") + " 12:00:00 UTC");
+    return Number.isNaN(parsed.getTime()) ?
+      new Date(Date.UTC(1970, 0, 1, 12)) :
+      parsed;
+  }
+
+  function formatBulletinLongDate_(value) {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(parseBulletinDate_(value));
+  }
+
+  function formatBulletinDateRange_(start, end) {
+    var startMonth = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "long",
+    }).format(start).toUpperCase();
+    var endMonth = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "long",
+    }).format(end).toUpperCase();
+    return startMonth + " " + start.getUTCDate() + " - " +
+      endMonth + " " + end.getUTCDate();
   }
 
   function createEmptySettingsSundayDraft_() {
@@ -15383,6 +16601,10 @@
       adminState.hubLoaded = false;
     }
 
+    if (pageId === "bulletin") {
+      adminState.bulletinLoaded = false;
+    }
+
     if (pageId === "quick-links" && !hasPendingQuickLinksChanges_()) {
       adminState.quickLinksLoaded = false;
     }
@@ -15704,6 +16926,33 @@
           resetCurrentCentralDataCache_();
           return result;
         });
+  }
+
+  function callBulletinModeEndpoint_(method, payload) {
+    if (!adminState.user) {
+      return Promise.reject(new Error("Sign in before using Bulletin Mode."));
+    }
+
+    var normalizedMethod = method === "POST" ? "POST" : "GET";
+
+    return adminState.user.getIdToken()
+        .then(function(idToken) {
+          var requestOptions = {
+            method: normalizedMethod,
+            headers: {
+              Authorization: "Bearer " + idToken,
+              Accept: "application/json",
+            },
+          };
+
+          if (normalizedMethod === "POST") {
+            requestOptions.headers["Content-Type"] = "application/json";
+            requestOptions.body = JSON.stringify(payload || {});
+          }
+
+          return fetch(BULLETIN_MODE_ENDPOINT, requestOptions);
+        })
+        .then(parseAdminEndpointResponse_);
   }
 
   function runWayfinderPrototypeQuery_(questionOverride) {
@@ -16700,6 +17949,7 @@
   function getManagedAdminPageConfigs_() {
     return [
       {key: "hub", label: "Hub"},
+      {key: "bulletin", label: "Bulletin Mode"},
       {key: "settings", label: "Settings"},
       {key: "integrations", label: "Integrations"},
       {key: "wayfinder", label: "Wayfinder"},
@@ -16725,6 +17975,7 @@
     }
 
     if (pageAccessKey === "hub" ||
+      pageAccessKey === "bulletin" ||
       pageAccessKey === "integrations" ||
       pageAccessKey === "resources" ||
       pageAccessKey === "nextSteps" ||
@@ -16751,6 +18002,12 @@
 
     if (!Object.prototype.hasOwnProperty.call(source, "integrations")) {
       nextPageAccess.integrations = normalizeAdminPermissionValue_(
+          source.settings,
+      );
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(source, "bulletin")) {
+      nextPageAccess.bulletin = normalizeAdminPermissionValue_(
           source.settings,
       );
     }
@@ -17867,7 +19124,8 @@
       return normalizeAdminPermissionValue_(pageAccess[pageAccessKey]);
     }
 
-    if (pageAccessKey === "hub" || pageAccessKey === "integrations") {
+    if (pageAccessKey === "hub" || pageAccessKey === "integrations" ||
+      pageAccessKey === "bulletin") {
       return normalizeAdminPermissionValue_(pageAccess.settings);
     }
 

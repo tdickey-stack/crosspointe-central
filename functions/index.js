@@ -11716,6 +11716,8 @@ function normalizeBulletinModePayload_(sourceData) {
 
   return {
     serviceDate: normalizeThisSundayDateValue_(source.serviceDate),
+    printFormat: source.printFormat === "full-page" ?
+      "full-page" : "half-letter",
     heroSource: source.heroSource === "manual" ? "manual" : "featured",
     headings: {
       frontHeading: normalizeBulletinModeHeading_(

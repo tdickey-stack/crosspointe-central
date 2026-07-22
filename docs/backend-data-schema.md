@@ -238,6 +238,11 @@ public Central frontend.
 
 ```text
 serviceDate
+printFormat (half-letter | full-page)
+heroSource (featured | manual)
+headings.frontHeading
+headings.backEyebrow
+headings.backHeading
 giving.monthlyBudget
 giving.monthToDateGiving
 giving.annualBudget
@@ -246,9 +251,15 @@ featuredEvent.id
 featuredEvent.title
 featuredEvent.description
 featuredEvent.includeDescription
+fallbackHero.eyebrow
+fallbackHero.title
+fallbackHero.description
+fallbackHero.imageUrl
+fallbackHero.imageStoragePath
 events[].id
 events[].title
 events[].description
+events[].location
 events[].included
 events[].includeDescription
 campaignIds[]
@@ -261,8 +272,9 @@ updatedByEmail
 ```
 
 Event IDs are Planning Center event-instance IDs. Bulletin Mode stores only
-print-specific overrides; schedule, location, image, and source descriptions
-continue to come from Planning Center through the live Central data flow.
+print-specific overrides; schedules and Planning Center defaults continue to
+come from Planning Center through the live Central data flow. `printFormat`
+defaults to `half-letter` for existing documents that do not have the field.
 
 ## What "Upsert" Means Here
 

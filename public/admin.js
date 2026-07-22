@@ -4532,6 +4532,8 @@
   function renderBulletinPagePanel_(currentPage) {
     var permission = getPageAccessLevel_("bulletin");
     var canSave = isEditorLevelPermission_(permission);
+    var printFormat = getBulletinPrintFormat_();
+    var fullPage = printFormat === "full-page";
 
     if (adminState.bulletinLoading && !adminState.bulletinLoaded) {
       return [
@@ -4567,12 +4569,21 @@
       "<div class=\"central-admin-panel-header\"><div>",
       "<h3>", escapeHtml_(currentPage.label), "</h3>",
       "<p>", escapeHtml_(currentPage.summary), "</p>",
-      "</div>", renderStatusPill_("2-up duplex", "is-safe"), "</div>",
+      "</div>", renderStatusPill_(
+          fullPage ? "Full-page single-sided" : "2-up duplex",
+          "is-safe",
+      ), "</div>",
       "<div class=\"central-admin-page-body\">",
       "<div class=\"central-admin-page-meta\">",
-      renderInlineMeta_("Paper", "US Letter landscape"),
-      renderInlineMeta_("Duplex", "Flip on short edge"),
-      renderInlineMeta_("Cut", "Center line"),
+      renderInlineMeta_(
+          "Paper",
+          fullPage ? "US Letter portrait" : "US Letter landscape",
+      ),
+      renderInlineMeta_(
+          "Sides",
+          fullPage ? "Single-sided" : "Duplex - flip on short edge",
+      ),
+      renderInlineMeta_("Finishing", fullPage ? "No cutting" : "Center cut"),
       "</div>",
       adminState.bulletinMessage ?
         renderAdminNote_(adminState.bulletinMessage) :
@@ -4583,6 +4594,7 @@
         "",
       renderBulletinSettingsEditor_(canSave),
       renderBulletinContentEditor_(canSave),
+      renderBulletinPrintFormatEditor_(canSave),
       "<div class=\"central-admin-action-row central-admin-bulletin-actions\">",
       "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-bulletin\"",
       !canSave || adminState.bulletinSaving ? " disabled" : "",
@@ -4593,10 +4605,42 @@
       "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-bulletin\">Refresh Central Content</button>",
       "</div>",
       renderAdminNote_(
-          "In the print dialog, choose two-sided printing, flip on the short edge, and 100% scale. Save as PDF uses the same imposed layout.",
+          fullPage ?
+            "In the print dialog, choose portrait, single-sided printing, and 100% scale." :
+            "In the print dialog, choose two-sided printing, flip on the short edge, and 100% scale. Save as PDF uses the same imposed layout.",
       ),
       renderBulletinPreview_(),
       "</div></section>",
+    ].join("");
+  }
+
+  function renderBulletinPrintFormatEditor_(canSave) {
+    var printFormat = getBulletinPrintFormat_();
+
+    return [
+      "<div class=\"central-admin-item central-admin-bulletin-format-editor\">",
+      "<div class=\"central-admin-item-header\"><strong>Print Format</strong>",
+      renderStatusPill_(
+          printFormat === "full-page" ? "Full Page" : "Half Letter",
+          "is-safe",
+      ),
+      "</div>",
+      "<p class=\"central-admin-note\">Choose the layout that Print / Save PDF should generate. Your content selections remain available when you switch formats.</p>",
+      "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-print-format\">",
+      "<legend>Insert Size</legend>",
+      "<label class=\"",
+      printFormat === "half-letter" ? "is-active" : "",
+      "\"><input type=\"radio\" name=\"bulletin-print-format\" value=\"half-letter\" data-admin-field=\"bulletin.printFormat\"",
+      printFormat === "half-letter" ? " checked" : "",
+      !canSave ? " disabled" : "",
+      "><span><strong>Half-Letter Insert</strong><small>Two copies per landscape sheet with front and back pages, ready to cut.</small></span></label>",
+      "<label class=\"",
+      printFormat === "full-page" ? "is-active" : "",
+      "\"><input type=\"radio\" name=\"bulletin-print-format\" value=\"full-page\" data-admin-field=\"bulletin.printFormat\"",
+      printFormat === "full-page" ? " checked" : "",
+      !canSave ? " disabled" : "",
+      "><span><strong>Full-Page Insert</strong><small>One portrait page with the hero, campaigns, serve opportunity, and QR footer.</small></span></label>",
+      "</fieldset></div>",
     ].join("");
   }
 
@@ -4977,21 +5021,37 @@
   }
 
   function renderBulletinPreview_() {
+    var fullPage = getBulletinPrintFormat_() === "full-page";
+
     return [
       "<div class=\"central-admin-bulletin-preview-header\"><div>",
       "<span class=\"central-admin-kicker\">Live Preview</span>",
-      "<h3>Half-letter insert</h3>",
-      "</div>", renderStatusPill_("Front + Back", "is-safe"), "</div>",
+      "<h3>", fullPage ? "Full-page insert" : "Half-letter insert", "</h3>",
+      "</div>", renderStatusPill_(
+          fullPage ? "Single Page" : "Front + Back",
+          "is-safe",
+      ), "</div>",
       "<div class=\"central-admin-bulletin-preview-grid\">",
-      renderBulletinPanel_("front", true),
-      renderBulletinPanel_("back", true),
+      fullPage ? renderBulletinFullPagePanel_(true) : [
+        renderBulletinPanel_("front", true),
+        renderBulletinPanel_("back", true),
+      ].join(""),
       "</div>",
     ].join("");
   }
 
   function renderBulletinPrintRoot_() {
+    if (getBulletinPrintFormat_() === "full-page") {
+      return [
+        "<div class=\"central-bulletin-print-root is-full-page\" aria-hidden=\"true\">",
+        "<section class=\"central-bulletin-full-sheet\">",
+        renderBulletinFullPagePanel_(false),
+        "</section></div>",
+      ].join("");
+    }
+
     return [
-      "<div class=\"central-bulletin-print-root\" aria-hidden=\"true\">",
+      "<div class=\"central-bulletin-print-root is-half-letter\" aria-hidden=\"true\">",
       "<section class=\"central-bulletin-sheet central-bulletin-sheet-front\">",
       renderBulletinPanel_("front", false),
       renderBulletinPanel_("front", false),
@@ -5000,6 +5060,19 @@
       renderBulletinPanel_("back", false),
       renderBulletinPanel_("back", false),
       "</section></div>",
+    ].join("");
+  }
+
+  function renderBulletinFullPagePanel_(preview) {
+    var className = "central-bulletin-panel central-bulletin-panel-front is-full-page";
+    if (preview) {
+      className += " is-preview";
+    }
+
+    return [
+      "<article class=\"", className, "\">",
+      renderBulletinFront_({fullPage: true}),
+      "</article>",
     ].join("");
   }
 
@@ -5016,7 +5089,8 @@
     ].join("");
   }
 
-  function renderBulletinFront_() {
+  function renderBulletinFront_(options) {
+    var fullPage = !!(options && options.fullPage);
     var hero = getBulletinFrontHero_();
     var heroImageUrl = hero.source === "featured" ?
       getBulletinFeaturedImageUrl_(hero) :
@@ -5073,13 +5147,15 @@
             escapeHtml_(serveNeed.description) + "</p>" : "", "</div>",
         "<span class=\"central-bulletin-serve-cta\">Learn more at<br><strong>central.crosspointe.tv</strong></span></section>",
       ].join("") : "",
-      "<section class=\"central-bulletin-card central-bulletin-giving\"><span class=\"central-bulletin-label\">Generosity</span>",
-      "<div class=\"central-bulletin-giving-grid\">",
-      renderBulletinGivingStat_("Monthly Budget", giving.monthlyBudget),
-      renderBulletinGivingStat_("MTD Giving", giving.monthToDateGiving),
-      renderBulletinGivingStat_("Annual Budget", giving.annualBudget),
-      renderBulletinGivingStat_("YTD Giving", giving.yearToDateGiving),
-      "</div><p class=\"central-bulletin-giving-link\">Give securely at <strong>crosspointe.tv/give</strong></p></section>",
+      fullPage ? renderBulletinDetailsCta_("central-bulletin-full-page-cta") : [
+        "<section class=\"central-bulletin-card central-bulletin-giving\"><span class=\"central-bulletin-label\">Generosity</span>",
+        "<div class=\"central-bulletin-giving-grid\">",
+        renderBulletinGivingStat_("Monthly Budget", giving.monthlyBudget),
+        renderBulletinGivingStat_("MTD Giving", giving.monthToDateGiving),
+        renderBulletinGivingStat_("Annual Budget", giving.annualBudget),
+        renderBulletinGivingStat_("YTD Giving", giving.yearToDateGiving),
+        "</div><p class=\"central-bulletin-giving-link\">Give securely at <strong>crosspointe.tv/give</strong></p></section>",
+      ].join(""),
     ].join("");
   }
 
@@ -5118,7 +5194,15 @@
       "</div><div>",
       rightGroups.map(renderBulletinPrintEventGroup_).join(""),
       "</div></div>",
-      "<section class=\"central-bulletin-back-cta\"><img class=\"central-bulletin-qr\" src=\"/central-bulletin-qr.png\" alt=\"QR code for central.crosspointe.tv\"><div>",
+      renderBulletinDetailsCta_(""),
+    ].join("");
+  }
+
+  function renderBulletinDetailsCta_(extraClassName) {
+    return [
+      "<section class=\"central-bulletin-back-cta",
+      extraClassName ? " " + escapeAttr_(extraClassName) : "",
+      "\"><img class=\"central-bulletin-qr\" src=\"/central-bulletin-qr.png\" alt=\"QR code for central.crosspointe.tv\"><div>",
       "<span class=\"central-bulletin-label\">Full Details + Next Steps</span>",
       "<p>Visit <strong>central.crosspointe.tv</strong></p>",
       "<small>Times, locations, and events are subject to change. Visit the website for updates.</small>",
@@ -11638,6 +11722,7 @@
   function createEmptyBulletinDraft_() {
     return {
       serviceDate: getDefaultSundayDateInputValue_(),
+      printFormat: "half-letter",
       heroSource: "featured",
       headings: {
         frontHeading: "This Week at\nCrossPointe",
@@ -11695,6 +11780,8 @@
     draft.serviceDate = savedServiceDate &&
       savedServiceDate >= automaticServiceDate ?
       savedServiceDate : automaticServiceDate;
+    draft.printFormat = source.printFormat === "full-page" ?
+      "full-page" : "half-letter";
     draft.heroSource = source.heroSource === "manual" ?
       "manual" : "featured";
     draft.headings = {
@@ -11972,6 +12059,11 @@
       !getBulletinFeaturedEvent_();
   }
 
+  function getBulletinPrintFormat_() {
+    return adminState.bulletinDraft.printFormat === "full-page" ?
+      "full-page" : "half-letter";
+  }
+
   function getBulletinEventDraftsInWindow_() {
     var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
     var end = new Date(start.getTime());
@@ -12202,6 +12294,8 @@
     var draft = adminState.bulletinDraft;
     return {
       serviceDate: normalizeSundayDateInputValue_(draft.serviceDate),
+      printFormat: draft.printFormat === "full-page" ?
+        "full-page" : "half-letter",
       heroSource: draft.heroSource === "manual" ? "manual" : "featured",
       headings: {
         frontHeading: normalizeBulletinHeadingText_(

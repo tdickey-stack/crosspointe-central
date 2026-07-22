@@ -719,6 +719,7 @@
   var adminThemeOverride = "";
   var adminPrintThemeLocked = false;
   var adminThemeBeforePrint = "";
+  var adminTitleBeforePrint = "";
   var adminSortDragSection = "";
   var adminSortDragDocId = "";
   var adminSortDropDocId = "";
@@ -810,9 +811,28 @@
     adminPrintThemeLocked = false;
     adminThemeBeforePrint = "";
 
+    restoreAdminPrintTitle_();
+
     if (isValidAdminTheme_(themeToRestore)) {
       applyAdminTheme_(themeToRestore);
     }
+  }
+
+  function setAdminPrintTitle_(title) {
+    if (!adminTitleBeforePrint) {
+      adminTitleBeforePrint = document.title;
+    }
+
+    document.title = String(title || document.title);
+  }
+
+  function restoreAdminPrintTitle_() {
+    if (!adminTitleBeforePrint) {
+      return;
+    }
+
+    document.title = adminTitleBeforePrint;
+    adminTitleBeforePrint = "";
   }
 
   function readStoredAdminTheme_() {
@@ -12568,6 +12588,7 @@
     });
 
     Promise.all(imageWaits).then(function() {
+      setAdminPrintTitle_(getBulletinPdfTitle_());
       beginAdminPrintThemeLock_();
 
       try {
@@ -12577,6 +12598,20 @@
         throw error;
       }
     });
+  }
+
+  function getBulletinPdfTitle_() {
+    var serviceDate = parseBulletinDate_(
+        adminState.bulletinDraft.serviceDate,
+    );
+    var year = String(serviceDate.getUTCFullYear()).slice(-2);
+    var month = String(serviceDate.getUTCMonth() + 1).padStart(2, "0");
+    var day = String(serviceDate.getUTCDate()).padStart(2, "0");
+    var formatLabel = getBulletinPrintFormat_() === "full-page" ?
+      "Full Page" : "Half-Page";
+
+    return "CrossPointe Central - " + formatLabel + " - " +
+      year + month + day;
   }
 
   function normalizeBulletinMoney_(value) {

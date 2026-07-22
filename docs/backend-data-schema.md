@@ -252,6 +252,8 @@ events[].description
 events[].included
 events[].includeDescription
 campaignIds[]
+campaignIcons[].id
+campaignIcons[].icon
 serveNeedId
 updatedAt
 updatedByUid

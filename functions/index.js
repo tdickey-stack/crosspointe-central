@@ -92,6 +92,24 @@ const CENTRAL_ADMIN_BULLETIN_MODE_DOC_PATH =
 const CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX =
   "bulletin-mode/fallback-images";
 const CENTRAL_BULLETIN_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const CENTRAL_BULLETIN_CAMPAIGN_ICON_IDS = new Set([
+  "general",
+  "gift",
+  "backpack",
+  "house",
+  "food",
+  "clothing",
+  "heart",
+  "helping-hands",
+  "praying-hands",
+  "school",
+  "family",
+  "medical",
+  "church",
+  "missions",
+  "donation",
+  "calendar",
+]);
 const CHANGE_REQUEST_CLEANUP_LIMIT_PER_STATUS = 25;
 const CENTRAL_PUBLIC_SETTINGS_DOC_PATH =
   "centralApp/root/public/settings";
@@ -11677,6 +11695,23 @@ function normalizeBulletinModePayload_(sourceData) {
   const campaignIds = Array.isArray(source.campaignIds) ?
     source.campaignIds :
     [];
+  const rawCampaignIcons = Array.isArray(source.campaignIcons) ?
+    source.campaignIcons :
+    [];
+  const campaignIcons = [];
+  const seenCampaignIconIds = new Set();
+
+  rawCampaignIcons.slice(0, 12).forEach((item) => {
+    const id = normalizeBulletinModeText_(item && item.id, 160);
+    if (!id || seenCampaignIconIds.has(id)) {
+      return;
+    }
+    seenCampaignIconIds.add(id);
+    campaignIcons.push({
+      id: id,
+      icon: normalizeBulletinCampaignIconId_(item && item.icon),
+    });
+  });
 
   return {
     serviceDate: normalizeThisSundayDateValue_(source.serviceDate),
@@ -11762,8 +11797,16 @@ function normalizeBulletinModePayload_(sourceData) {
     campaignIds: campaignIds.slice(0, 12)
         .map((id) => normalizeBulletinModeText_(id, 160))
         .filter(Boolean),
+    campaignIcons: campaignIcons,
     serveNeedId: normalizeBulletinModeText_(source.serveNeedId, 160),
   };
+}
+
+function normalizeBulletinCampaignIconId_(value) {
+  const iconId = String(value || "").trim().toLowerCase();
+  return CENTRAL_BULLETIN_CAMPAIGN_ICON_IDS.has(iconId) ?
+    iconId :
+    "general";
 }
 
 function normalizeBulletinModeText_(value, maxLength) {

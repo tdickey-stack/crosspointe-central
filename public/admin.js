@@ -20,6 +20,25 @@
   var FIRST_ADMIN_BOOTSTRAP_ENDPOINT = "/api/admin/bootstrap-first-user";
   var PUBLISH_PREVIEW_CONTENT_ENDPOINT = "/api/admin/publish-preview-content";
   var BULLETIN_MODE_ENDPOINT = "/api/admin/bulletin-mode";
+  var BULLETIN_CAMPAIGN_ICON_PATH = "/bulletin-campaign-icons/";
+  var BULLETIN_CAMPAIGN_ICONS = [
+    {id: "general", label: "General"},
+    {id: "gift", label: "Gift"},
+    {id: "backpack", label: "Backpack"},
+    {id: "house", label: "House"},
+    {id: "food", label: "Food / Meals"},
+    {id: "clothing", label: "Clothing"},
+    {id: "heart", label: "Heart / Care"},
+    {id: "helping-hands", label: "Helping Hands"},
+    {id: "praying-hands", label: "Praying Hands"},
+    {id: "school", label: "School"},
+    {id: "family", label: "Family"},
+    {id: "medical", label: "Medical"},
+    {id: "church", label: "Church"},
+    {id: "missions", label: "Missions / Globe"},
+    {id: "donation", label: "Donation"},
+    {id: "calendar", label: "Calendar"},
+  ];
   var SUBMIT_CHANGE_REQUEST_ENDPOINT = "/api/admin/submit-change-request";
   var REVIEW_CHANGE_REQUEST_ENDPOINT = "/api/admin/review-change-request";
   var LIST_ADMIN_USERS_ENDPOINT = "/api/admin/list-users";
@@ -2678,6 +2697,20 @@
       return;
     }
 
+    var bulletinCampaignIconId = event.target.getAttribute(
+        "data-admin-bulletin-campaign-icon",
+    );
+    if (bulletinCampaignIconId) {
+      if (event.type === "change") {
+        updateBulletinCampaignIcon_(
+            bulletinCampaignIconId,
+            event.target.value,
+        );
+        renderAdmin_();
+      }
+      return;
+    }
+
     var field = event.target.getAttribute("data-admin-field");
     var nextValue = event.target.type === "checkbox" ?
       !!event.target.checked :
@@ -4663,17 +4696,11 @@
       "<div class=\"central-admin-item central-admin-bulletin-front-content\">",
       "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong>",
       renderStatusPill_("Live sources", "is-live"), "</div>",
-      "<p class=\"central-admin-note\">Choose up to three campaigns and one Serve Opportunity for the printed front.</p>",
+      "<p class=\"central-admin-note\">Choose up to three campaigns and give each one a print icon. You can also select one Serve Opportunity.</p>",
       "<div class=\"central-admin-bulletin-choice-list\">",
       campaigns.length ? campaigns.map(function(item) {
         var checked = adminState.bulletinDraft.campaignIds.indexOf(String(item.id || "")) !== -1;
-        return renderBulletinChoice_(
-            "campaign",
-            item.id,
-            item.title || "Untitled campaign",
-            checked,
-            false,
-        );
+        return renderBulletinCampaignChoice_(item, checked, canSave);
       }).join("") : renderAdminNote_("No active campaigns are available."),
       "</div>",
       "<label class=\"central-admin-field is-select central-admin-bulletin-serve-select\"><span>Serve Opportunity</span>",
@@ -4893,6 +4920,35 @@
     ].join("");
   }
 
+  function renderBulletinCampaignChoice_(item, checked, canSave) {
+    var id = String(item && item.id || "");
+    var title = String(item && item.title || "Untitled campaign");
+    var iconId = getBulletinCampaignIconId_(item);
+
+    return [
+      "<div class=\"central-admin-bulletin-campaign-choice",
+      checked ? " is-selected" : "",
+      "\"><label class=\"central-admin-checkbox\">",
+      "<input type=\"checkbox\" data-admin-bulletin-choice=\"campaign\" data-admin-doc-id=\"",
+      escapeAttr_(id), "\"", checked ? " checked" : "",
+      canSave ? "" : " disabled", ">",
+      "<span>", escapeHtml_(title), "</span></label>",
+      "<div class=\"central-admin-bulletin-campaign-icon-control\">",
+      "<span class=\"central-admin-bulletin-campaign-icon-preview\"><img src=\"",
+      escapeAttr_(getBulletinCampaignIconUrl_(iconId)),
+      "\" alt=\"\"></span>",
+      "<select data-admin-bulletin-campaign-icon=\"", escapeAttr_(id),
+      "\" aria-label=\"Print icon for ", escapeAttr_(title), "\"",
+      canSave ? "" : " disabled", ">",
+      BULLETIN_CAMPAIGN_ICONS.map(function(icon) {
+        return "<option value=\"" + escapeAttr_(icon.id) + "\"" +
+          (icon.id === iconId ? " selected" : "") + ">" +
+          escapeHtml_(icon.label) + "</option>";
+      }).join(""),
+      "</select></div></div>",
+    ].join("");
+  }
+
   function renderBulletinEventEditor_(item) {
     return [
       "<article class=\"central-admin-bulletin-event-editor",
@@ -4998,7 +5054,10 @@
       campaigns.length ? [
         "<section class=\"central-bulletin-card central-bulletin-campaigns\"><span class=\"central-bulletin-label\">Current Campaigns</span>",
         campaigns.map(function(item) {
-          return "<div class=\"central-bulletin-campaign\"><span class=\"central-bulletin-campaign-icon\">+</span><div><strong>" +
+          var iconId = getBulletinCampaignIconId_(item);
+          return "<div class=\"central-bulletin-campaign\"><span class=\"central-bulletin-campaign-icon\"><img src=\"" +
+            escapeAttr_(getBulletinCampaignIconUrl_(iconId)) +
+            "\" alt=\"\"></span><div><strong>" +
             escapeHtml_(item.title || "Campaign") + "</strong>" +
             (item.description ? "<p class=\"central-bulletin-body-copy\">" +
               escapeHtml_(item.description) + "</p>" : "") +
@@ -11610,6 +11669,7 @@
       },
       events: [],
       campaignIds: [],
+      campaignIcons: {},
       serveNeedId: "",
     };
   }
@@ -11628,6 +11688,7 @@
     var savedFallback = source.fallbackHero &&
       typeof source.fallbackHero === "object" ? source.fallbackHero : {};
     var savedEventsById = {};
+    var savedCampaignIconsById = {};
 
     var automaticServiceDate = getDefaultSundayDateInputValue_();
     var savedServiceDate = normalizeSundayDateInputValue_(source.serviceDate);
@@ -11731,6 +11792,29 @@
         sourceLocation: sourceLocation,
       };
     });
+
+    (Array.isArray(source.campaignIcons) ? source.campaignIcons : [])
+        .forEach(function(item) {
+          var id = String(item && item.id || "");
+          if (id) {
+            savedCampaignIconsById[id] = normalizeBulletinCampaignIconId_(
+                item.icon,
+            );
+          }
+        });
+
+    (Array.isArray(data.campaigns) ? data.campaigns : [])
+        .forEach(function(item) {
+          var id = String(item && item.id || "");
+          if (!id) {
+            return;
+          }
+          draft.campaignIcons[id] = Object.prototype.hasOwnProperty.call(
+              savedCampaignIconsById,
+              id,
+          ) ? savedCampaignIconsById[id] :
+            getSuggestedBulletinCampaignIconId_(item);
+        });
 
     var campaignIds = Array.isArray(source.campaignIds) ?
       source.campaignIds.map(String) :
@@ -11950,6 +12034,96 @@
     });
   }
 
+  function normalizeBulletinCampaignIconId_(value) {
+    var iconId = String(value || "").trim().toLowerCase();
+    var isAllowed = BULLETIN_CAMPAIGN_ICONS.some(function(icon) {
+      return icon.id === iconId;
+    });
+    return isAllowed ? iconId : "general";
+  }
+
+  function getBulletinCampaignIconUrl_(value) {
+    return BULLETIN_CAMPAIGN_ICON_PATH +
+      normalizeBulletinCampaignIconId_(value) + ".svg";
+  }
+
+  function getSuggestedBulletinCampaignIconId_(item) {
+    var searchText = [
+      item && item.title,
+      item && item.description,
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    if (/backpack/.test(searchText)) {
+      return "backpack";
+    }
+    if (/(christmas|gift|toy|basket)/.test(searchText)) {
+      return "gift";
+    }
+    if (/(roof|house|home|housing)/.test(searchText)) {
+      return "house";
+    }
+    if (/(prayer|praying|pray)/.test(searchText)) {
+      return "praying-hands";
+    }
+    if (/(food|pantry|meal|grocery)/.test(searchText)) {
+      return "food";
+    }
+    if (/(clothing|clothes|coat|shirt)/.test(searchText)) {
+      return "clothing";
+    }
+    if (/(medical|health|clinic)/.test(searchText)) {
+      return "medical";
+    }
+    if (/(school|student|classroom)/.test(searchText)) {
+      return "school";
+    }
+    if (/(family|kids|baby|child)/.test(searchText)) {
+      return "family";
+    }
+    if (/(mission|global|outreach)/.test(searchText)) {
+      return "missions";
+    }
+    if (/(donation|fund|giving|generosity)/.test(searchText)) {
+      return "donation";
+    }
+    if (/(serve|volunteer|helper)/.test(searchText)) {
+      return "helping-hands";
+    }
+    if (/(church|building|campus)/.test(searchText)) {
+      return "church";
+    }
+    if (/(calendar|event|conference)/.test(searchText)) {
+      return "calendar";
+    }
+    if (/(heart|care|support)/.test(searchText)) {
+      return "heart";
+    }
+    return "general";
+  }
+
+  function getBulletinCampaignIconId_(item) {
+    var id = String(item && item.id || "");
+    var icons = adminState.bulletinDraft.campaignIcons || {};
+    if (Object.prototype.hasOwnProperty.call(icons, id)) {
+      return normalizeBulletinCampaignIconId_(icons[id]);
+    }
+    return getSuggestedBulletinCampaignIconId_(item);
+  }
+
+  function updateBulletinCampaignIcon_(campaignId, iconId) {
+    var id = String(campaignId || "");
+    if (!id) {
+      return;
+    }
+    if (!adminState.bulletinDraft.campaignIcons) {
+      adminState.bulletinDraft.campaignIcons = {};
+    }
+    adminState.bulletinDraft.campaignIcons[id] =
+      normalizeBulletinCampaignIconId_(iconId);
+    adminState.bulletinError = "";
+    adminState.bulletinMessage = "";
+  }
+
   function getSelectedBulletinCampaigns_() {
     var data = adminState.bulletinCentralData || {};
     var selectedIds = adminState.bulletinDraft.campaignIds || [];
@@ -12085,6 +12259,16 @@
         };
       }),
       campaignIds: draft.campaignIds.slice(0, 3),
+      campaignIcons: Object.keys(draft.campaignIcons || {})
+          .slice(0, 12)
+          .map(function(id) {
+            return {
+              id: String(id),
+              icon: normalizeBulletinCampaignIconId_(
+                  draft.campaignIcons[id],
+              ),
+            };
+          }),
       serveNeedId: String(draft.serveNeedId || ""),
     };
   }

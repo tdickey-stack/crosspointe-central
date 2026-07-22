@@ -12248,7 +12248,11 @@
             draft.fallbackHero.imageStoragePath || "",
         ).trim(),
       },
-      events: (draft.events || []).map(function(item) {
+      // Only persist events that belong to this bulletin. The Planning Center
+      // feed intentionally includes extra days so a future Sunday can be
+      // selected, but saving those hidden events can crowd editable events out
+      // of the backend payload limit.
+      events: getBulletinEventDraftsInWindow_().map(function(item) {
         return {
           id: item.id,
           title: String(item.title || "").trim(),

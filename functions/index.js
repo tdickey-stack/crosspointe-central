@@ -92,6 +92,7 @@ const CENTRAL_ADMIN_BULLETIN_MODE_DOC_PATH =
 const CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX =
   "bulletin-mode/fallback-images";
 const CENTRAL_BULLETIN_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const CENTRAL_BULLETIN_EVENT_OVERRIDE_LIMIT = 200;
 const CENTRAL_BULLETIN_CAMPAIGN_ICON_IDS = new Set([
   "general",
   "gift",
@@ -11781,19 +11782,24 @@ function normalizeBulletinModePayload_(sourceData) {
           fallbackSource.imageStoragePath,
       ),
     },
-    events: rawEvents.slice(0, 40).map((eventItem) => {
-      const item = eventItem && typeof eventItem === "object" ?
-        eventItem :
-        {};
-      return {
-        id: normalizeBulletinModeText_(item.id, 160),
-        title: normalizeBulletinModeText_(item.title, 180),
-        description: normalizeBulletinModeLongText_(item.description, 1200),
-        location: normalizeBulletinModeText_(item.location, 240),
-        included: item.included !== false,
-        includeDescription: item.includeDescription !== false,
-      };
-    }).filter((item) => item.id),
+    events: rawEvents
+        .slice(0, CENTRAL_BULLETIN_EVENT_OVERRIDE_LIMIT)
+        .map((eventItem) => {
+          const item = eventItem && typeof eventItem === "object" ?
+            eventItem :
+            {};
+          return {
+            id: normalizeBulletinModeText_(item.id, 160),
+            title: normalizeBulletinModeText_(item.title, 180),
+            description: normalizeBulletinModeLongText_(
+                item.description,
+                1200,
+            ),
+            location: normalizeBulletinModeText_(item.location, 240),
+            included: item.included !== false,
+            includeDescription: item.includeDescription !== false,
+          };
+        }).filter((item) => item.id),
     campaignIds: campaignIds.slice(0, 12)
         .map((id) => normalizeBulletinModeText_(id, 160))
         .filter(Boolean),

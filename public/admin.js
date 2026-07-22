@@ -635,6 +635,7 @@
     bulletinLoaded: false,
     bulletinLoading: false,
     bulletinSaving: false,
+    bulletinImageUploading: false,
     bulletinCentralData: null,
     bulletinDraft: createEmptyBulletinDraft_(),
     bulletinEditingEventId: "",
@@ -1166,6 +1167,16 @@
       if (action === "save-bulletin") {
         event.preventDefault();
         saveBulletinMode_();
+        return;
+      }
+
+      if (action === "remove-bulletin-fallback-image") {
+        event.preventDefault();
+        adminState.bulletinDraft.fallbackHero.imageUrl = "";
+        adminState.bulletinDraft.fallbackHero.imageStoragePath = "";
+        adminState.bulletinMessage =
+          "Welcome image removed from this draft. Save Bulletin Settings to keep the change.";
+        renderAdmin_();
         return;
       }
 
@@ -2640,6 +2651,16 @@
   }
 
   function handleAdminInput_(event) {
+    if (
+      event.type === "change" &&
+      event.target.hasAttribute("data-admin-bulletin-fallback-image")
+    ) {
+      uploadBulletinFallbackImage_(
+          event.target.files && event.target.files[0],
+      );
+      return;
+    }
+
     var bulletinEventId = event.target.getAttribute(
         "data-admin-bulletin-event-id",
     );
@@ -4612,6 +4633,7 @@
   function renderBulletinContentEditor_(canSave) {
     var data = adminState.bulletinCentralData || {};
     var featured = getBulletinFeaturedEvent_();
+    var manualHeroIsActive = isBulletinManualHeroActive_();
     var events = getBulletinEventDraftsInWindow_();
     var visibleEvents = getFilteredBulletinEventDrafts_(events);
     var selectedEventCount = events.filter(function(item) {
@@ -4626,33 +4648,17 @@
 
     return [
       "<div class=\"central-admin-bulletin-editor-grid\">",
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\"><strong>Featured Event</strong>",
-      renderStatusPill_(featured ? "From Central" : "Not available", featured ? "is-safe" : "is-warn"),
-      "</div>",
-      featured ? [
-        renderAdminInputField_({
-          label: "Printed Title",
-          field: "bulletin.featured.title",
-          value: featured.title,
-          maxLength: 180,
-        }),
-        renderAdminTextareaField_({
-          label: "Printed Description",
-          field: "bulletin.featured.description",
-          value: featured.description,
-          rows: 3,
-          maxLength: 1200,
-          hint: "Formatting: **bold**, *italics*, headings, and - or 1. lists. Line breaks are preserved.",
-        }),
-        renderAdminCheckboxField_({
-          label: "Include full description",
-          field: "bulletin.featured.includeDescription",
-          checked: featured.includeDescription,
-        }),
-      ].join("") : renderAdminNote_(
-          "No current Featured Event is available in the Central feed.",
+      "<div class=\"central-admin-item central-admin-bulletin-hero-editor\">",
+      "<div class=\"central-admin-item-header\"><strong>Main Hero</strong>",
+      renderStatusPill_(
+          manualHeroIsActive ? "Manual Hero Active" : "PCO Featured Active",
+          "is-safe",
       ),
+      "</div>",
+      renderBulletinHeroSourceToggle_(canSave, featured),
+      manualHeroIsActive ?
+        renderBulletinFallbackHeroEditor_(canSave, true) :
+        renderBulletinFeaturedHeroEditor_(featured, canSave),
       "</div>",
       "<div class=\"central-admin-item\">",
       "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong>",
@@ -4709,6 +4715,135 @@
           renderAdminNote_("No events match this view.")) :
         renderAdminNote_("No non-featured Central events fall in this bulletin window."),
       "</div>",
+    ].join("");
+  }
+
+  function renderBulletinFeaturedHeroEditor_(featured, canSave) {
+    if (!featured) {
+      return renderAdminNote_(
+          "No Featured Event is currently available from Planning Center. Bulletin Mode is safely using the Manual Hero.",
+      );
+    }
+
+    return [
+      "<div class=\"central-admin-bulletin-active-hero-editor\">",
+      "<p class=\"central-admin-note\">The current Planning Center Featured Event is selected for this bulletin.</p>",
+      renderAdminInputField_({
+        label: "Printed Title",
+        field: "bulletin.featured.title",
+        value: featured.title,
+        maxLength: 180,
+        disabled: !canSave,
+      }),
+      renderAdminTextareaField_({
+        label: "Printed Description",
+        field: "bulletin.featured.description",
+        value: featured.description,
+        rows: 3,
+        maxLength: 1200,
+        disabled: !canSave,
+        hint: "Formatting: **bold**, *italics*, headings, and - or 1. lists. Line breaks are preserved.",
+      }),
+      renderAdminCheckboxField_({
+        label: "Include full description",
+        field: "bulletin.featured.includeDescription",
+        checked: featured.includeDescription,
+        disabled: !canSave,
+      }),
+      "</div>",
+    ].join("");
+  }
+
+  function renderBulletinHeroSourceToggle_(canSave, featured) {
+    var selectedSource = adminState.bulletinDraft.heroSource === "manual" ?
+      "manual" : "featured";
+
+    return [
+      "<fieldset class=\"central-admin-bulletin-hero-source\">",
+      "<legend>Hero Source</legend>",
+      "<label class=\"",
+      selectedSource === "featured" ? "is-active" : "",
+      featured ? "" : " is-unavailable",
+      "\"><input type=\"radio\" name=\"bulletin-hero-source\" value=\"featured\" data-admin-field=\"bulletin.heroSource\"",
+      selectedSource === "featured" ? " checked" : "",
+      !canSave ? " disabled" : "",
+      "><span><strong>PCO Featured Event</strong><small>",
+      featured ? "Use the current Featured Event from Planning Center." :
+        "Unavailable right now; Manual Hero will be used as a fallback.",
+      "</small></span></label>",
+      "<label class=\"",
+      selectedSource === "manual" ? "is-active" : "",
+      "\"><input type=\"radio\" name=\"bulletin-hero-source\" value=\"manual\" data-admin-field=\"bulletin.heroSource\"",
+      selectedSource === "manual" ? " checked" : "",
+      !canSave ? " disabled" : "",
+      "><span><strong>Manual Hero</strong><small>Use the editable message and uploaded image below.</small></span></label>",
+      "</fieldset>",
+    ].join("");
+  }
+
+  function renderBulletinFallbackHeroEditor_(canSave, manualHeroIsActive) {
+    var fallback = adminState.bulletinDraft.fallbackHero || {};
+    var imageUrl = getBulletinFallbackImageUrl_(fallback.imageUrl);
+
+    return [
+      "<div class=\"central-admin-bulletin-fallback-editor\">",
+      "<div class=\"central-admin-bulletin-fallback-heading\"><div>",
+      "<strong>Manual Hero</strong>",
+      "<small>",
+      "Currently filling the front-page hero.",
+      "</small></div>",
+      renderStatusPill_(manualHeroIsActive ? "In use" : "Standby", "is-live"),
+      "</div>",
+      "<div class=\"central-admin-bulletin-fallback-fields\">",
+      renderAdminInputField_({
+        label: "Eyebrow",
+        field: "bulletin.fallbackHero.eyebrow",
+        value: fallback.eyebrow,
+        maxLength: 80,
+        disabled: !canSave,
+      }),
+      renderAdminInputField_({
+        label: "Title",
+        field: "bulletin.fallbackHero.title",
+        value: fallback.title,
+        maxLength: 180,
+        disabled: !canSave,
+      }),
+      renderAdminTextareaField_({
+        label: "Welcome Message",
+        field: "bulletin.fallbackHero.description",
+        value: fallback.description,
+        rows: 4,
+        maxLength: 1200,
+        wide: true,
+        disabled: !canSave,
+        hint: "Formatting: **bold**, *italics*, headings, and lists. Line breaks are preserved.",
+      }),
+      "</div>",
+      "<div class=\"central-admin-bulletin-image-editor",
+      imageUrl ? " has-image" : "",
+      "\">",
+      imageUrl ? [
+        "<img src=\"", escapeAttr_(imageUrl),
+        "\" alt=\"Current evergreen welcome graphic\">",
+      ].join("") :
+        "<div class=\"central-admin-bulletin-image-placeholder\">Optional welcome graphic</div>",
+      "<div class=\"central-admin-bulletin-image-actions\">",
+      "<label class=\"central-admin-link-button is-secondary central-admin-file-button",
+      adminState.bulletinImageUploading ? " is-disabled" : "",
+      "\"><span>",
+      adminState.bulletinImageUploading ? "Uploading..." :
+        (imageUrl ? "Replace image" : "Upload image"),
+      "</span><input type=\"file\" accept=\"image/jpeg,image/png,image/webp\" data-admin-bulletin-fallback-image",
+      !canSave || adminState.bulletinImageUploading ? " disabled" : "",
+      "></label>",
+      imageUrl ? [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"remove-bulletin-fallback-image\"",
+        !canSave || adminState.bulletinImageUploading ? " disabled" : "",
+        ">Remove image</button>",
+      ].join("") : "",
+      "<small>JPEG, PNG, or WebP up to 10 MB. The file is stored in the Central Firebase Storage bucket.</small>",
+      "</div></div></div>",
     ].join("");
   }
 
@@ -4826,8 +4961,10 @@
   }
 
   function renderBulletinFront_() {
-    var featured = getBulletinFeaturedEvent_();
-    var featuredImageUrl = getBulletinFeaturedImageUrl_(featured);
+    var hero = getBulletinFrontHero_();
+    var heroImageUrl = hero.source === "featured" ?
+      getBulletinFeaturedImageUrl_(hero) :
+      getBulletinFallbackImageUrl_(hero.image_url);
     var campaigns = getSelectedBulletinCampaigns_();
     var serveNeed = getSelectedBulletinServeNeed_();
     var giving = adminState.bulletinDraft.giving || {};
@@ -4838,20 +4975,23 @@
       "<div class=\"central-bulletin-heading\"><h1>",
       renderBulletinHeadingText_(headings.frontHeading),
       "</h1></div>",
-      featured ? [
+      hero ? [
         "<section class=\"central-bulletin-card central-bulletin-featured\">",
-        featuredImageUrl ? [
+        heroImageUrl ? [
           "<div class=\"central-bulletin-featured-media\">",
-          "<img src=\"", escapeAttr_(featuredImageUrl),
+          "<img src=\"", escapeAttr_(heroImageUrl),
           "\" alt=\"\"></div>",
         ].join("") : "",
-        "<span class=\"central-bulletin-label\">Featured Event</span>",
-        "<h2>", escapeHtml_(featured.title), "</h2>",
-        featured.doors_open_time ? "<p class=\"central-bulletin-featured-time\">Doors Open " + escapeHtml_(featured.doors_open_time) + "</p>" : "",
-        "<p class=\"central-bulletin-featured-time\">", escapeHtml_([featured.date, featured.time].filter(Boolean).join(" - ")), "</p>",
-        featured.includeDescription && featured.description ?
+        "<span class=\"central-bulletin-label\">", escapeHtml_(hero.eyebrow), "</span>",
+        "<h2>", escapeHtml_(hero.title), "</h2>",
+        hero.source === "featured" && hero.doors_open_time ? "<p class=\"central-bulletin-featured-time\">Doors Open " + escapeHtml_(hero.doors_open_time) + "</p>" : "",
+        hero.source === "featured" ?
+          "<p class=\"central-bulletin-featured-time\">" +
+            escapeHtml_([hero.date, hero.time].filter(Boolean).join(" - ")) +
+          "</p>" : "",
+        hero.includeDescription && hero.description ?
           "<div class=\"central-bulletin-description central-bulletin-body-copy central-bulletin-markdown\">" +
-            renderAdminMarkdownLite_(featured.description) + "</div>" :
+            renderAdminMarkdownLite_(hero.description) + "</div>" :
           "",
         "</section>",
       ].join("") : "",
@@ -11372,6 +11512,7 @@
   function createEmptyBulletinDraft_() {
     return {
       serviceDate: getDefaultSundayDateInputValue_(),
+      heroSource: "featured",
       headings: {
         frontHeading: "This Week at\nCrossPointe",
         backEyebrow: "See You There",
@@ -11388,6 +11529,17 @@
         title: "",
         description: "",
         includeDescription: true,
+      },
+      fallbackHero: {
+        eyebrow: "Welcome to CrossPointe",
+        title: "We're Glad You're Here",
+        description: [
+          "Whether this is your first Sunday or CrossPointe is already home,",
+          "we're glad you're here. Discover events, groups, serving",
+          "opportunities, and next steps at central.crosspointe.tv.",
+        ].join(" "),
+        imageUrl: "",
+        imageStoragePath: "",
       },
       events: [],
       campaignIds: [],
@@ -11406,6 +11558,8 @@
     var savedGiving = source.giving || {};
     var currentFeatured = data.featuredEvent || null;
     var savedFeatured = source.featuredEvent || {};
+    var savedFallback = source.fallbackHero &&
+      typeof source.fallbackHero === "object" ? source.fallbackHero : {};
     var savedEventsById = {};
 
     var automaticServiceDate = getDefaultSundayDateInputValue_();
@@ -11413,6 +11567,8 @@
     draft.serviceDate = savedServiceDate &&
       savedServiceDate >= automaticServiceDate ?
       savedServiceDate : automaticServiceDate;
+    draft.heroSource = source.heroSource === "manual" ?
+      "manual" : "featured";
     draft.headings = {
       frontHeading: normalizeBulletinHeadingText_(
           savedHeadings.frontHeading,
@@ -11442,6 +11598,17 @@
       yearToDateGiving: normalizeBulletinMoney_(
           savedGiving.yearToDateGiving,
       ),
+    };
+    draft.fallbackHero = {
+      eyebrow: String(
+          savedFallback.eyebrow || draft.fallbackHero.eyebrow,
+      ),
+      title: String(savedFallback.title || draft.fallbackHero.title),
+      description: String(
+          savedFallback.description || draft.fallbackHero.description,
+      ),
+      imageUrl: getBulletinFallbackImageUrl_(savedFallback.imageUrl),
+      imageStoragePath: String(savedFallback.imageStoragePath || ""),
     };
 
     if (currentFeatured) {
@@ -11619,6 +11786,41 @@
     return /^https:\/\//i.test(imageUrl) ? imageUrl : "";
   }
 
+  function getBulletinFallbackImageUrl_(value) {
+    var imageUrl = String(value || "").trim();
+    return (
+      /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i.test(imageUrl) ||
+      /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):9199\/v0\/b\//i.test(
+          imageUrl,
+      )
+    ) ? imageUrl : "";
+  }
+
+  function getBulletinFrontHero_() {
+    var featured = getBulletinFeaturedEvent_();
+    if (featured && !isBulletinManualHeroActive_()) {
+      return Object.assign({
+        source: "featured",
+        eyebrow: "Featured Event",
+      }, featured);
+    }
+
+    var fallback = adminState.bulletinDraft.fallbackHero || {};
+    return {
+      source: "fallback",
+      eyebrow: fallback.eyebrow || "Welcome to CrossPointe",
+      title: fallback.title || "We're Glad You're Here",
+      description: fallback.description || "",
+      image_url: getBulletinFallbackImageUrl_(fallback.imageUrl),
+      includeDescription: true,
+    };
+  }
+
+  function isBulletinManualHeroActive_() {
+    return adminState.bulletinDraft.heroSource === "manual" ||
+      !getBulletinFeaturedEvent_();
+  }
+
   function getBulletinEventDraftsInWindow_() {
     var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
     var end = new Date(start.getTime());
@@ -11711,6 +11913,10 @@
       adminState.bulletinDraft.featuredEvent[
           fieldName.replace("featured.", "")
       ] = value;
+    } else if (fieldName.indexOf("fallbackHero.") === 0) {
+      adminState.bulletinDraft.fallbackHero[
+          fieldName.replace("fallbackHero.", "")
+      ] = value;
     } else {
       adminState.bulletinDraft[fieldName] = value;
     }
@@ -11755,6 +11961,7 @@
     var draft = adminState.bulletinDraft;
     return {
       serviceDate: normalizeSundayDateInputValue_(draft.serviceDate),
+      heroSource: draft.heroSource === "manual" ? "manual" : "featured",
       headings: {
         frontHeading: normalizeBulletinHeadingText_(
             draft.headings.frontHeading,
@@ -11791,6 +11998,15 @@
         description: String(draft.featuredEvent.description || "").trim(),
         includeDescription: draft.featuredEvent.includeDescription !== false,
       },
+      fallbackHero: {
+        eyebrow: String(draft.fallbackHero.eyebrow || "").trim(),
+        title: String(draft.fallbackHero.title || "").trim(),
+        description: String(draft.fallbackHero.description || "").trim(),
+        imageUrl: getBulletinFallbackImageUrl_(draft.fallbackHero.imageUrl),
+        imageStoragePath: String(
+            draft.fallbackHero.imageStoragePath || "",
+        ).trim(),
+      },
       events: (draft.events || []).map(function(item) {
         return {
           id: item.id,
@@ -11804,6 +12020,85 @@
       campaignIds: draft.campaignIds.slice(0, 3),
       serveNeedId: String(draft.serveNeedId || ""),
     };
+  }
+
+  function uploadBulletinFallbackImage_(file) {
+    if (!file) {
+      return;
+    }
+
+    if (!isEditorLevelPermission_(getPageAccessLevel_("bulletin"))) {
+      adminState.bulletinError =
+        "Your current access level does not allow uploading Bulletin images.";
+      renderAdmin_();
+      return;
+    }
+
+    var allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (allowedTypes.indexOf(String(file.type || "").toLowerCase()) === -1) {
+      adminState.bulletinError = "Choose a JPEG, PNG, or WebP image.";
+      renderAdmin_();
+      return;
+    }
+
+    if (!file.size || file.size > 10 * 1024 * 1024) {
+      adminState.bulletinError = "Bulletin images must be 10 MB or smaller.";
+      renderAdmin_();
+      return;
+    }
+
+    adminState.bulletinImageUploading = true;
+    adminState.bulletinError = "";
+    adminState.bulletinMessage = "Uploading the welcome image...";
+    renderAdmin_();
+
+    readAdminFileAsDataUrl_(file)
+        .then(function(dataUrl) {
+          return callBulletinModeEndpoint_("POST", {
+            action: "uploadFallbackImage",
+            fileName: String(file.name || "bulletin-welcome-image"),
+            contentType: String(file.type || ""),
+            dataUrl: dataUrl,
+          });
+        })
+        .then(function(result) {
+          var imageUrl = getBulletinFallbackImageUrl_(
+              result && result.imageUrl,
+          );
+          if (!imageUrl) {
+            throw new Error("Firebase Storage did not return a usable image link.");
+          }
+
+          adminState.bulletinDraft.fallbackHero.imageUrl = imageUrl;
+          adminState.bulletinDraft.fallbackHero.imageStoragePath = String(
+              result && result.storagePath || "",
+          );
+          adminState.bulletinImageUploading = false;
+          adminState.bulletinMessage =
+            "Welcome image uploaded. Save Bulletin Settings to keep it with the evergreen hero.";
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.bulletinImageUploading = false;
+          adminState.bulletinMessage = "";
+          adminState.bulletinError = error && error.message ?
+            error.message :
+            "Unable to upload the Bulletin welcome image.";
+          renderAdmin_();
+        });
+  }
+
+  function readAdminFileAsDataUrl_(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.addEventListener("load", function() {
+        resolve(String(reader.result || ""));
+      }, {once: true});
+      reader.addEventListener("error", function() {
+        reject(new Error("The selected image could not be read."));
+      }, {once: true});
+      reader.readAsDataURL(file);
+    });
   }
 
   function saveBulletinMode_() {

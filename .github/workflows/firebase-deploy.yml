@@ -64,7 +64,7 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
       - name: Deploy live Firebase project
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only hosting,functions,firestore --non-interactive
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only hosting,functions,firestore,storage --non-interactive
 
   deploy-preview:
     if: github.ref == 'refs/heads/dev'

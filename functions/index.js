@@ -83,6 +83,9 @@ const CENTRAL_ADMIN_AUDIT_LOG_COLLECTION_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/auditLog";
 const CENTRAL_ADMIN_BULLETIN_MODE_DOC_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/public/bulletinMode";
+const CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX =
+  "bulletin-mode/fallback-images";
+const CENTRAL_BULLETIN_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const CHANGE_REQUEST_CLEANUP_LIMIT_PER_STATUS = 25;
 const CENTRAL_PUBLIC_SETTINGS_DOC_PATH =
   "centralApp/root/public/settings";
@@ -1405,6 +1408,25 @@ export const bulletinMode = onRequest(
                 serveNeedsOverride.items :
                 [],
             },
+          });
+          return;
+        }
+
+        const action = normalizeBulletinModeText_(
+            request.body && request.body.action,
+            40,
+        );
+        if (action === "uploadFallbackImage") {
+          const uploadResult = await uploadBulletinFallbackImage_(
+              request.body,
+              actor,
+          );
+          response.set("Cache-Control", "no-store");
+          response.status(200).json({
+            ok: true,
+            imageUrl: uploadResult.imageUrl,
+            storagePath: uploadResult.storagePath,
+            message: "Bulletin welcome image uploaded.",
           });
           return;
         }
@@ -11505,6 +11527,10 @@ function normalizeBulletinModePayload_(sourceData) {
     typeof source.featuredEvent === "object" ?
     source.featuredEvent :
     {};
+  const fallbackSource = source.fallbackHero &&
+    typeof source.fallbackHero === "object" ?
+    source.fallbackHero :
+    {};
   const rawEvents = Array.isArray(source.events) ? source.events : [];
   const campaignIds = Array.isArray(source.campaignIds) ?
     source.campaignIds :
@@ -11512,6 +11538,7 @@ function normalizeBulletinModePayload_(sourceData) {
 
   return {
     serviceDate: normalizeThisSundayDateValue_(source.serviceDate),
+    heroSource: source.heroSource === "manual" ? "manual" : "featured",
     headings: {
       frontHeading: normalizeBulletinModeHeading_(
           headingsSource.frontHeading,
@@ -11549,11 +11576,33 @@ function normalizeBulletinModePayload_(sourceData) {
     featuredEvent: {
       id: normalizeBulletinModeText_(featuredSource.id, 160),
       title: normalizeBulletinModeText_(featuredSource.title, 180),
-      description: normalizeBulletinModeText_(
+      description: normalizeBulletinModeLongText_(
           featuredSource.description,
           1200,
       ),
       includeDescription: featuredSource.includeDescription !== false,
+    },
+    fallbackHero: {
+      eyebrow: normalizeBulletinModeText_(
+          fallbackSource.eyebrow || "Welcome to CrossPointe",
+          80,
+      ),
+      title: normalizeBulletinModeText_(
+          fallbackSource.title || "We're Glad You're Here",
+          180,
+      ),
+      description: normalizeBulletinModeLongText_(
+          fallbackSource.description || [
+            "Whether this is your first Sunday or CrossPointe is already home,",
+            "we're glad you're here. Discover events, groups, serving",
+            "opportunities, and next steps at central.crosspointe.tv.",
+          ].join(" "),
+          1200,
+      ),
+      imageUrl: normalizeBulletinModeImageUrl_(fallbackSource.imageUrl),
+      imageStoragePath: normalizeBulletinModeStoragePath_(
+          fallbackSource.imageStoragePath,
+      ),
     },
     events: rawEvents.slice(0, 40).map((eventItem) => {
       const item = eventItem && typeof eventItem === "object" ?
@@ -11562,7 +11611,7 @@ function normalizeBulletinModePayload_(sourceData) {
       return {
         id: normalizeBulletinModeText_(item.id, 160),
         title: normalizeBulletinModeText_(item.title, 180),
-        description: normalizeBulletinModeText_(item.description, 1200),
+        description: normalizeBulletinModeLongText_(item.description, 1200),
         location: normalizeBulletinModeText_(item.location, 240),
         included: item.included !== false,
         includeDescription: item.includeDescription !== false,
@@ -11580,6 +11629,161 @@ function normalizeBulletinModeText_(value, maxLength) {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, maxLength);
+}
+
+function normalizeBulletinModeLongText_(value, maxLength) {
+  return String(value || "")
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/[\t ]+/g, " ").trimEnd())
+      .join("\n")
+      .trim()
+      .slice(0, maxLength);
+}
+
+function normalizeBulletinModeImageUrl_(value) {
+  const normalized = String(value || "").trim().slice(0, 2000);
+  if (!normalized) {
+    return "";
+  }
+
+  if (
+    /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i.test(normalized) ||
+    /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):9199\/v0\/b\//i.test(
+        normalized,
+    )
+  ) {
+    return normalized;
+  }
+
+  return "";
+}
+
+function normalizeBulletinModeStoragePath_(value) {
+  const normalized = String(value || "").trim().slice(0, 500);
+  return normalized.startsWith(CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX + "/") ?
+    normalized :
+    "";
+}
+
+async function uploadBulletinFallbackImage_(sourceData, actor) {
+  const source = sourceData && typeof sourceData === "object" ?
+    sourceData :
+    {};
+  const dataUrl = String(source.dataUrl || "");
+  const match = dataUrl.match(
+      /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/,
+  );
+
+  if (!match) {
+    throw createPreviewPublishError_(
+        "invalid-payload",
+        "Choose a JPEG, PNG, or WebP image to upload.",
+    );
+  }
+
+  const contentType = match[1].toLowerCase();
+  const imageBuffer = Buffer.from(match[2], "base64");
+  if (!imageBuffer.length || imageBuffer.length > CENTRAL_BULLETIN_IMAGE_MAX_BYTES) {
+    throw createPreviewPublishError_(
+        "invalid-payload",
+        "Bulletin images must be 10 MB or smaller.",
+    );
+  }
+
+  if (!isSupportedBulletinImageBuffer_(imageBuffer, contentType)) {
+    throw createPreviewPublishError_(
+        "invalid-payload",
+        "That file does not appear to be a valid JPEG, PNG, or WebP image.",
+    );
+  }
+
+  const extension = contentType === "image/jpeg" ?
+    "jpg" :
+    contentType.replace("image/", "");
+  const imageHash = crypto.createHash("sha256")
+      .update(imageBuffer)
+      .digest("hex")
+      .slice(0, 24);
+  const storagePath = [
+    CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX,
+    imageHash + "." + extension,
+  ].join("/");
+  const bucket = admin.storage().bucket();
+  const file = bucket.file(storagePath);
+  const [exists] = await file.exists();
+  let downloadToken = "";
+
+  if (exists) {
+    const [metadata] = await file.getMetadata();
+    downloadToken = getBulletinStorageDownloadToken_(metadata);
+  }
+
+  if (!downloadToken) {
+    downloadToken = crypto.randomUUID();
+    await file.save(imageBuffer, {
+      resumable: false,
+      metadata: {
+        contentType: contentType,
+        cacheControl: "public, max-age=31536000, immutable",
+        metadata: {
+          firebaseStorageDownloadTokens: downloadToken,
+          uploadedByUid: String(actor && actor.uid || "").trim(),
+          uploadedByEmail: String(actor && actor.email || "").trim(),
+        },
+      },
+    });
+  }
+
+  return {
+    imageUrl: buildBulletinStorageDownloadUrl_(
+        bucket.name,
+        storagePath,
+        downloadToken,
+    ),
+    storagePath: storagePath,
+  };
+}
+
+function isSupportedBulletinImageBuffer_(buffer, contentType) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) {
+    return false;
+  }
+
+  if (contentType === "image/jpeg") {
+    return buffer[0] === 0xff && buffer[1] === 0xd8 &&
+      buffer[buffer.length - 2] === 0xff &&
+      buffer[buffer.length - 1] === 0xd9;
+  }
+
+  if (contentType === "image/png") {
+    return buffer.subarray(0, 8).equals(
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+  }
+
+  return contentType === "image/webp" &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP";
+}
+
+function getBulletinStorageDownloadToken_(metadata) {
+  const rawValue = metadata && metadata.metadata &&
+    metadata.metadata.firebaseStorageDownloadTokens;
+  return String(rawValue || "").split(",")[0].trim();
+}
+
+function buildBulletinStorageDownloadUrl_(bucketName, storagePath, token) {
+  const emulatorHost = String(
+      process.env.FIREBASE_STORAGE_EMULATOR_HOST || "",
+  ).trim();
+  const baseUrl = emulatorHost ?
+    "http://" + emulatorHost :
+    "https://firebasestorage.googleapis.com";
+
+  return baseUrl + "/v0/b/" + encodeURIComponent(bucketName) +
+    "/o/" + encodeURIComponent(storagePath) +
+    "?alt=media&token=" + encodeURIComponent(token);
 }
 
 function normalizeBulletinModeHeading_(

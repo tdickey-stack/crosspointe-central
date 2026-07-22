@@ -26,6 +26,31 @@ test("fresh shared values avoid upstream refreshes", async () => {
   assert.equal(loadCount, 0);
 });
 
+test("forced refreshes replace otherwise fresh shared values", async () => {
+  const fake = createFakeFirestore({
+    value: {events: ["cached"]},
+    fetchedAtMs: 9000,
+  });
+  let loadCount = 0;
+
+  const result = await getSharedCachedValue({
+    firestore: fake.firestore,
+    docRef: fake.docRef,
+    ttlMs: 5000,
+    now: () => 10000,
+    forceRefresh: true,
+    loadFresh: async () => {
+      loadCount += 1;
+      return {events: ["upstream"]};
+    },
+  });
+
+  assert.equal(result.status, "refreshed");
+  assert.equal(result.fetchedAtMs, 10000);
+  assert.deepEqual(result.value, {events: ["upstream"]});
+  assert.equal(loadCount, 1);
+});
+
 test("concurrent cold callers share one upstream refresh", async () => {
   const fake = createFakeFirestore();
   let loadCount = 0;

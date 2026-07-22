@@ -41,6 +41,7 @@ export async function getSharedCachedValue(options = {}) {
   const isEntryCurrent = typeof options.isEntryCurrent === "function" ?
     options.isEntryCurrent :
     () => true;
+  const forceRefresh = options.forceRefresh === true;
   const metadata = options.metadata && typeof options.metadata === "object" ?
     options.metadata :
     {};
@@ -65,15 +66,24 @@ export async function getSharedCachedValue(options = {}) {
       now,
       validateValue,
       isEntryCurrent,
+      forceRefresh,
     });
 
     if (claim.status === "fresh") {
-      return {value: claim.value, status: "fresh"};
+      return {
+        value: claim.value,
+        status: "fresh",
+        fetchedAtMs: claim.fetchedAtMs,
+      };
     }
 
     if (claim.status === "busy") {
       if (claim.hasValue) {
-        return {value: claim.value, status: "stale"};
+        return {
+          value: claim.value,
+          status: "stale",
+          fetchedAtMs: claim.fetchedAtMs,
+        };
       }
       if (now() >= waitDeadlineMs) {
         throw new Error(
@@ -104,7 +114,7 @@ export async function getSharedCachedValue(options = {}) {
         reportCacheError(options, "write", error);
       }
 
-      return {value, status: "refreshed"};
+      return {value, status: "refreshed", fetchedAtMs};
     } catch (error) {
       await releaseRefreshLease({
         firestore,
@@ -116,7 +126,11 @@ export async function getSharedCachedValue(options = {}) {
       });
       if (claim.hasValue) {
         reportCacheError(options, "refresh", error);
-        return {value: claim.value, status: "stale"};
+        return {
+          value: claim.value,
+          status: "stale",
+          fetchedAtMs: claim.fetchedAtMs,
+        };
       }
       throw error;
     }
@@ -142,8 +156,13 @@ async function claimRefreshLease(options) {
       options.isEntryCurrent(entry) &&
       currentNowMs - fetchedAtMs < options.ttlMs;
 
-    if (fresh) {
-      return {status: "fresh", value: entry.value, hasValue: true};
+    if (fresh && !options.forceRefresh) {
+      return {
+        status: "fresh",
+        value: entry.value,
+        hasValue: true,
+        fetchedAtMs,
+      };
     }
 
     const leaseUntilMs = Number(entry.refreshLeaseUntilMs) || 0;
@@ -152,6 +171,7 @@ async function claimRefreshLease(options) {
         status: "busy",
         value: hasValue ? entry.value : null,
         hasValue,
+        fetchedAtMs,
       };
     }
 
@@ -164,6 +184,7 @@ async function claimRefreshLease(options) {
       status: "acquired",
       value: hasValue ? entry.value : null,
       hasValue,
+      fetchedAtMs,
     };
   });
 }

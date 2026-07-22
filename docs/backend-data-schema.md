@@ -105,14 +105,16 @@ have equivalent persisted draft collections.
 | `centralServeNeeds/root/interests/{submissionId}` | Public Serve Needs interest submissions and notification status |
 | `mail/{mailId}` | Legacy/optional mail-delivery status source watched by a trigger; the collection name can be changed with `CENTRAL_MAIL_COLLECTION_PATH` |
 | `centralCache/planningCenter/calendar/{cacheId}` | Server-only, last-known-good Planning Center calendar snapshots and refresh leases |
+| `centralCache/planningCenter/bulletin/{cacheId}` | Server-only prepared Bulletin Mode event and featured-event snapshots used for immediate admin loads |
 | `centralCache/planningCenter/rooms/{cacheId}` | Server-only raw room assignments and refresh leases keyed to a Planning Center event instance |
 
 Planning Center events, today's schedule, the Central Featured event,
 Registrations signups, and setlists are fetched at runtime; they are not
-currently maintained as the primary Firestore content collections. Calendar
-and room cache documents are disposable derivatives that reduce Planning
-Center API traffic; Planning Center remains the source of truth. These cache
-paths are accessible only to Cloud Functions through the Admin SDK and remain
+currently maintained as the primary Firestore content collections. Bulletin,
+calendar, and room cache documents are disposable derivatives
+that reduce Planning Center API traffic; Planning Center remains the source of
+truth. These cache paths are accessible only to Cloud Functions through the
+Admin SDK and remain
 covered by the client rules' default deny. The
 featured event is the next future instance tagged both `Central` and
 `Central Featured`; its description and image come directly from the parent

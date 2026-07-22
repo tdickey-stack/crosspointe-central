@@ -659,6 +659,7 @@
     bulletinDraft: createEmptyBulletinDraft_(),
     bulletinEditingEventId: "",
     bulletinEventFilter: "week1",
+    bulletinSync: null,
     bulletinError: "",
     bulletinMessage: "",
     sundayLoaded: false,
@@ -1208,10 +1209,9 @@
       if (action === "refresh-bulletin") {
         event.preventDefault();
         adminState.bulletinEditingEventId = "";
-        adminState.bulletinLoaded = false;
         adminState.bulletinError = "";
         resetCurrentCentralDataCache_();
-        loadBulletinMode_();
+        loadBulletinMode_(true);
         return;
       }
 
@@ -4602,7 +4602,12 @@
       adminState.bulletinSaving ? "Saving..." : "Save Bulletin Settings",
       "</button>",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"print-bulletin\">Print / Save PDF</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-bulletin\">Refresh Central Content</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-bulletin\"",
+      adminState.bulletinLoading ? " disabled" : "",
+      ">",
+      adminState.bulletinLoading ? "Refreshing Central Content..." :
+        "Refresh Central Content",
+      "</button>",
       "</div>",
       renderAdminNote_(
           fullPage ?
@@ -11180,12 +11185,19 @@
     loadBulletinMode_();
   }
 
-  function loadBulletinMode_() {
+  function loadBulletinMode_(forceRefresh) {
+    var refreshRequested = forceRefresh === true;
+    var wasLoaded = adminState.bulletinLoaded;
     adminState.bulletinLoading = true;
     adminState.bulletinError = "";
+    adminState.bulletinMessage = refreshRequested ?
+      "Refreshing events and rooms from Planning Center. You can keep viewing the cached bulletin while this finishes." :
+      "";
     renderAdmin_();
 
-    callBulletinModeEndpoint_("GET").then(function(result) {
+    callBulletinModeEndpoint_("GET", {
+      refresh: refreshRequested,
+    }).then(function(result) {
       var centralData = Object.assign({}, result && result.content || {});
       var bulletinEvents = result && result.events || {};
       if (Array.isArray(bulletinEvents.today)) {
@@ -11196,21 +11208,73 @@
       }
       adminState.bulletinLoading = false;
       adminState.bulletinLoaded = true;
+      adminState.bulletinSync = result && result.sync || null;
       adminState.bulletinCentralData = centralData;
       adminState.bulletinDraft = normalizeBulletinDraft_(
           result && result.config,
           adminState.bulletinCentralData,
       );
-      adminState.bulletinMessage = "";
+      adminState.bulletinMessage = getBulletinSyncMessage_(
+          adminState.bulletinSync,
+          refreshRequested,
+      );
       renderAdmin_();
     }).catch(function(error) {
       adminState.bulletinLoading = false;
-      adminState.bulletinLoaded = false;
+      adminState.bulletinLoaded = wasLoaded;
+      adminState.bulletinMessage = wasLoaded ?
+        "The cached bulletin is still available below." : "";
       adminState.bulletinError = error && error.message ?
         error.message :
         "Unable to load Bulletin Mode.";
       renderAdmin_();
     });
+  }
+
+  function getBulletinSyncMessage_(sync, refreshRequested) {
+    var source = sync && typeof sync === "object" ? sync : {};
+    var status = String(source.status || "");
+    var timestamp = formatBulletinSyncTimestamp_(source.fetchedAtMs);
+
+    if (status === "empty") {
+      return "No cached Planning Center content is available yet. Choose Refresh Central Content to prepare the bulletin event snapshot.";
+    }
+
+    if (refreshRequested && status === "refreshed") {
+      return "Central content refreshed from Planning Center" +
+        (timestamp ? " at " + timestamp : "") + ".";
+    }
+
+    if (refreshRequested && status === "fresh") {
+      return "Central content is already current" +
+        (timestamp ? " as of " + timestamp : "") + ".";
+    }
+
+    if (refreshRequested && status === "stale") {
+      return "Planning Center is busy or rate limited, so Bulletin Mode kept the last cached content" +
+        (timestamp ? " from " + timestamp : "") + ".";
+    }
+
+    if (timestamp) {
+      return "Showing cached Planning Center content from " + timestamp +
+        ". Use Refresh Central Content when you need the latest events and rooms.";
+    }
+
+    return "Showing cached Planning Center content. Use Refresh Central Content when you need the latest events and rooms.";
+  }
+
+  function formatBulletinSyncTimestamp_(value) {
+    var timestamp = Number(value);
+    if (!isFinite(timestamp) || timestamp <= 0) {
+      return "";
+    }
+
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(timestamp));
   }
 
   function loadSundayIfNeeded_() {
@@ -17749,6 +17813,14 @@
     }
 
     var normalizedMethod = method === "POST" ? "POST" : "GET";
+    var endpoint = BULLETIN_MODE_ENDPOINT;
+    if (
+      normalizedMethod === "GET" &&
+      payload &&
+      payload.refresh === true
+    ) {
+      endpoint += "?refresh=1";
+    }
 
     return adminState.user.getIdToken()
         .then(function(idToken) {
@@ -17765,7 +17837,7 @@
             requestOptions.body = JSON.stringify(payload || {});
           }
 
-          return fetch(BULLETIN_MODE_ENDPOINT, requestOptions);
+          return fetch(endpoint, requestOptions);
         })
         .then(parseAdminEndpointResponse_);
   }

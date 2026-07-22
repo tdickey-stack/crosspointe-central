@@ -89,6 +89,8 @@ const CENTRAL_ADMIN_AUDIT_LOG_COLLECTION_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/auditLog";
 const CENTRAL_ADMIN_BULLETIN_MODE_DOC_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/public/bulletinMode";
+const CENTRAL_BULLETIN_PCO_CACHE_COLLECTION_PATH =
+  "centralCache/planningCenter/bulletin";
 const CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX =
   "bulletin-mode/fallback-images";
 const CENTRAL_BULLETIN_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
@@ -378,7 +380,6 @@ const YOUVERSION_API_BASE_URL = "https://api.youversion.com/v1";
 const YOUVERSION_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const cachedCentralDataByMode = new Map();
-const cachedBulletinPlanningCenterByRoomRules = new Map();
 const BULLETIN_PLANNING_CENTER_CACHE_TTL_MS = 60 * 1000;
 const waitForPcoRequestStart = createRequestStartGate({
   minIntervalMs: PCO_REQUEST_MIN_INTERVAL_MS,
@@ -1455,14 +1456,21 @@ export const bulletinMode = onRequest(
           const roomRules = roomRulesOverride.shouldOverride ?
             roomRulesOverride.items :
             getDefaultCentralRoomRules_();
+          const config = normalizeBulletinModePayload_(
+              snapshot.exists ? snapshot.data() : {},
+          );
+          const refreshPlanningCenter = isTruthyValue_(
+              request.query && request.query.refresh,
+          );
+          const bulletinPlanningCenterResult = refreshPlanningCenter ?
+            await getBulletinPlanningCenterData_(roomRules) :
+            await getCachedBulletinPlanningCenterData_(roomRules, config);
           const bulletinPlanningCenter =
-            await getBulletinPlanningCenterData_(roomRules);
+            bulletinPlanningCenterResult.data;
           response.set("Cache-Control", "no-store");
           response.status(200).json({
             ok: true,
-            config: normalizeBulletinModePayload_(
-              snapshot.exists ? snapshot.data() : {},
-            ),
+            config: config,
             events: bulletinPlanningCenter.events,
             content: {
               featuredEvent: bulletinPlanningCenter.featuredEvent,
@@ -1472,6 +1480,10 @@ export const bulletinMode = onRequest(
               serveNeeds: serveNeedsOverride.shouldOverride ?
                 serveNeedsOverride.items :
                 [],
+            },
+            sync: {
+              status: bulletinPlanningCenterResult.status,
+              fetchedAtMs: bulletinPlanningCenterResult.fetchedAtMs,
             },
           });
           return;
@@ -3986,67 +3998,158 @@ async function fetchPcoCollectionJson_(url) {
   return combined;
 }
 
-async function getBulletinPlanningCenterData_(roomRules) {
-  const cacheKey = JSON.stringify(Array.isArray(roomRules) ? roomRules : []);
-  const cached = cachedBulletinPlanningCenterByRoomRules.get(cacheKey) || null;
-  if (
-    cached &&
-    cached.data &&
-    Date.now() - cached.fetchedAt < BULLETIN_PLANNING_CENTER_CACHE_TTL_MS
-  ) {
-    return cached.data;
-  }
-
-  if (cached && cached.promise) {
-    return cached.promise;
-  }
-
-  const promise = Promise.allSettled([
-    getCentralCalendarEvents_(roomRules, 21),
-    getCentralFeaturedEvent_(roomRules),
-  ]).then((results) => {
-    const previous = cached && cached.data ? cached.data : null;
-    const nextData = {
-      events: results[0].status === "fulfilled" ?
-        results[0].value :
-        (previous && previous.events || {today: [], upcoming: []}),
-      featuredEvent: results[1].status === "fulfilled" ?
-        results[1].value :
-        (previous && previous.featuredEvent || null),
+async function getCachedBulletinPlanningCenterData_(roomRules, config) {
+  const cacheContext = getBulletinPlanningCenterCacheContext_(roomRules);
+  const snapshot = await cacheContext.docRef.get();
+  const entry = snapshot.exists ? snapshot.data() || {} : {};
+  if (isValidBulletinPlanningCenterData_(entry.value)) {
+    return {
+      data: entry.value,
+      status: "cached",
+      fetchedAtMs: Number(entry.fetchedAtMs) || 0,
     };
+  }
 
-    if (results[0].status === "rejected") {
-      console.error("Bulletin Mode calendar sync failed.", results[0].reason);
-    }
-    if (results[1].status === "rejected") {
-      console.error(
-          "Bulletin Mode featured event sync failed.",
-          results[1].reason,
-      );
-    }
+  const calendarCache = await getCachedCentralCalendarEvents_(roomRules, 21);
+  if (calendarCache) {
+    return {
+      data: {
+        events: calendarCache.events,
+        featuredEvent: findCachedBulletinFeaturedEvent_(
+            calendarCache.events,
+            config && config.featuredEvent,
+        ),
+      },
+      status: "calendar-cache",
+      fetchedAtMs: calendarCache.fetchedAtMs,
+    };
+  }
 
-    cachedBulletinPlanningCenterByRoomRules.set(cacheKey, {
-      data: nextData,
-      fetchedAt: results[0].status === "fulfilled" || previous ?
-        Date.now() :
-        0,
-      promise: null,
-    });
-    return nextData;
-  }).catch((error) => {
-    cachedBulletinPlanningCenterByRoomRules.delete(cacheKey);
-    throw error;
-  });
-
-  cachedBulletinPlanningCenterByRoomRules.set(cacheKey, {
-    data: cached && cached.data || null,
-    fetchedAt: cached && cached.fetchedAt || 0,
-    promise: promise,
-  });
-  return promise;
+  return {
+    data: createEmptyBulletinPlanningCenterData_(),
+    status: "empty",
+    fetchedAtMs: 0,
+  };
 }
 
-async function getCentralCalendarEvents_(roomRules, lookaheadDays) {
+async function getBulletinPlanningCenterData_(roomRules) {
+  const cacheContext = getBulletinPlanningCenterCacheContext_(roomRules);
+  const cachedResult = await getSharedCachedValue({
+    firestore,
+    docRef: cacheContext.docRef,
+    ttlMs: BULLETIN_PLANNING_CENTER_CACHE_TTL_MS,
+    leaseMs: PCO_CACHE_REFRESH_LEASE_MS,
+    waitForRefreshMs: PCO_CACHE_WAIT_MS,
+    validateValue: isValidBulletinPlanningCenterData_,
+    metadata: {
+      cacheType: "planning-center-bulletin",
+      dateKey: dateKey_(new Date(), PCO_TIMEZONE),
+      roomRulesHash: cacheContext.roomRulesHash,
+    },
+    loadFresh: async () => {
+      const results = await Promise.allSettled([
+        getCentralCalendarEvents_(roomRules, 21, {forceRefresh: true}),
+        getCentralFeaturedEvent_(roomRules),
+      ]);
+
+      if (results[0].status === "rejected") {
+        console.error(
+            "Bulletin Mode calendar sync failed.",
+            results[0].reason,
+        );
+        throw results[0].reason;
+      }
+      if (results[1].status === "rejected") {
+        console.error(
+            "Bulletin Mode featured event sync failed.",
+            results[1].reason,
+        );
+        throw results[1].reason;
+      }
+
+      return {
+        events: results[0].value,
+        featuredEvent: results[1].value,
+      };
+    },
+    onError: (phase, error) => {
+      console.warn(
+          "Bulletin Mode shared snapshot " + phase + " failed.",
+          error,
+      );
+    },
+  });
+
+  return {
+    data: cachedResult.value,
+    status: cachedResult.status,
+    fetchedAtMs: cachedResult.fetchedAtMs,
+  };
+}
+
+function getBulletinPlanningCenterCacheContext_(roomRules) {
+  const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
+  const roomRulesHash = createRoomRulesComparisonHash_(normalizedRoomRules);
+  const cacheId = "v1-" + roomRulesHash.slice(0, 40);
+
+  return {
+    roomRulesHash,
+    docRef: firestore.doc(
+        CENTRAL_BULLETIN_PCO_CACHE_COLLECTION_PATH + "/" + cacheId,
+    ),
+  };
+}
+
+async function getCachedCentralCalendarEvents_(roomRules, lookaheadDays) {
+  const normalizedLookaheadDays = normalizeCalendarLookaheadDays_(
+      lookaheadDays,
+  );
+  const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
+  const roomRulesHash = createRoomRulesComparisonHash_(normalizedRoomRules);
+  const cacheId = [
+    "v1",
+    normalizedLookaheadDays,
+    roomRulesHash.slice(0, 32),
+  ].join("-");
+  const snapshot = await firestore.doc(
+      "centralCache/planningCenter/calendar/" + cacheId,
+  ).get();
+  const entry = snapshot.exists ? snapshot.data() || {} : {};
+
+  if (!isValidCalendarEventsValue_(entry.value)) {
+    return null;
+  }
+
+  return {
+    events: entry.value,
+    fetchedAtMs: Number(entry.fetchedAtMs) || 0,
+  };
+}
+
+function findCachedBulletinFeaturedEvent_(events, savedFeaturedEvent) {
+  const featuredId = String(savedFeaturedEvent && savedFeaturedEvent.id || "");
+  if (!featuredId) return null;
+
+  return (Array.isArray(events && events.today) ? events.today : [])
+      .concat(Array.isArray(events && events.upcoming) ? events.upcoming : [])
+      .find((item) => String(item && item.id || "") === featuredId) || null;
+}
+
+function createEmptyBulletinPlanningCenterData_() {
+  return {
+    events: {today: [], upcoming: []},
+    featuredEvent: null,
+  };
+}
+
+function isValidBulletinPlanningCenterData_(value) {
+  return !!value &&
+    isValidCalendarEventsValue_(value.events) &&
+    (value.featuredEvent === null ||
+      typeof value.featuredEvent === "object");
+}
+
+async function getCentralCalendarEvents_(roomRules, lookaheadDays, options = {}) {
   const normalizedLookaheadDays = normalizeCalendarLookaheadDays_(
       lookaheadDays,
   );
@@ -4079,6 +4182,7 @@ async function getCentralCalendarEvents_(roomRules, lookaheadDays) {
       lookaheadDays: normalizedLookaheadDays,
       roomRulesHash,
     },
+    forceRefresh: options.forceRefresh === true,
     loadFresh: () => fetchCentralCalendarEvents_(
         normalizedRoomRules,
         normalizedLookaheadDays,

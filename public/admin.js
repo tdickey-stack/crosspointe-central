@@ -4660,7 +4660,7 @@
         renderBulletinFallbackHeroEditor_(canSave, true) :
         renderBulletinFeaturedHeroEditor_(featured, canSave),
       "</div>",
-      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item central-admin-bulletin-front-content\">",
       "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong>",
       renderStatusPill_("Live sources", "is-live"), "</div>",
       "<p class=\"central-admin-note\">Choose up to three campaigns and one Serve Opportunity for the printed front.</p>",
@@ -4676,7 +4676,7 @@
         );
       }).join("") : renderAdminNote_("No active campaigns are available."),
       "</div>",
-      "<label class=\"central-admin-field\"><span>Serve Opportunity</span>",
+      "<label class=\"central-admin-field is-select central-admin-bulletin-serve-select\"><span>Serve Opportunity</span>",
       "<select data-admin-field=\"bulletin.serveNeedId\"",
       canSave ? "" : " disabled", ">",
       "<option value=\"\">None</option>",
@@ -4875,8 +4875,8 @@
       }).join(""),
       "</div>",
       "<div class=\"central-admin-bulletin-event-bulk\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"include\">Include Visible</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"exclude\">Exclude Visible</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"include\">Include All</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"exclude\">Exclude All</button>",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"week1-default\">Reset to Week 1</button>",
       "</div>",
       "</div>",
@@ -5130,9 +5130,14 @@
       String(item.description).trim() : "";
     var eventClass = "central-bulletin-event " +
       (description ? "has-description" : "is-compact");
+    var layoutWeight = Math.max(
+        1,
+        Math.min(2.4, getBulletinEventLayoutWeight_(item) / 4.5),
+    ).toFixed(2);
 
     return [
-      "<article class=\"", eventClass, "\">",
+      "<article class=\"", eventClass,
+      "\" style=\"--bulletin-event-weight:", layoutWeight, "\">",
       "<div class=\"central-bulletin-event-date\" aria-label=\"",
       escapeAttr_(item.date), "\"><span>", escapeHtml_(month),
       "</span><strong>", escapeHtml_(day), "</strong><small>",
@@ -11799,10 +11804,10 @@
   function getBulletinFrontHero_() {
     var featured = getBulletinFeaturedEvent_();
     if (featured && !isBulletinManualHeroActive_()) {
-      return Object.assign({
+      return Object.assign({}, featured, {
         source: "featured",
         eyebrow: "Featured Event",
-      }, featured);
+      });
     }
 
     var fallback = adminState.bulletinDraft.fallbackHero || {};
@@ -11878,7 +11883,7 @@
     }
 
     var shouldInclude = mode === "include";
-    getFilteredBulletinEventDrafts_(events).forEach(function(item) {
+    events.forEach(function(item) {
       item.included = shouldInclude;
     });
   }

@@ -81,6 +81,11 @@ const CENTRAL_ADMIN_CHANGE_REQUESTS_COLLECTION_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/changeRequests";
 const CENTRAL_ADMIN_AUDIT_LOG_COLLECTION_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/auditLog";
+const CENTRAL_ADMIN_BULLETIN_MODE_DOC_PATH =
+  CENTRAL_ADMIN_ROOT_DOC_PATH + "/public/bulletinMode";
+const CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX =
+  "bulletin-mode/fallback-images";
+const CENTRAL_BULLETIN_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const CHANGE_REQUEST_CLEANUP_LIMIT_PER_STATUS = 25;
 const CENTRAL_PUBLIC_SETTINGS_DOC_PATH =
   "centralApp/root/public/settings";
@@ -340,6 +345,8 @@ const YOUVERSION_API_BASE_URL = "https://api.youversion.com/v1";
 const YOUVERSION_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const cachedCentralDataByMode = new Map();
+const cachedBulletinPlanningCenterByRoomRules = new Map();
+const BULLETIN_PLANNING_CENTER_CACHE_TTL_MS = 60 * 1000;
 const CENTRAL_DATA_ENVIRONMENT_LIVE = "live";
 const CENTRAL_DATA_ENVIRONMENT_DEV = "dev";
 const CENTRAL_DATA_CACHE_KEY_PREFIX = "published:";
@@ -350,6 +357,7 @@ function clearCentralDataCache_() {
 const cachedYouVersionPassages = new Map();
 const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
+  {key: "bulletin", label: "Bulletin Mode"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
   {key: "wayfinder", label: "Wayfinder"},
@@ -1325,6 +1333,127 @@ export const claimAdminInvite = onRequest(
       } catch (error) {
         response.status(getAdminUserManagementStatusCode_(error)).json({
           error: getAdminUserManagementErrorMessage_(error),
+          code: error && error.code ? error.code : "",
+        });
+      }
+    },
+);
+
+export const bulletinMode = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      secrets: PLANNING_CENTER_SECRETS,
+    },
+    async (request, response) => {
+      if (request.method !== "GET" && request.method !== "POST") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      const idToken = getBearerToken_(request.headers.authorization);
+      if (!idToken) {
+        response.status(401).json({
+          error: "Missing Firebase ID token. Sign in again and retry.",
+        });
+        return;
+      }
+
+      let decodedToken = null;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+      } catch (error) {
+        response.status(401).json({
+          error: "Your Firebase sign-in expired. Sign in again and retry.",
+        });
+        return;
+      }
+
+      try {
+        const actor = await verifyBulletinModeAccess_(
+            decodedToken,
+            request.method === "POST",
+        );
+
+        if (request.method === "GET") {
+          const [
+            snapshot,
+            roomRulesOverride,
+            campaignsOverride,
+            serveNeedsOverride,
+          ] = await Promise.all([
+            firestore.doc(CENTRAL_ADMIN_BULLETIN_MODE_DOC_PATH).get(),
+            getFirestoreRoomRulesOverride_(),
+            getFirestoreCampaignsOverride_(),
+            getFirestoreServeNeedsOverride_(),
+          ]);
+          const roomRules = roomRulesOverride.shouldOverride ?
+            roomRulesOverride.items :
+            getDefaultCentralRoomRules_();
+          const bulletinPlanningCenter =
+            await getBulletinPlanningCenterData_(roomRules);
+          response.set("Cache-Control", "no-store");
+          response.status(200).json({
+            ok: true,
+            config: normalizeBulletinModePayload_(
+              snapshot.exists ? snapshot.data() : {},
+            ),
+            events: bulletinPlanningCenter.events,
+            content: {
+              featuredEvent: bulletinPlanningCenter.featuredEvent,
+              campaigns: campaignsOverride.shouldOverride ?
+                campaignsOverride.items :
+                [],
+              serveNeeds: serveNeedsOverride.shouldOverride ?
+                serveNeedsOverride.items :
+                [],
+            },
+          });
+          return;
+        }
+
+        const action = normalizeBulletinModeText_(
+            request.body && request.body.action,
+            40,
+        );
+        if (action === "uploadFallbackImage") {
+          const uploadResult = await uploadBulletinFallbackImage_(
+              request.body,
+              actor,
+          );
+          response.set("Cache-Control", "no-store");
+          response.status(200).json({
+            ok: true,
+            imageUrl: uploadResult.imageUrl,
+            storagePath: uploadResult.storagePath,
+            message: "Bulletin welcome image uploaded.",
+          });
+          return;
+        }
+
+        const config = normalizeBulletinModePayload_(
+            request.body && typeof request.body === "object" ?
+              request.body :
+              {},
+        );
+        await firestore.doc(CENTRAL_ADMIN_BULLETIN_MODE_DOC_PATH).set({
+          ...config,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedByUid: actor.uid,
+          updatedByEmail: actor.email,
+        });
+
+        await writeBulletinModeAuditLog_(actor, config.events.length);
+
+        response.set("Cache-Control", "no-store");
+        response.status(200).json({
+          ok: true,
+          config: config,
+          message: "Bulletin Mode settings saved.",
+        });
+      } catch (error) {
+        response.status(getBulletinModeStatusCode_(error)).json({
+          error: getBulletinModeErrorMessage_(error),
           code: error && error.code ? error.code : "",
         });
       }
@@ -3276,6 +3405,7 @@ function toCentralCampaignFromFirestoreDoc_(snapshot) {
   const ongoing = getNormalizedCampaignOngoingValue_(data);
 
   return {
+    id: String(snapshot && snapshot.id || "").trim(),
     active: isTruthyValue_(data.active) ? "TRUE" : "FALSE",
     title: String(data.title || "").trim(),
     description: String(data.description || "").trim(),
@@ -3765,25 +3895,122 @@ async function fetchPcoJson_(url) {
   return JSON.parse(body);
 }
 
-async function getCentralCalendarEvents_(roomRules) {
+async function fetchPcoCollectionJson_(url) {
+  const combined = {
+    data: [],
+    included: [],
+  };
+  const seenUrls = new Set();
+  let nextUrl = String(url || "").trim();
+  let pageCount = 0;
+
+  while (nextUrl && !seenUrls.has(nextUrl) && pageCount < 25) {
+    seenUrls.add(nextUrl);
+    const page = await fetchPcoJson_(nextUrl);
+    combined.data.push(...(Array.isArray(page.data) ? page.data : []));
+    combined.included.push(
+        ...(Array.isArray(page.included) ? page.included : []),
+    );
+    nextUrl = String(page.links && page.links.next || "").trim();
+    if (nextUrl && !/^https?:\/\//i.test(nextUrl)) {
+      nextUrl = new URL(
+          nextUrl,
+          "https://api.planningcenteronline.com",
+      ).toString();
+    }
+    pageCount += 1;
+  }
+
+  return combined;
+}
+
+async function getBulletinPlanningCenterData_(roomRules) {
+  const cacheKey = JSON.stringify(Array.isArray(roomRules) ? roomRules : []);
+  const cached = cachedBulletinPlanningCenterByRoomRules.get(cacheKey) || null;
+  if (
+    cached &&
+    cached.data &&
+    Date.now() - cached.fetchedAt < BULLETIN_PLANNING_CENTER_CACHE_TTL_MS
+  ) {
+    return cached.data;
+  }
+
+  if (cached && cached.promise) {
+    return cached.promise;
+  }
+
+  const promise = Promise.allSettled([
+    getCentralCalendarEvents_(roomRules, 21),
+    getCentralFeaturedEvent_(roomRules),
+  ]).then((results) => {
+    const previous = cached && cached.data ? cached.data : null;
+    const nextData = {
+      events: results[0].status === "fulfilled" ?
+        results[0].value :
+        (previous && previous.events || {today: [], upcoming: []}),
+      featuredEvent: results[1].status === "fulfilled" ?
+        results[1].value :
+        (previous && previous.featuredEvent || null),
+    };
+
+    if (results[0].status === "rejected") {
+      console.error("Bulletin Mode calendar sync failed.", results[0].reason);
+    }
+    if (results[1].status === "rejected") {
+      console.error(
+          "Bulletin Mode featured event sync failed.",
+          results[1].reason,
+      );
+    }
+
+    cachedBulletinPlanningCenterByRoomRules.set(cacheKey, {
+      data: nextData,
+      fetchedAt: results[0].status === "fulfilled" || previous ?
+        Date.now() :
+        0,
+      promise: null,
+    });
+    return nextData;
+  }).catch((error) => {
+    cachedBulletinPlanningCenterByRoomRules.delete(cacheKey);
+    throw error;
+  });
+
+  cachedBulletinPlanningCenterByRoomRules.set(cacheKey, {
+    data: cached && cached.data || null,
+    fetchedAt: cached && cached.fetchedAt || 0,
+    promise: promise,
+  });
+  return promise;
+}
+
+async function getCentralCalendarEvents_(roomRules, lookaheadDays) {
   const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
   const twoWeeksFromNow = new Date();
   twoWeeksFromNow.setDate(
-      twoWeeksFromNow.getDate() + PCO_CALENDAR_LOOKAHEAD_DAYS,
+      twoWeeksFromNow.getDate() + (
+        Number.isFinite(Number(lookaheadDays)) ?
+          Number(lookaheadDays) :
+          PCO_CALENDAR_LOOKAHEAD_DAYS
+      ),
   );
   const endKey = dateKey_(twoWeeksFromNow, PCO_TIMEZONE);
+  const queryStartDate = new Date(todayKey + "T00:00:00Z");
+  const queryEndDate = new Date(endKey + "T23:59:59Z");
+  queryStartDate.setUTCDate(queryStartDate.getUTCDate() - 1);
+  queryEndDate.setUTCDate(queryEndDate.getUTCDate() + 1);
 
   const url =
     "https://api.planningcenteronline.com/calendar/v2/event_instances" +
     "?include=tags,event" +
     "&order=starts_at" +
     "&where[starts_at][gte]=" +
-    encodeURIComponent(todayKey + "T00:00:00Z") +
+    encodeURIComponent(queryStartDate.toISOString()) +
     "&where[starts_at][lte]=" +
-    encodeURIComponent(endKey + "T23:59:59Z") +
+    encodeURIComponent(queryEndDate.toISOString()) +
     "&per_page=100";
 
-  const data = await fetchPcoJson_(url);
+  const data = await fetchPcoCollectionJson_(url);
   const tagMap = {};
   const eventMap = {};
 
@@ -3812,7 +4039,8 @@ async function getCentralCalendarEvents_(roomRules) {
 
         const startsDate = new Date(startsAt);
         if (Number.isNaN(startsDate.getTime())) return null;
-        if (dateKey_(startsDate, PCO_TIMEZONE) < todayKey) return null;
+        const startsDateKey = dateKey_(startsDate, PCO_TIMEZONE);
+        if (startsDateKey < todayKey || startsDateKey > endKey) return null;
 
         const eventRef = instance.relationships &&
           instance.relationships.event &&
@@ -4058,6 +4286,7 @@ async function buildCentralCalendarItem_(
   ) ? String(eventAttrs.registration_url).trim() : "";
 
   return {
+    id: String(instance.id || "").trim(),
     active: "TRUE",
     featured: featured ? "TRUE" : "FALSE",
     title: title,
@@ -4913,6 +5142,7 @@ function getLocalMinutes_(date, timezone) {
 
 function toTodayItem_(item) {
   return {
+    id: item.id,
     active: "TRUE",
     title: item.title,
     date: item.date,
@@ -4938,6 +5168,7 @@ function toTodayItem_(item) {
 
 function toUpcomingItem_(item) {
   return {
+    id: item.id,
     active: "TRUE",
     featured: item.featured,
     title: item.title,
@@ -5354,6 +5585,59 @@ async function verifyPreviewPublisherAccess_(decodedToken, section) {
     throw createPreviewPublishError_(
         "preview-publish-forbidden",
         "Your current admin access level does not allow publishing this section.",
+    );
+  }
+
+  return {
+    uid: String(decodedToken.uid || "").trim(),
+    email: email,
+    displayName: String(
+        decodedToken.name ||
+        userSnapshot.get("displayName") ||
+        "",
+    ).trim(),
+  };
+}
+
+async function verifyBulletinModeAccess_(decodedToken, requireEdit) {
+  const email = normalizeAdminEmail_(decodedToken && decodedToken.email);
+  if (!isAllowedCentralAdminEmail_(email)) {
+    throw createPreviewPublishError_(
+        "admin-email-required",
+        "Use a CrossPointe account or an explicitly allowed tester account to manage Bulletin Mode.",
+    );
+  }
+
+  const userSnapshot = await firestore
+      .doc(getCentralAdminUserDocPath_(decodedToken.uid))
+      .get();
+
+  if (!userSnapshot.exists || userSnapshot.get("active") !== true) {
+    throw createPreviewPublishError_(
+        "admin-access-required",
+        "Your admin access record must be active before you can use Bulletin Mode.",
+    );
+  }
+
+  const pageAccess = userSnapshot.get("pageAccess") || {};
+  const permission = getManagedAdminSectionPermission_(
+      pageAccess,
+      "bulletin",
+      "settings",
+  );
+  const canRead = permission === "view" ||
+    permission === "propose" ||
+    canPublishPreviewWithPermission_(permission);
+  const allowed = requireEdit ?
+    canPublishPreviewWithPermission_(permission) :
+    canRead;
+
+  if (!allowed) {
+    throw createPreviewPublishError_(
+        "bulletin-mode-forbidden",
+        requireEdit ?
+          "Your current admin access level does not allow saving Bulletin Mode settings." :
+          "Your current admin access level does not allow viewing Bulletin Mode.",
     );
   }
 
@@ -6189,7 +6473,7 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
       {};
 
   MANAGED_ADMIN_PAGE_KEYS.forEach((key) => {
-    const value = key === "integrations" &&
+    const value = (key === "integrations" || key === "bulletin") &&
       !Object.prototype.hasOwnProperty.call(source, key) ?
       source.settings :
       source[key];
@@ -6361,6 +6645,28 @@ function getPreviewPublishErrorMessage_(error) {
   return error && error.message ?
     error.message :
     "Unable to publish content.";
+}
+
+function getBulletinModeStatusCode_(error) {
+  if (!error || !error.code) {
+    return 500;
+  }
+
+  if (
+    error.code === "admin-email-required" ||
+    error.code === "admin-access-required" ||
+    error.code === "bulletin-mode-forbidden"
+  ) {
+    return 403;
+  }
+
+  return 400;
+}
+
+function getBulletinModeErrorMessage_(error) {
+  return error && error.message ?
+    error.message :
+    "Unable to load or save Bulletin Mode settings.";
 }
 
 function createChangeRequestError_(code, message) {
@@ -11208,6 +11514,305 @@ function buildPublishedNextStepPayload_(sourceData) {
   };
 }
 
+function normalizeBulletinModePayload_(sourceData) {
+  const source = sourceData && typeof sourceData === "object" ?
+    sourceData :
+    {};
+  const givingSource = source.giving && typeof source.giving === "object" ?
+    source.giving :
+    {};
+  const headingsSource = source.headings &&
+    typeof source.headings === "object" ? source.headings : {};
+  const featuredSource = source.featuredEvent &&
+    typeof source.featuredEvent === "object" ?
+    source.featuredEvent :
+    {};
+  const fallbackSource = source.fallbackHero &&
+    typeof source.fallbackHero === "object" ?
+    source.fallbackHero :
+    {};
+  const rawEvents = Array.isArray(source.events) ? source.events : [];
+  const campaignIds = Array.isArray(source.campaignIds) ?
+    source.campaignIds :
+    [];
+
+  return {
+    serviceDate: normalizeThisSundayDateValue_(source.serviceDate),
+    heroSource: source.heroSource === "manual" ? "manual" : "featured",
+    headings: {
+      frontHeading: normalizeBulletinModeHeading_(
+          headingsSource.frontHeading,
+          "This Week at\nCrossPointe",
+          80,
+          2,
+      ),
+      backEyebrow: normalizeBulletinModeHeading_(
+          headingsSource.backEyebrow,
+          "See You There",
+          50,
+          1,
+      ),
+      backHeading: normalizeBulletinModeHeading_(
+          headingsSource.backHeading,
+          "The Next Two Weeks",
+          80,
+          2,
+      ),
+    },
+    giving: {
+      monthlyBudget: normalizeBulletinDollarValue_(
+          givingSource.monthlyBudget,
+      ),
+      monthToDateGiving: normalizeBulletinDollarValue_(
+          givingSource.monthToDateGiving,
+      ),
+      annualBudget: normalizeBulletinDollarValue_(
+          givingSource.annualBudget,
+      ),
+      yearToDateGiving: normalizeBulletinDollarValue_(
+          givingSource.yearToDateGiving,
+      ),
+    },
+    featuredEvent: {
+      id: normalizeBulletinModeText_(featuredSource.id, 160),
+      title: normalizeBulletinModeText_(featuredSource.title, 180),
+      description: normalizeBulletinModeLongText_(
+          featuredSource.description,
+          1200,
+      ),
+      includeDescription: featuredSource.includeDescription !== false,
+    },
+    fallbackHero: {
+      eyebrow: normalizeBulletinModeText_(
+          fallbackSource.eyebrow || "Welcome to CrossPointe",
+          80,
+      ),
+      title: normalizeBulletinModeText_(
+          fallbackSource.title || "We're Glad You're Here",
+          180,
+      ),
+      description: normalizeBulletinModeLongText_(
+          fallbackSource.description || [
+            "Whether this is your first Sunday or CrossPointe is already home,",
+            "we're glad you're here. Discover events, groups, serving",
+            "opportunities, and next steps at central.crosspointe.tv.",
+          ].join(" "),
+          1200,
+      ),
+      imageUrl: normalizeBulletinModeImageUrl_(fallbackSource.imageUrl),
+      imageStoragePath: normalizeBulletinModeStoragePath_(
+          fallbackSource.imageStoragePath,
+      ),
+    },
+    events: rawEvents.slice(0, 40).map((eventItem) => {
+      const item = eventItem && typeof eventItem === "object" ?
+        eventItem :
+        {};
+      return {
+        id: normalizeBulletinModeText_(item.id, 160),
+        title: normalizeBulletinModeText_(item.title, 180),
+        description: normalizeBulletinModeLongText_(item.description, 1200),
+        location: normalizeBulletinModeText_(item.location, 240),
+        included: item.included !== false,
+        includeDescription: item.includeDescription !== false,
+      };
+    }).filter((item) => item.id),
+    campaignIds: campaignIds.slice(0, 12)
+        .map((id) => normalizeBulletinModeText_(id, 160))
+        .filter(Boolean),
+    serveNeedId: normalizeBulletinModeText_(source.serveNeedId, 160),
+  };
+}
+
+function normalizeBulletinModeText_(value, maxLength) {
+  return String(value || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, maxLength);
+}
+
+function normalizeBulletinModeLongText_(value, maxLength) {
+  return String(value || "")
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/[\t ]+/g, " ").trimEnd())
+      .join("\n")
+      .trim()
+      .slice(0, maxLength);
+}
+
+function normalizeBulletinModeImageUrl_(value) {
+  const normalized = String(value || "").trim().slice(0, 2000);
+  if (!normalized) {
+    return "";
+  }
+
+  if (
+    /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i.test(normalized) ||
+    /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):9199\/v0\/b\//i.test(
+        normalized,
+    )
+  ) {
+    return normalized;
+  }
+
+  return "";
+}
+
+function normalizeBulletinModeStoragePath_(value) {
+  const normalized = String(value || "").trim().slice(0, 500);
+  return normalized.startsWith(CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX + "/") ?
+    normalized :
+    "";
+}
+
+async function uploadBulletinFallbackImage_(sourceData, actor) {
+  const source = sourceData && typeof sourceData === "object" ?
+    sourceData :
+    {};
+  const dataUrl = String(source.dataUrl || "");
+  const match = dataUrl.match(
+      /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/,
+  );
+
+  if (!match) {
+    throw createPreviewPublishError_(
+        "invalid-payload",
+        "Choose a JPEG, PNG, or WebP image to upload.",
+    );
+  }
+
+  const contentType = match[1].toLowerCase();
+  const imageBuffer = Buffer.from(match[2], "base64");
+  if (!imageBuffer.length || imageBuffer.length > CENTRAL_BULLETIN_IMAGE_MAX_BYTES) {
+    throw createPreviewPublishError_(
+        "invalid-payload",
+        "Bulletin images must be 10 MB or smaller.",
+    );
+  }
+
+  if (!isSupportedBulletinImageBuffer_(imageBuffer, contentType)) {
+    throw createPreviewPublishError_(
+        "invalid-payload",
+        "That file does not appear to be a valid JPEG, PNG, or WebP image.",
+    );
+  }
+
+  const extension = contentType === "image/jpeg" ?
+    "jpg" :
+    contentType.replace("image/", "");
+  const imageHash = crypto.createHash("sha256")
+      .update(imageBuffer)
+      .digest("hex")
+      .slice(0, 24);
+  const storagePath = [
+    CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX,
+    imageHash + "." + extension,
+  ].join("/");
+  const bucket = admin.storage().bucket();
+  const file = bucket.file(storagePath);
+  const [exists] = await file.exists();
+  let downloadToken = "";
+
+  if (exists) {
+    const [metadata] = await file.getMetadata();
+    downloadToken = getBulletinStorageDownloadToken_(metadata);
+  }
+
+  if (!downloadToken) {
+    downloadToken = crypto.randomUUID();
+    await file.save(imageBuffer, {
+      resumable: false,
+      metadata: {
+        contentType: contentType,
+        cacheControl: "public, max-age=31536000, immutable",
+        metadata: {
+          firebaseStorageDownloadTokens: downloadToken,
+          uploadedByUid: String(actor && actor.uid || "").trim(),
+          uploadedByEmail: String(actor && actor.email || "").trim(),
+        },
+      },
+    });
+  }
+
+  return {
+    imageUrl: buildBulletinStorageDownloadUrl_(
+        bucket.name,
+        storagePath,
+        downloadToken,
+    ),
+    storagePath: storagePath,
+  };
+}
+
+function isSupportedBulletinImageBuffer_(buffer, contentType) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) {
+    return false;
+  }
+
+  if (contentType === "image/jpeg") {
+    return buffer[0] === 0xff && buffer[1] === 0xd8 &&
+      buffer[buffer.length - 2] === 0xff &&
+      buffer[buffer.length - 1] === 0xd9;
+  }
+
+  if (contentType === "image/png") {
+    return buffer.subarray(0, 8).equals(
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+  }
+
+  return contentType === "image/webp" &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP";
+}
+
+function getBulletinStorageDownloadToken_(metadata) {
+  const rawValue = metadata && metadata.metadata &&
+    metadata.metadata.firebaseStorageDownloadTokens;
+  return String(rawValue || "").split(",")[0].trim();
+}
+
+function buildBulletinStorageDownloadUrl_(bucketName, storagePath, token) {
+  const emulatorHost = String(
+      process.env.FIREBASE_STORAGE_EMULATOR_HOST || "",
+  ).trim();
+  const baseUrl = emulatorHost ?
+    "http://" + emulatorHost :
+    "https://firebasestorage.googleapis.com";
+
+  return baseUrl + "/v0/b/" + encodeURIComponent(bucketName) +
+    "/o/" + encodeURIComponent(storagePath) +
+    "?alt=media&token=" + encodeURIComponent(token);
+}
+
+function normalizeBulletinModeHeading_(
+    value,
+    fallbackValue,
+    maxLength,
+    maxLines,
+) {
+  const normalized = String(value == null ? "" : value)
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .slice(0, Math.max(1, Number(maxLines) || 1))
+      .join("\n")
+      .trim();
+  const fallback = String(fallbackValue || "").trim();
+  return (normalized || fallback).slice(0, Number(maxLength) || 80);
+}
+
+function normalizeBulletinDollarValue_(value) {
+  const parsed = Number(String(value == null ? "" : value).replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+
+  return Math.min(Math.round(parsed), 1000000000);
+}
+
 function buildPublishedServeNeedPayload_(sourceData) {
   return {
     need: trimFirestoreStringValue_(sourceData.need),
@@ -11455,6 +12060,25 @@ async function writePreviewPublishAuditLog_(
   }
 }
 
+async function writeBulletinModeAuditLog_(actor, eventCount) {
+  try {
+    await firestore.collection(CENTRAL_ADMIN_AUDIT_LOG_COLLECTION_PATH).add({
+      action: "saveBulletinMode",
+      target: "admin",
+      section: "bulletin",
+      operation: "save",
+      itemCount: Number(eventCount || 0),
+      message: "Bulletin Mode settings saved.",
+      actorUid: String(actor && actor.uid || "").trim(),
+      actorEmail: String(actor && actor.email || "").trim(),
+      actorDisplayName: String(actor && actor.displayName || "").trim(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Bulletin Mode audit log failed.", error);
+  }
+}
+
 async function writeChangeRequestAuditLog_(entry) {
   try {
     await firestore.collection(CENTRAL_ADMIN_AUDIT_LOG_COLLECTION_PATH).add({
@@ -11568,6 +12192,7 @@ function buildFirstAdminUserDoc_(decodedToken) {
 function buildFirstAdminPageAccess_() {
   return {
     hub: "admin",
+    bulletin: "admin",
     settings: "admin",
     integrations: "admin",
     wayfinder: "admin",

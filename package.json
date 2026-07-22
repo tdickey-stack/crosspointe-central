@@ -10,10 +10,10 @@
     "wayfinder:query": "npm --prefix functions run wayfinder:query --",
     "wayfinder:import:dry-run": "npm --prefix functions run wayfinder:import:dry-run",
     "wayfinder:import:emulator": "npm --prefix functions run wayfinder:import:emulator",
-    "deploy:live": "firebase deploy --project crosspointe-central --only hosting,functions,firestore",
+    "deploy:live": "firebase deploy --project crosspointe-central --only hosting,functions,firestore,storage",
     "deploy:firestore": "firebase deploy --only firestore",
     "emulators": "firebase emulators:start --project crosspointe-central --only hosting,functions,auth",
-    "emulators:full": "firebase emulators:start --project crosspointe-central --only hosting,functions,auth,firestore",
+    "emulators:full": "firebase emulators:start --project crosspointe-central --only hosting,functions,auth,firestore,storage",
     "emulators:lan": "node scripts/start-lan-emulators.mjs",
     "gmail:token": "node scripts/get-gmail-refresh-token.mjs"
   },

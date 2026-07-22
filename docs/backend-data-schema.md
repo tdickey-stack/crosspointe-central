@@ -22,6 +22,10 @@ Admin browser
   |     Cloud Function validates and normalizes the payload
   |     then writes `centralApp/...` or `centralContent/...`
   |
+  |-- GET/POST /api/admin/bulletin-mode
+  |     reads live Planning Center events and stores only private bulletin
+  |     settings, giving figures, and per-event print overrides
+  |
   `-- POST /api/admin/submit-change-request
         writes `centralAdmin/root/changeRequests/{requestId}`
         approval merges the requested upserts/removals and publishes them
@@ -92,6 +96,7 @@ have equivalent persisted draft collections.
 | `centralAdmin/root/pages/{pageId}` | Reserved/readable admin page records |
 | `centralAdmin/root/roles/{roleId}` | Reserved/readable role records |
 | `centralAdmin/root/public/whatsNew` | Admin What's New fallback document |
+| `centralAdmin/root/public/bulletinMode` | Private Bulletin Mode giving figures and print overrides |
 
 ### Operational data
 
@@ -217,6 +222,39 @@ button_text
 
 The hosted `public/content/whats-new.json` adds an `enabled` switch and contains
 separate `public` and `admin` objects with the same practical fields.
+
+### Bulletin Mode
+
+`centralAdmin/root/public/bulletinMode` is readable only to active admin users
+and is written through the authenticated Bulletin Mode Cloud Function. It is
+not included in `/api/central-data`, so giving figures never appear on the
+public Central frontend.
+
+```text
+serviceDate
+giving.monthlyBudget
+giving.monthToDateGiving
+giving.annualBudget
+giving.yearToDateGiving
+featuredEvent.id
+featuredEvent.title
+featuredEvent.description
+featuredEvent.includeDescription
+events[].id
+events[].title
+events[].description
+events[].included
+events[].includeDescription
+campaignIds[]
+serveNeedId
+updatedAt
+updatedByUid
+updatedByEmail
+```
+
+Event IDs are Planning Center event-instance IDs. Bulletin Mode stores only
+print-specific overrides; schedule, location, image, and source descriptions
+continue to come from Planning Center through the live Central data flow.
 
 ## What "Upsert" Means Here
 

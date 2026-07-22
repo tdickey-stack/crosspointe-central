@@ -3516,8 +3516,8 @@
 }
 
 .central-bulletin-event-entry + .central-bulletin-event-entry {
-  margin-top: 0.045in;
-  padding-top: 0.045in;
+  margin-top: 0.03in;
+  padding-top: 0.06in;
   border-top: 1px solid var(--bulletin-line);
 }
 
@@ -3642,8 +3642,8 @@
 
 .central-bulletin-event-columns.is-dense .central-bulletin-event-entry +
 .central-bulletin-event-entry {
-  margin-top: 0.035in;
-  padding-top: 0.035in;
+  margin-top: 0.023in;
+  padding-top: 0.047in;
 }
 
 .central-bulletin-event-columns.is-ultra-dense .central-bulletin-event {
@@ -3684,8 +3684,8 @@
 
 .central-bulletin-event-columns.is-ultra-dense .central-bulletin-event-entry +
 .central-bulletin-event-entry {
-  margin-top: 0.025in;
-  padding-top: 0.025in;
+  margin-top: 0.017in;
+  padding-top: 0.033in;
 }
 
 .central-bulletin-event-columns.is-max-density > div {
@@ -3733,8 +3733,8 @@
 
 .central-bulletin-event-columns.is-max-density .central-bulletin-event-entry +
 .central-bulletin-event-entry {
-  margin-top: 0.015in;
-  padding-top: 0.015in;
+  margin-top: 0.01in;
+  padding-top: 0.02in;
 }
 
 .central-bulletin-event-columns.is-overflow-density > div {
@@ -3783,8 +3783,8 @@
 
 .central-bulletin-event-columns.is-overflow-density .central-bulletin-event-entry +
 .central-bulletin-event-entry {
-  margin-top: 0.01in;
-  padding-top: 0.01in;
+  margin-top: 0.006in;
+  padding-top: 0.014in;
 }
 
 .central-bulletin-back-cta {

@@ -48,6 +48,12 @@ import {
 } from
   "./planning-center/registrations.js";
 import {
+  createRequestStartGate,
+  fetchJsonWithRetry,
+} from "./planning-center/request-control.js";
+import {getSharedCachedValue} from
+  "./planning-center/shared-cache.js";
+import {
   createWayfinderNoticeCommandHandler,
   createWayfinderNoticeDraftGenerator,
   getActiveWayfinderNotices,
@@ -316,6 +322,14 @@ const PCO_CALENDAR_LOOKAHEAD_DAYS = parsePositiveInt_(
     process.env.PCO_CALENDAR_LOOKAHEAD_DAYS,
     14,
 );
+const PCO_REQUEST_MIN_INTERVAL_MS = Math.max(
+    100,
+    parsePositiveInt_(process.env.PCO_REQUEST_MIN_INTERVAL_MS, 250),
+);
+const PCO_CALENDAR_CACHE_TTL_MS = 5 * 60 * 1000;
+const PCO_ROOM_CACHE_TTL_MS = 30 * 60 * 1000;
+const PCO_CACHE_REFRESH_LEASE_MS = 45 * 1000;
+const PCO_CACHE_WAIT_MS = 50 * 1000;
 const PCO_SERVICE_TYPES = parsePlanningCenterServiceTypes_(
     process.env.PCO_SERVICE_TYPES || "2346:9:00,2345:10:30",
 );
@@ -347,6 +361,9 @@ const YOUVERSION_CACHE_TTL_MS = 15 * 60 * 1000;
 const cachedCentralDataByMode = new Map();
 const cachedBulletinPlanningCenterByRoomRules = new Map();
 const BULLETIN_PLANNING_CENTER_CACHE_TTL_MS = 60 * 1000;
+const waitForPcoRequestStart = createRequestStartGate({
+  minIntervalMs: PCO_REQUEST_MIN_INTERVAL_MS,
+});
 const CENTRAL_DATA_ENVIRONMENT_LIVE = "live";
 const CENTRAL_DATA_ENVIRONMENT_DEV = "dev";
 const CENTRAL_DATA_CACHE_KEY_PREFIX = "published:";
@@ -498,15 +515,41 @@ export const centralData = onRequest(
           return;
         }
 
-        const combinedData = await buildCentralDataPayload_(environment);
-        const payload = {
-          ...combinedData,
-          youVersionAppKey: YOUVERSION_APP_KEY,
-        };
+        if (cachedEntry && cachedEntry.promise) {
+          const pendingPayload = await cachedEntry.promise;
+          response.set("Cache-Control", "no-store");
+          response.status(200).json(pendingPayload);
+          return;
+        }
+
+        const payloadPromise = buildCentralDataPayload_(environment)
+            .then((combinedData) => {
+              const payload = {
+                ...combinedData,
+                youVersionAppKey: YOUVERSION_APP_KEY,
+              };
+              cachedCentralDataByMode.set(cacheKey, {
+                data: payload,
+                fetchedAt: Date.now(),
+                promise: null,
+              });
+              return payload;
+            })
+            .catch((error) => {
+              if (cachedEntry && cachedEntry.data) {
+                cachedCentralDataByMode.set(cacheKey, cachedEntry);
+              } else {
+                cachedCentralDataByMode.delete(cacheKey);
+              }
+              throw error;
+            });
+
         cachedCentralDataByMode.set(cacheKey, {
-          data: payload,
-          fetchedAt: Date.now(),
+          data: cachedEntry && cachedEntry.data || null,
+          fetchedAt: cachedEntry && cachedEntry.fetchedAt || 0,
+          promise: payloadPromise,
         });
+        const payload = await payloadPromise;
 
         response.set("Cache-Control", "no-store");
         response.status(200).json(payload);
@@ -1343,7 +1386,10 @@ export const bulletinMode = onRequest(
     {
       region: "us-central1",
       cors: true,
-      secrets: PLANNING_CENTER_SECRETS,
+      secrets: [
+        ...PLANNING_CENTER_SECRETS,
+        CENTRAL_CALENDAR_SIGNING_KEY,
+      ],
     },
     async (request, response) => {
       if (request.method !== "GET" && request.method !== "POST") {
@@ -3878,21 +3924,18 @@ async function fetchPcoJson_(url) {
       credentials.appId + ":" + credentials.secret,
   ).toString("base64");
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: "Basic " + token,
-      Accept: "application/json",
+  return fetchJsonWithRetry(url, {
+    waitForRequestStart: waitForPcoRequestStart,
+    maxAttempts: 3,
+    maxRetryAfterMs: 20000,
+    requestOptions: {
+      method: "GET",
+      headers: {
+        Authorization: "Basic " + token,
+        Accept: "application/json",
+      },
     },
   });
-
-  const body = await response.text();
-
-  if (!response.ok) {
-    throw new Error("Planning Center API error " + response.status + ": " + body);
-  }
-
-  return JSON.parse(body);
 }
 
 async function fetchPcoCollectionJson_(url) {
@@ -3985,14 +4028,72 @@ async function getBulletinPlanningCenterData_(roomRules) {
 }
 
 async function getCentralCalendarEvents_(roomRules, lookaheadDays) {
+  const normalizedLookaheadDays = normalizeCalendarLookaheadDays_(
+      lookaheadDays,
+  );
+  const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
+  const roomRulesHash = createRoomRulesComparisonHash_(normalizedRoomRules);
+  const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
+  const cacheId = [
+    "v1",
+    normalizedLookaheadDays,
+    roomRulesHash.slice(0, 32),
+  ].join("-");
+  const docRef = firestore.doc(
+      "centralCache/planningCenter/calendar/" + cacheId,
+  );
+  const cachedResult = await getSharedCachedValue({
+    firestore,
+    docRef,
+    ttlMs: PCO_CALENDAR_CACHE_TTL_MS,
+    leaseMs: PCO_CACHE_REFRESH_LEASE_MS,
+    waitForRefreshMs: PCO_CACHE_WAIT_MS,
+    validateValue: isValidCalendarEventsValue_,
+    isEntryCurrent: (entry) => {
+      return entry.dateKey === todayKey &&
+        Number(entry.lookaheadDays) === normalizedLookaheadDays &&
+        entry.roomRulesHash === roomRulesHash;
+    },
+    metadata: {
+      cacheType: "planning-center-calendar",
+      dateKey: todayKey,
+      lookaheadDays: normalizedLookaheadDays,
+      roomRulesHash,
+    },
+    loadFresh: () => fetchCentralCalendarEvents_(
+        normalizedRoomRules,
+        normalizedLookaheadDays,
+    ),
+    onError: (phase, error) => {
+      console.warn(
+          "Planning Center calendar cache " + phase + " failed.",
+          error,
+      );
+    },
+  });
+
+  return cachedResult.value;
+}
+
+function normalizeCalendarLookaheadDays_(lookaheadDays) {
+  const parsed = Number(lookaheadDays);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return PCO_CALENDAR_LOOKAHEAD_DAYS;
+  }
+  return Math.min(90, Math.max(1, Math.floor(parsed)));
+}
+
+function isValidCalendarEventsValue_(value) {
+  return !!value &&
+    Array.isArray(value.today) &&
+    Array.isArray(value.upcoming);
+}
+
+async function fetchCentralCalendarEvents_(roomRules, lookaheadDays) {
   const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
   const twoWeeksFromNow = new Date();
   twoWeeksFromNow.setDate(
-      twoWeeksFromNow.getDate() + (
-        Number.isFinite(Number(lookaheadDays)) ?
-          Number(lookaheadDays) :
-          PCO_CALENDAR_LOOKAHEAD_DAYS
-      ),
+      twoWeeksFromNow.getDate() + lookaheadDays,
   );
   const endKey = dateKey_(twoWeeksFromNow, PCO_TIMEZONE);
   const queryStartDate = new Date(todayKey + "T00:00:00Z");
@@ -4667,6 +4768,47 @@ function buildCalendarFilename_(title) {
 }
 
 async function getEventInstanceRooms_(instanceId, roomRules) {
+  const normalizedInstanceId = String(instanceId || "").trim();
+  if (!normalizedInstanceId) return [];
+
+  const cacheId = "v1-" + crypto.createHash("sha256")
+      .update(normalizedInstanceId)
+      .digest("hex")
+      .slice(0, 40);
+  const docRef = firestore.doc(
+      "centralCache/planningCenter/rooms/" + cacheId,
+  );
+  const cachedResult = await getSharedCachedValue({
+    firestore,
+    docRef,
+    ttlMs: PCO_ROOM_CACHE_TTL_MS,
+    leaseMs: PCO_CACHE_REFRESH_LEASE_MS,
+    waitForRefreshMs: PCO_CACHE_WAIT_MS,
+    validateValue: (value) => {
+      return Array.isArray(value) && value.every((room) => {
+        return typeof room === "string";
+      });
+    },
+    metadata: {
+      cacheType: "planning-center-event-rooms",
+      instanceId: normalizedInstanceId,
+    },
+    loadFresh: () => fetchEventInstanceRooms_(normalizedInstanceId),
+    onError: (phase, error) => {
+      console.warn(
+          "Planning Center room cache " + phase + " failed.",
+          error,
+      );
+    },
+  });
+
+  return applyRoomRules_(
+      cachedResult.value,
+      Array.isArray(roomRules) ? roomRules : [],
+  );
+}
+
+async function fetchEventInstanceRooms_(instanceId) {
   const url =
     "https://api.planningcenteronline.com/calendar/v2/event_instances/" +
     encodeURIComponent(instanceId) +
@@ -4699,7 +4841,7 @@ async function getEventInstanceRooms_(instanceId, roomRules) {
       })
       .filter(Boolean);
 
-  return applyRoomRules_(rawRooms, roomRules);
+  return rawRooms;
 }
 
 /**

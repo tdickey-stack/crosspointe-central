@@ -5033,10 +5033,14 @@
     var events = getBulletinEventDraftsInWindow_().filter(function(item) {
       return item.included;
     });
-    var eventColumns = splitBulletinEventsIntoColumns_(events);
-    var leftEvents = eventColumns.left;
-    var rightEvents = eventColumns.right;
-    var maxRows = Math.max(leftEvents.length, rightEvents.length);
+    var eventGroups = groupBulletinEventsByDate_(events);
+    var eventColumns = splitBulletinEventGroupsIntoColumns_(eventGroups);
+    var leftGroups = eventColumns.left;
+    var rightGroups = eventColumns.right;
+    var maxRows = Math.max(
+        countBulletinEventsInGroups_(leftGroups),
+        countBulletinEventsInGroups_(rightGroups),
+    );
     var densityClass = getBulletinEventDensityClass_(maxRows);
     var serviceDate = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
     var endDate = new Date(serviceDate.getTime());
@@ -5051,9 +5055,9 @@
       "</strong></div>",
       "<div class=\"central-bulletin-event-columns",
       densityClass, "\"><div>",
-      leftEvents.map(renderBulletinPrintEvent_).join(""),
+      leftGroups.map(renderBulletinPrintEventGroup_).join(""),
       "</div><div>",
-      rightEvents.map(renderBulletinPrintEvent_).join(""),
+      rightGroups.map(renderBulletinPrintEventGroup_).join(""),
       "</div></div>",
       "<section class=\"central-bulletin-back-cta\"><img class=\"central-bulletin-qr\" src=\"/central-bulletin-qr.png\" alt=\"QR code for central.crosspointe.tv\"><div>",
       "<span class=\"central-bulletin-label\">Full Details + Next Steps</span>",
@@ -5079,13 +5083,40 @@
     return " is-fitted is-stretched";
   }
 
-  function splitBulletinEventsIntoColumns_(events) {
-    var items = Array.isArray(events) ? events : [];
+  function groupBulletinEventsByDate_(events) {
+    var groups = [];
+    var groupsByDate = Object.create(null);
+
+    (Array.isArray(events) ? events : []).forEach(function(item) {
+      var dateKey = String(item && item.date || "");
+      var group = groupsByDate[dateKey];
+
+      if (!group) {
+        group = {date: dateKey, events: []};
+        groupsByDate[dateKey] = group;
+        groups.push(group);
+      }
+
+      group.events.push(item);
+    });
+
+    return groups;
+  }
+
+  function countBulletinEventsInGroups_(groups) {
+    return (Array.isArray(groups) ? groups : [])
+        .reduce(function(total, group) {
+          return total + (Array.isArray(group.events) ? group.events.length : 0);
+        }, 0);
+  }
+
+  function splitBulletinEventGroupsIntoColumns_(groups) {
+    var items = Array.isArray(groups) ? groups : [];
     if (items.length < 2) {
       return {left: items.slice(), right: []};
     }
 
-    var weights = items.map(getBulletinEventLayoutWeight_);
+    var weights = items.map(getBulletinEventGroupLayoutWeight_);
     var totalWeight = weights.reduce(function(total, weight) {
       return total + weight;
     }, 0);
@@ -5121,28 +5152,59 @@
     return 3 + (titleLines * 1.35) + metaLines + (descriptionLines * 0.9);
   }
 
-  function renderBulletinPrintEvent_(item) {
-    var date = parseBulletinDate_(item.date);
+  function getBulletinEventEntryLayoutWeight_(item) {
+    return Math.max(
+        1,
+        Math.min(2.4, getBulletinEventLayoutWeight_(item) / 4.5),
+    );
+  }
+
+  function getBulletinEventGroupLayoutWeight_(group) {
+    return (Array.isArray(group && group.events) ? group.events : [])
+        .reduce(function(total, item) {
+          return total + getBulletinEventEntryLayoutWeight_(item);
+        }, 0);
+  }
+
+  function renderBulletinPrintEventGroup_(group) {
+    var events = Array.isArray(group && group.events) ? group.events : [];
+    var date = parseBulletinDate_(group.date);
     var weekday = new Intl.DateTimeFormat("en-US", {timeZone: "UTC", weekday: "short"}).format(date).toUpperCase();
     var month = new Intl.DateTimeFormat("en-US", {timeZone: "UTC", month: "short"}).format(date).toUpperCase();
     var day = String(date.getUTCDate());
-    var description = item.includeDescription && item.description ?
-      String(item.description).trim() : "";
+    var hasDescription = events.some(function(item) {
+      return item.includeDescription && String(item.description || "").trim();
+    });
     var eventClass = "central-bulletin-event " +
-      (description ? "has-description" : "is-compact");
+      (hasDescription ? "has-description" : "is-compact") +
+      (events.length > 1 ? " is-grouped" : "");
     var layoutWeight = Math.max(
         1,
-        Math.min(2.4, getBulletinEventLayoutWeight_(item) / 4.5),
+        getBulletinEventGroupLayoutWeight_(group),
     ).toFixed(2);
 
     return [
       "<article class=\"", eventClass,
       "\" style=\"--bulletin-event-weight:", layoutWeight, "\">",
       "<div class=\"central-bulletin-event-date\" aria-label=\"",
-      escapeAttr_(item.date), "\"><span>", escapeHtml_(month),
+      escapeAttr_(group.date), "\"><span>", escapeHtml_(month),
       "</span><strong>", escapeHtml_(day), "</strong><small>",
       escapeHtml_(weekday), "</small></div>",
       "<div class=\"central-bulletin-event-copy\">",
+      events.map(renderBulletinPrintEventEntry_).join(""),
+      "</div></article>",
+    ].join("");
+  }
+
+  function renderBulletinPrintEventEntry_(item) {
+    var description = item.includeDescription && item.description ?
+      String(item.description).trim() : "";
+    var entryWeight = getBulletinEventEntryLayoutWeight_(item).toFixed(2);
+
+    return [
+      "<section class=\"central-bulletin-event-entry",
+      description ? " has-description" : " is-compact",
+      "\" style=\"--bulletin-entry-weight:", entryWeight, "\">",
       "<p class=\"central-bulletin-event-meta\">",
       item.time ? [
         "<span class=\"central-bulletin-event-meta-time\">",
@@ -5157,7 +5219,7 @@
         "<div class=\"central-bulletin-event-description central-bulletin-body-copy central-bulletin-markdown\">" +
           renderAdminMarkdownLite_(description) + "</div>" :
         "",
-      "</div></article>",
+      "</section>",
     ].join("");
   }
 

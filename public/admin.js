@@ -268,6 +268,7 @@
   var ADMIN_ACTION_SUCCESS_TRANSITION_MS = 1000;
   var ADMIN_QUICK_LINK_REVEAL_RESET_MS = 700;
   var ADMIN_FLOATING_SAVE_BAR_EXIT_MS = 480;
+  var ADMIN_COLLECTION_EDITOR_EXIT_MS = 720;
   var ADMIN_ACTION_DIRTY_SCOPES = {
     "save-bulletin": "bulletin",
     "publish-hub-settings": "hub-settings",
@@ -313,6 +314,13 @@
     "edit-next-step": "next-step",
     "edit-room-rule": "room-rule",
     "edit-admin-user": "admin-user",
+  };
+  var ADMIN_COLLECTION_EDITOR_DIRTY_SCOPES = {
+    quickLinks: "quick-link",
+    resources: "resource",
+    campaigns: "campaign",
+    serveNeeds: "serve-need",
+    nextSteps: "next-step",
   };
   var ADMIN_HIDDEN_STATUS_PILL_LABELS = {
     "admin only": true,
@@ -583,6 +591,12 @@
     floatingSaveBarScope: "",
     floatingSaveBarExitScope: "",
     floatingSaveBarExitLabel: "",
+    collectionEditorOpen: "",
+    collectionEditorFocusPending: false,
+    collectionEditorEntering: false,
+    collectionEditorExiting: "",
+    collectionEditorCloseAfterExit: "",
+    collectionActionsEntering: "",
     firebaseReady: false,
     firebaseProjectId: "",
     usingEmulators: shouldUseFirebaseEmulators_(),
@@ -860,8 +874,10 @@
   var adminSortDragDocId = "";
   var adminSortDropDocId = "";
   var adminSortDropPlacement = "";
+  var adminSortDropZone = "";
   var adminActionSuccessResetTimer = null;
   var adminFloatingSaveBarExitTimer = null;
+  var adminCollectionEditorExitTimer = null;
 
   if (!isAdminRoute_()) {
     return;
@@ -1318,7 +1334,17 @@
       var editDirtyScope = ADMIN_EDIT_ACTION_DIRTY_SCOPES[action] || "";
 
       if (resetDirtyScope) {
+        var resetCollectionSection =
+          getAdminCollectionSectionForDirtyScope_(resetDirtyScope);
+        if (resetCollectionSection &&
+          adminState.collectionEditorOpen === resetCollectionSection) {
+          startAdminCollectionEditorExit_(resetCollectionSection);
+        }
         clearAdminDirtyScope_(resetDirtyScope);
+        if (resetCollectionSection) {
+          event.preventDefault();
+          return;
+        }
       }
 
       if (editDirtyScope) {
@@ -1327,10 +1353,28 @@
           return;
         }
         clearAdminDirtyScope_(editDirtyScope);
+        var editCollectionSection =
+          getAdminCollectionSectionForDirtyScope_(editDirtyScope);
+        if (editCollectionSection) {
+          cancelAdminCollectionEditorExit_();
+          adminState.collectionEditorOpen = editCollectionSection;
+          adminState.collectionEditorFocusPending = true;
+          adminState.collectionEditorEntering = true;
+          adminState.collectionEditorExiting = "";
+          adminState.collectionActionsEntering = "";
+        }
       }
 
       if (isAdminSuccessButtonAction_(action)) {
         beginAdminActionFeedback_(action);
+      }
+
+      if (action === "open-collection-editor") {
+        event.preventDefault();
+        openAdminCollectionEditor_(
+            button.getAttribute("data-admin-collection-editor") || "",
+        );
+        return;
       }
 
       if (action === "sign-in") {
@@ -2044,6 +2088,102 @@
     }) || "";
   }
 
+  function getAdminCollectionSectionForDirtyScope_(scope) {
+    return Object.keys(ADMIN_COLLECTION_EDITOR_DIRTY_SCOPES).find(
+        function(section) {
+          return ADMIN_COLLECTION_EDITOR_DIRTY_SCOPES[section] === scope;
+        },
+    ) || "";
+  }
+
+  function resetAdminCollectionDraft_(section) {
+    if (section === "quickLinks") {
+      resetQuickLinksDraft_();
+    } else if (section === "resources") {
+      resetResourcesDraft_();
+    } else if (section === "campaigns") {
+      resetCampaignsDraft_();
+    } else if (section === "serveNeeds") {
+      resetServeNeedsDraft_();
+    } else if (section === "nextSteps") {
+      resetNextStepsDraft_();
+    }
+  }
+
+  function openAdminCollectionEditor_(section) {
+    var normalizedSection = String(section || "").trim();
+    var dirtyScope = ADMIN_COLLECTION_EDITOR_DIRTY_SCOPES[
+        normalizedSection
+    ] || "";
+    if (!dirtyScope) {
+      return;
+    }
+
+    if (!confirmDiscardAdminChanges_(dirtyScope)) {
+      return;
+    }
+
+    cancelAdminCollectionEditorExit_();
+    resetAdminCollectionDraft_(normalizedSection);
+    adminState.collectionEditorOpen = normalizedSection;
+    adminState.collectionEditorFocusPending = true;
+    adminState.collectionEditorEntering = true;
+    adminState.collectionEditorExiting = "";
+    adminState.collectionEditorCloseAfterExit = "";
+    adminState.collectionActionsEntering = "";
+    renderAdmin_();
+  }
+
+  function prefersReducedAdminMotion_() {
+    return !!(
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  }
+
+  function cancelAdminCollectionEditorExit_() {
+    if (adminCollectionEditorExitTimer) {
+      window.clearTimeout(adminCollectionEditorExitTimer);
+      adminCollectionEditorExitTimer = null;
+    }
+    adminState.collectionEditorExiting = "";
+  }
+
+  function startAdminCollectionEditorExit_(section) {
+    var normalizedSection = String(section || "").trim();
+    if (!normalizedSection ||
+      adminState.collectionEditorOpen !== normalizedSection ||
+      adminState.collectionEditorExiting === normalizedSection) {
+      return;
+    }
+
+    cancelAdminCollectionEditorExit_();
+    adminState.collectionEditorFocusPending = false;
+    adminState.collectionEditorEntering = false;
+    adminState.collectionEditorExiting = normalizedSection;
+    adminState.collectionEditorCloseAfterExit = "";
+    adminState.collectionActionsEntering = "";
+    renderAdmin_();
+
+    var exitDuration = prefersReducedAdminMotion_() ?
+      0 :
+      ADMIN_COLLECTION_EDITOR_EXIT_MS;
+    adminCollectionEditorExitTimer = window.setTimeout(function() {
+      adminCollectionEditorExitTimer = null;
+      if (adminState.collectionEditorExiting !== normalizedSection ||
+        adminState.collectionEditorOpen !== normalizedSection) {
+        return;
+      }
+
+      adminState.collectionEditorOpen = "";
+      adminState.collectionEditorExiting = "";
+      adminState.collectionEditorCloseAfterExit = "";
+      adminState.collectionActionsEntering = normalizedSection;
+      resetAdminCollectionDraft_(normalizedSection);
+      renderAdmin_();
+    }, exitDuration);
+  }
+
   function isAdminDirtyScope_(scope) {
     return !!(
       scope &&
@@ -2059,6 +2199,13 @@
     }
 
     cancelAdminFloatingSaveBarExit_();
+    var collectionSection = getAdminCollectionSectionForDirtyScope_(
+        normalizedScope,
+    );
+    if (collectionSection &&
+      adminState.collectionEditorCloseAfterExit === collectionSection) {
+      adminState.collectionEditorCloseAfterExit = "";
+    }
     var wasDirty = isAdminDirtyScope_(normalizedScope);
     var previousActiveScope = adminState.activeDirtyScope;
     adminState.dirtyScopes[normalizedScope] = true;
@@ -2101,7 +2248,14 @@
     adminState.activeDirtyScope = "";
     if (skipExitAnimation) {
       cancelAdminFloatingSaveBarExit_();
+      cancelAdminCollectionEditorExit_();
       adminState.floatingSaveBarScope = "";
+      adminState.collectionEditorOpen = "";
+      adminState.collectionEditorFocusPending = false;
+      adminState.collectionEditorEntering = false;
+      adminState.collectionEditorExiting = "";
+      adminState.collectionEditorCloseAfterExit = "";
+      adminState.collectionActionsEntering = "";
     }
     syncAdminSaveBars_();
     syncAdminFloatingSaveBar_();
@@ -2125,6 +2279,11 @@
     cancelAdminFloatingSaveBarExit_();
     adminState.floatingSaveBarExitScope = normalizedScope;
     adminState.floatingSaveBarExitLabel = String(label || "Changes saved");
+    var collectionSection = adminState.collectionEditorCloseAfterExit;
+    if (collectionSection &&
+      adminState.collectionEditorOpen === collectionSection) {
+      startAdminCollectionEditorExit_(collectionSection);
+    }
     syncAdminFloatingSaveBar_();
     adminFloatingSaveBarExitTimer = window.setTimeout(function() {
       adminFloatingSaveBarExitTimer = null;
@@ -2373,7 +2532,15 @@
     adminState.actionFeedbackPendingKey = "";
     adminState.actionFeedbackSuccessKey = actionKey;
     adminState.actionFeedbackSuccessPlayed = false;
-    clearAdminDirtyScope_(ADMIN_ACTION_DIRTY_SCOPES[actionKey] || "");
+    var dirtyScope = ADMIN_ACTION_DIRTY_SCOPES[actionKey] || "";
+    var collectionSection = getAdminCollectionSectionForDirtyScope_(
+        dirtyScope,
+    );
+    if (collectionSection &&
+      adminState.collectionEditorOpen === collectionSection) {
+      adminState.collectionEditorCloseAfterExit = collectionSection;
+    }
+    clearAdminDirtyScope_(dirtyScope);
   }
 
   function clearPendingAdminActionFeedback_() {
@@ -2477,6 +2644,13 @@
       return;
     }
 
+    adminState.collectionEditorOpen = "";
+    adminState.collectionEditorFocusPending = false;
+    adminState.collectionEditorEntering = false;
+    adminState.collectionEditorExiting = "";
+    adminState.collectionEditorCloseAfterExit = "";
+    adminState.collectionActionsEntering = "";
+    cancelAdminCollectionEditorExit_();
     clearAdminActionFeedback_();
     adminState.currentPageId = getCurrentAdminPageId_();
     adminState.sidebarNavGroup = getAdminSidebarGroupForPageId_(
@@ -2558,6 +2732,7 @@
         target.section,
         target.docId,
         target.placement,
+        target.zone,
     );
   }
 
@@ -2583,6 +2758,7 @@
       draggedDocId,
       target.docId,
       target.placement,
+      target.zone,
     );
   }
 
@@ -2591,6 +2767,20 @@
   }
 
   function resolveAdminSortDropTarget_(event) {
+    var zoneEl = event.target.closest("[data-admin-sort-zone]");
+    if (zoneEl) {
+      return {
+        section: String(
+            zoneEl.getAttribute("data-admin-sort-section") || "",
+        ).trim(),
+        docId: "",
+        placement: "after",
+        zone: String(
+            zoneEl.getAttribute("data-admin-sort-zone") || "",
+        ).trim(),
+      };
+    }
+
     var itemEl = event.target.closest("[data-admin-sort-item]");
     if (itemEl) {
       return {
@@ -2599,6 +2789,7 @@
         ).trim(),
         docId: String(itemEl.getAttribute("data-admin-doc-id") || "").trim(),
         placement: getAdminSortDropPlacement_(itemEl, event.clientY),
+        zone: "",
       };
     }
 
@@ -2621,6 +2812,7 @@
       section: section,
       docId: String(lastItemEl.getAttribute("data-admin-doc-id") || "").trim(),
       placement: "after",
+      zone: "",
     };
   }
 
@@ -2636,9 +2828,11 @@
     return clientY < (rect.top + (rect.height / 2)) ? "before" : "after";
   }
 
-  function setAdminSortDropState_(section, docId, placement) {
+  function setAdminSortDropState_(section, docId, placement, zone) {
+    var normalizedZone = String(zone || "").trim();
     if (adminSortDropDocId === docId &&
       adminSortDropPlacement === placement &&
+      adminSortDropZone === normalizedZone &&
       adminSortDragSection === section) {
       return;
     }
@@ -2646,6 +2840,15 @@
     clearAdminSortDropState_();
     adminSortDropDocId = docId;
     adminSortDropPlacement = placement;
+    adminSortDropZone = normalizedZone;
+
+    if (normalizedZone) {
+      var zoneTargetEl = getAdminSortZoneEl_(section, normalizedZone);
+      if (zoneTargetEl) {
+        zoneTargetEl.classList.add("is-sort-drop-target");
+      }
+      return;
+    }
 
     var itemEl = getAdminSortableItemEl_(section, docId);
     if (!itemEl) {
@@ -2661,18 +2864,26 @@
     if (!appEl) {
       adminSortDropDocId = "";
       adminSortDropPlacement = "";
+      adminSortDropZone = "";
       return;
     }
 
     Array.prototype.forEach.call(
-        appEl.querySelectorAll(".is-drop-before, .is-drop-after"),
+        appEl.querySelectorAll(
+            ".is-drop-before, .is-drop-after, .is-sort-drop-target",
+        ),
         function(element) {
-          element.classList.remove("is-drop-before", "is-drop-after");
+          element.classList.remove(
+              "is-drop-before",
+              "is-drop-after",
+              "is-sort-drop-target",
+          );
         },
     );
 
     adminSortDropDocId = "";
     adminSortDropPlacement = "";
+    adminSortDropZone = "";
   }
 
   function clearAdminSortDragState_() {
@@ -2705,6 +2916,30 @@
 
           if ((element.getAttribute("data-admin-sort-section") || "") === section &&
             (element.getAttribute("data-admin-doc-id") || "") === docId) {
+            match = element;
+          }
+        },
+    );
+
+    return match;
+  }
+
+  function getAdminSortZoneEl_(section, zone) {
+    if (!appEl || !section || !zone) {
+      return null;
+    }
+
+    var match = null;
+    Array.prototype.forEach.call(
+        appEl.querySelectorAll("[data-admin-sort-zone]"),
+        function(element) {
+          if (match) {
+            return;
+          }
+
+          if ((element.getAttribute("data-admin-sort-section") || "") ===
+            section &&
+            (element.getAttribute("data-admin-sort-zone") || "") === zone) {
             match = element;
           }
         },
@@ -3137,6 +3372,74 @@
     );
   }
 
+  function reorderQuickLinkItems_(
+      items,
+      draggedDocId,
+      targetDocId,
+      placement,
+      targetZone,
+  ) {
+    var groupedItems = sortQuickLinksItems_(items)
+        .filter(function(item) {
+          return item && item.active !== false;
+        })
+        .concat(sortQuickLinksItems_(items).filter(function(item) {
+          return item && item.active === false;
+        }))
+        .map(function(item) {
+          return Object.assign({}, item);
+        });
+    var draggedIndex = groupedItems.findIndex(function(item) {
+      return item && item.id === draggedDocId;
+    });
+    var targetItem = groupedItems.find(function(item) {
+      return item && item.id === targetDocId;
+    }) || null;
+    var normalizedZone = String(targetZone || "").trim();
+
+    if (draggedIndex === -1 || (!targetItem && !normalizedZone)) {
+      return groupedItems;
+    }
+
+    var draggedItem = groupedItems.splice(draggedIndex, 1)[0];
+    var nextActive = normalizedZone ?
+      normalizedZone === "visible" :
+      targetItem.active !== false;
+    draggedItem = Object.assign({}, draggedItem, {
+      active: nextActive,
+    });
+
+    if (normalizedZone) {
+      var visibleCount = groupedItems.filter(function(item) {
+        return item && item.active !== false;
+      }).length;
+      groupedItems.splice(
+          nextActive ? 0 : visibleCount,
+          0,
+          draggedItem,
+      );
+    } else {
+      var targetIndex = groupedItems.findIndex(function(item) {
+        return item && item.id === targetDocId;
+      });
+      if (targetIndex === -1) {
+        return sortQuickLinksItems_(items);
+      }
+
+      groupedItems.splice(
+          placement === "after" ? targetIndex + 1 : targetIndex,
+          0,
+          draggedItem,
+      );
+    }
+
+    return groupedItems.map(function(item, index) {
+      return Object.assign({}, item, {
+        sort: (index + 1) * 10,
+      });
+    });
+  }
+
   function applyHubModuleSectionUpdate_(section, previousItems, nextItems) {
     var moduleConfig = getHubModuleSortSectionConfig_(section);
     var actionConfig = moduleConfig ?
@@ -3252,6 +3555,7 @@
       draggedDocId,
       targetDocId,
       placement,
+      targetZone,
   ) {
     if (!canReorderSortableSection_(section)) {
       return;
@@ -3280,12 +3584,20 @@
     }
 
     var previousItems = cloneSortableSectionItems_(section);
-    var nextItems = reorderSortableItems_(
-        previousItems,
-        draggedDocId,
-        targetDocId,
-        placement,
-    );
+    var nextItems = section === "quickLinks" ?
+      reorderQuickLinkItems_(
+          previousItems,
+          draggedDocId,
+          targetDocId,
+          placement,
+          targetZone,
+      ) :
+      reorderSortableItems_(
+          previousItems,
+          draggedDocId,
+          targetDocId,
+          placement,
+      );
     var submitChangeData = buildSortableSectionChangeRequestData_(
         section,
         previousItems,
@@ -3615,6 +3927,15 @@
       return;
     }
 
+    if (!nextPage || nextPage.id !== adminState.currentPageId) {
+      cancelAdminCollectionEditorExit_();
+      adminState.collectionEditorOpen = "";
+      adminState.collectionEditorFocusPending = false;
+      adminState.collectionEditorEntering = false;
+      adminState.collectionEditorExiting = "";
+      adminState.collectionEditorCloseAfterExit = "";
+      adminState.collectionActionsEntering = "";
+    }
     clearAdminActionFeedback_();
     adminState.currentPageId = nextPage ? nextPage.id : "overview";
     adminState.sidebarNavGroup = getAdminSidebarGroupForPageId_(
@@ -4240,6 +4561,8 @@
     syncAdminSaveBars_();
     syncAdminFloatingSaveBar_();
     syncAdminActionButtonFeedback_();
+    syncAdminCollectionEditorFocus_();
+    syncAdminCollectionActionsEntrance_();
     syncAdminQuickLinkReveal_();
     maybeLoadCurrentPageData_();
   }
@@ -8947,6 +9270,85 @@
       "This is the current published list.";
   }
 
+  function renderAdminCollectionActions_(config) {
+    if (
+      !config ||
+      !config.canEdit ||
+      adminState.collectionEditorOpen === config.section
+    ) {
+      return "";
+    }
+
+    return [
+      "<div class=\"central-admin-collection-actions",
+      adminState.collectionActionsEntering === config.section ?
+        " is-entering" :
+        "",
+      "\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"open-collection-editor\" data-admin-collection-editor=\"",
+      escapeAttr_(config.section), "\"",
+      config.busy ? " disabled" : "",
+      ">",
+      "<span class=\"central-admin-collection-add-icon\" aria-hidden=\"true\">+</span>",
+      escapeHtml_(config.label || "Add New"),
+      "</button>",
+      "</div>",
+    ].join("");
+  }
+
+  function renderAdminCollectionEditor_(section, editorHtml) {
+    if (adminState.collectionEditorOpen !== section) {
+      return "";
+    }
+
+    return [
+      "<div class=\"central-admin-collection-editor",
+      adminState.collectionEditorEntering ? " is-entering" : "",
+      adminState.collectionEditorExiting === section ? " is-exiting" : "",
+      "\" data-admin-collection-editor-panel=\"",
+      escapeAttr_(section), "\">",
+      "<div class=\"central-admin-collection-editor-inner\">",
+      editorHtml,
+      "</div>",
+      "</div>",
+    ].join("");
+  }
+
+  function syncAdminCollectionEditorFocus_() {
+    if (!appEl || !adminState.collectionEditorFocusPending ||
+      !adminState.collectionEditorOpen) {
+      return;
+    }
+
+    var section = adminState.collectionEditorOpen;
+    adminState.collectionEditorFocusPending = false;
+    adminState.collectionEditorEntering = false;
+    window.requestAnimationFrame(function() {
+      var editorEl = appEl && appEl.querySelector(
+          '[data-admin-collection-editor-panel="' + section + '"]',
+      );
+      if (!editorEl) {
+        return;
+      }
+
+      editorEl.scrollIntoView({behavior: "smooth", block: "start"});
+      var firstField = editorEl.querySelector(
+          "input:not([type=checkbox]):not([disabled]), textarea:not([disabled]), select:not([disabled])",
+      );
+      if (firstField) {
+        firstField.focus({preventScroll: true});
+      }
+    });
+  }
+
+  function syncAdminCollectionActionsEntrance_() {
+    if (!adminState.collectionActionsEntering) {
+      return;
+    }
+
+    adminState.collectionActionsEntering = "";
+  }
+
   function renderQuickLinksPagePanel_(currentPage) {
     return [
       "<section class=\"central-admin-panel\">",
@@ -8976,7 +9378,14 @@
           "Add or edit links below, then drag them into the order you want people to see.",
       ),
       "</div>",
-      renderQuickLinksEditorForm_(),
+      renderAdminCollectionActions_({
+        section: "quickLinks",
+        label: "Add Quick Link",
+        canEdit: canEditQuickLinks_(),
+        busy: adminState.quickLinksLoading || !adminState.quickLinksLoaded ||
+          adminState.quickLinksSaving || adminState.quickLinksPublishing,
+      }),
+      renderAdminCollectionEditor_("quickLinks", renderQuickLinksEditorForm_()),
       renderQuickLinksList_(),
       "</div>",
       "</div>",
@@ -9071,7 +9480,7 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "These links appear on the homepage and in Sunday morning quick actions. Turn on Sunday Only when a link should stay hidden until Sunday Mode is active." :
+            "New links start in Visible. After publishing, drag a link below Disabled whenever you want to hide it from Central. Turn on Sunday Only when it should appear only during Sunday Mode." :
             "You can view Quick Links, but you don't have permission to make changes.",
       ),
       "<div class=\"central-admin-quick-links-feedback\" aria-live=\"polite\">",
@@ -9099,12 +9508,6 @@
         "\">",
         "</label>",
         "<label class=\"central-admin-checkbox\">",
-        "<input type=\"checkbox\" data-admin-field=\"quick-link.active\"",
-        draft.active ? " checked" : "",
-        ">",
-        "<span>Show this link in Central</span>",
-        "</label>",
-        "<label class=\"central-admin-checkbox\">",
         "<input type=\"checkbox\" data-admin-field=\"quick-link.sunday_only\"",
         draft.sunday_only ? " checked" : "",
         ">",
@@ -9123,7 +9526,7 @@
         escapeHtml_(
             adminState.quickLinksEditingId ?
               "Cancel Edit" :
-              "Clear Form",
+              "Cancel",
         ),
         "</button>",
         "</div>",
@@ -9133,8 +9536,15 @@
   }
 
   function renderQuickLinksList_() {
+    var sortedItems = sortQuickLinksItems_(adminState.quickLinksItems);
+    var visibleItems = sortedItems.filter(function(item) {
+      return item && item.active !== false;
+    });
+    var disabledItems = sortedItems.filter(function(item) {
+      return item && item.active === false;
+    });
     var canReorder = canReorderSortableSection_("quickLinks") &&
-      adminState.quickLinksItems.length > 1;
+      adminState.quickLinksItems.length > 0;
 
     if (!isActiveAdminUserRecord_()) {
       return "";
@@ -9178,29 +9588,52 @@
       "<div class=\"central-admin-item-header\">",
       "<strong>Current Quick Links</strong>",
       renderStatusPill_(
-          adminState.quickLinksItems.length + " loaded",
-          "is-safe",
+          visibleItems.length + " visible",
+          visibleItems.length ? "is-safe" : "is-live",
+      ),
+      renderStatusPill_(
+          disabledItems.length + " disabled",
+          disabledItems.length ? "is-live" : "is-safe",
       ),
       "</div>",
       renderAdminNote_(
-          getSortableListInstruction_(canReorder),
+          canReorder ?
+            "Drag links to change their order. Drag a link below Disabled to hide it, or back into Visible to show it again." :
+            "This is the current Quick Links layout on preview.",
       ),
       "<div class=\"central-admin-list\" data-admin-sort-list=\"true\" data-admin-sort-section=\"quickLinks\">",
-      adminState.quickLinksItems.map(function(item) {
-        var isRecentlyAdded =
-          adminState.quickLinksRecentlyAddedId === item.id;
-        var itemMarkup = renderQuickLinksListItem_(item, canReorder);
-        return isRecentlyAdded ? [
-          "<div class=\"central-admin-list-item-reveal\" data-admin-quick-link-reveal=\"true\">",
-          "<div class=\"central-admin-list-item-reveal-inner\">",
-          itemMarkup,
-          "</div>",
-          "</div>",
-        ].join("") : itemMarkup;
-      }).join(""),
+      "<div class=\"central-admin-module-divider central-admin-sort-zone\" data-admin-sort-zone=\"visible\" data-admin-sort-section=\"quickLinks\">",
+      "<span>Visible</span>",
+      "<small>Shown in Central in the order below.</small>",
+      "</div>",
+      visibleItems.length ?
+        renderQuickLinksListItems_(visibleItems, canReorder) :
+        "<div class=\"central-admin-module-empty central-admin-sort-zone\" data-admin-sort-zone=\"visible\" data-admin-sort-section=\"quickLinks\">Drag a disabled link here to show it in Central.</div>",
+      "<div class=\"central-admin-module-divider central-admin-sort-zone\" data-admin-sort-zone=\"disabled\" data-admin-sort-section=\"quickLinks\">",
+      "<span>Disabled</span>",
+      "<small>Hidden from Central until moved back to Visible.</small>",
+      "</div>",
+      disabledItems.length ?
+        renderQuickLinksListItems_(disabledItems, canReorder) :
+        "<div class=\"central-admin-module-empty central-admin-sort-zone\" data-admin-sort-zone=\"disabled\" data-admin-sort-section=\"quickLinks\">Drag a link here to disable it.</div>",
       "</div>",
       "</div>",
     ].join("");
+  }
+
+  function renderQuickLinksListItems_(items, canReorder) {
+    return (Array.isArray(items) ? items : []).map(function(item) {
+      var isRecentlyAdded =
+        adminState.quickLinksRecentlyAddedId === item.id;
+      var itemMarkup = renderQuickLinksListItem_(item, canReorder);
+      return isRecentlyAdded ? [
+        "<div class=\"central-admin-list-item-reveal\" data-admin-quick-link-reveal=\"true\">",
+        "<div class=\"central-admin-list-item-reveal-inner\">",
+        itemMarkup,
+        "</div>",
+        "</div>",
+      ].join("") : itemMarkup;
+    }).join("");
   }
 
   function renderQuickLinksListItem_(item, canReorder) {
@@ -9210,6 +9643,8 @@
           item,
           !canReorder,
           item.title || "quick link",
+          "central-admin-module-item" +
+            (item.active === false ? " is-disabled" : ""),
       ),
       "<div class=\"central-admin-list-main\">",
       "<strong>", escapeHtml_(item.title || "Untitled Link"), "</strong>",
@@ -9217,7 +9652,6 @@
       escapeHtml_(item.url || "No URL"),
       "</a>",
       "<div class=\"central-admin-page-meta\">",
-      renderInlineMeta_("Status", item.active ? "Active" : "Hidden"),
       renderInlineMeta_(
           "Audience",
           item.sunday_only ? "Sunday Only" : "All Modes",
@@ -9474,7 +9908,14 @@
           "Add helpful links, guides, and tools, then drag them into the order you want people to see.",
       ),
       "</div>",
-      renderResourcesEditorForm_(),
+      renderAdminCollectionActions_({
+        section: "resources",
+        label: "Add Resource",
+        canEdit: canEditResources_(),
+        busy: adminState.resourcesLoading || !adminState.resourcesLoaded ||
+          adminState.resourcesSaving || adminState.resourcesPublishing,
+      }),
+      renderAdminCollectionEditor_("resources", renderResourcesEditorForm_()),
       renderResourcesList_(),
       "</div>",
       "</div>",
@@ -9582,7 +10023,7 @@
         escapeHtml_(
             adminState.resourcesEditingId ?
               "Cancel Edit" :
-              "Clear Form",
+              "Cancel",
         ),
         "</button>",
         "</div>",
@@ -9766,7 +10207,14 @@
           "Add church-wide initiatives and featured calls to action, then drag them into the order you want people to see.",
       ),
       "</div>",
-      renderCampaignsEditorForm_(),
+      renderAdminCollectionActions_({
+        section: "campaigns",
+        label: "Add Campaign",
+        canEdit: canEditCampaigns_(),
+        busy: adminState.campaignsLoading || !adminState.campaignsLoaded ||
+          adminState.campaignsSaving || adminState.campaignsPublishing,
+      }),
+      renderAdminCollectionEditor_("campaigns", renderCampaignsEditorForm_()),
       renderCampaignsList_(),
       "</div>",
       "</div>",
@@ -9890,7 +10338,7 @@
         escapeHtml_(
             adminState.campaignsEditingId ?
               "Cancel Edit" :
-              "Clear Form",
+              "Cancel",
         ),
         "</button>",
         "</div>",
@@ -10074,7 +10522,14 @@
           "Add volunteer opportunities, then drag them into the order you want people to see.",
       ),
       "</div>",
-      renderServeNeedsEditorForm_(),
+      renderAdminCollectionActions_({
+        section: "serveNeeds",
+        label: "Add Serve Need",
+        canEdit: canEditServeNeeds_(),
+        busy: adminState.serveNeedsLoading || !adminState.serveNeedsLoaded ||
+          adminState.serveNeedsSaving || adminState.serveNeedsPublishing,
+      }),
+      renderAdminCollectionEditor_("serveNeeds", renderServeNeedsEditorForm_()),
       renderServeNeedsList_(),
       "</div>",
       "</div>",
@@ -10193,7 +10648,7 @@
         escapeHtml_(
             adminState.serveNeedsEditingId ?
               "Cancel Edit" :
-              "Clear Form",
+              "Cancel",
         ),
         "</button>",
         "</div>",
@@ -10379,7 +10834,14 @@
           "Add connection cards and action pathways, then drag them into the order you want people to see.",
       ),
       "</div>",
-      renderNextStepsEditorForm_(),
+      renderAdminCollectionActions_({
+        section: "nextSteps",
+        label: "Add Next Step",
+        canEdit: canEditNextSteps_(),
+        busy: adminState.nextStepsLoading || !adminState.nextStepsLoaded ||
+          adminState.nextStepsSaving || adminState.nextStepsPublishing,
+      }),
+      renderAdminCollectionEditor_("nextSteps", renderNextStepsEditorForm_()),
       renderNextStepsList_(),
       "</div>",
       "</div>",
@@ -10481,7 +10943,7 @@
         escapeHtml_(
             adminState.nextStepsEditingId ?
               "Cancel Edit" :
-              "Clear Form",
+              "Cancel",
         ),
         "</button>",
         "</div>",
@@ -15376,6 +15838,10 @@
 
   function normalizeQuickLinkListItem_(item, index) {
     var source = item || {};
+    var hasActiveValue = Object.prototype.hasOwnProperty.call(
+        source,
+        "active",
+    );
 
     return {
       id: String(source.id || ("quick-link-" + String(index + 1))).trim(),
@@ -15384,8 +15850,10 @@
       sort: Number.isFinite(Number(source.sort)) ?
         Number(source.sort) :
         50,
-      active: source.active === true ||
-        String(source.active || "").toLowerCase() === "true",
+      active: hasActiveValue ?
+        source.active === true ||
+          String(source.active || "").toLowerCase() === "true" :
+        true,
       sunday_only: source.sunday_only === true ||
         String(source.sunday_only || "").toLowerCase() === "true",
     };
@@ -15588,6 +16056,10 @@
     var data = docSnapshot && typeof docSnapshot.data === "function" ?
       docSnapshot.data() || {} :
       {};
+    var hasActiveValue = Object.prototype.hasOwnProperty.call(
+        data,
+        "active",
+    );
 
     return {
       id: docSnapshot.id,
@@ -15596,7 +16068,10 @@
       sort: Number.isFinite(Number(data.sort)) ?
         Number(data.sort) :
         50,
-      active: data.active === true || String(data.active || "").toLowerCase() === "true",
+      active: hasActiveValue ?
+        data.active === true ||
+          String(data.active || "").toLowerCase() === "true" :
+        true,
       sunday_only: data.sunday_only === true ||
         String(data.sunday_only || "").toLowerCase() === "true",
     };

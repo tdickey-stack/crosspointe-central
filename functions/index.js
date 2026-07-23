@@ -95,6 +95,9 @@ const CENTRAL_BULLETIN_IMAGE_STORAGE_PREFIX =
   "bulletin-mode/fallback-images";
 const CENTRAL_BULLETIN_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const CENTRAL_BULLETIN_EVENT_OVERRIDE_LIMIT = 200;
+const CENTRAL_BULLETIN_MAX_CAMPAIGNS = 3;
+const CENTRAL_BULLETIN_MAX_SERVE_NEEDS = 3;
+const CENTRAL_BULLETIN_MAX_FRONT_CONTENT_ITEMS = 4;
 const CENTRAL_BULLETIN_CAMPAIGN_ICON_IDS = new Set([
   "general",
   "gift",
@@ -394,7 +397,7 @@ function clearCentralDataCache_() {
 const cachedYouVersionPassages = new Map();
 const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
-  {key: "bulletin", label: "Bulletin Mode"},
+  {key: "bulletin", label: "Print Mode"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
   {key: "wayfinder", label: "Wayfinder"},
@@ -1503,7 +1506,7 @@ export const bulletinMode = onRequest(
             ok: true,
             imageUrl: uploadResult.imageUrl,
             storagePath: uploadResult.storagePath,
-            message: "Bulletin welcome image uploaded.",
+            message: "Print Mode welcome image uploaded.",
           });
           return;
         }
@@ -1526,7 +1529,7 @@ export const bulletinMode = onRequest(
         response.status(200).json({
           ok: true,
           config: config,
-          message: "Bulletin Mode settings saved.",
+          message: "Print Mode settings saved.",
         });
       } catch (error) {
         response.status(getBulletinModeStatusCode_(error)).json({
@@ -5869,7 +5872,7 @@ async function verifyBulletinModeAccess_(decodedToken, requireEdit) {
   if (!isAllowedCentralAdminEmail_(email)) {
     throw createPreviewPublishError_(
         "admin-email-required",
-        "Use a CrossPointe account or an explicitly allowed tester account to manage Bulletin Mode.",
+        "Use a CrossPointe account or an explicitly allowed tester account to manage Print Mode.",
     );
   }
 
@@ -5880,7 +5883,7 @@ async function verifyBulletinModeAccess_(decodedToken, requireEdit) {
   if (!userSnapshot.exists || userSnapshot.get("active") !== true) {
     throw createPreviewPublishError_(
         "admin-access-required",
-        "Your admin access record must be active before you can use Bulletin Mode.",
+        "Your admin access record must be active before you can use Print Mode.",
     );
   }
 
@@ -5901,8 +5904,8 @@ async function verifyBulletinModeAccess_(decodedToken, requireEdit) {
     throw createPreviewPublishError_(
         "bulletin-mode-forbidden",
         requireEdit ?
-          "Your current admin access level does not allow saving Bulletin Mode settings." :
-          "Your current admin access level does not allow viewing Bulletin Mode.",
+          "Your current admin access level does not allow saving Print Mode settings." :
+          "Your current admin access level does not allow viewing Print Mode.",
     );
   }
 
@@ -6931,7 +6934,7 @@ function getBulletinModeStatusCode_(error) {
 function getBulletinModeErrorMessage_(error) {
   return error && error.message ?
     error.message :
-    "Unable to load or save Bulletin Mode settings.";
+    "Unable to load or save Print Mode settings.";
 }
 
 function createChangeRequestError_(code, message) {
@@ -11779,6 +11782,37 @@ function buildPublishedNextStepPayload_(sourceData) {
   };
 }
 
+function getDefaultBulletinFallbackBlocks_() {
+  return [
+    {
+      id: "new-here",
+      eyebrow: "New Here?",
+      title: "We'd Love to Help You Get Connected",
+      description: [
+        "Find your next step, learn more about CrossPointe, and discover",
+        "ways to get involved at central.crosspointe.tv.",
+      ].join(" "),
+      imageUrl: "",
+      imageStoragePath: "",
+      imageSide: "right",
+      enabled: true,
+    },
+    {
+      id: "stay-connected",
+      eyebrow: "Stay Connected",
+      title: "Everything You Need for the Week Ahead",
+      description: [
+        "Explore events, groups, resources, and serving opportunities",
+        "anytime at central.crosspointe.tv.",
+      ].join(" "),
+      imageUrl: "",
+      imageStoragePath: "",
+      imageSide: "left",
+      enabled: true,
+    },
+  ];
+}
+
 function normalizeBulletinModePayload_(sourceData) {
   const source = sourceData && typeof sourceData === "object" ?
     sourceData :
@@ -11796,6 +11830,9 @@ function normalizeBulletinModePayload_(sourceData) {
     typeof source.fallbackHero === "object" ?
     source.fallbackHero :
     {};
+  const fallbackBlockSource = Array.isArray(source.fallbackBlocks) ?
+    source.fallbackBlocks :
+    getDefaultBulletinFallbackBlocks_();
   const rawEvents = Array.isArray(source.events) ? source.events : [];
   const campaignIds = Array.isArray(source.campaignIds) ?
     source.campaignIds :
@@ -11817,12 +11854,35 @@ function normalizeBulletinModePayload_(sourceData) {
       icon: normalizeBulletinCampaignIconId_(item && item.icon),
     });
   });
+  const normalizedCampaignIds = campaignIds
+      .map((id) => normalizeBulletinModeText_(id, 160))
+      .filter((id, index, ids) => id && ids.indexOf(id) === index)
+      .slice(0, CENTRAL_BULLETIN_MAX_CAMPAIGNS);
+  const rawServeNeedIds = Array.isArray(source.serveNeedIds) ?
+    source.serveNeedIds :
+    (source.serveNeedId ? [source.serveNeedId] : []);
+  const normalizedServeNeedIds = rawServeNeedIds
+      .map((id) => normalizeBulletinModeText_(id, 160))
+      .filter((id, index, ids) => id && ids.indexOf(id) === index)
+      .slice(
+          0,
+          Math.min(
+              CENTRAL_BULLETIN_MAX_SERVE_NEEDS,
+              Math.max(
+                  0,
+                  CENTRAL_BULLETIN_MAX_FRONT_CONTENT_ITEMS -
+                    normalizedCampaignIds.length,
+              ),
+          ),
+      );
 
   return {
     serviceDate: normalizeThisSundayDateValue_(source.serviceDate),
     printFormat: source.printFormat === "full-page" ?
       "full-page" : "half-letter",
     heroSource: source.heroSource === "manual" ? "manual" : "featured",
+    frontContentSource: source.frontContentSource === "fallback" ?
+      "fallback" : "live",
     headings: {
       frontHeading: normalizeBulletinModeHeading_(
           headingsSource.frontHeading,
@@ -11888,6 +11948,31 @@ function normalizeBulletinModePayload_(sourceData) {
           fallbackSource.imageStoragePath,
       ),
     },
+    fallbackBlocks: fallbackBlockSource.slice(0, 4)
+        .map((blockItem, index) => {
+          const block = blockItem && typeof blockItem === "object" ?
+            blockItem :
+            {};
+          return {
+            id: normalizeBulletinModeText_(
+                block.id || "fallback-" + String(index + 1),
+                160,
+            ),
+            eyebrow: normalizeBulletinModeText_(block.eyebrow, 80),
+            title: normalizeBulletinModeText_(block.title, 180),
+            description: normalizeBulletinModeLongText_(
+                block.description,
+                800,
+            ),
+            imageUrl: normalizeBulletinModeImageUrl_(block.imageUrl),
+            imageStoragePath: normalizeBulletinModeStoragePath_(
+                block.imageStoragePath,
+            ),
+            imageSide: block.imageSide === "left" ? "left" : "right",
+            enabled: block.enabled !== false,
+          };
+        })
+        .filter((block) => block.id && block.title),
     events: rawEvents
         .slice(0, CENTRAL_BULLETIN_EVENT_OVERRIDE_LIMIT)
         .map((eventItem) => {
@@ -11906,11 +11991,10 @@ function normalizeBulletinModePayload_(sourceData) {
             includeDescription: item.includeDescription !== false,
           };
         }).filter((item) => item.id),
-    campaignIds: campaignIds.slice(0, 12)
-        .map((id) => normalizeBulletinModeText_(id, 160))
-        .filter(Boolean),
+    campaignIds: normalizedCampaignIds,
     campaignIcons: campaignIcons,
-    serveNeedId: normalizeBulletinModeText_(source.serveNeedId, 160),
+    serveNeedIds: normalizedServeNeedIds,
+    serveNeedId: normalizedServeNeedIds[0] || "",
   };
 }
 
@@ -12365,7 +12449,7 @@ async function writeBulletinModeAuditLog_(actor, eventCount) {
       section: "bulletin",
       operation: "save",
       itemCount: Number(eventCount || 0),
-      message: "Bulletin Mode settings saved.",
+      message: "Print Mode settings saved.",
       actorUid: String(actor && actor.uid || "").trim(),
       actorEmail: String(actor && actor.email || "").trim(),
       actorDisplayName: String(actor && actor.displayName || "").trim(),

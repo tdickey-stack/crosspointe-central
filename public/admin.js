@@ -39,6 +39,47 @@
     {id: "donation", label: "Donation"},
     {id: "calendar", label: "Calendar"},
   ];
+  var PRINT_MODE_STEPS = [
+    {
+      id: "layout",
+      label: "Page Layout",
+      shortLabel: "Layout",
+      description: "Choose the printed size and finishing format.",
+    },
+    {
+      id: "hero",
+      label: "Hero Info",
+      shortLabel: "Hero",
+      description: "Set the Sunday date, front heading, and main feature.",
+    },
+    {
+      id: "front",
+      label: "Front Page",
+      shortLabel: "Front",
+      description: "Choose giving, campaign, and serve information.",
+    },
+    {
+      id: "events",
+      label: "Events",
+      shortLabel: "Events",
+      description: "Build the event list for the back of the insert.",
+    },
+    {
+      id: "review",
+      label: "Review & Print",
+      shortLabel: "Print",
+      description: "Check both sides, then print or save a PDF.",
+    },
+  ];
+  var PRINT_MODE_MAX_CAMPAIGNS = 3;
+  var PRINT_MODE_MAX_SERVE_NEEDS = 3;
+  var PRINT_MODE_MAX_FRONT_CONTENT_ITEMS = 4;
+  var PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS = 45;
+  var PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS = 70;
+  var PRINT_MODE_EVENT_CONTINUATION_TRIGGER_WEIGHT = 6;
+  var PRINT_MODE_EVENT_CONTINUATION_MAX_COLUMN_WEIGHT = 7.5;
+  var PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS = 18;
+  var PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS = 12;
   var SUBMIT_CHANGE_REQUEST_ENDPOINT = "/api/admin/submit-change-request";
   var REVIEW_CHANGE_REQUEST_ENDPOINT = "/api/admin/review-change-request";
   var LIST_ADMIN_USERS_ENDPOINT = "/api/admin/list-users";
@@ -126,10 +167,10 @@
     },
     {
       id: "bulletin",
-      label: "Bulletin Mode",
+      label: "Print Mode",
       route: "/admin/bulletin",
       pageAccessKey: "bulletin",
-      summary: "Build a two-sided, two-up half-letter insert from current Central content.",
+      summary: "Build and print a guided Sunday insert from current Central content.",
       collectionPath: "centralAdmin/root/public/bulletinMode",
       status: "Print workflow",
     },
@@ -925,6 +966,17 @@
     bulletinSync: null,
     bulletinError: "",
     bulletinMessage: "",
+    bulletinFallbackBlockEditorOpen: false,
+    bulletinFallbackBlockEditingId: "",
+    bulletinFallbackBlockDraft: createEmptyBulletinFallbackBlockDraft_(),
+    bulletinFallbackBlockImageUploading: false,
+    printModeQuickAddSection: "",
+    printModeStep: 1,
+    printModeStepDirection: "",
+    printModePreviewSide: "front",
+    printModePreviewDirection: "",
+    printModePreviewSwitching: false,
+    printModeFormatTransition: "",
     sundayLoaded: false,
     sundayLoading: false,
     sundayCurrent: null,
@@ -1446,6 +1498,30 @@
       var resetDirtyScope = ADMIN_RESET_ACTION_DIRTY_SCOPES[action] || "";
       var editDirtyScope = ADMIN_EDIT_ACTION_DIRTY_SCOPES[action] || "";
 
+      if (
+        action === "reset-campaign-form" &&
+        adminState.printModeQuickAddSection === "campaigns"
+      ) {
+        event.preventDefault();
+        clearAdminDirtyScope_("campaign");
+        resetCampaignsDraft_();
+        adminState.printModeQuickAddSection = "";
+        renderAdmin_();
+        return;
+      }
+
+      if (
+        action === "reset-serve-need-form" &&
+        adminState.printModeQuickAddSection === "serveNeeds"
+      ) {
+        event.preventDefault();
+        clearAdminDirtyScope_("serve-need");
+        resetServeNeedsDraft_();
+        adminState.printModeQuickAddSection = "";
+        renderAdmin_();
+        return;
+      }
+
       if (resetDirtyScope) {
         var resetCollectionSection =
           getAdminCollectionSectionForDirtyScope_(resetDirtyScope);
@@ -1529,13 +1605,114 @@
         return;
       }
 
+      if (action === "print-mode-step") {
+        event.preventDefault();
+        setPrintModeStep_(
+            Number(button.getAttribute("data-admin-print-mode-step")),
+        );
+        return;
+      }
+
+      if (action === "print-mode-previous") {
+        event.preventDefault();
+        setPrintModeStep_(adminState.printModeStep - 1);
+        return;
+      }
+
+      if (action === "print-mode-next") {
+        event.preventDefault();
+        setPrintModeStep_(adminState.printModeStep + 1);
+        return;
+      }
+
+      if (action === "print-mode-preview-side") {
+        event.preventDefault();
+        setPrintModePreviewSide_(
+            button.getAttribute("data-admin-print-mode-preview-side"),
+        );
+        return;
+      }
+
+      if (action === "open-print-mode-quick-add") {
+        event.preventDefault();
+        openPrintModeQuickAdd_(
+            button.getAttribute("data-admin-print-mode-quick-add"),
+        );
+        return;
+      }
+
+      if (action === "close-print-mode-quick-add") {
+        event.preventDefault();
+        closePrintModeQuickAdd_();
+        return;
+      }
+
+      if (action === "open-bulletin-fallback-block-editor") {
+        event.preventDefault();
+        openBulletinFallbackBlockEditor_();
+        return;
+      }
+
+      if (action === "edit-bulletin-fallback-block") {
+        event.preventDefault();
+        openBulletinFallbackBlockEditor_(
+            button.getAttribute("data-admin-doc-id"),
+        );
+        return;
+      }
+
+      if (action === "close-bulletin-fallback-block-editor") {
+        event.preventDefault();
+        closeBulletinFallbackBlockEditor_();
+        return;
+      }
+
+      if (action === "save-bulletin-fallback-block") {
+        event.preventDefault();
+        saveBulletinFallbackBlock_();
+        return;
+      }
+
+      if (action === "move-bulletin-fallback-block") {
+        event.preventDefault();
+        moveBulletinFallbackBlock_(
+            button.getAttribute("data-admin-doc-id"),
+            button.getAttribute("data-admin-move-direction"),
+        );
+        return;
+      }
+
+      if (action === "toggle-bulletin-fallback-block") {
+        event.preventDefault();
+        toggleBulletinFallbackBlock_(
+            button.getAttribute("data-admin-doc-id"),
+        );
+        return;
+      }
+
+      if (action === "remove-bulletin-fallback-block") {
+        event.preventDefault();
+        removeBulletinFallbackBlock_(
+            button.getAttribute("data-admin-doc-id"),
+        );
+        return;
+      }
+
+      if (action === "remove-bulletin-fallback-block-image") {
+        event.preventDefault();
+        adminState.bulletinFallbackBlockDraft.imageUrl = "";
+        adminState.bulletinFallbackBlockDraft.imageStoragePath = "";
+        renderAdmin_();
+        return;
+      }
+
       if (action === "remove-bulletin-fallback-image") {
         event.preventDefault();
         markAdminDirtyScope_("bulletin");
         adminState.bulletinDraft.fallbackHero.imageUrl = "";
         adminState.bulletinDraft.fallbackHero.imageStoragePath = "";
         adminState.bulletinMessage =
-          "Welcome image removed from this draft. Save Bulletin Settings to keep the change.";
+          "Welcome image removed from this draft. Save your changes to keep it.";
         renderAdmin_();
         return;
       }
@@ -1658,6 +1835,9 @@
       if (action === "reset-campaign-form") {
         event.preventDefault();
         resetCampaignsDraft_();
+        if (adminState.printModeQuickAddSection === "campaigns") {
+          adminState.printModeQuickAddSection = "";
+        }
         renderAdmin_();
         return;
       }
@@ -1982,6 +2162,9 @@
       if (action === "reset-serve-need-form") {
         event.preventDefault();
         resetServeNeedsDraft_();
+        if (adminState.printModeQuickAddSection === "serveNeeds") {
+          adminState.printModeQuickAddSection = "";
+        }
         renderAdmin_();
         return;
       }
@@ -2175,7 +2358,9 @@
 
     var bulletinChoice = event.target.closest("[data-admin-bulletin-choice]");
     if (bulletinChoice) {
-      updateBulletinChoice_(bulletinChoice);
+      if (updateBulletinChoice_(bulletinChoice)) {
+        markAdminDirtyScope_("bulletin");
+      }
       renderAdmin_();
       return;
     }
@@ -2417,6 +2602,16 @@
     }
 
     cancelAdminFloatingSaveBarExit_();
+    if (
+      normalizedScope === "bulletin" &&
+      adminState.currentPageId === "bulletin" &&
+      adminState.bulletinLoaded
+    ) {
+      adminState.floatingSaveBarScope = "bulletin";
+      syncAdminFloatingSaveBar_();
+      return;
+    }
+
     adminState.floatingSaveBarExitScope = normalizedScope;
     adminState.floatingSaveBarExitLabel = String(label || "Changes saved");
     var collectionSection = adminState.collectionEditorCloseAfterExit;
@@ -2434,6 +2629,13 @@
       adminState.floatingSaveBarExitScope = "";
       adminState.floatingSaveBarExitLabel = "";
       adminState.floatingSaveBarScope = "";
+      if (
+        adminState.currentPageId === "bulletin" &&
+        adminState.bulletinLoaded
+      ) {
+        syncAdminFloatingSaveBar_();
+        return;
+      }
       var saveBar = appEl && appEl.querySelector(
           "[data-admin-floating-save-bar]",
       );
@@ -2561,6 +2763,14 @@
         },
     );
 
+    if (
+      adminState.currentPageId === "bulletin" &&
+      adminState.bulletinLoaded
+    ) {
+      syncPrintModeWorkflowDock_();
+      return;
+    }
+
     var action = adminState.actionFeedbackPendingKey ||
       adminState.actionFeedbackSuccessKey ||
       getAdminActionForDirtyScope_(adminState.activeDirtyScope) ||
@@ -2633,6 +2843,69 @@
     }
     adminState.floatingSaveBarScope = scope;
     mainEl.appendChild(saveBar);
+  }
+
+  function syncPrintModeWorkflowDock_() {
+    var mainEl = appEl && appEl.querySelector(".central-admin-main");
+    if (!mainEl) {
+      return;
+    }
+
+    var step = getPrintModeStep_();
+    var definition = getPrintModeStepDefinition_(step);
+    var saveState = getAdminSaveBarState_("save-bulletin", "bulletin");
+    var canSave = isEditorLevelPermission_(getPageAccessLevel_("bulletin"));
+    var showSave = canSave && saveState !== "clean";
+    var isNewDock = adminState.floatingSaveBarScope !== "bulletin";
+    var statusLabel = getAdminSaveBarStatusLabel_(saveState);
+    var saveLabel = adminState.bulletinSaving ? "Saving..." : "Save Changes";
+    var dock = document.createElement("div");
+
+    dock.className = [
+      "central-admin-floating-save-bar",
+      "central-admin-print-mode-dock",
+      "is-" + saveState,
+      isNewDock ? "is-entering" : "",
+    ].filter(Boolean).join(" ");
+    dock.setAttribute("data-admin-floating-save-bar", "true");
+    dock.setAttribute("data-admin-save-scope", "bulletin");
+    dock.setAttribute("role", "status");
+    dock.setAttribute("aria-live", "polite");
+    dock.innerHTML = [
+      "<div class=\"central-admin-print-mode-dock-status\">",
+      "<span class=\"central-admin-print-mode-dock-step\">Step ",
+      String(step), " of ", String(PRINT_MODE_STEPS.length), "</span>",
+      "<strong>", escapeHtml_(definition.label), "</strong>",
+      "<small><span class=\"central-admin-floating-save-dot\" aria-hidden=\"true\"></span>",
+      escapeHtml_(statusLabel), "</small>",
+      "</div>",
+      "<div class=\"central-admin-floating-save-actions central-admin-print-mode-dock-actions\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"print-mode-previous\"",
+      step === 1 || adminState.bulletinSaving ? " disabled" : "",
+      ">Previous</button>",
+      showSave ? [
+        "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-bulletin\"",
+        adminState.bulletinSaving ? " disabled" : "",
+        ">", escapeHtml_(saveLabel), "</button>",
+      ].join("") : "",
+      step < PRINT_MODE_STEPS.length ? [
+        "<button type=\"button\" class=\"central-admin-link-button ",
+        showSave ? "is-secondary" : "is-primary",
+        "\" data-admin-action=\"print-mode-next\"",
+        adminState.bulletinSaving ? " disabled" : "",
+        ">Next</button>",
+      ].join("") : [
+        "<button type=\"button\" class=\"central-admin-link-button ",
+        showSave ? "is-secondary" : "is-primary",
+        "\" data-admin-action=\"print-bulletin\"",
+        adminState.bulletinSaving ? " disabled" : "",
+        ">Print / Save PDF</button>",
+      ].join(""),
+      "</div>",
+    ].join("");
+
+    adminState.floatingSaveBarScope = "bulletin";
+    mainEl.appendChild(dock);
   }
 
   function beginAdminActionFeedback_(action) {
@@ -3813,6 +4086,16 @@
   function handleAdminInput_(event) {
     if (
       event.type === "change" &&
+      event.target.hasAttribute("data-admin-bulletin-block-image")
+    ) {
+      uploadBulletinFallbackBlockImage_(
+          event.target.files && event.target.files[0],
+      );
+      return;
+    }
+
+    if (
+      event.type === "change" &&
       event.target.hasAttribute("data-admin-bulletin-fallback-image")
     ) {
       markAdminDirtyScope_("bulletin");
@@ -3829,14 +4112,21 @@
         "data-admin-bulletin-event-field",
     );
     if (bulletinEventId && bulletinEventField) {
+      var bulletinEventValue = event.target.type === "checkbox" ?
+        !!event.target.checked :
+        event.target.value;
       markAdminDirtyScope_("bulletin");
       updateBulletinEventField_(
           bulletinEventId,
           bulletinEventField,
-          event.target.type === "checkbox" ?
-            !!event.target.checked :
-            event.target.value,
+          bulletinEventValue,
       );
+      if (bulletinEventField === "description") {
+        syncBulletinEventDescriptionGuidance_(
+            bulletinEventId,
+            bulletinEventValue,
+        );
+      }
       return;
     }
 
@@ -3863,6 +4153,15 @@
       return;
     }
 
+    if (field.indexOf("bulletin-block.") === 0) {
+      var fallbackBlockField = field.replace("bulletin-block.", "");
+      adminState.bulletinFallbackBlockDraft[fallbackBlockField] = nextValue;
+      if (fallbackBlockField === "imageSide") {
+        renderAdmin_();
+      }
+      return;
+    }
+
     if (field === "delete-confirm.skip") {
       adminState.deleteConfirmSkip = nextValue;
       return;
@@ -3880,7 +4179,6 @@
     if (field.indexOf("bulletin.") === 0) {
       updateBulletinDraftField_(field.replace("bulletin.", ""), nextValue);
       if (field === "bulletin.serviceDate" ||
-        field === "bulletin.serveNeedId" ||
         field === "bulletin.featured.includeDescription" ||
         event.type === "change") {
         renderAdmin_();
@@ -4711,6 +5009,8 @@
       renderAdminUserEditorModal_(currentPage),
       renderDeleteConfirmModal_(),
       renderBulletinEventEditorModal_(currentPage),
+      renderPrintModeQuickAddModal_(currentPage),
+      renderBulletinFallbackBlockModal_(currentPage),
       "</div>",
       currentPage.id === "bulletin" && adminState.bulletinLoaded ?
         renderBulletinPrintRoot_() :
@@ -5176,7 +5476,9 @@
       "<textarea rows=\"5\" maxlength=\"1200\" data-admin-bulletin-event-id=\"",
       escapeAttr_(item.id), "\" data-admin-bulletin-event-field=\"description\">",
       escapeHtml_(item.description), "</textarea>",
-      "<small class=\"central-admin-field-hint\">Formatting: **bold**, *italics*, headings, and - or 1. lists. Line breaks are preserved.</small></label>",
+      "<small class=\"central-admin-field-hint\">Formatting: **bold**, *italics*, headings, and - or 1. lists. Line breaks are preserved.</small>",
+      renderBulletinEventDescriptionGuidance_(item),
+      "</label>",
       "<label class=\"central-admin-checkbox central-admin-modal-checkbox\"><input type=\"checkbox\" data-admin-bulletin-event-id=\"",
       escapeAttr_(item.id), "\" data-admin-bulletin-event-field=\"includeDescription\"",
       item.includeDescription ? " checked" : "", "><span>Include full description</span></label>",
@@ -5186,6 +5488,146 @@
       "</div>",
       "</div>",
       "</div>",
+    ].join("");
+  }
+
+  function renderPrintModeQuickAddModal_(currentPage) {
+    var section = adminState.printModeQuickAddSection;
+    if (
+      !currentPage ||
+      currentPage.id !== "bulletin" ||
+      (section !== "campaigns" && section !== "serveNeeds")
+    ) {
+      return "";
+    }
+
+    var isCampaign = section === "campaigns";
+    var isLoading = isCampaign ?
+      adminState.campaignsLoading :
+      adminState.serveNeedsLoading;
+    var isLoaded = isCampaign ?
+      adminState.campaignsLoaded :
+      adminState.serveNeedsLoaded;
+
+    return [
+      "<div class=\"central-admin-modal central-admin-print-mode-quick-add-modal\" role=\"presentation\">",
+      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-print-mode-quick-add\" aria-label=\"Close ",
+      isCampaign ? "campaign" : "serve opportunity",
+      " editor\"></button>",
+      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-print-mode-quick-add-title\">",
+      "<div class=\"central-admin-modal-copy\">",
+      "<span class=\"central-admin-kicker\">Print Mode Shortcut</span>",
+      "<h3 id=\"central-admin-print-mode-quick-add-title\">Add ",
+      isCampaign ? "Campaign" : "Serve Opportunity",
+      "</h3><p>This publishes to the shared Central list and makes it available in Print Mode.</p>",
+      "</div>",
+      isLoading || !isLoaded ?
+        renderAdminNote_(
+            isCampaign ?
+              "Loading the Campaigns editor..." :
+              "Loading the Serve Opportunities editor...",
+        ) :
+        (isCampaign ?
+          renderCampaignsEditorForm_() :
+          renderServeNeedsEditorForm_()),
+      "</div></div>",
+    ].join("");
+  }
+
+  function renderBulletinFallbackBlockModal_(currentPage) {
+    if (
+      !currentPage ||
+      currentPage.id !== "bulletin" ||
+      !adminState.bulletinFallbackBlockEditorOpen
+    ) {
+      return "";
+    }
+
+    var draft = adminState.bulletinFallbackBlockDraft ||
+      createEmptyBulletinFallbackBlockDraft_();
+    var imageUrl = getBulletinFallbackImageUrl_(draft.imageUrl);
+    var editing = !!adminState.bulletinFallbackBlockEditingId;
+
+    return [
+      "<div class=\"central-admin-modal central-admin-bulletin-block-modal\" role=\"presentation\">",
+      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-bulletin-fallback-block-editor\" aria-label=\"Close custom block editor\"></button>",
+      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-bulletin-block-modal-title\">",
+      "<div class=\"central-admin-modal-copy\">",
+      "<span class=\"central-admin-kicker\">Custom Front Content</span>",
+      "<h3 id=\"central-admin-bulletin-block-modal-title\">",
+      editing ? "Edit Custom Block" : "Add Custom Block",
+      "</h3><p>Add useful evergreen information for Sundays without a Campaign or Serve Opportunity.</p>",
+      "</div>",
+      "<div class=\"central-admin-bulletin-block-modal-fields\">",
+      renderAdminInputField_({
+        label: "Eyebrow",
+        field: "bulletin-block.eyebrow",
+        value: draft.eyebrow,
+        maxLength: 80,
+        placeholder: "New Here?",
+      }),
+      renderAdminInputField_({
+        label: "Title",
+        field: "bulletin-block.title",
+        value: draft.title,
+        maxLength: 180,
+        placeholder: "We'd Love to Help You Get Connected",
+      }),
+      renderAdminTextareaField_({
+        label: "Description",
+        field: "bulletin-block.description",
+        value: draft.description,
+        rows: 4,
+        maxLength: 800,
+        wide: true,
+      }),
+      "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-block-image-side\">",
+      "<legend>Image Placement</legend>",
+      "<label class=\"", draft.imageSide === "left" ? "is-active" : "",
+      "\"><input type=\"radio\" name=\"bulletin-block-image-side\" value=\"left\" data-admin-field=\"bulletin-block.imageSide\"",
+      draft.imageSide === "left" ? " checked" : "",
+      "><span><strong>Image Left</strong><small>Text follows the image.</small></span></label>",
+      "<label class=\"", draft.imageSide !== "left" ? "is-active" : "",
+      "\"><input type=\"radio\" name=\"bulletin-block-image-side\" value=\"right\" data-admin-field=\"bulletin-block.imageSide\"",
+      draft.imageSide !== "left" ? " checked" : "",
+      "><span><strong>Image Right</strong><small>Text leads into the image.</small></span></label>",
+      "</fieldset>",
+      "<div class=\"central-admin-bulletin-image-editor",
+      imageUrl ? " has-image" : "", "\">",
+      imageUrl ?
+        "<img src=\"" + escapeAttr_(imageUrl) + "\" alt=\"Current custom block image\">" :
+        "<div class=\"central-admin-bulletin-image-placeholder\">Optional block image</div>",
+      "<div class=\"central-admin-bulletin-image-actions\">",
+      "<label class=\"central-admin-link-button is-secondary central-admin-file-button",
+      adminState.bulletinFallbackBlockImageUploading ? " is-disabled" : "",
+      "\"><span>",
+      adminState.bulletinFallbackBlockImageUploading ?
+        "Uploading..." :
+        (imageUrl ? "Replace image" : "Upload image"),
+      "</span><input type=\"file\" accept=\"image/jpeg,image/png,image/webp\" data-admin-bulletin-block-image",
+      adminState.bulletinFallbackBlockImageUploading ? " disabled" : "",
+      "></label>",
+      imageUrl ? [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"remove-bulletin-fallback-block-image\"",
+        adminState.bulletinFallbackBlockImageUploading ? " disabled" : "",
+        ">Remove image</button>",
+      ].join("") : "",
+      "<small>JPEG, PNG, or WebP up to 10 MB.</small>",
+      "</div></div>",
+      "<label class=\"central-admin-checkbox central-admin-modal-checkbox\"><input type=\"checkbox\" data-admin-field=\"bulletin-block.enabled\"",
+      draft.enabled !== false ? " checked" : "",
+      "><span>Include this block when custom content is used</span></label>",
+      "</div>",
+      adminState.bulletinError ?
+        "<p class=\"central-admin-note\">" +
+          escapeHtml_(adminState.bulletinError) + "</p>" :
+        "",
+      "<div class=\"central-admin-action-row central-admin-modal-actions\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"close-bulletin-fallback-block-editor\">Cancel</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-bulletin-fallback-block\"",
+      adminState.bulletinFallbackBlockImageUploading ? " disabled" : "",
+      ">", editing ? "Save Block" : "Add Block", "</button>",
+      "</div></div></div>",
     ].join("");
   }
 
@@ -5689,7 +6131,7 @@
     }
 
     if (page.id === "bulletin") {
-      return "A print-ready half-letter Sunday insert.";
+      return "A guided Sunday print workflow with a live preview.";
     }
 
     if (page.id === "quick-links") {
@@ -6018,8 +6460,6 @@
   function renderBulletinPagePanel_(currentPage) {
     var permission = getPageAccessLevel_("bulletin");
     var canSave = isEditorLevelPermission_(permission);
-    var printFormat = getBulletinPrintFormat_();
-    var fullPage = printFormat === "full-page";
 
     if (adminState.bulletinLoading && !adminState.bulletinLoaded) {
       return [
@@ -6030,7 +6470,7 @@
         "</div>", renderStatusPill_("Loading", "is-live"), "</div>",
         "<div class=\"central-admin-page-body\">",
         renderAdminNote_(
-            "Loading the current Central content and saved bulletin settings.",
+            "Loading the current Central content and saved Print Mode settings.",
         ),
         "</div></section>",
       ].join("");
@@ -6051,57 +6491,785 @@
     }
 
     return [
-      "<section class=\"central-admin-panel central-admin-bulletin-panel\">",
+      "<section class=\"central-admin-panel central-admin-bulletin-panel central-admin-print-mode-panel\">",
       "<div class=\"central-admin-panel-header\"><div>",
       "<h3>", escapeHtml_(currentPage.label), "</h3>",
       "<p>", escapeHtml_(currentPage.summary), "</p>",
-      "</div>", renderStatusPill_(
-          fullPage ? "Full-page single-sided" : "2-up duplex",
-          "is-safe",
-      ), "</div>",
+      "</div></div>",
       "<div class=\"central-admin-page-body\">",
-      "<div class=\"central-admin-page-meta\">",
-      renderInlineMeta_(
-          "Paper",
-          fullPage ? "US Letter portrait" : "US Letter landscape",
-      ),
-      renderInlineMeta_(
-          "Sides",
-          fullPage ? "Single-sided" : "Duplex - flip on short edge",
-      ),
-      renderInlineMeta_("Finishing", fullPage ? "No cutting" : "Center cut"),
-      "</div>",
       adminState.bulletinMessage ?
-        renderAdminNote_(adminState.bulletinMessage) :
+        "<div class=\"central-admin-print-mode-message\">" +
+          renderAdminNote_(adminState.bulletinMessage) +
+        "</div>" :
         "",
       adminState.bulletinError ?
         "<p class=\"central-admin-note\">" +
           escapeHtml_(adminState.bulletinError) + "</p>" :
         "",
-      renderBulletinSettingsEditor_(canSave),
-      renderBulletinContentEditor_(canSave),
-      renderBulletinPrintFormatEditor_(canSave),
-      "<div class=\"central-admin-action-row central-admin-bulletin-actions\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-bulletin\"",
-      !canSave || adminState.bulletinSaving ? " disabled" : "",
-      ">",
-      adminState.bulletinSaving ? "Saving..." : "Save Bulletin Settings",
+      renderPrintModeStepRail_(),
+      "<div class=\"central-admin-print-mode-workspace\">",
+      "<div class=\"central-admin-print-mode-editor\">",
+      renderPrintModeCurrentStep_(canSave),
+      "</div>",
+      renderPrintModePreview_(),
+      "</div>",
+      "</div></section>",
+    ].join("");
+  }
+
+  function getPrintModeStep_() {
+    var step = Number(adminState.printModeStep);
+    if (!isFinite(step)) {
+      return 1;
+    }
+    return Math.max(1, Math.min(PRINT_MODE_STEPS.length, Math.round(step)));
+  }
+
+  function getPrintModeStepDefinition_(step) {
+    var definition =
+      PRINT_MODE_STEPS[Math.max(0, getPrintModeStepIndex_(step))] ||
+      PRINT_MODE_STEPS[0];
+    if (
+      Number(step) === 5 &&
+      getBulletinPrintFormat_() === "full-page"
+    ) {
+      return Object.assign({}, definition, {
+        description: "Check the finished front page, then print or save a PDF.",
+      });
+    }
+    return definition;
+  }
+
+  function getPrintModeStepIndex_(step) {
+    var normalizedStep = Number(step);
+    if (!isFinite(normalizedStep)) {
+      normalizedStep = 1;
+    }
+    return Math.max(
+        0,
+        Math.min(PRINT_MODE_STEPS.length - 1, Math.round(normalizedStep) - 1),
+    );
+  }
+
+  function setPrintModeStep_(nextStep) {
+    var currentStep = getPrintModeStep_();
+    var normalizedStep = getPrintModeStepIndex_(nextStep) + 1;
+    if (
+      getBulletinPrintFormat_() === "full-page" &&
+      normalizedStep === 4
+    ) {
+      normalizedStep = currentStep < 4 ? 5 : 3;
+    }
+    if (normalizedStep === currentStep) {
+      return;
+    }
+
+    adminState.printModeStepDirection =
+      normalizedStep > currentStep ? "forward" : "backward";
+    adminState.printModeStep = normalizedStep;
+
+    var automaticSide = getBulletinPrintFormat_() === "full-page" ?
+      "front" :
+      (normalizedStep <= 3 ?
+      "front" :
+      (normalizedStep === 4 ? "back" : ""));
+    if (automaticSide &&
+      adminState.printModePreviewSide !== automaticSide) {
+      adminState.printModePreviewDirection =
+        automaticSide === "back" ? "forward" : "backward";
+      adminState.printModePreviewSide = automaticSide;
+    }
+
+    renderAdmin_();
+  }
+
+  function setPrintModePreviewSide_(side) {
+    var normalizedSide = side === "back" ? "back" : "front";
+    if (
+      normalizedSide === "back" &&
+      getBulletinPrintFormat_() === "full-page"
+    ) {
+      return;
+    }
+    if (normalizedSide === adminState.printModePreviewSide) {
+      return;
+    }
+
+    if (adminState.printModePreviewSwitching) {
+      return;
+    }
+
+    var direction = normalizedSide === "back" ? "forward" : "backward";
+    var previewPage = document.querySelector(
+        ".central-admin-print-mode-preview-page",
+    );
+    var reduceMotion = window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (!previewPage || reduceMotion) {
+      adminState.printModePreviewDirection = direction;
+      adminState.printModePreviewSide = normalizedSide;
+      renderAdmin_();
+      return;
+    }
+
+    adminState.printModePreviewSwitching = true;
+    previewPage.classList.add("is-flip-out-" + direction);
+
+    var sideChanged = false;
+    var completeSideChange = function() {
+      if (sideChanged) {
+        return;
+      }
+      sideChanged = true;
+      adminState.printModePreviewDirection = direction;
+      adminState.printModePreviewSide = normalizedSide;
+      renderAdmin_();
+
+      window.setTimeout(function() {
+        adminState.printModePreviewSwitching = false;
+      }, 480);
+    };
+
+    previewPage.addEventListener("animationend", completeSideChange, {
+      once: true,
+    });
+    window.setTimeout(completeSideChange, 390);
+  }
+
+  function openPrintModeQuickAdd_(section) {
+    var normalizedSection = section === "serveNeeds" ?
+      "serveNeeds" : "campaigns";
+    var permission = getPageAccessLevel_(normalizedSection);
+    if (!isEditorLevelPermission_(permission)) {
+      return;
+    }
+
+    clearAdminDirtyScope_(
+        normalizedSection === "serveNeeds" ? "serve-need" : "campaign",
+    );
+    adminState.printModeQuickAddSection = normalizedSection;
+    if (normalizedSection === "campaigns") {
+      resetCampaignsDraft_();
+      if (!adminState.campaignsLoaded && !adminState.campaignsLoading) {
+        loadCampaigns_();
+        return;
+      }
+    } else {
+      resetServeNeedsDraft_();
+      if (!adminState.serveNeedsLoaded && !adminState.serveNeedsLoading) {
+        loadServeNeeds_();
+        return;
+      }
+    }
+    renderAdmin_();
+  }
+
+  function closePrintModeQuickAdd_() {
+    var section = adminState.printModeQuickAddSection;
+    var dirtyScope = section === "serveNeeds" ? "serve-need" : "campaign";
+    clearAdminDirtyScope_(dirtyScope);
+
+    if (section === "campaigns") {
+      resetCampaignsDraft_();
+    } else if (section === "serveNeeds") {
+      resetServeNeedsDraft_();
+    }
+    adminState.printModeQuickAddSection = "";
+    renderAdmin_();
+  }
+
+  function openBulletinFallbackBlockEditor_(blockId) {
+    var blocks = adminState.bulletinDraft.fallbackBlocks || [];
+    var block = blockId ? blocks.find(function(item) {
+      return item.id === blockId;
+    }) : null;
+
+    adminState.bulletinFallbackBlockEditingId = block ? block.id : "";
+    adminState.bulletinFallbackBlockDraft = block ?
+      Object.assign(createEmptyBulletinFallbackBlockDraft_(), block) :
+      createEmptyBulletinFallbackBlockDraft_();
+    adminState.bulletinFallbackBlockEditorOpen = true;
+    adminState.bulletinError = "";
+    renderAdmin_();
+  }
+
+  function closeBulletinFallbackBlockEditor_() {
+    adminState.bulletinFallbackBlockEditorOpen = false;
+    adminState.bulletinFallbackBlockEditingId = "";
+    adminState.bulletinFallbackBlockDraft =
+      createEmptyBulletinFallbackBlockDraft_();
+    adminState.bulletinFallbackBlockImageUploading = false;
+    adminState.bulletinError = "";
+    renderAdmin_();
+  }
+
+  function saveBulletinFallbackBlock_() {
+    var draft = adminState.bulletinFallbackBlockDraft ||
+      createEmptyBulletinFallbackBlockDraft_();
+    var title = String(draft.title || "").trim();
+    if (!title) {
+      adminState.bulletinError = "Custom blocks need a title.";
+      renderAdmin_();
+      return;
+    }
+
+    var blocks = (adminState.bulletinDraft.fallbackBlocks || [])
+        .map(function(block) {
+          return Object.assign({}, block);
+        });
+    var editingId = adminState.bulletinFallbackBlockEditingId;
+    var nextBlock = {
+      id: editingId ||
+        "fallback-" + Date.now().toString(36),
+      eyebrow: String(draft.eyebrow || "").trim(),
+      title: title,
+      description: String(draft.description || "").trim(),
+      imageUrl: getBulletinFallbackImageUrl_(draft.imageUrl),
+      imageStoragePath: String(draft.imageStoragePath || "").trim(),
+      imageSide: draft.imageSide === "left" ? "left" : "right",
+      enabled: draft.enabled !== false,
+    };
+    var existingIndex = blocks.findIndex(function(block) {
+      return block.id === editingId;
+    });
+
+    if (existingIndex === -1) {
+      blocks.push(nextBlock);
+    } else {
+      blocks[existingIndex] = nextBlock;
+    }
+
+    adminState.bulletinDraft.fallbackBlocks = blocks.slice(0, 4);
+    markAdminDirtyScope_("bulletin");
+    adminState.bulletinFallbackBlockEditorOpen = false;
+    adminState.bulletinFallbackBlockEditingId = "";
+    adminState.bulletinFallbackBlockDraft =
+      createEmptyBulletinFallbackBlockDraft_();
+    adminState.bulletinError = "";
+    renderAdmin_();
+  }
+
+  function moveBulletinFallbackBlock_(blockId, direction) {
+    var blocks = (adminState.bulletinDraft.fallbackBlocks || []).slice();
+    var index = blocks.findIndex(function(block) {
+      return block.id === blockId;
+    });
+    var nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (
+      index < 0 ||
+      nextIndex < 0 ||
+      nextIndex >= blocks.length
+    ) {
+      return;
+    }
+
+    var movingBlock = blocks[index];
+    blocks[index] = blocks[nextIndex];
+    blocks[nextIndex] = movingBlock;
+    adminState.bulletinDraft.fallbackBlocks = blocks;
+    markAdminDirtyScope_("bulletin");
+    renderAdmin_();
+  }
+
+  function toggleBulletinFallbackBlock_(blockId) {
+    var block = (adminState.bulletinDraft.fallbackBlocks || [])
+        .find(function(item) {
+          return item.id === blockId;
+        });
+    if (!block) {
+      return;
+    }
+
+    block.enabled = block.enabled === false;
+    markAdminDirtyScope_("bulletin");
+    renderAdmin_();
+  }
+
+  function removeBulletinFallbackBlock_(blockId) {
+    var block = (adminState.bulletinDraft.fallbackBlocks || [])
+        .find(function(item) {
+          return item.id === blockId;
+        });
+    if (!block) {
+      return;
+    }
+
+    openDeleteConfirm_({
+      title: "Remove Custom Block",
+      message: "Remove " + (block.title || "this custom block") +
+        " from Print Mode?",
+      confirmLabel: "Remove Block",
+      showSkip: false,
+      onConfirm: function() {
+        adminState.bulletinDraft.fallbackBlocks =
+          (adminState.bulletinDraft.fallbackBlocks || [])
+              .filter(function(item) {
+                return item.id !== blockId;
+              });
+        markAdminDirtyScope_("bulletin");
+        renderAdmin_();
+      },
+    });
+  }
+
+  function renderPrintModeStepRail_() {
+    var activeStep = getPrintModeStep_();
+    var fullPage = getBulletinPrintFormat_() === "full-page";
+    var formatTransition = adminState.printModeFormatTransition;
+
+    var html = [
+      "<nav class=\"central-admin-print-mode-steps\" aria-label=\"Print Mode steps\">",
+      PRINT_MODE_STEPS.map(function(step, index) {
+        var stepNumber = index + 1;
+        var isUnavailable = fullPage && stepNumber === 4;
+        var isActive = stepNumber === activeStep;
+        var isComplete = stepNumber < activeStep && !isUnavailable;
+        return [
+          "<button type=\"button\" class=\"central-admin-print-mode-step",
+          isActive ? " is-active" : "",
+          isComplete ? " is-complete" : "",
+          isUnavailable ? " is-unavailable" : "",
+          stepNumber === 4 && formatTransition === "to-full" ?
+            " is-fading-out" : "",
+          stepNumber === 4 && formatTransition === "to-half" ?
+            " is-fading-in" : "",
+          "\" data-admin-action=\"print-mode-step\" data-admin-print-mode-step=\"",
+          String(stepNumber),
+          "\" aria-current=\"", isActive ? "step" : "false", "\"",
+          isUnavailable ? " disabled aria-disabled=\"true\"" : "",
+          ">",
+          "<span class=\"central-admin-print-mode-step-number\">",
+          isComplete ? "✓" : String(stepNumber),
+          "</span><span class=\"central-admin-print-mode-step-label\">",
+          escapeHtml_(step.shortLabel),
+          "</span></button>",
+        ].join("");
+      }).join(""),
+      "</nav>",
+    ].join("");
+    adminState.printModeFormatTransition = "";
+    return html;
+  }
+
+  function renderPrintModeCurrentStep_(canSave) {
+    var step = getPrintModeStep_();
+    var definition = getPrintModeStepDefinition_(step);
+    var direction = adminState.printModeStepDirection;
+    var content = "";
+
+    if (step === 1) {
+      content = renderBulletinPrintFormatEditor_(canSave);
+    } else if (step === 2) {
+      content = renderPrintModeHeroStep_(canSave);
+    } else if (step === 3) {
+      content = renderPrintModeFrontStep_(canSave);
+    } else if (step === 4) {
+      content = renderPrintModeEventsStep_(canSave);
+    } else {
+      content = renderPrintModeReviewStep_();
+    }
+
+    adminState.printModeStepDirection = "";
+
+    return [
+      "<section class=\"central-admin-print-mode-step-panel",
+      direction ? " is-" + escapeAttr_(direction) : "",
+      "\">",
+      "<div class=\"central-admin-print-mode-step-heading\">",
+      "<span>Step ", String(step), " of ", String(PRINT_MODE_STEPS.length),
+      "</span><h2>", escapeHtml_(definition.label), "</h2>",
+      "<p>", escapeHtml_(definition.description), "</p>",
+      "</div>",
+      "<div class=\"central-admin-print-mode-step-content\">",
+      content,
+      "</div></section>",
+    ].join("");
+  }
+
+  function renderPrintModeHeroStep_(canSave) {
+    var featured = getBulletinFeaturedEvent_();
+    var manualHeroIsActive = isBulletinManualHeroActive_();
+    var headings = adminState.bulletinDraft.headings || {};
+
+    return [
+      "<div class=\"central-admin-item central-admin-print-mode-basics\">",
+      "<div class=\"central-admin-form-grid\">",
+      renderAdminInputField_({
+        label: "Sunday Date",
+        field: "bulletin.serviceDate",
+        value: adminState.bulletinDraft.serviceDate,
+        type: "date",
+        disabled: !canSave,
+      }),
+      renderAdminTextareaField_({
+        label: "Front Page Heading",
+        field: "bulletin.headings.frontHeading",
+        value: headings.frontHeading,
+        rows: 2,
+        maxLength: 80,
+        wide: true,
+        disabled: !canSave,
+        hint: "Use a line break to control where the printed heading wraps.",
+      }),
+      "</div></div>",
+      "<div class=\"central-admin-item central-admin-bulletin-hero-editor\">",
+      "<div class=\"central-admin-item-header\"><strong>Main Hero</strong></div>",
+      renderBulletinHeroSourceToggle_(canSave, featured),
+      manualHeroIsActive ?
+        renderBulletinFallbackHeroEditor_(canSave, true) :
+        renderBulletinFeaturedHeroEditor_(featured, canSave),
+      "</div>",
+    ].join("");
+  }
+
+  function renderPrintModeFrontStep_(canSave) {
+    var data = adminState.bulletinCentralData || {};
+    var giving = adminState.bulletinDraft.giving || {};
+    var campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
+    var serveNeeds = Array.isArray(data.serveNeeds) ? data.serveNeeds : [];
+    var selectionState = getBulletinFrontContentSelectionState_();
+    var fullPage = getBulletinPrintFormat_() === "full-page";
+    var useFallback =
+      adminState.bulletinDraft.frontContentSource === "fallback";
+    var hasSelectedLiveContent =
+      getSelectedBulletinCampaigns_().length > 0 ||
+      getSelectedBulletinServeNeeds_().length > 0;
+
+    return [
+      fullPage ? "" : [
+        "<div class=\"central-admin-item central-admin-bulletin-settings\">",
+      "<div class=\"central-admin-item-header\"><strong>Giving Snapshot</strong></div>",
+      "<div class=\"central-admin-form-grid\">",
+      renderBulletinMoneyInput_(
+          "Monthly Budget",
+          "monthlyBudget",
+          giving.monthlyBudget,
+      ),
+      renderBulletinMoneyInput_(
+          "Month-to-Date Giving",
+          "monthToDateGiving",
+          giving.monthToDateGiving,
+      ),
+      renderBulletinMoneyInput_(
+          "Annual Budget",
+          "annualBudget",
+          giving.annualBudget,
+      ),
+      renderBulletinMoneyInput_(
+          "Year-to-Date Giving",
+          "yearToDateGiving",
+          giving.yearToDateGiving,
+      ),
+      "</div></div>",
+      ].join(""),
+      "<div class=\"central-admin-item central-admin-bulletin-front-content\">",
+      "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong></div>",
+      renderPrintModeFrontContentSourceToggle_(
+          canSave,
+          hasSelectedLiveContent,
+      ),
+      useFallback ? [
+        renderPrintModeFallbackBlocksEditor_(canSave),
+      ].join("") : [
+      "<div class=\"central-admin-print-mode-content-budget",
+      selectionState.totalCount >= selectionState.maxCount ?
+        " is-at-limit" : "",
+      "\"><strong>", String(selectionState.totalCount), " of ",
+      String(selectionState.maxCount), " front-page items selected</strong>",
+      "<span>",
+      selectionState.totalCount >= selectionState.maxCount ?
+        "Front-page limit reached. Unselect an item to choose another." :
+        "Choose any mix of Campaigns and Serve Opportunities.",
+      "</span></div>",
+      "<div class=\"central-admin-print-mode-live-content-heading\">",
+      "<div><strong>Campaigns</strong></div>",
+      renderPrintModeQuickAddAction_("campaigns"),
+      "</div>",
+      "<div class=\"central-admin-bulletin-choice-list\">",
+      campaigns.length ? campaigns.map(function(item) {
+        var checked = adminState.bulletinDraft.campaignIds.indexOf(
+            String(item.id || ""),
+        ) !== -1;
+        var disableUnchecked = !checked && (
+          selectionState.campaignCount >= PRINT_MODE_MAX_CAMPAIGNS ||
+          selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        );
+        return renderBulletinCampaignChoice_(
+            item,
+            checked,
+            canSave,
+            disableUnchecked,
+        );
+      }).join("") : renderAdminNote_("No active campaigns are available."),
+      "</div>",
+      "<div class=\"central-admin-print-mode-serve-heading\">",
+      "<div><strong>Serve Opportunities</strong></div>",
+      renderPrintModeQuickAddAction_("serveNeeds"),
+      "</div>",
+      "<div class=\"central-admin-bulletin-choice-list central-admin-bulletin-serve-choice-list\">",
+      serveNeeds.length ? serveNeeds.map(function(item) {
+        var checked = adminState.bulletinDraft.serveNeedIds.indexOf(
+            String(item.id || ""),
+        ) !== -1;
+        var disableUnchecked = !checked && (
+          selectionState.serveNeedCount >= PRINT_MODE_MAX_SERVE_NEEDS ||
+          selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        );
+        return renderBulletinServeNeedChoice_(
+            item,
+            checked,
+            canSave,
+            disableUnchecked,
+        );
+      }).join("") : renderAdminNote_(
+          "No active Serve Opportunities are available.",
+      ),
+      "</div>",
+      !hasSelectedLiveContent ? [
+        "<div class=\"central-admin-print-mode-fallback-notice\">",
+        "<strong>Custom blocks will fill this space.</strong>",
+        "<p>Nothing is selected from Campaigns or Serve Opportunities, so the saved fallback blocks will appear automatically.</p>",
+        "</div>",
+        renderPrintModeFallbackBlocksEditor_(canSave),
+      ].join("") : "",
+      ].join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderPrintModeFrontContentSourceToggle_(
+      canSave,
+      hasSelectedLiveContent,
+  ) {
+    var selectedSource =
+      adminState.bulletinDraft.frontContentSource === "fallback" ?
+        "fallback" : "live";
+
+    return [
+      "<fieldset class=\"central-admin-bulletin-hero-source central-admin-print-mode-content-source\">",
+      "<legend>Content Source</legend>",
+      "<label class=\"", selectedSource === "live" ? "is-active" : "",
+      "\"><input type=\"radio\" name=\"bulletin-front-content-source\" value=\"live\" data-admin-field=\"bulletin.frontContentSource\"",
+      selectedSource === "live" ? " checked" : "",
+      !canSave ? " disabled" : "",
+      "><span><strong>Campaigns & Serving</strong><small>",
+      hasSelectedLiveContent ?
+        "Use selected content from the shared Central lists." :
+        "Use shared Central content when available, then fall back safely.",
+      "</small></span></label>",
+      "<label class=\"", selectedSource === "fallback" ? "is-active" : "",
+      "\"><input type=\"radio\" name=\"bulletin-front-content-source\" value=\"fallback\" data-admin-field=\"bulletin.frontContentSource\"",
+      selectedSource === "fallback" ? " checked" : "",
+      !canSave ? " disabled" : "",
+      "><span><strong>Custom Blocks</strong><small>Use your saved image-and-text blocks instead.</small></span></label>",
+      "</fieldset>",
+    ].join("");
+  }
+
+  function renderPrintModeQuickAddAction_(section) {
+    var isServeNeed = section === "serveNeeds";
+    var normalizedSection = isServeNeed ? "serveNeeds" : "campaigns";
+    if (!isEditorLevelPermission_(
+        getPageAccessLevel_(normalizedSection),
+    )) {
+      return "";
+    }
+
+    return [
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-print-mode-quick-add-button\" data-admin-action=\"open-print-mode-quick-add\" data-admin-print-mode-quick-add=\"",
+      normalizedSection, "\"><span aria-hidden=\"true\">+</span> ",
+      isServeNeed ? "Serve" : "Campaign",
       "</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"print-bulletin\">Print / Save PDF</button>",
+    ].join("");
+  }
+
+  function renderPrintModeFallbackBlocksEditor_(canSave) {
+    var blocks = Array.isArray(adminState.bulletinDraft.fallbackBlocks) ?
+      adminState.bulletinDraft.fallbackBlocks :
+      [];
+
+    return [
+      "<div class=\"central-admin-print-mode-fallback-editor\">",
+      "<div class=\"central-admin-print-mode-fallback-editor-header\"><div>",
+      "<strong>Custom Blocks</strong>",
+      "<p>These appear in this order whenever Custom Blocks are selected or no live content is available.</p>",
+      "</div>",
+      canSave && blocks.length < 4 ? [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"open-bulletin-fallback-block-editor\">",
+        "<span aria-hidden=\"true\">+</span> Add Block</button>",
+      ].join("") : "",
+      "</div>",
+      blocks.length ? [
+        "<div class=\"central-admin-print-mode-fallback-list\">",
+        blocks.map(function(block, index) {
+          var imageUrl = getBulletinFallbackImageUrl_(block.imageUrl);
+          return [
+            "<article class=\"central-admin-print-mode-fallback-row",
+            block.enabled === false ? " is-disabled" : "",
+            "\">",
+            imageUrl ?
+              "<img src=\"" + escapeAttr_(imageUrl) + "\" alt=\"\">" :
+              "<span class=\"central-admin-print-mode-fallback-placeholder\" aria-hidden=\"true\">",
+            imageUrl ? "" : "Aa</span>",
+            "<div><span>", escapeHtml_(block.eyebrow || "Custom Block"),
+            "</span><strong>", escapeHtml_(block.title || "Untitled Block"),
+            "</strong><small>Image ",
+            escapeHtml_(block.imageSide === "left" ? "left" : "right"),
+            block.enabled === false ? " · hidden" : "",
+            "</small></div>",
+            canSave ? [
+              "<div class=\"central-admin-print-mode-fallback-actions\">",
+              "<button type=\"button\" data-admin-action=\"move-bulletin-fallback-block\" data-admin-doc-id=\"",
+              escapeAttr_(block.id), "\" data-admin-move-direction=\"up\" aria-label=\"Move ",
+              escapeAttr_(block.title || "block"), " up\"",
+              index === 0 ? " disabled" : "", ">↑</button>",
+              "<button type=\"button\" data-admin-action=\"move-bulletin-fallback-block\" data-admin-doc-id=\"",
+              escapeAttr_(block.id), "\" data-admin-move-direction=\"down\" aria-label=\"Move ",
+              escapeAttr_(block.title || "block"), " down\"",
+              index === blocks.length - 1 ? " disabled" : "", ">↓</button>",
+              "<button type=\"button\" data-admin-action=\"toggle-bulletin-fallback-block\" data-admin-doc-id=\"",
+              escapeAttr_(block.id), "\">",
+              block.enabled === false ? "Show" : "Hide", "</button>",
+              "<button type=\"button\" data-admin-action=\"edit-bulletin-fallback-block\" data-admin-doc-id=\"",
+              escapeAttr_(block.id), "\">Edit</button>",
+              "<button type=\"button\" data-admin-action=\"remove-bulletin-fallback-block\" data-admin-doc-id=\"",
+              escapeAttr_(block.id), "\" aria-label=\"Remove ",
+              escapeAttr_(block.title || "block"), "\">×</button>",
+              "</div>",
+            ].join("") : "",
+            "</article>",
+          ].join("");
+        }).join(""),
+        "</div>",
+      ].join("") :
+        renderAdminNote_(
+            "Add a custom block so the front page always has useful content.",
+        ),
+      "</div>",
+    ].join("");
+  }
+
+  function renderPrintModeEventsStep_(canSave) {
+    var headings = adminState.bulletinDraft.headings || {};
+    var events = getBulletinEventDraftsInWindow_();
+    var visibleEvents = getFilteredBulletinEventDrafts_(events);
+    var selectedEventCount = events.filter(function(item) {
+      return item.included;
+    }).length;
+    var weekOneCount = events.filter(function(item) {
+      return getBulletinEventWeek_(item) === "week1";
+    }).length;
+    var weekTwoCount = events.length - weekOneCount;
+
+    return [
+      "<div class=\"central-admin-item central-admin-print-mode-event-heading\">",
+      "<div class=\"central-admin-form-grid\">",
+      renderAdminInputField_({
+        label: "Back Page Eyebrow",
+        field: "bulletin.headings.backEyebrow",
+        value: headings.backEyebrow,
+        maxLength: 50,
+        disabled: !canSave,
+      }),
+      renderAdminInputField_({
+        label: "Back Page Heading",
+        field: "bulletin.headings.backHeading",
+        value: headings.backHeading,
+        maxLength: 80,
+        disabled: !canSave,
+      }),
+      "</div></div>",
+      "<div class=\"central-admin-item central-admin-print-mode-event-list\">",
+      "<div class=\"central-admin-item-header\"><strong>Next Two Weeks</strong>",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-bulletin\"",
       adminState.bulletinLoading ? " disabled" : "",
       ">",
-      adminState.bulletinLoading ? "Refreshing Central Content..." :
-        "Refresh Central Content",
-      "</button>",
+      adminState.bulletinLoading ? "Refreshing..." : "Refresh Events",
+      "</button></div>",
+      "<p class=\"central-admin-note\">Choose the events that should appear on the back. Featured Event is excluded automatically.</p>",
+      events.length ?
+        renderBulletinEventFilterBar_(
+            events.length,
+            weekOneCount,
+            weekTwoCount,
+            selectedEventCount,
+        ) +
+        (visibleEvents.length ?
+          "<div class=\"central-admin-bulletin-events-grid\">" +
+            visibleEvents.map(renderBulletinEventEditor_).join("") +
+          "</div>" :
+          renderAdminNote_("No events match this view.")) :
+        renderAdminNote_(
+            "No non-featured Central events fall in this Print Mode window.",
+        ),
       "</div>",
-      renderAdminNote_(
-          fullPage ?
-            "In the print dialog, choose portrait, single-sided printing, and 100% scale." :
-            "In the print dialog, choose two-sided printing, flip on the short edge, and 100% scale. Save as PDF uses the same imposed layout.",
-      ),
-      renderBulletinPreview_(),
-      "</div></section>",
+    ].join("");
+  }
+
+  function renderPrintModeReviewStep_() {
+    var fullPage = getBulletinPrintFormat_() === "full-page";
+    var selectedEventCount = getBulletinEventDraftsInWindow_().filter(
+        function(item) {
+          return item.included;
+        },
+    ).length;
+    var selectedCampaignCount = getSelectedBulletinCampaigns_().length;
+    var selectedServeNeedCount = getSelectedBulletinServeNeeds_().length;
+    var fallbackCount = getBulletinFallbackBlocksForPrint_().length;
+    var usingFallback = shouldUseBulletinFallbackBlocks_();
+    var liveContentSummary = [
+      selectedCampaignCount ?
+        String(selectedCampaignCount) + " Campaign" +
+          (selectedCampaignCount === 1 ? "" : "s") :
+        "",
+      selectedServeNeedCount ?
+        String(selectedServeNeedCount) + " Serve Opportunit" +
+          (selectedServeNeedCount === 1 ? "y" : "ies") :
+        "",
+    ].filter(Boolean).join(" · ") || "No Live Content";
+
+    return [
+      "<div class=\"central-admin-print-mode-review-grid",
+      fullPage ? " is-full-page" : "", "\">",
+      "<div class=\"central-admin-item\"><span class=\"central-admin-print-mode-review-label\">Format</span>",
+      "<strong>", fullPage ? "Full-page insert" : "Half-letter insert",
+      "</strong><small>",
+      fullPage ? "Portrait · single-sided · no cutting" :
+        "Landscape · duplex · center cut",
+      "</small></div>",
+      "<div class=\"central-admin-item\"><span class=\"central-admin-print-mode-review-label\">Front Page</span>",
+      "<strong>",
+      usingFallback ?
+        String(fallbackCount) + " Custom Block" +
+          (fallbackCount === 1 ? "" : "s") :
+        liveContentSummary,
+      "</strong><small>",
+      usingFallback ?
+        "Plus the selected hero" :
+        "Plus the selected hero" +
+          (fullPage ? "" : " and giving"),
+      "</small></div>",
+      fullPage ? "" : [
+        "<div class=\"central-admin-item\"><span class=\"central-admin-print-mode-review-label\">Back Page</span>",
+      "<strong>", String(selectedEventCount), " Event",
+      selectedEventCount === 1 ? "" : "s",
+        "</strong><small>Printed on the reverse side</small></div>",
+      ].join(""),
+      "</div>",
+      "<div class=\"central-admin-item central-admin-print-mode-print-note\">",
+      "<strong>Ready to print?</strong>",
+      "<p>",
+      fullPage ?
+        "Choose portrait, single-sided printing, and 100% scale in the print dialog." :
+        "Choose two-sided printing, flip on the short edge, and 100% scale. Save as PDF uses the same imposed layout.",
+      "</p>",
+      "<p>",
+      fullPage ?
+        "Check the front preview one last time. Print / Save PDF is waiting in the workflow bar below." :
+        "Use the Front and Back control above the preview for one last check. Print / Save PDF is waiting in the workflow bar below.",
+      "</p>",
+      "</div>",
     ].join("");
   }
 
@@ -6213,6 +7381,7 @@
     var weekTwoCount = events.length - weekOneCount;
     var campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
     var serveNeeds = Array.isArray(data.serveNeeds) ? data.serveNeeds : [];
+    var selectionState = getBulletinFrontContentSelectionState_();
 
     return [
       "<div class=\"central-admin-bulletin-editor-grid\">",
@@ -6231,25 +7400,29 @@
       "<div class=\"central-admin-item central-admin-bulletin-front-content\">",
       "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong>",
       renderStatusPill_("Live sources", "is-live"), "</div>",
-      "<p class=\"central-admin-note\">Choose up to three campaigns and give each one a print icon. You can also select one Serve Opportunity.</p>",
+      "<p class=\"central-admin-note\">Choose up to four combined Campaigns and Serve Opportunities. Each list allows up to three selections.</p>",
       "<div class=\"central-admin-bulletin-choice-list\">",
       campaigns.length ? campaigns.map(function(item) {
         var checked = adminState.bulletinDraft.campaignIds.indexOf(String(item.id || "")) !== -1;
         return renderBulletinCampaignChoice_(item, checked, canSave);
       }).join("") : renderAdminNote_("No active campaigns are available."),
       "</div>",
-      "<label class=\"central-admin-field is-select central-admin-bulletin-serve-select\"><span>Serve Opportunity</span>",
-      "<select data-admin-field=\"bulletin.serveNeedId\"",
-      canSave ? "" : " disabled", ">",
-      "<option value=\"\">None</option>",
+      "<div class=\"central-admin-bulletin-choice-list central-admin-bulletin-serve-choice-list\">",
       serveNeeds.map(function(item) {
-        var id = String(item.id || "");
-        return "<option value=\"" + escapeAttr_(id) + "\"" +
-          (adminState.bulletinDraft.serveNeedId === id ? " selected" : "") +
-          ">" + escapeHtml_(item.need || item.title || "Untitled need") +
-          "</option>";
+        var checked = adminState.bulletinDraft.serveNeedIds.indexOf(
+            String(item.id || ""),
+        ) !== -1;
+        return renderBulletinServeNeedChoice_(
+            item,
+            checked,
+            canSave,
+            !checked && (
+              selectionState.serveNeedCount >= PRINT_MODE_MAX_SERVE_NEEDS ||
+              selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+            ),
+        );
       }).join(""),
-      "</select></label>",
+      "</div>",
       "</div>",
       "</div>",
       "<div class=\"central-admin-item\">",
@@ -6283,7 +7456,7 @@
   function renderBulletinFeaturedHeroEditor_(featured, canSave) {
     if (!featured) {
       return renderAdminNote_(
-          "No Featured Event is currently available from Planning Center. Bulletin Mode is safely using the Manual Hero.",
+          "No Featured Event is currently available from Planning Center. Print Mode is safely using the Manual Hero.",
       );
     }
 
@@ -6455,7 +7628,12 @@
     ].join("");
   }
 
-  function renderBulletinCampaignChoice_(item, checked, canSave) {
+  function renderBulletinCampaignChoice_(
+      item,
+      checked,
+      canSave,
+      disableUnchecked,
+  ) {
     var id = String(item && item.id || "");
     var title = String(item && item.title || "Untitled campaign");
     var iconId = getBulletinCampaignIconId_(item);
@@ -6466,7 +7644,7 @@
       "\"><label class=\"central-admin-checkbox\">",
       "<input type=\"checkbox\" data-admin-bulletin-choice=\"campaign\" data-admin-doc-id=\"",
       escapeAttr_(id), "\"", checked ? " checked" : "",
-      canSave ? "" : " disabled", ">",
+      canSave && !disableUnchecked ? "" : " disabled", ">",
       "<span>", escapeHtml_(title), "</span></label>",
       "<div class=\"central-admin-bulletin-campaign-icon-control\">",
       "<span class=\"central-admin-bulletin-campaign-icon-preview\"><img src=\"",
@@ -6482,6 +7660,40 @@
       }).join(""),
       "</select></div></div>",
     ].join("");
+  }
+
+  function renderBulletinServeNeedChoice_(
+      item,
+      checked,
+      canSave,
+      disableUnchecked,
+  ) {
+    var id = String(item && item.id || "");
+    var title = String(
+        item && (item.need || item.title) || "Untitled opportunity",
+    );
+    var ministry = formatBulletinServeMinistryLabel_(
+        item && item.ministry,
+    );
+
+    return [
+      "<div class=\"central-admin-bulletin-serve-choice",
+      checked ? " is-selected" : "",
+      "\"><label class=\"central-admin-checkbox\">",
+      "<input type=\"checkbox\" data-admin-bulletin-choice=\"serve-need\" data-admin-doc-id=\"",
+      escapeAttr_(id), "\"", checked ? " checked" : "",
+      canSave && !disableUnchecked ? "" : " disabled", ">",
+      "<span><small>", escapeHtml_(ministry), "</small><strong>",
+      escapeHtml_(title), "</strong></span></label></div>",
+    ].join("");
+  }
+
+  function formatBulletinServeMinistryLabel_(value) {
+    var ministry = String(value || "").trim();
+    if (!ministry) {
+      return "General Ministry";
+    }
+    return /ministry$/i.test(ministry) ? ministry : ministry + " Ministry";
   }
 
   function renderBulletinEventEditor_(item) {
@@ -6504,6 +7716,7 @@
       item.description ?
         "<p>" + escapeHtml_(item.description) + "</p>" :
         "<p class=\"is-empty\">No description from Planning Center.</p>",
+      renderBulletinEventDescriptionGuidance_(item),
       "</div>",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-event-edit\" data-admin-action=\"edit-bulletin-event\" data-admin-bulletin-event-id=\"",
       escapeAttr_(item.id), "\">Edit Print Copy</button>",
@@ -6511,23 +7724,43 @@
     ].join("");
   }
 
-  function renderBulletinPreview_() {
+  function renderPrintModePreview_() {
     var fullPage = getBulletinPrintFormat_() === "full-page";
+    var side = !fullPage && adminState.printModePreviewSide === "back" ?
+      "back" : "front";
+    var direction = adminState.printModePreviewDirection;
+    var previewPanel = side === "back" ?
+      renderBulletinPanel_("back", true) :
+      (fullPage ?
+        renderBulletinFullPagePanel_(true) :
+        renderBulletinPanel_("front", true));
+
+    adminState.printModePreviewDirection = "";
 
     return [
-      "<div class=\"central-admin-bulletin-preview-header\"><div>",
-      "<span class=\"central-admin-kicker\">Live Preview</span>",
-      "<h3>", fullPage ? "Full-page insert" : "Half-letter insert", "</h3>",
-      "</div>", renderStatusPill_(
-          fullPage ? "Single Page" : "Front + Back",
-          "is-safe",
-      ), "</div>",
-      "<div class=\"central-admin-bulletin-preview-grid\">",
-      fullPage ? renderBulletinFullPagePanel_(true) : [
-        renderBulletinPanel_("front", true),
-        renderBulletinPanel_("back", true),
-      ].join(""),
-      "</div>",
+      "<aside class=\"central-admin-print-mode-preview\">",
+      "<div class=\"central-admin-print-mode-preview-toolbar\">",
+      "<div><span class=\"central-admin-kicker\">Live Preview</span>",
+      "<strong>", fullPage ? "Full Page" : "Half Letter", "</strong></div>",
+      "<div class=\"central-admin-print-mode-preview-toggle",
+      side === "back" ? " is-back" : "",
+      "\" role=\"group\" aria-label=\"Preview side\">",
+      "<span class=\"central-admin-print-mode-preview-slider\" aria-hidden=\"true\"></span>",
+      "<button type=\"button\" class=\"", side === "front" ? "is-active" : "",
+      "\" data-admin-action=\"print-mode-preview-side\" data-admin-print-mode-preview-side=\"front\" aria-pressed=\"",
+      side === "front" ? "true" : "false", "\">Front</button>",
+      "<button type=\"button\" class=\"", side === "back" ? "is-active" : "",
+      "\" data-admin-action=\"print-mode-preview-side\" data-admin-print-mode-preview-side=\"back\" aria-pressed=\"",
+      side === "back" ? "true" : "false", "\"",
+      fullPage ? " disabled aria-disabled=\"true\"" : "",
+      ">Back</button>",
+      "</div></div>",
+      "<div class=\"central-admin-print-mode-preview-stage",
+      fullPage && side === "front" ? " is-full-page" : " is-half-letter",
+      "\"><div class=\"central-admin-print-mode-preview-page",
+      direction ? " is-" + escapeAttr_(direction) : "",
+      "\">", previewPanel, "</div></div>",
+      "</aside>",
     ].join("");
   }
 
@@ -6587,7 +7820,9 @@
       getBulletinFeaturedImageUrl_(hero) :
       getBulletinFallbackImageUrl_(hero.image_url);
     var campaigns = getSelectedBulletinCampaigns_();
-    var serveNeed = getSelectedBulletinServeNeed_();
+    var serveNeeds = getSelectedBulletinServeNeeds_();
+    var fallbackBlocks = getBulletinFallbackBlocksForPrint_();
+    var useFallbackBlocks = shouldUseBulletinFallbackBlocks_();
     var giving = adminState.bulletinDraft.giving || {};
     var headings = adminState.bulletinDraft.headings || {};
 
@@ -6616,7 +7851,12 @@
           "",
         "</section>",
       ].join("") : "",
-      campaigns.length ? [
+      useFallbackBlocks ? [
+        "<div class=\"central-bulletin-fallback-blocks\">",
+        fallbackBlocks.map(renderBulletinFallbackBlock_).join(""),
+        "</div>",
+      ].join("") : "",
+      !useFallbackBlocks && campaigns.length ? [
         "<section class=\"central-bulletin-card central-bulletin-campaigns\"><span class=\"central-bulletin-label\">Current Campaigns</span>",
         campaigns.map(function(item) {
           var iconId = getBulletinCampaignIconId_(item);
@@ -6630,12 +7870,32 @@
         }).join(""),
         "</section>",
       ].join("") : "",
-      serveNeed ? [
-        "<section class=\"central-bulletin-card central-bulletin-serve\"><div><span class=\"central-bulletin-label\">Serve Opportunity</span><h3>",
-        escapeHtml_(serveNeed.need || serveNeed.title || "Serve at CrossPointe"),
-        "</h3>", serveNeed.description ?
-          "<p class=\"central-bulletin-body-copy\">" +
-            escapeHtml_(serveNeed.description) + "</p>" : "", "</div>",
+      !useFallbackBlocks && serveNeeds.length ? [
+        "<section class=\"central-bulletin-card central-bulletin-serve\"><div>",
+        "<span class=\"central-bulletin-label\">Serve Opportunit",
+        serveNeeds.length === 1 ? "y" : "ies", "</span>",
+        "<div class=\"central-bulletin-serve-list\">",
+        serveNeeds.map(function(serveNeed) {
+          return [
+            "<article class=\"central-bulletin-serve-item\">",
+            "<span class=\"central-bulletin-serve-ministry\">",
+            escapeHtml_(
+                formatBulletinServeMinistryLabel_(serveNeed.ministry),
+            ),
+            "</span><h3>",
+            escapeHtml_(
+                serveNeed.need || serveNeed.title || "Serve at CrossPointe",
+            ),
+            "</h3>",
+            serveNeed.description ? [
+              "<p class=\"central-bulletin-body-copy\">",
+              escapeHtml_(serveNeed.description),
+              "</p>",
+            ].join("") : "",
+            "</article>",
+          ].join("");
+        }).join(""),
+        "</div></div>",
         "<span class=\"central-bulletin-serve-cta\">Learn more at<br><strong>central.crosspointe.tv</strong></span></section>",
       ].join("") : "",
       fullPage ? renderBulletinDetailsCta_("central-bulletin-full-page-cta") : [
@@ -6650,6 +7910,32 @@
     ].join("");
   }
 
+  function renderBulletinFallbackBlock_(block) {
+    var imageUrl = getBulletinFallbackImageUrl_(block && block.imageUrl);
+    var imageSide = block && block.imageSide === "left" ? "left" : "right";
+
+    return [
+      "<section class=\"central-bulletin-card central-bulletin-fallback-block is-image-",
+      imageSide, imageUrl ? " has-image" : "", "\">",
+      imageUrl ? [
+        "<div class=\"central-bulletin-fallback-media\"><img src=\"",
+        escapeAttr_(imageUrl), "\" alt=\"\"></div>",
+      ].join("") : "",
+      "<div class=\"central-bulletin-fallback-copy\">",
+      block && block.eyebrow ?
+        "<span class=\"central-bulletin-label\">" +
+          escapeHtml_(block.eyebrow) + "</span>" :
+        "",
+      "<h3>", escapeHtml_(block && block.title || "Connect at CrossPointe"),
+      "</h3>",
+      block && block.description ?
+        "<p class=\"central-bulletin-body-copy\">" +
+          escapeHtml_(block.description) + "</p>" :
+        "",
+      "</div></section>",
+    ].join("");
+  }
+
   function renderBulletinGivingStat_(label, value) {
     return "<div><span>" + escapeHtml_(label) + "</span><strong>" +
       escapeHtml_(formatBulletinCurrency_(value)) + "</strong></div>";
@@ -6660,7 +7946,9 @@
       return item.included;
     });
     var eventGroups = groupBulletinEventsByDate_(events);
-    var eventColumns = splitBulletinEventGroupsIntoColumns_(eventGroups);
+    var eventColumns = addBulletinEventContinuationFallback_(
+        splitBulletinEventGroupsIntoColumns_(eventGroups),
+    );
     var leftGroups = eventColumns.left;
     var rightGroups = eventColumns.right;
     var maxRows = Math.max(
@@ -6668,6 +7956,25 @@
         countBulletinEventsInGroups_(rightGroups),
     );
     var densityClass = getBulletinEventDensityClass_(maxRows);
+    var hasContinuation = leftGroups.concat(rightGroups).some(function(group) {
+      return !!(group && group.isContinuation);
+    });
+    var maxColumnWeight = Math.max(
+        getBulletinEventGroupsLayoutWeight_(leftGroups),
+        getBulletinEventGroupsLayoutWeight_(rightGroups),
+    );
+    if (
+      densityClass.indexOf(" is-fitted") === -1 &&
+      maxColumnWeight > 4
+    ) {
+      densityClass += " is-fitted is-stretched is-dense";
+    }
+    if (hasContinuation) {
+      if (densityClass.indexOf(" is-dense") === -1) {
+        densityClass += " is-dense";
+      }
+      densityClass += " has-continuation";
+    }
     var serviceDate = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
     var endDate = new Date(serviceDate.getTime());
     var headings = adminState.bulletinDraft.headings || {};
@@ -6680,9 +7987,13 @@
       escapeHtml_(formatBulletinDateRange_(serviceDate, endDate)),
       "</strong></div>",
       "<div class=\"central-bulletin-event-columns",
-      densityClass, "\"><div>",
+      densityClass, "\"><div",
+      hasContinuation ? " class=\"is-continuation-source\"" : "",
+      ">",
       leftGroups.map(renderBulletinPrintEventGroup_).join(""),
-      "</div><div>",
+      "</div><div",
+      hasContinuation ? " class=\"is-continuation-target\"" : "",
+      ">",
       rightGroups.map(renderBulletinPrintEventGroup_).join(""),
       "</div></div>",
       renderBulletinDetailsCta_(""),
@@ -6714,7 +8025,7 @@
     if (maxRows > 4) {
       return " is-fitted is-stretched is-dense";
     }
-    return " is-fitted is-stretched";
+    return "";
   }
 
   function groupBulletinEventsByDate_(events) {
@@ -6773,34 +8084,309 @@
     };
   }
 
+  function addBulletinEventContinuationFallback_(columns) {
+    var leftGroups = Array.isArray(columns && columns.left) ?
+      columns.left : [];
+    var rightGroups = Array.isArray(columns && columns.right) ?
+      columns.right : [];
+    var leftWeight = getBulletinEventGroupsLayoutWeight_(leftGroups);
+    var rightWeight = getBulletinEventGroupsLayoutWeight_(rightGroups);
+
+    if (
+      !leftGroups.length ||
+      leftWeight <= PRINT_MODE_EVENT_CONTINUATION_TRIGGER_WEIGHT ||
+      rightWeight >= leftWeight
+    ) {
+      return {left: leftGroups, right: rightGroups};
+    }
+
+    var sourceGroup = leftGroups[leftGroups.length - 1];
+    var sourceEvents = Array.isArray(sourceGroup && sourceGroup.events) ?
+      sourceGroup.events : [];
+    var sourceEvent = sourceEvents[sourceEvents.length - 1];
+    if (
+      !sourceEvent ||
+      !sourceEvent.includeDescription ||
+      !String(sourceEvent.description || "").trim()
+    ) {
+      return {left: leftGroups, right: rightGroups};
+    }
+
+    var split = splitBulletinDescriptionForContinuation_(
+        sourceEvent.description,
+    );
+    if (!split) {
+      return {left: leftGroups, right: rightGroups};
+    }
+
+    var primaryEvent = Object.assign({}, sourceEvent, {
+      description: split.primary,
+    });
+    var continuationEvent = Object.assign({}, sourceEvent, {
+      id: String(sourceEvent.id || "event") + "--continuation",
+      time: "",
+      location: "",
+      description: split.continuation,
+      isContinuation: true,
+    });
+    var nextSourceEvents = sourceEvents.slice();
+    nextSourceEvents[nextSourceEvents.length - 1] = primaryEvent;
+    var nextLeftGroups = leftGroups.slice();
+    nextLeftGroups[nextLeftGroups.length - 1] = Object.assign(
+        {},
+        sourceGroup,
+        {events: nextSourceEvents},
+    );
+    var continuationGroup = {
+      date: sourceGroup.date,
+      events: [continuationEvent],
+      isContinuation: true,
+    };
+    var nextRightGroups = [continuationGroup].concat(rightGroups);
+    var nextLeftWeight =
+      getBulletinEventGroupsLayoutWeight_(nextLeftGroups);
+    var nextRightWeight =
+      getBulletinEventGroupsLayoutWeight_(nextRightGroups);
+
+    if (
+      nextRightWeight > PRINT_MODE_EVENT_CONTINUATION_MAX_COLUMN_WEIGHT ||
+      nextLeftWeight >= leftWeight
+    ) {
+      return {left: leftGroups, right: rightGroups};
+    }
+
+    return {
+      left: nextLeftGroups,
+      right: nextRightGroups,
+    };
+  }
+
+  function splitBulletinDescriptionForContinuation_(value) {
+    var description = String(value || "").trim();
+    var totalWords = getBulletinEventDescriptionWordCount_(description);
+    if (
+      totalWords <
+      PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS +
+      PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS
+    ) {
+      return null;
+    }
+
+    var targetPrimaryWords = Math.max(
+        PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS,
+        Math.min(
+            Math.round(totalWords * 0.52),
+            totalWords -
+              PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS,
+        ),
+    );
+    var boundaryPattern = /(?:[.!?]+["')\]]*(?=\s|$)|\n{2,})/g;
+    var bestSplit = null;
+    var match;
+
+    while ((match = boundaryPattern.exec(description))) {
+      var primary = description.slice(
+          0,
+          match.index + match[0].length,
+      ).trim();
+      var continuation = description.slice(
+          match.index + match[0].length,
+      ).trim();
+      var primaryWords =
+        getBulletinEventDescriptionWordCount_(primary);
+      var continuationWords =
+        getBulletinEventDescriptionWordCount_(continuation);
+
+      if (
+        primaryWords < PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS ||
+        continuationWords <
+          PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS
+      ) {
+        continue;
+      }
+
+      var distance = Math.abs(primaryWords - targetPrimaryWords);
+      if (!bestSplit || distance < bestSplit.distance) {
+        bestSplit = {
+          primary: primary,
+          continuation: continuation,
+          distance: distance,
+        };
+      }
+    }
+
+    return bestSplit ? {
+      primary: bestSplit.primary,
+      continuation: bestSplit.continuation,
+    } : null;
+  }
+
+  function getBulletinEventDescriptionWordCount_(value) {
+    var words = String(value || "").trim().match(/\S+/g);
+    return words ? words.length : 0;
+  }
+
+  function getBulletinEventDescriptionLengthClass_(value) {
+    var wordCount = getBulletinEventDescriptionWordCount_(value);
+    if (wordCount > PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS) {
+      return " is-description-extra-long";
+    }
+    if (wordCount > PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS) {
+      return " is-description-long";
+    }
+    return "";
+  }
+
+  function getBulletinEventDescriptionFitSize_(item) {
+    var source = item || {};
+    var wordCount = getBulletinEventDescriptionWordCount_(
+        source.description,
+    );
+    var titleLines = Math.max(
+        1,
+        Math.ceil(String(source.title || "").length / 25),
+    );
+    var metaLength = String(source.time || "").length +
+      String(source.location || "").length;
+    var metaLines = Math.max(1, Math.ceil(metaLength / 31));
+    var layoutPressure = wordCount +
+      ((titleLines - 1) * 8) +
+      ((metaLines - 1) * 4);
+    var fontSize = 0.125;
+
+    if (layoutPressure > 30) {
+      fontSize -= Math.min(
+          layoutPressure - 30,
+          30,
+      ) * 0.0005;
+    }
+    if (layoutPressure > 60) {
+      fontSize -= Math.min(
+          layoutPressure - 60,
+          23,
+      ) * 0.000435;
+    }
+
+    return Math.max(0.1, fontSize).toFixed(4) + "in";
+  }
+
   function getBulletinEventLayoutWeight_(item) {
     var source = item || {};
     var titleLines = Math.max(1, Math.ceil(String(source.title || "").length / 25));
     var metaLength = String(source.time || "").length +
       String(source.location || "").length;
     var metaLines = Math.max(1, Math.ceil(metaLength / 31));
-    var descriptionLines = source.includeDescription && source.description ?
-      Math.ceil(String(source.description).length / 42) :
+    var descriptionWordCount = source.includeDescription ?
+      getBulletinEventDescriptionWordCount_(source.description) :
       0;
 
-    return 3 + (titleLines * 1.35) + metaLines + (descriptionLines * 0.9);
+    if (!descriptionWordCount) {
+      return 0.42 + (titleLines * 0.14) + (metaLines * 0.06);
+    }
+
+    return 0.7 + (titleLines * 0.22) + (metaLines * 0.14) +
+      (descriptionWordCount / 42);
   }
 
   function getBulletinEventEntryLayoutWeight_(item) {
     return Math.max(
-        1,
-        Math.min(2.4, getBulletinEventLayoutWeight_(item) / 4.5),
+        0.62,
+        Math.min(3.6, getBulletinEventLayoutWeight_(item)),
     );
   }
 
   function getBulletinEventGroupLayoutWeight_(group) {
-    return (Array.isArray(group && group.events) ? group.events : [])
+    return 0.24 + (Array.isArray(group && group.events) ? group.events : [])
         .reduce(function(total, item) {
           return total + getBulletinEventEntryLayoutWeight_(item);
         }, 0);
   }
 
+  function getBulletinEventGroupsLayoutWeight_(groups) {
+    return (Array.isArray(groups) ? groups : [])
+        .reduce(function(total, group) {
+          return total + getBulletinEventGroupLayoutWeight_(group);
+        }, 0);
+  }
+
+  function getBulletinEventDescriptionGuidanceState_(value) {
+    var wordCount = getBulletinEventDescriptionWordCount_(value);
+    var state = {
+      wordCount: wordCount,
+      className: "",
+      message: wordCount ? "Recommended length" : "No print description",
+    };
+
+    if (wordCount > PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS) {
+      state.className = " is-over-limit";
+      state.message = "Shorten for maximum readability";
+    } else if (wordCount > PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS) {
+      state.className = " is-warning";
+      state.message = "Will scale slightly to fit";
+    }
+
+    return state;
+  }
+
+  function renderBulletinEventDescriptionGuidance_(item) {
+    var source = item || {};
+    var state = getBulletinEventDescriptionGuidanceState_(
+        source.description,
+    );
+
+    return [
+      "<span class=\"central-admin-bulletin-description-guidance",
+      state.className,
+      "\" data-admin-bulletin-description-guidance=\"",
+      escapeAttr_(source.id),
+      "\"><span data-admin-bulletin-description-word-value>",
+      escapeHtml_(String(state.wordCount)),
+      " words</span><span aria-hidden=\"true\">·</span><span ",
+      "data-admin-bulletin-description-word-message>",
+      escapeHtml_(state.message),
+      "</span><small>",
+      String(PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS),
+      " words recommended</small></span>",
+    ].join("");
+  }
+
+  function syncBulletinEventDescriptionGuidance_(eventId, value) {
+    var state = getBulletinEventDescriptionGuidanceState_(value);
+    document.querySelectorAll(
+        "[data-admin-bulletin-description-guidance]",
+    ).forEach(function(element) {
+      if (
+        element.getAttribute("data-admin-bulletin-description-guidance") !==
+        String(eventId)
+      ) {
+        return;
+      }
+
+      element.classList.toggle("is-warning", state.className === " is-warning");
+      element.classList.toggle(
+          "is-over-limit",
+          state.className === " is-over-limit",
+      );
+      var countElement = element.querySelector(
+          "[data-admin-bulletin-description-word-value]",
+      );
+      var messageElement = element.querySelector(
+          "[data-admin-bulletin-description-word-message]",
+      );
+      if (countElement) {
+        countElement.textContent = String(state.wordCount) + " words";
+      }
+      if (messageElement) {
+        messageElement.textContent = state.message;
+      }
+    });
+  }
+
   function renderBulletinPrintEventGroup_(group) {
+    if (group && group.isContinuation) {
+      return renderBulletinPrintEventContinuation_(group.events[0]);
+    }
+
     var events = Array.isArray(group && group.events) ? group.events : [];
     var date = parseBulletinDate_(group.date);
     var weekday = new Intl.DateTimeFormat("en-US", {timeZone: "UTC", weekday: "short"}).format(date).toUpperCase();
@@ -6811,7 +8397,8 @@
     });
     var eventClass = "central-bulletin-event " +
       (hasDescription ? "has-description" : "is-compact") +
-      (events.length > 1 ? " is-grouped" : "");
+      (events.length > 1 ? " is-grouped" : "") +
+      (hasDescription || events.length > 1 ? " has-event-body" : "");
     var layoutWeight = Math.max(
         1,
         getBulletinEventGroupLayoutWeight_(group),
@@ -6824,21 +8411,18 @@
       escapeAttr_(group.date), "\"><span>", escapeHtml_(month),
       "</span><strong>", escapeHtml_(day), "</strong><small>",
       escapeHtml_(weekday), "</small></div>",
+      renderBulletinPrintEventHeading_(events[0]),
       "<div class=\"central-bulletin-event-copy\">",
-      events.map(renderBulletinPrintEventEntry_).join(""),
+      events.map(renderBulletinPrintEventEntry_).join(
+          "<div class=\"central-bulletin-event-divider\" aria-hidden=\"true\"></div>",
+      ),
       "</div></article>",
     ].join("");
   }
 
-  function renderBulletinPrintEventEntry_(item) {
-    var description = item.includeDescription && item.description ?
-      String(item.description).trim() : "";
-    var entryWeight = getBulletinEventEntryLayoutWeight_(item).toFixed(2);
-
+  function renderBulletinPrintEventHeading_(item) {
     return [
-      "<section class=\"central-bulletin-event-entry",
-      description ? " has-description" : " is-compact",
-      "\" style=\"--bulletin-entry-weight:", entryWeight, "\">",
+      "<div class=\"central-bulletin-event-entry-heading\">",
       "<p class=\"central-bulletin-event-meta\">",
       item.time ? [
         "<span class=\"central-bulletin-event-meta-time\">",
@@ -6848,9 +8432,53 @@
         "<span class=\"central-bulletin-event-meta-location\">",
         escapeHtml_(item.location), "</span>",
       ].join("") : "",
-      "</p><h3>", escapeHtml_(item.title), "</h3>",
+      "</p><h3>", escapeHtml_(item.title), "</h3></div>",
+    ].join("");
+  }
+
+  function renderBulletinPrintEventContinuation_(item) {
+    var description = String(item && item.description || "").trim();
+    var descriptionLengthClass =
+      getBulletinEventDescriptionLengthClass_(description);
+    var descriptionFitSize =
+      getBulletinEventDescriptionFitSize_(item);
+
+    return [
+      "<article class=\"central-bulletin-event central-bulletin-event-continuation has-description\">",
+      "<div class=\"central-bulletin-event-copy\">",
+      "<h3>", escapeHtml_(item && item.title || "Event"),
+      "<span class=\"central-bulletin-continuation-title\">Continued</span></h3>",
       description ?
-        "<div class=\"central-bulletin-event-description central-bulletin-body-copy central-bulletin-markdown\">" +
+        "<div class=\"central-bulletin-event-description central-bulletin-body-copy central-bulletin-markdown" +
+          descriptionLengthClass +
+          "\" style=\"--bulletin-event-description-fit-size:" +
+          escapeAttr_(descriptionFitSize) + "\">" +
+          renderAdminMarkdownLite_(description) + "</div>" :
+        "",
+      "</div></article>",
+    ].join("");
+  }
+
+  function renderBulletinPrintEventEntry_(item, index) {
+    var description = item.includeDescription && item.description ?
+      String(item.description).trim() : "";
+    var entryWeight = getBulletinEventEntryLayoutWeight_(item).toFixed(2);
+    var descriptionLengthClass =
+      getBulletinEventDescriptionLengthClass_(description);
+    var descriptionFitSize =
+      getBulletinEventDescriptionFitSize_(item);
+
+    return [
+      "<section class=\"central-bulletin-event-entry",
+      description ? " has-description" : " is-compact",
+      index === 0 ? " is-first" : "",
+      "\" style=\"--bulletin-entry-weight:", entryWeight, "\">",
+      index === 0 ? "" : renderBulletinPrintEventHeading_(item),
+      description ?
+        "<div class=\"central-bulletin-event-description central-bulletin-body-copy central-bulletin-markdown" +
+          descriptionLengthClass +
+          "\" style=\"--bulletin-event-description-fit-size:" +
+          escapeAttr_(descriptionFitSize) + "\">" +
           renderAdminMarkdownLite_(description) + "</div>" :
         "",
       "</section>",
@@ -13304,7 +14932,7 @@
     adminState.bulletinLoading = true;
     adminState.bulletinError = "";
     adminState.bulletinMessage = refreshRequested ?
-      "Refreshing events and rooms from Planning Center. You can keep viewing the cached bulletin while this finishes." :
+      "Refreshing events and rooms from Planning Center. You can keep working while this finishes." :
       "";
     renderAdmin_();
 
@@ -13336,10 +14964,10 @@
       adminState.bulletinLoading = false;
       adminState.bulletinLoaded = wasLoaded;
       adminState.bulletinMessage = wasLoaded ?
-        "The cached bulletin is still available below." : "";
+        "Your cached Print Mode content is still available below." : "";
       adminState.bulletinError = error && error.message ?
         error.message :
-        "Unable to load Bulletin Mode.";
+        "Unable to load Print Mode.";
       renderAdmin_();
     });
   }
@@ -13350,7 +14978,7 @@
     var timestamp = formatBulletinSyncTimestamp_(source.fetchedAtMs);
 
     if (status === "empty") {
-      return "No cached Planning Center content is available yet. Choose Refresh Central Content to prepare the bulletin event snapshot.";
+      return "No cached Planning Center content is available yet. Choose Refresh Events in Step 4 to prepare the event snapshot.";
     }
 
     if (refreshRequested && status === "refreshed") {
@@ -13364,16 +14992,16 @@
     }
 
     if (refreshRequested && status === "stale") {
-      return "Planning Center is busy or rate limited, so Bulletin Mode kept the last cached content" +
+      return "Planning Center is busy or rate limited, so Print Mode kept the last cached content" +
         (timestamp ? " from " + timestamp : "") + ".";
     }
 
     if (timestamp) {
       return "Showing cached Planning Center content from " + timestamp +
-        ". Use Refresh Central Content when you need the latest events and rooms.";
+        ". Use Refresh Events in Step 4 when you need the latest events and rooms.";
     }
 
-    return "Showing cached Planning Center content. Use Refresh Central Content when you need the latest events and rooms.";
+    return "Showing cached Planning Center content. Use Refresh Events in Step 4 when you need the latest events and rooms.";
   }
 
   function formatBulletinSyncTimestamp_(value) {
@@ -13927,11 +15555,56 @@
     };
   }
 
+  function createDefaultBulletinFallbackBlocks_() {
+    return [
+      {
+        id: "new-here",
+        eyebrow: "New Here?",
+        title: "We'd Love to Help You Get Connected",
+        description: [
+          "Find your next step, learn more about CrossPointe, and discover",
+          "ways to get involved at central.crosspointe.tv.",
+        ].join(" "),
+        imageUrl: "",
+        imageStoragePath: "",
+        imageSide: "right",
+        enabled: true,
+      },
+      {
+        id: "stay-connected",
+        eyebrow: "Stay Connected",
+        title: "Everything You Need for the Week Ahead",
+        description: [
+          "Explore events, groups, resources, and serving opportunities",
+          "anytime at central.crosspointe.tv.",
+        ].join(" "),
+        imageUrl: "",
+        imageStoragePath: "",
+        imageSide: "left",
+        enabled: true,
+      },
+    ];
+  }
+
+  function createEmptyBulletinFallbackBlockDraft_() {
+    return {
+      id: "",
+      eyebrow: "",
+      title: "",
+      description: "",
+      imageUrl: "",
+      imageStoragePath: "",
+      imageSide: "right",
+      enabled: true,
+    };
+  }
+
   function createEmptyBulletinDraft_() {
     return {
       serviceDate: getDefaultSundayDateInputValue_(),
       printFormat: "half-letter",
       heroSource: "featured",
+      frontContentSource: "live",
       headings: {
         frontHeading: "This Week at\nCrossPointe",
         backEyebrow: "See You There",
@@ -13963,7 +15636,8 @@
       events: [],
       campaignIds: [],
       campaignIcons: {},
-      serveNeedId: "",
+      serveNeedIds: [],
+      fallbackBlocks: createDefaultBulletinFallbackBlocks_(),
     };
   }
 
@@ -13980,6 +15654,9 @@
     var savedFeatured = source.featuredEvent || {};
     var savedFallback = source.fallbackHero &&
       typeof source.fallbackHero === "object" ? source.fallbackHero : {};
+    var savedFallbackBlocks = Array.isArray(source.fallbackBlocks) ?
+      source.fallbackBlocks :
+      createDefaultBulletinFallbackBlocks_();
     var savedEventsById = {};
     var savedCampaignIconsById = {};
 
@@ -13992,6 +15669,8 @@
       "full-page" : "half-letter";
     draft.heroSource = source.heroSource === "manual" ?
       "manual" : "featured";
+    draft.frontContentSource = source.frontContentSource === "fallback" ?
+      "fallback" : "live";
     draft.headings = {
       frontHeading: normalizeBulletinHeadingText_(
           savedHeadings.frontHeading,
@@ -14033,6 +15712,23 @@
       imageUrl: getBulletinFallbackImageUrl_(savedFallback.imageUrl),
       imageStoragePath: String(savedFallback.imageStoragePath || ""),
     };
+    draft.fallbackBlocks = savedFallbackBlocks.slice(0, 4)
+        .map(function(item, index) {
+          var block = item && typeof item === "object" ? item : {};
+          return {
+            id: String(block.id || ("fallback-" + String(index + 1))),
+            eyebrow: String(block.eyebrow || ""),
+            title: String(block.title || ""),
+            description: String(block.description || ""),
+            imageUrl: getBulletinFallbackImageUrl_(block.imageUrl),
+            imageStoragePath: String(block.imageStoragePath || ""),
+            imageSide: block.imageSide === "left" ? "left" : "right",
+            enabled: block.enabled !== false,
+          };
+        })
+        .filter(function(block) {
+          return block.title;
+        });
 
     if (currentFeatured) {
       var featuredId = getBulletinItemId_(currentFeatured);
@@ -14114,16 +15810,36 @@
     var campaignIds = Array.isArray(source.campaignIds) ?
       source.campaignIds.map(String) :
       [];
-    draft.campaignIds = campaignIds.length ? campaignIds :
+    draft.campaignIds = (campaignIds.length ? campaignIds :
       (Array.isArray(data.campaigns) ? data.campaigns : [])
-          .slice(0, 3)
+          .slice(0, PRINT_MODE_MAX_CAMPAIGNS)
           .map(function(item) {
             return String(item.id || "");
           })
-          .filter(Boolean);
-    draft.serveNeedId = String(source.serveNeedId || "") ||
-      String(data.serveNeeds && data.serveNeeds[0] &&
-        data.serveNeeds[0].id || "");
+          .filter(Boolean))
+        .slice(0, PRINT_MODE_MAX_CAMPAIGNS);
+    var hasSavedServeNeedIds = Array.isArray(source.serveNeedIds);
+    var savedServeNeedIds = hasSavedServeNeedIds ?
+      source.serveNeedIds.map(String) :
+      (source.serveNeedId ? [String(source.serveNeedId)] : []);
+    if (!hasSavedServeNeedIds && !savedServeNeedIds.length) {
+      savedServeNeedIds = [
+        String(data.serveNeeds && data.serveNeeds[0] &&
+          data.serveNeeds[0].id || ""),
+      ].filter(Boolean);
+    }
+    var remainingFrontItemSlots = Math.max(
+        0,
+        PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - draft.campaignIds.length,
+    );
+    draft.serveNeedIds = savedServeNeedIds
+        .filter(function(id, index, ids) {
+          return id && ids.indexOf(id) === index;
+        })
+        .slice(
+            0,
+            Math.min(PRINT_MODE_MAX_SERVE_NEEDS, remainingFrontItemSlots),
+        );
 
     return draft;
   }
@@ -14431,18 +16147,67 @@
         .filter(function(item) {
           return selectedIds.indexOf(String(item.id || "")) !== -1;
         })
-        .slice(0, 3);
+        .slice(0, PRINT_MODE_MAX_CAMPAIGNS);
   }
 
-  function getSelectedBulletinServeNeed_() {
+  function getSelectedBulletinServeNeeds_() {
     var data = adminState.bulletinCentralData || {};
+    var selectedIds = adminState.bulletinDraft.serveNeedIds || [];
     return (Array.isArray(data.serveNeeds) ? data.serveNeeds : [])
-        .find(function(item) {
-          return String(item.id || "") === adminState.bulletinDraft.serveNeedId;
-        }) || null;
+        .filter(function(item) {
+          return selectedIds.indexOf(String(item.id || "")) !== -1;
+        })
+        .slice(0, PRINT_MODE_MAX_SERVE_NEEDS);
+  }
+
+  function getBulletinFrontContentSelectionState_() {
+    var campaignCount = getSelectedBulletinCampaigns_().length;
+    var serveNeedCount = getSelectedBulletinServeNeeds_().length;
+    return {
+      campaignCount: campaignCount,
+      serveNeedCount: serveNeedCount,
+      totalCount: campaignCount + serveNeedCount,
+      maxCount: PRINT_MODE_MAX_FRONT_CONTENT_ITEMS,
+    };
+  }
+
+  function getBulletinFallbackBlocksForPrint_() {
+    return (
+      Array.isArray(adminState.bulletinDraft.fallbackBlocks) ?
+        adminState.bulletinDraft.fallbackBlocks :
+        []
+    ).filter(function(block) {
+      return block && block.enabled !== false && String(block.title || "").trim();
+    }).slice(0, 4);
+  }
+
+  function shouldUseBulletinFallbackBlocks_() {
+    return (
+      adminState.bulletinDraft.frontContentSource === "fallback" ||
+      (
+        !getSelectedBulletinCampaigns_().length &&
+        !getSelectedBulletinServeNeeds_().length
+      )
+    );
   }
 
   function updateBulletinDraftField_(fieldName, value) {
+    if (
+      fieldName === "printFormat" &&
+      value !== adminState.bulletinDraft.printFormat
+    ) {
+      adminState.printModeFormatTransition =
+        value === "full-page" ? "to-full" : "to-half";
+      if (value === "full-page") {
+        adminState.printModePreviewSide = "front";
+        adminState.printModePreviewDirection = "backward";
+        if (getPrintModeStep_() === 4) {
+          adminState.printModeStep = 5;
+          adminState.printModeStepDirection = "forward";
+        }
+      }
+    }
+
     if (fieldName.indexOf("giving.") === 0) {
       adminState.bulletinDraft.giving[fieldName.replace("giving.", "")] =
         normalizeBulletinMoney_(value);
@@ -14480,31 +16245,78 @@
   function updateBulletinChoice_(input) {
     var choiceType = input.getAttribute("data-admin-bulletin-choice") || "";
     var id = input.getAttribute("data-admin-doc-id") || "";
+    var selectionState = getBulletinFrontContentSelectionState_();
 
     if (choiceType === "campaign") {
       var ids = adminState.bulletinDraft.campaignIds.slice();
       var index = ids.indexOf(id);
-      if (input.checked && index === -1 && ids.length < 3) {
+      if (
+        input.checked &&
+        index === -1 &&
+        ids.length < PRINT_MODE_MAX_CAMPAIGNS &&
+        selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+      ) {
         ids.push(id);
       } else if (!input.checked && index !== -1) {
         ids.splice(index, 1);
+      } else {
+        input.checked = index !== -1;
+        return false;
       }
       adminState.bulletinDraft.campaignIds = ids;
-      return;
+      return true;
+    }
+
+    if (choiceType === "serve-need") {
+      var serveNeedIds =
+        (adminState.bulletinDraft.serveNeedIds || []).slice();
+      var serveNeedIndex = serveNeedIds.indexOf(id);
+      if (
+        input.checked &&
+        serveNeedIndex === -1 &&
+        serveNeedIds.length < PRINT_MODE_MAX_SERVE_NEEDS &&
+        selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+      ) {
+        serveNeedIds.push(id);
+      } else if (!input.checked && serveNeedIndex !== -1) {
+        serveNeedIds.splice(serveNeedIndex, 1);
+      } else {
+        input.checked = serveNeedIndex !== -1;
+        return false;
+      }
+      adminState.bulletinDraft.serveNeedIds = serveNeedIds;
+      return true;
     }
 
     if (choiceType === "event") {
       updateBulletinEventField_(id, "included", !!input.checked);
+      return true;
     }
+
+    return false;
   }
 
   function buildBulletinModePayload_() {
     var draft = adminState.bulletinDraft;
+    var campaignIds = (draft.campaignIds || [])
+        .slice(0, PRINT_MODE_MAX_CAMPAIGNS);
+    var serveNeedIds = (draft.serveNeedIds || []).slice(
+        0,
+        Math.min(
+            PRINT_MODE_MAX_SERVE_NEEDS,
+            Math.max(
+                0,
+                PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - campaignIds.length,
+            ),
+        ),
+    );
     return {
       serviceDate: normalizeSundayDateInputValue_(draft.serviceDate),
       printFormat: draft.printFormat === "full-page" ?
         "full-page" : "half-letter",
       heroSource: draft.heroSource === "manual" ? "manual" : "featured",
+      frontContentSource: draft.frontContentSource === "fallback" ?
+        "fallback" : "live",
       headings: {
         frontHeading: normalizeBulletinHeadingText_(
             draft.headings.frontHeading,
@@ -14550,6 +16362,21 @@
             draft.fallbackHero.imageStoragePath || "",
         ).trim(),
       },
+      fallbackBlocks: (draft.fallbackBlocks || []).slice(0, 4)
+          .map(function(block) {
+            return {
+              id: String(block.id || "").trim(),
+              eyebrow: String(block.eyebrow || "").trim(),
+              title: String(block.title || "").trim(),
+              description: String(block.description || "").trim(),
+              imageUrl: getBulletinFallbackImageUrl_(block.imageUrl),
+              imageStoragePath: String(
+                  block.imageStoragePath || "",
+              ).trim(),
+              imageSide: block.imageSide === "left" ? "left" : "right",
+              enabled: block.enabled !== false,
+            };
+          }),
       // Only persist events that belong to this bulletin. The Planning Center
       // feed intentionally includes extra days so a future Sunday can be
       // selected, but saving those hidden events can crowd editable events out
@@ -14564,7 +16391,7 @@
           includeDescription: item.includeDescription !== false,
         };
       }),
-      campaignIds: draft.campaignIds.slice(0, 3),
+      campaignIds: campaignIds,
       campaignIcons: Object.keys(draft.campaignIcons || {})
           .slice(0, 12)
           .map(function(id) {
@@ -14575,7 +16402,10 @@
               ),
             };
           }),
-      serveNeedId: String(draft.serveNeedId || ""),
+      serveNeedIds: serveNeedIds,
+      // Keep the first selection for older clients until Print Mode has been
+      // promoted everywhere.
+      serveNeedId: String(serveNeedIds[0] || ""),
     };
   }
 
@@ -14632,7 +16462,7 @@
           );
           adminState.bulletinImageUploading = false;
           adminState.bulletinMessage =
-            "Welcome image uploaded. Save Bulletin Settings to keep it with the evergreen hero.";
+            "Welcome image uploaded. Save your changes to keep it with the evergreen hero.";
           renderAdmin_();
         })
         .catch(function(error) {
@@ -14640,7 +16470,64 @@
           adminState.bulletinMessage = "";
           adminState.bulletinError = error && error.message ?
             error.message :
-            "Unable to upload the Bulletin welcome image.";
+            "Unable to upload the Print Mode welcome image.";
+          renderAdmin_();
+        });
+  }
+
+  function uploadBulletinFallbackBlockImage_(file) {
+    if (!file) {
+      return;
+    }
+
+    var allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (allowedTypes.indexOf(String(file.type || "").toLowerCase()) === -1) {
+      adminState.bulletinError = "Choose a JPEG, PNG, or WebP image.";
+      renderAdmin_();
+      return;
+    }
+
+    if (!file.size || file.size > 10 * 1024 * 1024) {
+      adminState.bulletinError = "Print Mode images must be 10 MB or smaller.";
+      renderAdmin_();
+      return;
+    }
+
+    adminState.bulletinFallbackBlockImageUploading = true;
+    adminState.bulletinError = "";
+    renderAdmin_();
+
+    readAdminFileAsDataUrl_(file)
+        .then(function(dataUrl) {
+          return callBulletinModeEndpoint_("POST", {
+            action: "uploadFallbackImage",
+            fileName: String(file.name || "print-mode-custom-block"),
+            contentType: String(file.type || ""),
+            dataUrl: dataUrl,
+          });
+        })
+        .then(function(result) {
+          var imageUrl = getBulletinFallbackImageUrl_(
+              result && result.imageUrl,
+          );
+          if (!imageUrl) {
+            throw new Error(
+                "Firebase Storage did not return a usable image link.",
+            );
+          }
+
+          adminState.bulletinFallbackBlockDraft.imageUrl = imageUrl;
+          adminState.bulletinFallbackBlockDraft.imageStoragePath = String(
+              result && result.storagePath || "",
+          );
+          adminState.bulletinFallbackBlockImageUploading = false;
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.bulletinFallbackBlockImageUploading = false;
+          adminState.bulletinError = error && error.message ?
+            error.message :
+            "Unable to upload the custom block image.";
           renderAdmin_();
         });
   }
@@ -14661,30 +16548,30 @@
   function saveBulletinMode_() {
     if (!isEditorLevelPermission_(getPageAccessLevel_("bulletin"))) {
       adminState.bulletinError =
-        "Your current access level does not allow saving Bulletin Mode.";
+        "Your current access level does not allow saving Print Mode.";
       renderAdmin_();
       return;
     }
 
     adminState.bulletinSaving = true;
     adminState.bulletinError = "";
-    renderAdmin_();
+    syncAdminFloatingSaveBar_();
+    syncAdminActionButtonFeedback_();
 
     callBulletinModeEndpoint_("POST", buildBulletinModePayload_())
-        .then(function(result) {
+        .then(function() {
           completePendingAdminActionFeedback_();
           adminState.bulletinSaving = false;
-          adminState.bulletinMessage = result && result.message ?
-            result.message :
-            "Bulletin Mode settings saved.";
-          renderAdmin_();
+          adminState.bulletinMessage = "";
+          syncAdminFloatingSaveBar_();
+          syncAdminActionButtonFeedback_();
         })
         .catch(function(error) {
           clearPendingAdminActionFeedback_();
           adminState.bulletinSaving = false;
           adminState.bulletinError = error && error.message ?
             error.message :
-            "Unable to save Bulletin Mode settings.";
+            "Unable to save Print Mode settings.";
           renderAdmin_();
         });
   }
@@ -16002,6 +17889,15 @@
           adminState.campaignsPublishedItems = publishedItems;
           adminState.campaignsUsingPublishedFallback = false;
           adminState.campaignsItems = publishedItems;
+          if (
+            adminState.currentPageId === "bulletin" &&
+            adminState.bulletinCentralData
+          ) {
+            adminState.bulletinCentralData.campaigns =
+              publishedItems.filter(function(item) {
+                return item.active;
+              });
+          }
           renderAdmin_();
         })
         .catch(function(error) {
@@ -16056,6 +17952,15 @@
           adminState.serveNeedsPublishedItems = publishedItems;
           adminState.serveNeedsUsingPublishedFallback = false;
           adminState.serveNeedsItems = publishedItems;
+          if (
+            adminState.currentPageId === "bulletin" &&
+            adminState.bulletinCentralData
+          ) {
+            adminState.bulletinCentralData.serveNeeds =
+              publishedItems.filter(function(item) {
+                return item.active;
+              });
+          }
           renderAdmin_();
         })
         .catch(function(error) {
@@ -18416,6 +20321,9 @@
           adminState.campaignsMessage = result && result.message ?
             result.message :
             successMessage;
+          if (adminState.printModeQuickAddSection === "campaigns") {
+            adminState.printModeQuickAddSection = "";
+          }
           loadCampaigns_();
         })
         .catch(function(error) {
@@ -18975,6 +20883,9 @@
           adminState.serveNeedsMessage = result && result.message ?
             result.message :
             successMessage;
+          if (adminState.printModeQuickAddSection === "serveNeeds") {
+            adminState.printModeQuickAddSection = "";
+          }
           loadServeNeeds_();
         })
         .catch(function(error) {
@@ -20030,7 +21941,7 @@
 
   function callBulletinModeEndpoint_(method, payload) {
     if (!adminState.user) {
-      return Promise.reject(new Error("Sign in before using Bulletin Mode."));
+      return Promise.reject(new Error("Sign in before using Print Mode."));
     }
 
     var normalizedMethod = method === "POST" ? "POST" : "GET";
@@ -21061,7 +22972,7 @@
   function getManagedAdminPageConfigs_() {
     return [
       {key: "hub", label: "Hub"},
-      {key: "bulletin", label: "Bulletin Mode"},
+      {key: "bulletin", label: "Print Mode"},
       {key: "settings", label: "Settings"},
       {key: "integrations", label: "Integrations"},
       {key: "wayfinder", label: "Wayfinder"},

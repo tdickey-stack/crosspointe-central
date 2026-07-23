@@ -117,7 +117,7 @@
     },
     {
       id: "hub",
-      label: "Hub",
+      label: "Homepage",
       route: "/admin/hub",
       pageAccessKey: "hub",
       summary: "Main Central homepage copy plus the Sunday-mode hero and labels that belong on the Hub page.",
@@ -183,7 +183,7 @@
       label: "Settings",
       route: "/admin/settings",
       pageAccessKey: "settings",
-      summary: "Operational Sunday controls, room rules, and admin user access for the dashboard.",
+      summary: "Sunday Mode, room names, and access for your admin team.",
       collectionPath: PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
       status: "Preview workflow",
     },
@@ -198,10 +198,10 @@
     },
     {
       id: "wayfinder",
-      label: "Wayfinder Lab",
+      label: "Wayfinder",
       route: "/admin/wayfinder",
       pageAccessKey: "wayfinder",
-      summary: "Private testing for Wayfinder's approved knowledge retrieval before Gemini is connected.",
+      summary: "Manage Wayfinder answers, source information, and temporary notices.",
       collectionPath: "centralAssistantKnowledgeDraft",
       status: "Private prototype",
     },
@@ -210,11 +210,135 @@
       label: "Change Requests",
       route: "/admin/change-requests",
       pageAccessKey: "changeRequests",
-      summary: "Approval queue for proposed edits before they publish.",
+      summary: "Review proposed changes before they go live.",
       collectionPath: CENTRAL_ADMIN_CHANGE_REQUESTS_COLLECTION_PATH,
       status: "Approval queue",
     },
   ];
+  var ADMIN_SIDEBAR_GROUPS = [
+    {
+      id: "hub",
+      label: "Hub",
+      pageIds: [
+        "hub",
+        "quick-links",
+        "status-banner",
+        "serve-needs",
+        "resources",
+        "campaigns",
+        "next-steps",
+      ],
+    },
+  ];
+  var ADMIN_SIDEBAR_ROOT_ITEMS = [
+    {type: "page", id: "overview"},
+    {type: "group", id: "hub"},
+    {type: "page", id: "sunday"},
+    {type: "page", id: "bulletin"},
+    {type: "page", id: "settings"},
+    {type: "page", id: "integrations"},
+    {type: "page", id: "wayfinder"},
+    {type: "page", id: "change-requests"},
+  ];
+  var ADMIN_SUCCESS_BUTTON_ACTIONS = {
+    "save-bulletin": true,
+    "publish-hub-settings": true,
+    "publish-hub-sunday": true,
+    "publish-sunday": true,
+    "publish-settings-sunday": true,
+    "publish-integrations": true,
+    "publish-wayfinder-notice": true,
+    "publish-wayfinder-knowledge": true,
+    "save-room-rule": true,
+    "publish-room-rules": true,
+    "save-admin-user": true,
+    "save-quick-link": true,
+    "publish-status-banner": true,
+    "publish-quick-links": true,
+    "save-resource": true,
+    "publish-resources": true,
+    "save-campaign": true,
+    "publish-campaigns": true,
+    "save-serve-need": true,
+    "publish-serve-needs": true,
+    "save-next-step": true,
+    "publish-next-steps": true,
+  };
+  var ADMIN_ACTION_SUCCESS_RESET_MS = 3600;
+  var ADMIN_ACTION_SUCCESS_TRANSITION_MS = 1000;
+  var ADMIN_QUICK_LINK_REVEAL_RESET_MS = 700;
+  var ADMIN_FLOATING_SAVE_BAR_EXIT_MS = 480;
+  var ADMIN_ACTION_DIRTY_SCOPES = {
+    "save-bulletin": "bulletin",
+    "publish-hub-settings": "hub-settings",
+    "publish-hub-sunday": "hub-sunday",
+    "publish-sunday": "sunday",
+    "publish-settings-sunday": "settings-sunday",
+    "publish-integrations": "integrations",
+    "save-quick-link": "quick-link",
+    "publish-status-banner": "status-banner",
+    "save-resource": "resource",
+    "save-campaign": "campaign",
+    "save-serve-need": "serve-need",
+    "save-next-step": "next-step",
+    "save-room-rule": "room-rule",
+    "save-admin-user": "admin-user",
+  };
+  var ADMIN_DIRTY_SCOPE_RESET_ACTIONS = {
+    "hub-settings": "reset-hub-settings",
+    "hub-sunday": "reset-hub-sunday",
+    "sunday": "reset-sunday",
+    "settings-sunday": "reset-settings-sunday",
+    "integrations": "reset-integrations",
+    "quick-link": "reset-quick-link-form",
+    "status-banner": "reset-status-banner-form",
+    "resource": "reset-resource-form",
+    "campaign": "reset-campaign-form",
+    "serve-need": "reset-serve-need-form",
+    "next-step": "reset-next-step-form",
+    "room-rule": "reset-room-rule-form",
+    "admin-user": "reset-admin-user-form",
+  };
+  var ADMIN_RESET_ACTION_DIRTY_SCOPES = Object.keys(
+      ADMIN_DIRTY_SCOPE_RESET_ACTIONS,
+  ).reduce(function(scopes, scope) {
+    scopes[ADMIN_DIRTY_SCOPE_RESET_ACTIONS[scope]] = scope;
+    return scopes;
+  }, {});
+  var ADMIN_EDIT_ACTION_DIRTY_SCOPES = {
+    "edit-quick-link": "quick-link",
+    "edit-resource": "resource",
+    "edit-campaign": "campaign",
+    "edit-serve-need": "serve-need",
+    "edit-next-step": "next-step",
+    "edit-room-rule": "room-rule",
+    "edit-admin-user": "admin-user",
+  };
+  var ADMIN_HIDDEN_STATUS_PILL_LABELS = {
+    "admin only": true,
+    "approval queue": true,
+    "approval required": true,
+    "approval workflow": true,
+    "can publish": true,
+    "can publish live preview": true,
+    "can change preview state": true,
+    "editable": true,
+    "edit & publish": true,
+    "foundation": true,
+    "isolated": true,
+    "next patch": true,
+    "operational controls": true,
+    "preview workflow": true,
+    "preview-safe": true,
+    "private prototype": true,
+    "production": true,
+    "published workflow": true,
+    "read only": true,
+    "ready to configure": true,
+    "restricted": true,
+    "submit for approval": true,
+    "write access": true,
+  };
   var CENTRAL_ALLOWED_EMAIL_DOMAINS = ["crosspointe.tv"];
   var CENTRAL_ALLOWED_ADMIN_EMAILS = ["tylerdickey17@gmail.com"];
   var CENTRAL_THEME_STORAGE_KEY = "central-theme-override-v2";
@@ -448,6 +572,17 @@
     bootMode: window.CENTRAL_BOOT_MODE || "public",
     currentPageId: getCurrentAdminPageId_(),
     sidebarOpen: shouldAdminSidebarStartOpen_(),
+    sidebarNavGroup: getAdminSidebarGroupForPageId_(
+        getCurrentAdminPageId_(),
+    ),
+    actionFeedbackPendingKey: "",
+    actionFeedbackSuccessKey: "",
+    actionFeedbackSuccessPlayed: false,
+    dirtyScopes: {},
+    activeDirtyScope: "",
+    floatingSaveBarScope: "",
+    floatingSaveBarExitScope: "",
+    floatingSaveBarExitLabel: "",
     firebaseReady: false,
     firebaseProjectId: "",
     usingEmulators: shouldUseFirebaseEmulators_(),
@@ -487,6 +622,7 @@
     quickLinksDraftInitialized: false,
     quickLinksUsingPublishedFallback: false,
     quickLinksEditingId: "",
+    quickLinksRecentlyAddedId: "",
     quickLinksError: "",
     quickLinksMessage: "",
     resourcesLoaded: false,
@@ -724,6 +860,8 @@
   var adminSortDragDocId = "";
   var adminSortDropDocId = "";
   var adminSortDropPlacement = "";
+  var adminActionSuccessResetTimer = null;
+  var adminFloatingSaveBarExitTimer = null;
 
   if (!isAdminRoute_()) {
     return;
@@ -753,6 +891,7 @@
     appEl.addEventListener("dragend", handleAdminDragEnd_);
     document.addEventListener("keydown", handleAdminKeyDown_);
     window.addEventListener("popstate", handleAdminPopState_);
+    window.addEventListener("beforeunload", handleAdminBeforeUnload_);
     window.addEventListener("beforeprint", beginAdminPrintThemeLock_);
     window.addEventListener("afterprint", endAdminPrintThemeLock_);
 
@@ -1017,6 +1156,8 @@
       handlePendingAdminRedirectResult_();
 
       adminAuth.onAuthStateChanged(function(user) {
+        clearAllAdminDirtyScopes_(true);
+        clearAdminActionFeedback_();
         adminState.user = user;
         adminState.userEmailAllowed = isAllowedAdminEmail_(user && user.email);
         adminState.authLoading = false;
@@ -1173,6 +1314,24 @@
     var button = event.target.closest("[data-admin-action]");
     if (button) {
       var action = button.getAttribute("data-admin-action");
+      var resetDirtyScope = ADMIN_RESET_ACTION_DIRTY_SCOPES[action] || "";
+      var editDirtyScope = ADMIN_EDIT_ACTION_DIRTY_SCOPES[action] || "";
+
+      if (resetDirtyScope) {
+        clearAdminDirtyScope_(resetDirtyScope);
+      }
+
+      if (editDirtyScope) {
+        if (!confirmDiscardAdminChanges_(editDirtyScope)) {
+          event.preventDefault();
+          return;
+        }
+        clearAdminDirtyScope_(editDirtyScope);
+      }
+
+      if (isAdminSuccessButtonAction_(action)) {
+        beginAdminActionFeedback_(action);
+      }
 
       if (action === "sign-in") {
         event.preventDefault();
@@ -1194,6 +1353,9 @@
 
       if (action === "sign-out") {
         event.preventDefault();
+        if (!confirmDiscardAdminChanges_()) {
+          return;
+        }
         signOutFromAdmin_();
         return;
       }
@@ -1212,6 +1374,7 @@
 
       if (action === "remove-bulletin-fallback-image") {
         event.preventDefault();
+        markAdminDirtyScope_("bulletin");
         adminState.bulletinDraft.fallbackHero.imageUrl = "";
         adminState.bulletinDraft.fallbackHero.imageStoragePath = "";
         adminState.bulletinMessage =
@@ -1228,6 +1391,9 @@
 
       if (action === "refresh-bulletin") {
         event.preventDefault();
+        if (!confirmDiscardAdminChanges_("bulletin")) {
+          return;
+        }
         adminState.bulletinEditingEventId = "";
         adminState.bulletinError = "";
         resetCurrentCentralDataCache_();
@@ -1260,6 +1426,7 @@
 
       if (action === "bulk-bulletin-events") {
         event.preventDefault();
+        markAdminDirtyScope_("bulletin");
         updateBulletinEventBulkInclusion_(
             button.getAttribute("data-admin-bulletin-bulk") || "",
         );
@@ -1792,6 +1959,25 @@
         return;
       }
 
+      if (action === "open-sidebar-nav-group") {
+        event.preventDefault();
+        adminState.sidebarNavGroup =
+          button.getAttribute("data-admin-nav-group") || "";
+        if (!syncAdminSidebarNavGroupState_()) {
+          renderAdmin_();
+        }
+        return;
+      }
+
+      if (action === "close-sidebar-nav-group") {
+        event.preventDefault();
+        adminState.sidebarNavGroup = "";
+        if (!syncAdminSidebarNavGroupState_()) {
+          renderAdmin_();
+        }
+        return;
+      }
+
       if (action === "confirm-delete-confirm") {
         event.preventDefault();
         confirmDeleteConfirm_();
@@ -1822,8 +2008,480 @@
     navigateToAdminPage_(pageId);
   }
 
+  function isAdminSuccessButtonAction_(action) {
+    return !!ADMIN_SUCCESS_BUTTON_ACTIONS[String(action || "")];
+  }
+
+  function getAdminDirtyScopeForField_(field) {
+    var normalizedField = String(field || "").trim();
+    var fieldPrefix = normalizedField.split(".")[0];
+
+    if (fieldPrefix === "settings-sunday") {
+      return adminState.currentPageId === "integrations" ?
+        "integrations" :
+        "settings-sunday";
+    }
+
+    return {
+      bulletin: "bulletin",
+      "hub-settings": "hub-settings",
+      "hub-sunday": "hub-sunday",
+      sunday: "sunday",
+      "quick-link": "quick-link",
+      "status-banner": "status-banner",
+      resource: "resource",
+      campaign: "campaign",
+      "serve-need": "serve-need",
+      "next-step": "next-step",
+      "room-rule": "room-rule",
+      "admin-user": "admin-user",
+    }[fieldPrefix] || "";
+  }
+
+  function getAdminActionForDirtyScope_(scope) {
+    return Object.keys(ADMIN_ACTION_DIRTY_SCOPES).find(function(action) {
+      return ADMIN_ACTION_DIRTY_SCOPES[action] === scope;
+    }) || "";
+  }
+
+  function isAdminDirtyScope_(scope) {
+    return !!(
+      scope &&
+      adminState.dirtyScopes &&
+      adminState.dirtyScopes[scope]
+    );
+  }
+
+  function markAdminDirtyScope_(scope) {
+    var normalizedScope = String(scope || "").trim();
+    if (!normalizedScope) {
+      return;
+    }
+
+    cancelAdminFloatingSaveBarExit_();
+    var wasDirty = isAdminDirtyScope_(normalizedScope);
+    var previousActiveScope = adminState.activeDirtyScope;
+    adminState.dirtyScopes[normalizedScope] = true;
+    adminState.activeDirtyScope = normalizedScope;
+    syncAdminSaveBars_();
+    if (!wasDirty || previousActiveScope !== normalizedScope) {
+      syncAdminFloatingSaveBar_();
+    }
+  }
+
+  function clearAdminDirtyScope_(scope) {
+    var normalizedScope = String(scope || "").trim();
+    if (!normalizedScope) {
+      return;
+    }
+
+    var wasDirty = isAdminDirtyScope_(normalizedScope);
+    delete adminState.dirtyScopes[normalizedScope];
+    if (adminState.activeDirtyScope === normalizedScope) {
+      adminState.activeDirtyScope = Object.keys(adminState.dirtyScopes).pop() || "";
+    }
+    syncAdminSaveBars_();
+    if (
+      wasDirty &&
+      !Object.keys(adminState.dirtyScopes).length &&
+      !adminState.actionFeedbackPendingKey &&
+      !adminState.actionFeedbackSuccessKey
+    ) {
+      startAdminFloatingSaveBarExit_(
+          normalizedScope,
+          "Changes discarded",
+      );
+      return;
+    }
+    syncAdminFloatingSaveBar_();
+  }
+
+  function clearAllAdminDirtyScopes_(skipExitAnimation) {
+    adminState.dirtyScopes = {};
+    adminState.activeDirtyScope = "";
+    if (skipExitAnimation) {
+      cancelAdminFloatingSaveBarExit_();
+      adminState.floatingSaveBarScope = "";
+    }
+    syncAdminSaveBars_();
+    syncAdminFloatingSaveBar_();
+  }
+
+  function cancelAdminFloatingSaveBarExit_() {
+    if (adminFloatingSaveBarExitTimer) {
+      window.clearTimeout(adminFloatingSaveBarExitTimer);
+      adminFloatingSaveBarExitTimer = null;
+    }
+    adminState.floatingSaveBarExitScope = "";
+    adminState.floatingSaveBarExitLabel = "";
+  }
+
+  function startAdminFloatingSaveBarExit_(scope, label) {
+    var normalizedScope = String(scope || "").trim();
+    if (!normalizedScope) {
+      return;
+    }
+
+    cancelAdminFloatingSaveBarExit_();
+    adminState.floatingSaveBarExitScope = normalizedScope;
+    adminState.floatingSaveBarExitLabel = String(label || "Changes saved");
+    syncAdminFloatingSaveBar_();
+    adminFloatingSaveBarExitTimer = window.setTimeout(function() {
+      adminFloatingSaveBarExitTimer = null;
+      if (adminState.floatingSaveBarExitScope !== normalizedScope) {
+        return;
+      }
+
+      adminState.floatingSaveBarExitScope = "";
+      adminState.floatingSaveBarExitLabel = "";
+      adminState.floatingSaveBarScope = "";
+      var saveBar = appEl && appEl.querySelector(
+          "[data-admin-floating-save-bar]",
+      );
+      if (saveBar) {
+        saveBar.remove();
+      }
+      if (appEl) {
+        Array.prototype.forEach.call(
+            appEl.querySelectorAll(".is-floating-save-source"),
+            function(actionRow) {
+              actionRow.classList.remove("is-floating-save-source");
+            },
+        );
+      }
+    }, ADMIN_FLOATING_SAVE_BAR_EXIT_MS);
+  }
+
+  function hasAdminUnsavedChanges_(scope) {
+    if (scope) {
+      return isAdminDirtyScope_(scope);
+    }
+    return Object.keys(adminState.dirtyScopes || {}).length > 0;
+  }
+
+  function confirmDiscardAdminChanges_(scope) {
+    if (!hasAdminUnsavedChanges_(scope)) {
+      return true;
+    }
+
+    var confirmed = window.confirm(
+        "You have unsaved changes. Leave without saving them?",
+    );
+    if (!confirmed) {
+      return false;
+    }
+
+    if (scope) {
+      clearAdminDirtyScope_(scope);
+    } else {
+      clearAllAdminDirtyScopes_(true);
+    }
+    return true;
+  }
+
+  function handleAdminBeforeUnload_(event) {
+    if (!hasAdminUnsavedChanges_()) {
+      return;
+    }
+
+    event.preventDefault();
+    event.returnValue = "";
+  }
+
+  function getAdminSaveBarState_(action, scope) {
+    if (adminState.actionFeedbackSuccessKey === action) {
+      return "saved";
+    }
+    if (adminState.actionFeedbackPendingKey === action) {
+      return "saving";
+    }
+    return isAdminDirtyScope_(scope) ? "dirty" : "clean";
+  }
+
+  function getAdminSaveBarStatusLabel_(state) {
+    if (state === "exiting") {
+      return adminState.floatingSaveBarExitLabel || "Changes saved";
+    }
+    if (state === "saved") {
+      return "Changes saved";
+    }
+    if (state === "saving") {
+      return "Saving changes...";
+    }
+    return state === "dirty" ? "Unsaved changes" : "No unsaved changes";
+  }
+
+  function syncAdminSaveBars_() {
+    if (!appEl) {
+      return;
+    }
+
+    Object.keys(ADMIN_ACTION_DIRTY_SCOPES).forEach(function(action) {
+      var scope = ADMIN_ACTION_DIRTY_SCOPES[action];
+      var state = getAdminSaveBarState_(action, scope);
+      Array.prototype.forEach.call(
+          appEl.querySelectorAll(
+              '.central-admin-panel [data-admin-action="' + action + '"]',
+          ),
+          function(buttonEl) {
+            var actionRow = buttonEl.closest(".central-admin-action-row");
+            if (actionRow) {
+              actionRow.classList.add("central-admin-save-action-row");
+              actionRow.setAttribute("data-admin-save-scope", scope);
+            }
+
+            var storedBaseDisabled = buttonEl.getAttribute(
+                "data-admin-save-base-disabled",
+            );
+            var baseDisabled = storedBaseDisabled == null ?
+              buttonEl.disabled :
+              storedBaseDisabled === "true";
+            buttonEl.setAttribute(
+                "data-admin-save-base-disabled",
+                baseDisabled ? "true" : "false",
+            );
+            buttonEl.disabled = baseDisabled || state === "clean";
+          },
+      );
+    });
+  }
+
+  function syncAdminFloatingSaveBar_() {
+    if (!appEl) {
+      return;
+    }
+
+    var existingBar = appEl.querySelector("[data-admin-floating-save-bar]");
+    if (existingBar) {
+      existingBar.remove();
+    }
+    Array.prototype.forEach.call(
+        appEl.querySelectorAll(".is-floating-save-source"),
+        function(actionRow) {
+          actionRow.classList.remove("is-floating-save-source");
+        },
+    );
+
+    var action = adminState.actionFeedbackPendingKey ||
+      adminState.actionFeedbackSuccessKey ||
+      getAdminActionForDirtyScope_(adminState.activeDirtyScope) ||
+      getAdminActionForDirtyScope_(adminState.floatingSaveBarExitScope);
+    var scope = ADMIN_ACTION_DIRTY_SCOPES[action] || "";
+    var state = adminState.floatingSaveBarExitScope === scope &&
+      !adminState.actionFeedbackPendingKey &&
+      !adminState.actionFeedbackSuccessKey &&
+      !isAdminDirtyScope_(scope) ?
+      "exiting" :
+      getAdminSaveBarState_(action, scope);
+    if (!action || !scope || state === "clean") {
+      adminState.floatingSaveBarScope = "";
+      return;
+    }
+
+    var sourceButton = appEl.querySelector(
+        '.central-admin-panel [data-admin-action="' + action + '"]',
+    );
+    if (!sourceButton) {
+      if (state === "exiting") {
+        cancelAdminFloatingSaveBarExit_();
+        adminState.floatingSaveBarScope = "";
+      }
+      return;
+    }
+
+    var sourceActionRow = sourceButton.closest(".central-admin-action-row");
+    if (sourceActionRow) {
+      sourceActionRow.classList.add("is-floating-save-source");
+    }
+
+    var resetAction = ADMIN_DIRTY_SCOPE_RESET_ACTIONS[scope] || "";
+    var resetButton = resetAction ? appEl.querySelector(
+        '.central-admin-panel [data-admin-action="' + resetAction + '"]',
+    ) : null;
+    var mainEl = appEl.querySelector(".central-admin-main");
+    if (!mainEl) {
+      return;
+    }
+
+    var saveBar = document.createElement("div");
+    var isNewSaveBar = adminState.floatingSaveBarScope !== scope;
+    saveBar.className = "central-admin-floating-save-bar is-" + state +
+      (state === "exiting" &&
+        adminState.floatingSaveBarExitLabel === "Changes saved" ?
+        " is-saved" : "") +
+      (isNewSaveBar && state !== "exiting" ? " is-entering" : "");
+    saveBar.setAttribute("data-admin-floating-save-bar", "true");
+    saveBar.setAttribute("data-admin-save-scope", scope);
+    saveBar.setAttribute("role", "status");
+    saveBar.setAttribute("aria-live", "polite");
+    saveBar.innerHTML = [
+      "<div class=\"central-admin-floating-save-status\">",
+      "<span class=\"central-admin-floating-save-dot\" aria-hidden=\"true\"></span>",
+      "<strong>", escapeHtml_(getAdminSaveBarStatusLabel_(state)), "</strong>",
+      "</div>",
+      "<div class=\"central-admin-floating-save-actions\">",
+      sourceButton.outerHTML,
+      resetButton ? resetButton.outerHTML : "",
+      "</div>",
+    ].join("");
+    if (state === "exiting") {
+      Array.prototype.forEach.call(
+          saveBar.querySelectorAll("button"),
+          function(buttonEl) {
+            buttonEl.disabled = true;
+          },
+      );
+    }
+    adminState.floatingSaveBarScope = scope;
+    mainEl.appendChild(saveBar);
+  }
+
+  function beginAdminActionFeedback_(action) {
+    var actionKey = String(action || "").trim();
+    if (!isAdminSuccessButtonAction_(actionKey)) {
+      return;
+    }
+
+    clearAdminActionSuccessResetTimer_();
+    adminState.actionFeedbackPendingKey = actionKey;
+    adminState.actionFeedbackSuccessKey = "";
+    adminState.actionFeedbackSuccessPlayed = false;
+
+    window.setTimeout(function() {
+      if (adminState.actionFeedbackPendingKey !== actionKey || !appEl) {
+        return;
+      }
+
+      var buttonEl = appEl.querySelector(
+          '[data-admin-action="' + actionKey + '"]',
+      );
+      if (buttonEl && !buttonEl.disabled) {
+        adminState.actionFeedbackPendingKey = "";
+        syncAdminSaveBars_();
+        syncAdminFloatingSaveBar_();
+      }
+    }, 0);
+  }
+
+  function completePendingAdminActionFeedback_() {
+    var actionKey = adminState.actionFeedbackPendingKey;
+    if (!isAdminSuccessButtonAction_(actionKey)) {
+      return;
+    }
+
+    clearAdminActionSuccessResetTimer_();
+    adminState.actionFeedbackPendingKey = "";
+    adminState.actionFeedbackSuccessKey = actionKey;
+    adminState.actionFeedbackSuccessPlayed = false;
+    clearAdminDirtyScope_(ADMIN_ACTION_DIRTY_SCOPES[actionKey] || "");
+  }
+
+  function clearPendingAdminActionFeedback_() {
+    adminState.actionFeedbackPendingKey = "";
+  }
+
+  function clearAdminActionFeedback_() {
+    clearAdminActionSuccessResetTimer_();
+    adminState.actionFeedbackPendingKey = "";
+    adminState.actionFeedbackSuccessKey = "";
+    adminState.actionFeedbackSuccessPlayed = false;
+  }
+
+  function clearAdminActionSuccessResetTimer_() {
+    if (adminActionSuccessResetTimer) {
+      window.clearTimeout(adminActionSuccessResetTimer);
+      adminActionSuccessResetTimer = null;
+    }
+  }
+
+  function startAdminActionSuccessResetTimer_() {
+    clearAdminActionSuccessResetTimer_();
+    adminActionSuccessResetTimer = window.setTimeout(function() {
+      adminActionSuccessResetTimer = null;
+      var actionKey = adminState.actionFeedbackSuccessKey;
+      var buttonEls = appEl ? Array.prototype.slice.call(
+          appEl.querySelectorAll(
+              '[data-admin-action="' + actionKey + '"]',
+          ),
+      ) : [];
+
+      if (!buttonEls.some(function(buttonEl) {
+        return buttonEl.classList.contains("is-success");
+      })) {
+        adminState.actionFeedbackSuccessKey = "";
+        adminState.actionFeedbackSuccessPlayed = false;
+        var missingButtonScope = ADMIN_ACTION_DIRTY_SCOPES[actionKey] || "";
+        if (missingButtonScope && !Object.keys(adminState.dirtyScopes).length) {
+          startAdminFloatingSaveBarExit_(
+              missingButtonScope,
+              "Changes saved",
+          );
+        } else {
+          syncAdminFloatingSaveBar_();
+        }
+        return;
+      }
+
+      buttonEls.forEach(function(buttonEl) {
+        buttonEl.classList.remove("is-success");
+        buttonEl.classList.add("is-returning");
+      });
+      adminActionSuccessResetTimer = window.setTimeout(function() {
+        adminActionSuccessResetTimer = null;
+        if (adminState.actionFeedbackSuccessKey !== actionKey) {
+          return;
+        }
+
+        adminState.actionFeedbackSuccessKey = "";
+        adminState.actionFeedbackSuccessPlayed = false;
+        buttonEls.forEach(function(buttonEl) {
+          if (!buttonEl.isConnected) {
+            return;
+          }
+
+          buttonEl.classList.remove("is-returning");
+          buttonEl.removeAttribute("aria-label");
+          buttonEl.removeAttribute("aria-live");
+          var defaultLabelEl = buttonEl.querySelector(
+              ".central-admin-success-button-default",
+          );
+          var successSurfaceEl = buttonEl.querySelector(
+              ".central-admin-success-button-surface",
+          );
+          if (defaultLabelEl) {
+            defaultLabelEl.removeAttribute("aria-hidden");
+          }
+          if (successSurfaceEl) {
+            successSurfaceEl.setAttribute("aria-hidden", "true");
+          }
+        });
+        syncAdminSaveBars_();
+        var completedScope = ADMIN_ACTION_DIRTY_SCOPES[actionKey] || "";
+        if (completedScope && !Object.keys(adminState.dirtyScopes).length) {
+          startAdminFloatingSaveBarExit_(completedScope, "Changes saved");
+        } else {
+          syncAdminFloatingSaveBar_();
+        }
+      }, ADMIN_ACTION_SUCCESS_TRANSITION_MS);
+    }, ADMIN_ACTION_SUCCESS_RESET_MS);
+  }
+
   function handleAdminPopState_() {
+    var previousPage = getAdminPageById_(adminState.currentPageId);
+    if (!confirmDiscardAdminChanges_()) {
+      window.history.pushState(
+          {},
+          "",
+          previousPage ? previousPage.route : "/admin",
+      );
+      return;
+    }
+
+    clearAdminActionFeedback_();
     adminState.currentPageId = getCurrentAdminPageId_();
+    adminState.sidebarNavGroup = getAdminSidebarGroupForPageId_(
+        adminState.currentPageId,
+    );
     markAdminPageDataStaleForNavigation_(adminState.currentPageId);
     renderAdmin_();
   }
@@ -2694,6 +3352,7 @@
       event.type === "change" &&
       event.target.hasAttribute("data-admin-bulletin-fallback-image")
     ) {
+      markAdminDirtyScope_("bulletin");
       uploadBulletinFallbackImage_(
           event.target.files && event.target.files[0],
       );
@@ -2707,6 +3366,7 @@
         "data-admin-bulletin-event-field",
     );
     if (bulletinEventId && bulletinEventField) {
+      markAdminDirtyScope_("bulletin");
       updateBulletinEventField_(
           bulletinEventId,
           bulletinEventField,
@@ -2722,6 +3382,7 @@
     );
     if (bulletinCampaignIconId) {
       if (event.type === "change") {
+        markAdminDirtyScope_("bulletin");
         updateBulletinCampaignIcon_(
             bulletinCampaignIconId,
             event.target.value,
@@ -2750,6 +3411,8 @@
       adminState.wayfinderAnswerError = "";
       return;
     }
+
+    markAdminDirtyScope_(getAdminDirtyScopeForField_(field));
 
     if (field.indexOf("bulletin.") === 0) {
       updateBulletinDraftField_(field.replace("bulletin.", ""), nextValue);
@@ -2944,7 +3607,19 @@
     var nextPage = getAdminPageById_(pageId);
     var nextRoute = nextPage ? nextPage.route : "/admin";
 
+    if (
+      nextPage &&
+      nextPage.id !== adminState.currentPageId &&
+      !confirmDiscardAdminChanges_()
+    ) {
+      return;
+    }
+
+    clearAdminActionFeedback_();
     adminState.currentPageId = nextPage ? nextPage.id : "overview";
+    adminState.sidebarNavGroup = getAdminSidebarGroupForPageId_(
+        adminState.currentPageId,
+    );
     if (!shouldAdminSidebarStartOpen_()) {
       adminState.sidebarOpen = false;
     }
@@ -3538,6 +4213,7 @@
     if (accessIsResolved && !canAccessAdminPage_(currentPage)) {
       currentPage = getAdminPageById_("overview");
       adminState.currentPageId = "overview";
+      adminState.sidebarNavGroup = "";
 
       if (window.history && window.history.replaceState) {
         window.history.replaceState({}, "", "/admin");
@@ -3560,10 +4236,169 @@
         "",
     ].join("");
 
+    syncAdminPageChrome_(currentPage);
+    syncAdminSaveBars_();
+    syncAdminFloatingSaveBar_();
+    syncAdminActionButtonFeedback_();
+    syncAdminQuickLinkReveal_();
     maybeLoadCurrentPageData_();
   }
 
+  function syncAdminPageChrome_(currentPage) {
+    if (!appEl || !currentPage || currentPage.id === "overview") {
+      return;
+    }
+
+    var panelEl = appEl.querySelector(
+        ".central-admin-main-inner > .central-admin-panel",
+    );
+    if (!panelEl) {
+      return;
+    }
+
+    panelEl.classList.add("central-admin-workspace-panel");
+    Array.prototype.forEach.call(
+        panelEl.querySelectorAll(".central-admin-item-header strong"),
+        function(titleEl) {
+          if (String(titleEl.textContent || "").trim() !==
+            "How this page behaves") {
+            return;
+          }
+
+          var introItem = titleEl.closest(".central-admin-item");
+          if (!introItem) {
+            return;
+          }
+
+          introItem.classList.add("central-admin-page-intro");
+          var introNote = Array.prototype.find.call(
+              introItem.children,
+              function(child) {
+                return child.classList &&
+                  child.classList.contains("central-admin-note");
+              },
+          );
+          if (introNote) {
+            introNote.classList.add("central-admin-page-intro-note");
+          }
+          if (introItem.children.length <= 2) {
+            introItem.classList.add("is-empty");
+          }
+        },
+    );
+  }
+
+  function syncAdminQuickLinkReveal_() {
+    var recentlyAddedId = adminState.quickLinksRecentlyAddedId;
+    if (!recentlyAddedId || !appEl) {
+      return;
+    }
+
+    var itemEl = appEl.querySelector(
+        '[data-admin-sort-section="quickLinks"][data-admin-doc-id="' +
+        recentlyAddedId + '"]',
+    );
+    var revealEl = itemEl ?
+      itemEl.closest("[data-admin-quick-link-reveal]") : null;
+    if (itemEl && revealEl) {
+      adminState.quickLinksRecentlyAddedId = "";
+      window.setTimeout(function() {
+        if (itemEl.isConnected && revealEl.parentNode) {
+          revealEl.parentNode.insertBefore(itemEl, revealEl);
+          revealEl.parentNode.removeChild(revealEl);
+        }
+      }, ADMIN_QUICK_LINK_REVEAL_RESET_MS);
+    }
+  }
+
+  function syncAdminActionButtonFeedback_() {
+    if (!appEl) {
+      return;
+    }
+
+    Array.prototype.forEach.call(
+        appEl.querySelectorAll(
+            ".central-admin-link-button.is-primary[data-admin-action]",
+        ),
+        function(buttonEl) {
+          var actionKey = buttonEl.getAttribute("data-admin-action") || "";
+          if (!isAdminSuccessButtonAction_(actionKey)) {
+            return;
+          }
+
+          var defaultLabel = String(buttonEl.textContent || "").trim();
+          var isSuccess = adminState.actionFeedbackSuccessKey === actionKey;
+          buttonEl.classList.add("central-admin-success-button");
+          buttonEl.innerHTML = [
+            "<span class=\"central-admin-success-button-default\"",
+            isSuccess ? " aria-hidden=\"true\"" : "",
+            ">", escapeHtml_(defaultLabel), "</span>",
+            "<span class=\"central-admin-success-button-surface\"",
+            isSuccess ? "" : " aria-hidden=\"true\"",
+            "><span>Success</span></span>",
+          ].join("");
+
+          if (!isSuccess) {
+            return;
+          }
+
+          buttonEl.disabled = true;
+          buttonEl.setAttribute("aria-label", "Success");
+          buttonEl.setAttribute("aria-live", "polite");
+
+          if (adminState.actionFeedbackSuccessPlayed) {
+            buttonEl.classList.add("is-success");
+            return;
+          }
+
+          window.requestAnimationFrame(function() {
+            if (
+              !buttonEl.isConnected ||
+              adminState.actionFeedbackSuccessKey !== actionKey
+            ) {
+              return;
+            }
+
+            var successSurfaceEl = buttonEl.querySelector(
+                ".central-admin-success-button-surface",
+            );
+            if (successSurfaceEl) {
+              successSurfaceEl.getBoundingClientRect();
+            }
+            window.requestAnimationFrame(function() {
+              if (
+                !buttonEl.isConnected ||
+                adminState.actionFeedbackSuccessKey !== actionKey
+              ) {
+                return;
+              }
+
+              buttonEl.classList.add("is-success");
+              adminState.actionFeedbackSuccessPlayed = true;
+              startAdminActionSuccessResetTimer_();
+            });
+          });
+        },
+    );
+  }
+
   function renderAdminSidebar_(currentPage, visiblePages) {
+    var activeGroup = getAdminSidebarGroupById_(
+        adminState.sidebarNavGroup,
+    );
+    var sidebarGroup = activeGroup || ADMIN_SIDEBAR_GROUPS[0] || null;
+    var groupPages = getVisibleAdminSidebarGroupPages_(
+        sidebarGroup,
+        visiblePages,
+    );
+
+    if (activeGroup && !groupPages.length) {
+      activeGroup = null;
+      if (!adminState.authLoading && adminState.userDocLoaded) {
+        adminState.sidebarNavGroup = "";
+      }
+    }
+
     return [
       "<aside class=\"central-admin-sidebar\" id=\"central-admin-sidebar\">",
       "<div class=\"central-admin-sidebar-top\">",
@@ -3581,18 +4416,164 @@
       "</div>",
       renderAdminUserPanel_(),
       "<nav class=\"central-admin-nav\" aria-label=\"Admin pages\">",
-      visiblePages.map(function(page) {
-        return [
-          "<a href=\"", escapeAttr_(page.route), "\" data-admin-nav=\"",
-          escapeAttr_(page.id), "\" class=\"",
-          page.id === currentPage.id ? "is-active" : "", "\">",
-          "<span>", escapeHtml_(page.label), "</span>",
-          renderAdminSidebarNavMeta_(page),
-          "</a>",
-        ].join("");
-      }).join(""),
+      "<div class=\"central-admin-nav-stage",
+      activeGroup ? " is-group-active" : "", "\" data-admin-nav-stage",
+      activeGroup ? " data-admin-nav-group=\"" +
+        escapeAttr_(activeGroup.id) + "\"" : "",
+      ">",
+      "<div class=\"central-admin-nav-panel is-root\" data-admin-nav-panel=\"root\"",
+      activeGroup ? " aria-hidden=\"true\" inert" : " aria-hidden=\"false\"",
+      ">",
+      renderAdminSidebarRootNav_(visiblePages, currentPage),
+      "</div>",
+      sidebarGroup && groupPages.length ? [
+        "<div class=\"central-admin-nav-panel is-group\" data-admin-nav-panel=\"",
+        escapeAttr_(sidebarGroup.id), "\"",
+        activeGroup ? " aria-hidden=\"false\"" :
+          " aria-hidden=\"true\" inert",
+        ">",
+        renderAdminSidebarGroupNav_(sidebarGroup, groupPages, currentPage),
+        "</div>",
+      ].join("") : "",
+      "</div>",
       "</nav>",
       "</aside>",
+    ].join("");
+  }
+
+  function syncAdminSidebarNavGroupState_() {
+    if (!appEl) {
+      return false;
+    }
+
+    var stageEl = appEl.querySelector("[data-admin-nav-stage]");
+    var rootPanelEl = appEl.querySelector(
+        '[data-admin-nav-panel="root"]',
+    );
+    var groupId = adminState.sidebarNavGroup || "";
+    var groupPanelEl = groupId ? appEl.querySelector(
+        '[data-admin-nav-panel="' + groupId + '"]',
+    ) : appEl.querySelector(".central-admin-nav-panel.is-group");
+
+    if (!stageEl || !rootPanelEl || !groupPanelEl) {
+      return false;
+    }
+
+    var showGroup = !!groupId;
+    stageEl.classList.toggle("is-group-active", showGroup);
+    if (showGroup) {
+      stageEl.setAttribute("data-admin-nav-group", groupId);
+    } else {
+      stageEl.removeAttribute("data-admin-nav-group");
+    }
+
+    setAdminSidebarNavPanelActive_(rootPanelEl, !showGroup);
+    setAdminSidebarNavPanelActive_(groupPanelEl, showGroup);
+
+    window.requestAnimationFrame(function() {
+      var focusTarget = showGroup ?
+        groupPanelEl.querySelector(".central-admin-nav-back") :
+        rootPanelEl.querySelector(
+            '[data-admin-nav-group="' +
+            (groupPanelEl.getAttribute("data-admin-nav-panel") || "") +
+            '"]',
+        );
+      if (focusTarget) {
+        focusTarget.focus({preventScroll: true});
+      }
+    });
+
+    return true;
+  }
+
+  function setAdminSidebarNavPanelActive_(panelEl, isActive) {
+    panelEl.setAttribute("aria-hidden", isActive ? "false" : "true");
+    panelEl.toggleAttribute("inert", !isActive);
+  }
+
+  function getAdminSidebarGroupById_(groupId) {
+    return ADMIN_SIDEBAR_GROUPS.find(function(group) {
+      return group.id === groupId;
+    }) || null;
+  }
+
+  function getAdminSidebarGroupForPageId_(pageId) {
+    var group = ADMIN_SIDEBAR_GROUPS.find(function(groupItem) {
+      return groupItem.pageIds.indexOf(pageId) !== -1;
+    });
+
+    return group ? group.id : "";
+  }
+
+  function getVisibleAdminSidebarGroupPages_(group, visiblePages) {
+    if (!group) {
+      return [];
+    }
+
+    return group.pageIds.map(function(pageId) {
+      return visiblePages.find(function(page) {
+        return page.id === pageId;
+      }) || null;
+    }).filter(Boolean);
+  }
+
+  function renderAdminSidebarRootNav_(visiblePages, currentPage) {
+    return ADMIN_SIDEBAR_ROOT_ITEMS.map(function(item) {
+      if (item.type === "group") {
+        var group = getAdminSidebarGroupById_(item.id);
+        var groupPages = getVisibleAdminSidebarGroupPages_(
+            group,
+            visiblePages,
+        );
+
+        if (!group || !groupPages.length) {
+          return "";
+        }
+
+        var groupIsActive = group.pageIds.indexOf(currentPage.id) !== -1;
+        return [
+          "<button type=\"button\" data-admin-action=\"open-sidebar-nav-group\" data-admin-nav-group=\"",
+          escapeAttr_(group.id), "\" class=\"",
+          groupIsActive ? "is-active" : "", "\" aria-label=\"Open ",
+          escapeAttr_(group.label), " section\">",
+          "<span>", escapeHtml_(group.label), "</span>",
+          "<span class=\"central-admin-nav-chevron\" aria-hidden=\"true\"></span>",
+          "</button>",
+        ].join("");
+      }
+
+      var page = visiblePages.find(function(visiblePage) {
+        return visiblePage.id === item.id;
+      });
+      return page ? renderAdminSidebarPageLink_(page, currentPage) : "";
+    }).join("");
+  }
+
+  function renderAdminSidebarGroupNav_(group, groupPages, currentPage) {
+    return [
+      "<div class=\"central-admin-nav-context\">",
+      "<button type=\"button\" class=\"central-admin-nav-back\" data-admin-action=\"close-sidebar-nav-group\">",
+      "<span class=\"central-admin-nav-back-arrow\" aria-hidden=\"true\">&larr;</span>",
+      "<span>All sections</span>",
+      "</button>",
+      "<p>", escapeHtml_(group.label), "</p>",
+      "</div>",
+      groupPages.map(function(page) {
+        return renderAdminSidebarPageLink_(page, currentPage);
+      }).join(""),
+    ].join("");
+  }
+
+  function renderAdminSidebarPageLink_(page, currentPage) {
+    var isActive = page.id === currentPage.id;
+    return [
+      "<a href=\"", escapeAttr_(page.route), "\" data-admin-nav=\"",
+      escapeAttr_(page.id), "\" class=\"",
+      isActive ? "is-active" : "", "\"",
+      isActive ? " aria-current=\"page\"" : "", ">",
+      "<span>", escapeHtml_(page.label), "</span>",
+      renderAdminSidebarNavMeta_(page),
+      "</a>",
     ].join("");
   }
 
@@ -3704,6 +4685,7 @@
   }
 
   function renderAdminHero_(currentPage) {
+    var heroBadgesHtml = renderAdminHeroBadges_(currentPage);
     return [
       "<section class=\"central-admin-hero\">",
       "<div class=\"central-admin-hero-top\">",
@@ -3718,16 +4700,12 @@
       "</div>",
       "</div>",
       "<div class=\"central-admin-hero-copy\">",
-      "<div class=\"central-admin-hero-bar\">",
-      "<span class=\"central-admin-kicker\">Central Admin</span>",
-      "<span class=\"central-admin-badge\">", escapeHtml_(currentPage.label), "</span>",
-      "</div>",
       "<h2>", escapeHtml_(getAdminHeroTitle_(currentPage)), "</h2>",
       "<p>", escapeHtml_(getAdminHeroDescription_(currentPage)), "</p>",
       "</div>",
-      "<div class=\"central-admin-badges\">",
-      renderAdminHeroBadges_(currentPage),
-      "</div>",
+      heroBadgesHtml ?
+        "<div class=\"central-admin-badges\">" + heroBadgesHtml + "</div>" :
+        "",
       adminState.errorMessage ?
         "<p class=\"central-admin-note central-admin-hero-note\">" +
         escapeHtml_(adminState.errorMessage) +
@@ -3738,24 +4716,7 @@
   }
 
   function renderAdminHeroBadges_(currentPage) {
-    var badges = [
-      renderStatusPill_(
-          getAdminAccessSummaryLabel_(),
-          getAdminAccessSummaryTone_(),
-      ),
-    ];
-
-    if (currentPage && currentPage.pageAccessKey) {
-      var permission = getPageAccessLevel_(currentPage.pageAccessKey);
-      if (permission !== "none") {
-        badges.push(
-            renderStatusPill_(
-                getPermissionLabel_(permission),
-                getPermissionToneClass_(permission),
-            ),
-        );
-      }
-    }
+    var badges = [];
 
     if (
       adminState.changeRequestsPendingCount > 0 &&
@@ -3768,8 +4729,6 @@
               "is-live",
           ),
       );
-    } else if (adminState.usingEmulators) {
-      badges.push(renderStatusPill_("Local preview", "is-warn"));
     }
 
     return badges.join("");
@@ -3878,7 +4837,7 @@
       return "Dashboard";
     }
 
-    return "Manage " + currentPage.label;
+    return currentPage.label;
   }
 
   function renderAdminMetricCard_(label, metric, description, toneClass) {
@@ -4020,10 +4979,6 @@
       "<h3>", escapeHtml_(currentPage.label), "</h3>",
       "<p>", escapeHtml_(currentPage.summary), "</p>",
       "</div>",
-      renderStatusPill_(
-          String(pages.length) + " page" + (pages.length === 1 ? "" : "s"),
-          "is-safe",
-      ),
       "</div>",
       "<div class=\"central-admin-page-body\">",
       pages.length ? [
@@ -4177,7 +5132,6 @@
   }
 
   function renderOverviewPageCard_(page) {
-    var permission = getPageAccessLevel_(page.pageAccessKey);
     var statusText = page.id === "change-requests" &&
       adminState.changeRequestsPendingCount > 0 ?
       String(adminState.changeRequestsPendingCount) + " pending" :
@@ -4191,15 +5145,10 @@
       "<article class=\"central-admin-card central-admin-overview-card\">",
       "<div class=\"central-admin-overview-card-top\">",
       "<h3>", escapeHtml_(page.label), "</h3>",
-      "<div class=\"central-admin-badges\">",
-      renderStatusPill_(
-          getPermissionLabel_(permission),
-          getPermissionToneClass_(permission),
-      ),
       statusText && page.id === "change-requests" ?
-        renderStatusPill_(statusText, "is-live") :
+        "<div class=\"central-admin-badges\">" +
+          renderStatusPill_(statusText, "is-live") + "</div>" :
         "",
-      "</div>",
       "</div>",
       "<p>", escapeHtml_(getAdminPageShortSummary_(page)), "</p>",
       "<div class=\"central-admin-action-row\">",
@@ -4255,7 +5204,7 @@
     }
 
     if (page.id === "settings") {
-      return "Operational controls, room rules, and admin access.";
+      return "Sunday Mode, room names, and team access.";
     }
 
     if (page.id === "change-requests") {
@@ -5428,7 +6377,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Hub starts from the current published values Central is showing right now. Direct publishers can publish immediately, while request-level users submit their edits for approval.",
+          "Update the homepage content and choose which modules appear in Central.",
       ),
       adminState.hubLoading ?
         renderAdminNote_("Loading the current Hub values.") :
@@ -5470,13 +6419,7 @@
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
       bodyHtml: [
-      renderAdminNote_(
-          canEdit ?
-            (actionConfig.mode === "submit" ?
-              "These homepage edits stay local until you submit them for approval. An admin can then review them in the Change Requests page." :
-              "These homepage edits can publish directly to preview from this page.") :
-            "Your current permission level does not allow editing the homepage.",
-      ),
+      renderAdminEditorAccessNote_(canEdit, actionConfig),
       adminState.hubSettingsMessage ?
         renderAdminNote_(adminState.hubSettingsMessage) :
         "",
@@ -5625,13 +6568,7 @@
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
       bodyHtml: [
-      renderAdminNote_(
-          canEdit ?
-            (actionConfig.mode === "submit" ?
-              "These Sunday Mode edits stay local until you submit them for approval. An admin can then review them in the Change Requests page." :
-              "These Sunday Mode edits can publish directly to preview from this page.") :
-            "Your current permission level does not allow editing Sunday Mode.",
-      ),
+      renderAdminEditorAccessNote_(canEdit, actionConfig),
       renderAdminNote_(
           "Force Sunday Mode, the livestream link and note, and the Bible ID now live on the Settings page so the Hub editor stays focused on homepage content.",
       ),
@@ -5809,7 +6746,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Sunday starts from what Central is showing right now. The date defaults to the current Sunday if today is Sunday, otherwise the next upcoming Sunday, and you can override it any time.",
+          "Update the sermon details shown on the Sunday page. The date automatically starts with the next Sunday, and optional fields stay hidden when left blank.",
       ),
       adminState.sundayLoading ?
         renderAdminNote_("Loading the current Sunday values.") :
@@ -5846,13 +6783,7 @@
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
       "</div>",
-      renderAdminNote_(
-          canEdit ?
-            (actionConfig.mode === "submit" ?
-              "These Sunday edits stay local until you submit them for approval. An admin can then review them in the Change Requests page." :
-              "These Sunday edits can publish directly to preview from this page.") :
-            "Your current permission level does not allow editing Sunday.",
-      ),
+      renderAdminEditorAccessNote_(canEdit, actionConfig),
       adminState.sundayMessage ?
         renderAdminNote_(adminState.sundayMessage) :
         "",
@@ -5955,7 +6886,7 @@
       renderStatusPill_("Operational controls", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Use Settings for the switches and rules that shape how the app behaves behind the scenes, while Hub stays focused on the homepage content itself.",
+          "Manage Sunday Mode, Wayfinder access, room naming, and admin accounts.",
       ),
       adminState.settingsLoading ?
         renderAdminNote_("Loading the current settings and room rules.") :
@@ -6003,7 +6934,7 @@
       renderAdminNote_(
           canEdit ?
             "Live and Dev have separate Sunday Mode controls. Changing one environment will not change the other. Service integrations now live on the Integrations page." :
-            "Your current permission level does not allow editing Settings.",
+            "You can view Settings, but you don't have permission to make changes.",
       ),
       adminState.settingsSundayMessage ?
         renderAdminNote_(adminState.settingsSundayMessage) :
@@ -6184,7 +7115,7 @@
       renderAdminNote_(
           canEdit ?
             "Manage the services Central connects to. Each section keeps one provider's settings together." :
-            "Your current permission level does not allow editing Integrations.",
+            "You can view Integrations, but you don't have permission to make changes.",
       ),
       adminState.settingsLoading ?
         renderAdminNote_("Loading the current integration settings.") :
@@ -7405,9 +8336,9 @@
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
-              "Room Rules shape how Planning Center rooms get renamed or hidden in Central. Each save sends a single approval request, so editors can submit one rule change at a time." :
-              "Room Rules shape how Planning Center rooms get renamed or hidden in Central. Each save publishes that one rule change immediately.") :
-            "Your current permission level does not allow editing room rules.",
+              "Room Rules rename or hide Planning Center rooms in Central. Submit each rule when it is ready for review." :
+              "Room Rules rename or hide Planning Center rooms in Central.") :
+            "You can view Room Rules, but you don't have permission to make changes.",
       ),
       adminState.roomRulesMessage ?
         renderAdminNote_(adminState.roomRulesMessage) :
@@ -8042,7 +8973,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Quick Links act one change at a time. You can drag them into a new order, and dropping a link publishes that reorder instantly or sends it for approval.",
+          "Add or edit links below, then drag them into the order you want people to see.",
       ),
       "</div>",
       renderQuickLinksEditorForm_(),
@@ -8091,7 +9022,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "The banner editor starts from the published Firestore banner Central is using right now. Direct publishers can publish or hide immediately, while request-level users can submit those changes for approval.",
+          "Create the announcement shown at the top of Central, or hide it when it is no longer needed.",
       ),
       "</div>",
       renderStatusBannerEditor_(),
@@ -8140,9 +9071,10 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "These links feed the homepage quick links section and the Sunday morning quick actions row. Turn on Sunday Only when a link should stay hidden until Sunday Mode is active. Saving here immediately publishes the change or submits it for approval, depending on your access." :
-            "Your current permission level does not allow editing quick links.",
+            "These links appear on the homepage and in Sunday morning quick actions. Turn on Sunday Only when a link should stay hidden until Sunday Mode is active." :
+            "You can view Quick Links, but you don't have permission to make changes.",
       ),
+      "<div class=\"central-admin-quick-links-feedback\" aria-live=\"polite\">",
       adminState.quickLinksMessage ?
         renderAdminNote_(adminState.quickLinksMessage) :
         "",
@@ -8151,6 +9083,7 @@
         escapeHtml_(adminState.quickLinksError) +
         "</p>" :
         "",
+      "</div>",
       canEdit ? [
         "<div class=\"central-admin-form-grid\">",
         "<label class=\"central-admin-field\">",
@@ -8254,43 +9187,58 @@
       ),
       "<div class=\"central-admin-list\" data-admin-sort-list=\"true\" data-admin-sort-section=\"quickLinks\">",
       adminState.quickLinksItems.map(function(item) {
-        return [
-          renderSortableListItemStart_(
-              "quickLinks",
-              item,
-              !canReorder,
-              item.title || "quick link",
-          ),
-          "<div class=\"central-admin-list-main\">",
-          "<strong>", escapeHtml_(item.title || "Untitled Link"), "</strong>",
-          "<a class=\"central-admin-inline-link\" href=\"", escapeAttr_(item.url || "#"), "\" target=\"_blank\" rel=\"noopener\">",
-          escapeHtml_(item.url || "No URL"),
-          "</a>",
-          "<div class=\"central-admin-page-meta\">",
-          renderInlineMeta_("Status", item.active ? "Active" : "Hidden"),
-          renderInlineMeta_(
-              "Audience",
-              item.sunday_only ? "Sunday Only" : "All Modes",
-          ),
+        var isRecentlyAdded =
+          adminState.quickLinksRecentlyAddedId === item.id;
+        var itemMarkup = renderQuickLinksListItem_(item, canReorder);
+        return isRecentlyAdded ? [
+          "<div class=\"central-admin-list-item-reveal\" data-admin-quick-link-reveal=\"true\">",
+          "<div class=\"central-admin-list-item-reveal-inner\">",
+          itemMarkup,
           "</div>",
           "</div>",
-          "<div class=\"central-admin-list-actions\">",
-          "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-quick-link\" data-admin-doc-id=\"",
-          escapeAttr_(item.id),
-          "\"",
-          adminState.quickLinksSaving || adminState.quickLinksPublishing ? " disabled" : "",
-          ">Edit</button>",
-          "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-quick-link\" data-admin-doc-id=\"",
-          escapeAttr_(item.id),
-          "\"",
-          adminState.quickLinksSaving || adminState.quickLinksPublishing ? " disabled" : "",
-          ">Delete</button>",
-          "</div>",
-          "</article>",
-        ].join("");
+        ].join("") : itemMarkup;
       }).join(""),
       "</div>",
       "</div>",
+    ].join("");
+  }
+
+  function renderQuickLinksListItem_(item, canReorder) {
+    return [
+      renderSortableListItemStart_(
+          "quickLinks",
+          item,
+          !canReorder,
+          item.title || "quick link",
+      ),
+      "<div class=\"central-admin-list-main\">",
+      "<strong>", escapeHtml_(item.title || "Untitled Link"), "</strong>",
+      "<a class=\"central-admin-inline-link\" href=\"", escapeAttr_(item.url || "#"), "\" target=\"_blank\" rel=\"noopener\">",
+      escapeHtml_(item.url || "No URL"),
+      "</a>",
+      "<div class=\"central-admin-page-meta\">",
+      renderInlineMeta_("Status", item.active ? "Active" : "Hidden"),
+      renderInlineMeta_(
+          "Audience",
+          item.sunday_only ? "Sunday Only" : "All Modes",
+      ),
+      "</div>",
+      "</div>",
+      "<div class=\"central-admin-list-actions\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-quick-link\" data-admin-doc-id=\"",
+      escapeAttr_(item.id),
+      "\"",
+      adminState.quickLinksSaving || adminState.quickLinksPublishing ?
+        " disabled" : "",
+      ">Edit</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-quick-link\" data-admin-doc-id=\"",
+      escapeAttr_(item.id),
+      "\"",
+      adminState.quickLinksSaving || adminState.quickLinksPublishing ?
+        " disabled" : "",
+      ">Delete</button>",
+      "</div>",
+      "</article>",
     ].join("");
   }
 
@@ -8340,9 +9288,9 @@
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
-              "Submit banner changes for approval here. An admin can then approve or reject them from the Change Requests page." :
-              "Publish updates the Central banner immediately. Hide changes the published banner state right away.") :
-            "Your current permission level does not allow editing the status banner.",
+              "When you're ready, submit the banner for review." :
+              "Publish the banner when it is ready, or hide it without deleting the saved copy.") :
+            "You can view the Status Banner, but you don't have permission to make changes.",
       ),
       adminState.statusBannerMessage ?
         renderAdminNote_(adminState.statusBannerMessage) :
@@ -8523,7 +9471,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Resources act one change at a time. You can drag them into a new order, and dropping a resource publishes that reorder instantly or sends it for approval.",
+          "Add helpful links, guides, and tools, then drag them into the order you want people to see.",
       ),
       "</div>",
       renderResourcesEditorForm_(),
@@ -8572,8 +9520,8 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "Use Resources for helpful links, guides, and tools. Saving here immediately publishes the change or submits it for approval, depending on your access." :
-            "Your current permission level does not allow editing resources.",
+            "Use Resources for helpful links, guides, and tools." :
+            "You can view Resources, but you don't have permission to make changes.",
       ),
       adminState.resourcesMessage ?
         renderAdminNote_(adminState.resourcesMessage) :
@@ -8815,7 +9763,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Campaigns act one change at a time. You can drag them into a new order, and dropping a campaign publishes that reorder instantly or sends it for approval.",
+          "Add church-wide initiatives and featured calls to action, then drag them into the order you want people to see.",
       ),
       "</div>",
       renderCampaignsEditorForm_(),
@@ -8864,8 +9812,8 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "Use Campaigns for church-wide initiatives and featured calls to action. Saving here immediately publishes the change or submits it for approval, depending on your access." :
-            "Your current permission level does not allow editing campaigns.",
+            "Use Campaigns for church-wide initiatives and featured calls to action." :
+            "You can view Campaigns, but you don't have permission to make changes.",
       ),
       adminState.campaignsMessage ?
         renderAdminNote_(adminState.campaignsMessage) :
@@ -9123,7 +10071,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Serve Needs act one change at a time. You can drag them into a new order, and dropping a need publishes that reorder instantly or sends it for approval.",
+          "Add volunteer opportunities, then drag them into the order you want people to see.",
       ),
       "</div>",
       renderServeNeedsEditorForm_(),
@@ -9173,7 +10121,7 @@
       renderAdminNote_(
           canEdit ?
             "Use Serve Needs for ministry volunteer opportunities. The public button opens a contact form, and this record stores the ministry contact email that will receive the interest." :
-            "Your current permission level does not allow editing serve needs.",
+            "You can view Serve Needs, but you don't have permission to make changes.",
       ),
       adminState.serveNeedsMessage ?
         renderAdminNote_(adminState.serveNeedsMessage) :
@@ -9428,7 +10376,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Next Steps act one change at a time. You can drag them into a new order, and dropping a card publishes that reorder instantly or sends it for approval.",
+          "Add connection cards and action pathways, then drag them into the order you want people to see.",
       ),
       "</div>",
       renderNextStepsEditorForm_(),
@@ -9477,8 +10425,8 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "Use Next Steps for connection cards and action pathways. Saving here immediately publishes the change or submits it for approval, depending on your access." :
-            "Your current permission level does not allow editing Next Steps.",
+            "Use Next Steps for connection cards and action pathways." :
+            "You can view Next Steps, but you don't have permission to make changes.",
       ),
       adminState.nextStepsMessage ?
         renderAdminNote_(adminState.nextStepsMessage) :
@@ -12548,6 +13496,7 @@
 
     callBulletinModeEndpoint_("POST", buildBulletinModePayload_())
         .then(function(result) {
+          completePendingAdminActionFeedback_();
           adminState.bulletinSaving = false;
           adminState.bulletinMessage = result && result.message ?
             result.message :
@@ -12555,6 +13504,7 @@
           renderAdmin_();
         })
         .catch(function(error) {
+          clearPendingAdminActionFeedback_();
           adminState.bulletinSaving = false;
           adminState.bulletinError = error && error.message ?
             error.message :
@@ -14405,6 +15355,7 @@
     adminState.quickLinksDraftInitialized = false;
     adminState.quickLinksUsingPublishedFallback = false;
     adminState.quickLinksEditingId = "";
+    adminState.quickLinksRecentlyAddedId = "";
     adminState.quickLinksError = "";
     adminState.quickLinksMessage = "";
   }
@@ -14537,7 +15488,30 @@
           adminState.quickLinksMessage = result && result.message ?
             result.message :
             successMessage;
-          loadQuickLinks_();
+
+          if (actionConfig.mode === "publish") {
+            var publishedItems = sortQuickLinksItems_(
+                items.filter(function(item) {
+                  return item.id !== nextItem.id;
+                }).concat([nextItem]),
+            );
+            adminState.quickLinksLoading = false;
+            adminState.quickLinksLoaded = true;
+            adminState.quickLinksBaselineItems = cloneQuickLinksItems_(
+                publishedItems,
+            );
+            adminState.quickLinksPendingChangesById = {};
+            adminState.quickLinksPublishedItems = cloneQuickLinksItems_(
+                publishedItems,
+            );
+            adminState.quickLinksDraftInitialized = false;
+            adminState.quickLinksUsingPublishedFallback = false;
+            adminState.quickLinksItems = publishedItems;
+            adminState.quickLinksRecentlyAddedId = previousItem ?
+              "" : nextItem.id;
+          }
+
+          renderAdmin_();
         })
         .catch(function(error) {
           adminState.quickLinksSaving = false;
@@ -17790,6 +18764,7 @@
 
   function runSectionPrimaryAction_(config) {
     var permission = String(config && config.permission || "").trim().toLowerCase();
+    var actionPromise = null;
     var requestPayload = {
       section: config && config.section || "",
       operation: config && config.operation || "publish",
@@ -17803,19 +18778,27 @@
     }
 
     if (isDirectPublishPermission_(permission)) {
-      return callPreviewPublishEndpoint_(requestPayload);
-    }
-
-    if (isSubmitForApprovalPermission_(permission)) {
-      return callSubmitChangeRequestEndpoint_(requestPayload)
+      actionPromise = callPreviewPublishEndpoint_(requestPayload);
+    } else if (isSubmitForApprovalPermission_(permission)) {
+      actionPromise = callSubmitChangeRequestEndpoint_(requestPayload)
           .then(function(result) {
             adminState.changeRequestsLoaded = false;
             loadChangeRequestsSummaryIfNeeded_();
             return result;
           });
+    } else {
+      actionPromise = Promise.reject(new Error(
+          "Your current access level cannot publish or submit this section.",
+      ));
     }
 
-    return Promise.reject(new Error("Your current access level cannot publish or submit this section."));
+    return actionPromise.then(function(result) {
+      completePendingAdminActionFeedback_();
+      return result;
+    }, function(error) {
+      clearPendingAdminActionFeedback_();
+      throw error;
+    });
   }
 
   function callPreviewPublishEndpoint_(payload) {
@@ -18348,6 +19331,7 @@
       action: "publish",
       draftId: draft.id,
     }).then(function(result) {
+      completePendingAdminActionFeedback_();
       adminState.wayfinderNoticeWorking = false;
       adminState.wayfinderNoticeDraft = null;
       adminState.wayfinderNoticeMessage =
@@ -18356,6 +19340,7 @@
       loadWayfinderManagers_();
       renderAdmin_();
     }).catch(function(error) {
+      clearPendingAdminActionFeedback_();
       adminState.wayfinderNoticeWorking = false;
       adminState.wayfinderNoticeError = error && error.message ?
         error.message : "The notice could not be published.";
@@ -18526,6 +19511,7 @@
       action: "publish",
       draftId: draft.id,
     }).then(function(result) {
+      completePendingAdminActionFeedback_();
       adminState.wayfinderKnowledgeWorking = false;
       adminState.wayfinderKnowledgeDraft = null;
       adminState.wayfinderKnowledgeMessage =
@@ -18533,6 +19519,7 @@
       loadWayfinderManagers_();
       renderAdmin_();
     }).catch(function(error) {
+      clearPendingAdminActionFeedback_();
       adminState.wayfinderKnowledgeWorking = false;
       adminState.wayfinderKnowledgeError = error && error.message ?
         error.message : "The permanent change could not be approved.";
@@ -19175,6 +20162,7 @@
 
     callUpsertAdminUserEndpoint_(payload)
         .then(function(result) {
+          completePendingAdminActionFeedback_();
           adminState.adminUsersSaving = false;
           adminState.adminUsersMessage = result && result.message ?
             result.message :
@@ -19191,6 +20179,7 @@
           loadAdminUsers_(adminState.adminUsersMessage);
         })
         .catch(function(error) {
+          clearPendingAdminActionFeedback_();
           adminState.adminUsersSaving = false;
           adminState.adminUsersError = error && error.message ?
             error.message :
@@ -19920,9 +20909,14 @@
   }
 
   function renderStatusPill_(label, toneClass) {
+    var normalizedLabel = String(label || "").trim();
+    if (ADMIN_HIDDEN_STATUS_PILL_LABELS[normalizedLabel.toLowerCase()]) {
+      return "";
+    }
+
     return [
       "<span class=\"central-admin-pill ", toneClass || "", "\">",
-      escapeHtml_(label),
+      escapeHtml_(normalizedLabel),
       "</span>",
     ].join("");
   }
@@ -19933,6 +20927,22 @@
       escapeHtml_(text),
       "</p>",
     ].join("");
+  }
+
+  function renderAdminEditorAccessNote_(canEdit, actionConfig) {
+    if (!canEdit) {
+      return renderAdminNote_(
+          "You can view this section, but you don't have permission to make changes.",
+      );
+    }
+
+    if (actionConfig && actionConfig.mode === "submit") {
+      return renderAdminNote_(
+          "When you're ready, submit your changes for review.",
+      );
+    }
+
+    return "";
   }
 
   function renderInlineMeta_(label, value) {

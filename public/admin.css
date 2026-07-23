@@ -559,6 +559,11 @@
   [data-app-route="admin"] .central-admin-collection-actions {
     animation: none !important;
   }
+
+  [data-app-route="admin"] .central-admin-team-modal .central-admin-modal-scrim,
+  [data-app-route="admin"] .central-admin-team-modal .central-admin-modal-dialog {
+    transition: none !important;
+  }
 }
 
 [data-app-route="admin"] .central-admin-main {
@@ -2670,6 +2675,375 @@
   justify-content: center;
 }
 
+[data-app-route="admin"] .central-admin-team-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+[data-app-route="admin"] .central-admin-team-toolbar p {
+  margin: 0;
+  color: var(--cp-muted);
+}
+
+[data-app-route="admin"] .central-admin-team-toolbar .central-admin-link-button {
+  flex: 0 0 auto;
+}
+
+[data-app-route="admin"] .central-admin-team-list {
+  display: grid;
+  gap: 10px;
+}
+
+[data-app-route="admin"] .central-admin-team-member {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(39, 39, 42, 0.08);
+}
+
+[data-app-route="admin"] .central-admin-team-avatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: rgba(239, 59, 45, 0.1);
+  color: var(--cp-red);
+  font-size: 0.86rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+[data-app-route="admin"] .central-admin-team-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+[data-app-route="admin"] .central-admin-team-member-copy,
+[data-app-route="admin"] .central-admin-team-member-heading {
+  min-width: 0;
+}
+
+[data-app-route="admin"] .central-admin-team-member-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+[data-app-route="admin"] .central-admin-team-member-heading strong,
+[data-app-route="admin"] .central-admin-team-member-heading p,
+[data-app-route="admin"] .central-admin-team-access-summary {
+  margin: 0;
+}
+
+[data-app-route="admin"] .central-admin-team-member-heading p {
+  margin-top: 3px;
+  color: var(--cp-muted);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+[data-app-route="admin"] .central-admin-team-access-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 12px;
+  margin-top: 10px;
+  color: var(--cp-muted);
+  font-size: 0.8rem;
+}
+
+[data-app-route="admin"] .central-admin-team-access-summary strong {
+  color: var(--cp-text-strong);
+}
+
+[data-app-route="admin"] .central-admin-team-access-summary span {
+  position: relative;
+}
+
+[data-app-route="admin"] .central-admin-team-access-summary span + span::before {
+  content: "·";
+  position: absolute;
+  right: calc(100% + 5px);
+}
+
+[data-app-route="admin"] .central-admin-team-member-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+[data-app-route="admin"] .central-admin-team-empty {
+  display: grid;
+  gap: 5px;
+  padding: 28px;
+  text-align: center;
+  border-radius: 20px;
+  background: rgba(39, 39, 42, 0.035);
+  border: 1px dashed rgba(39, 39, 42, 0.12);
+}
+
+[data-app-route="admin"] .central-admin-team-empty p {
+  margin: 0;
+  color: var(--cp-muted);
+}
+
+[data-app-route="admin"] .central-admin-team-modal .central-admin-modal-scrim {
+  opacity: 0;
+  transition: opacity 0.62s var(--cp-admin-nav-ease);
+}
+
+[data-app-route="admin"] .central-admin-team-modal .central-admin-modal-dialog {
+  width: min(100%, 840px);
+  max-height: calc(100vh - 40px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(30px) scale(0.965);
+  transform-origin: center;
+  transition:
+    transform 0.72s var(--cp-admin-nav-ease),
+    opacity 0.5s ease;
+  will-change: transform, opacity;
+}
+
+[data-app-route="admin"] .central-admin-team-modal.is-visible .central-admin-modal-scrim {
+  opacity: 1;
+}
+
+[data-app-route="admin"] .central-admin-team-modal.is-visible .central-admin-modal-dialog {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+[data-app-route="admin"] .central-admin-team-modal.is-closing {
+  pointer-events: none;
+}
+
+[data-app-route="admin"] .central-admin-team-modal.is-closing .central-admin-modal-scrim {
+  opacity: 0;
+  transition-timing-function: var(--cp-admin-success-exit-ease);
+}
+
+[data-app-route="admin"] .central-admin-team-modal.is-closing .central-admin-modal-dialog {
+  opacity: 0;
+  transform: translateY(26px) scale(0.972);
+  transition:
+    transform 0.7s var(--cp-admin-success-exit-ease),
+    opacity 0.46s ease;
+}
+
+[data-app-route="admin"] .central-admin-team-modal-fields {
+  min-height: 0;
+  display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 18px;
+  padding-right: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+[data-app-route="admin"] .central-admin-team-modal-error {
+  color: var(--cp-red);
+}
+
+[data-app-route="admin"] .central-admin-team-status {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(39, 39, 42, 0.035);
+  border: 1px solid rgba(39, 39, 42, 0.08);
+  cursor: pointer;
+}
+
+[data-app-route="admin"] .central-admin-team-status input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cp-red);
+}
+
+[data-app-route="admin"] .central-admin-team-status span {
+  display: grid;
+  gap: 2px;
+}
+
+[data-app-route="admin"] .central-admin-team-status small {
+  color: var(--cp-muted);
+  font-size: 0.78rem;
+}
+
+[data-app-route="admin"] .central-admin-permission-presets {
+  display: grid;
+  gap: 12px;
+}
+
+[data-app-route="admin"] .central-admin-permission-section-heading,
+[data-app-route="admin"] .central-admin-permission-group-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+[data-app-route="admin"] .central-admin-permission-section-heading p,
+[data-app-route="admin"] .central-admin-permission-group-heading p {
+  margin: 4px 0 0;
+  color: var(--cp-muted);
+  font-size: 0.82rem;
+}
+
+[data-app-route="admin"] .central-admin-permission-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+[data-app-route="admin"] .central-admin-permission-preset {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 98px;
+  padding: 13px;
+  text-align: left;
+  color: var(--cp-text);
+  border-radius: 16px;
+  border: 1px solid rgba(39, 39, 42, 0.1);
+  background: rgba(39, 39, 42, 0.035);
+  box-shadow: none;
+}
+
+[data-app-route="admin"] .central-admin-permission-preset:hover,
+[data-app-route="admin"] .central-admin-permission-preset:focus-visible {
+  border-color: rgba(239, 59, 45, 0.28);
+  background: rgba(239, 59, 45, 0.055);
+}
+
+[data-app-route="admin"] .central-admin-permission-preset.is-selected {
+  border-color: rgba(239, 59, 45, 0.52);
+  background: rgba(239, 59, 45, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(239, 59, 45, 0.14);
+}
+
+[data-app-route="admin"] .central-admin-permission-preset strong {
+  color: var(--cp-text-strong);
+}
+
+[data-app-route="admin"] .central-admin-permission-preset span {
+  color: var(--cp-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+[data-app-route="admin"] .central-admin-permission-customizer {
+  border-radius: 18px;
+  border: 1px solid rgba(39, 39, 42, 0.09);
+  background: rgba(39, 39, 42, 0.025);
+  overflow: hidden;
+}
+
+[data-app-route="admin"] .central-admin-permission-customizer > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 14px 16px;
+  color: var(--cp-text-strong);
+  font-weight: 800;
+}
+
+[data-app-route="admin"] .central-admin-permission-customizer > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+[data-app-route="admin"] .central-admin-permission-customizer > summary::-webkit-details-marker {
+  display: none;
+}
+
+[data-app-route="admin"] .central-admin-permission-customizer > summary span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+[data-app-route="admin"] .central-admin-permission-customizer > summary small {
+  color: var(--cp-muted);
+  font-weight: 600;
+}
+
+[data-app-route="admin"] .central-admin-permission-customizer-chevron {
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.28s ease;
+}
+
+[data-app-route="admin"] .central-admin-permission-customizer[open] .central-admin-permission-customizer-chevron {
+  transform: rotate(225deg);
+}
+
+[data-app-route="admin"] .central-admin-permission-groups {
+  display: grid;
+  gap: 16px;
+  padding: 0 16px 16px;
+}
+
+[data-app-route="admin"] .central-admin-permission-group {
+  display: grid;
+  gap: 10px;
+}
+
+[data-app-route="admin"] .central-admin-permission-rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+[data-app-route="admin"] .central-admin-permission-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(126px, auto);
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 7px 9px 7px 12px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(39, 39, 42, 0.07);
+  color: var(--cp-text-strong);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+[data-app-route="admin"] .central-admin-permission-row select {
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 26px 5px 9px;
+  border-radius: 10px;
+  font-size: 0.76rem;
+}
+
+[data-app-route="admin"] .central-admin-team-modal .central-admin-modal-actions {
+  padding-top: 2px;
+}
+
+[data-app-route="admin"] .central-admin-team-modal .central-admin-team-delete {
+  margin-right: auto;
+}
+
 :root[data-theme="dark"][data-app-route="admin"] body {
   background:
     radial-gradient(circle at top, rgba(239, 59, 45, 0.2), transparent 24rem),
@@ -2931,6 +3305,27 @@
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-team-member,
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-permission-row {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-team-empty,
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-team-status,
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-permission-preset,
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-permission-customizer {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-permission-preset:hover,
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-permission-preset:focus-visible,
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-permission-preset.is-selected {
+  background: rgba(239, 59, 45, 0.16);
+  border-color: rgba(255, 121, 101, 0.48);
+}
+
 @media (max-width: 1080px) {
   [data-app-route="admin"] .central-admin-shell {
     padding-left: 0;
@@ -3049,6 +3444,54 @@
   [data-app-route="admin"] .central-admin-list-row,
   [data-app-route="admin"] .central-admin-overview-grid {
     grid-template-columns: 1fr;
+  }
+
+  [data-app-route="admin"] .central-admin-team-toolbar,
+  [data-app-route="admin"] .central-admin-team-member-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-app-route="admin"] .central-admin-team-toolbar .central-admin-link-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  [data-app-route="admin"] .central-admin-team-member {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  [data-app-route="admin"] .central-admin-team-member-actions {
+    grid-column: 1 / -1;
+  }
+
+  [data-app-route="admin"] .central-admin-team-member-actions .central-admin-link-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  [data-app-route="admin"] .central-admin-permission-preset-grid,
+  [data-app-route="admin"] .central-admin-permission-rows {
+    grid-template-columns: 1fr;
+  }
+
+  [data-app-route="admin"] .central-admin-permission-preset {
+    min-height: 0;
+  }
+
+  [data-app-route="admin"] .central-admin-team-modal .central-admin-modal-dialog {
+    max-height: calc(100vh - 24px);
+  }
+
+  [data-app-route="admin"] .central-admin-team-modal .central-admin-modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  [data-app-route="admin"] .central-admin-team-modal .central-admin-team-delete {
+    grid-column: 1 / -1;
+    margin-right: 0;
   }
 
   [data-app-route="admin"] .wayfinder-lab-notice,

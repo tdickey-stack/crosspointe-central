@@ -181,11 +181,43 @@
     {
       id: "settings",
       label: "Settings",
+      navLabel: "Overview",
       route: "/admin/settings",
       pageAccessKey: "settings",
-      summary: "Sunday Mode, room names, and access for your admin team.",
+      pageAccessKeys: ["settings", "roomRules", "users"],
+      summary: "Sunday Mode, room presentation, and access for your admin team.",
       collectionPath: PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
       status: "Preview workflow",
+    },
+    {
+      id: "settings-sunday-mode",
+      label: "Sunday Mode",
+      route: "/admin/settings/sunday-mode",
+      pageAccessKey: "settings",
+      summary: "Live and development Sunday Mode schedules and overrides.",
+      collectionPath: PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
+      status: "Preview workflow",
+      hideFromOverview: true,
+    },
+    {
+      id: "settings-rooms",
+      label: "Rooms",
+      route: "/admin/settings/rooms",
+      pageAccessKey: "roomRules",
+      summary: "Rename or hide Planning Center rooms when they appear in Central.",
+      collectionPath: PUBLISHED_ROOM_RULES_COLLECTION_PATH,
+      status: "Preview workflow",
+      hideFromOverview: true,
+    },
+    {
+      id: "settings-team",
+      label: "Team & Permissions",
+      route: "/admin/settings/team",
+      pageAccessKey: "users",
+      summary: "Manage admin users, invitations, account status, and page access.",
+      collectionPath: CENTRAL_ADMIN_USERS_COLLECTION_PATH,
+      status: "Admin access",
+      hideFromOverview: true,
     },
     {
       id: "integrations",
@@ -229,13 +261,23 @@
         "next-steps",
       ],
     },
+    {
+      id: "settings",
+      label: "Settings",
+      pageIds: [
+        "settings",
+        "settings-sunday-mode",
+        "settings-rooms",
+        "settings-team",
+      ],
+    },
   ];
   var ADMIN_SIDEBAR_ROOT_ITEMS = [
     {type: "page", id: "overview"},
     {type: "group", id: "hub"},
     {type: "page", id: "sunday"},
     {type: "page", id: "bulletin"},
-    {type: "page", id: "settings"},
+    {type: "group", id: "settings"},
     {type: "page", id: "integrations"},
     {type: "page", id: "wayfinder"},
     {type: "page", id: "change-requests"},
@@ -321,6 +363,7 @@
     campaigns: "campaign",
     serveNeeds: "serve-need",
     nextSteps: "next-step",
+    roomRules: "room-rule",
   };
   var ADMIN_HIDDEN_STATUS_PILL_LABELS = {
     "admin only": true,
@@ -525,6 +568,71 @@
     "approve",
     "admin",
   ];
+  var ADMIN_USER_PERMISSION_GROUPS = [
+    {
+      label: "Content",
+      description: "Everyday pages and publishing tools.",
+      keys: [
+        "hub",
+        "bulletin",
+        "thisSunday",
+        "quickLinks",
+        "statusBanner",
+        "resources",
+        "campaigns",
+        "nextSteps",
+        "serveNeeds",
+      ],
+    },
+    {
+      label: "Operations",
+      description: "Site behavior, integrations, rooms, and Wayfinder.",
+      keys: ["settings", "integrations", "roomRules", "wayfinder"],
+    },
+    {
+      label: "Administration",
+      description: "Approvals and access management.",
+      keys: ["changeRequests", "users", "roles"],
+    },
+  ];
+  var ADMIN_USER_ACCESS_PRESETS = [
+    {
+      id: "viewer",
+      label: "View Only",
+      description: "Can see Central content without changing it.",
+      permission: "view",
+      changeRequests: "none",
+      administration: "none",
+      wayfinder: "view",
+    },
+    {
+      id: "contributor",
+      label: "Contributor",
+      description: "Can prepare changes for someone else to approve.",
+      permission: "propose",
+      changeRequests: "view",
+      administration: "none",
+      wayfinder: "view",
+    },
+    {
+      id: "publisher",
+      label: "Publisher",
+      description: "Can edit and publish content without managing users.",
+      permission: "edit",
+      changeRequests: "approve",
+      administration: "none",
+      wayfinder: "view",
+    },
+    {
+      id: "administrator",
+      label: "Administrator",
+      description: "Full access, including team and permission management.",
+      permission: "admin",
+      changeRequests: "admin",
+      administration: "admin",
+      wayfinder: "admin",
+    },
+  ];
   var SUNDAY_MODE_OVERRIDE_OPTIONS = [
     {
       value: "auto",
@@ -576,6 +684,7 @@
   var adminWhatsNewEscapeHandler = null;
   var adminWhatsNewUnsubscribe = null;
   var hostedWhatsNewConfigPromise = null;
+  var adminUserEditorCloseTimer = null;
   var adminState = {
     bootMode: window.CENTRAL_BOOT_MODE || "public",
     currentPageId: getCurrentAdminPageId_(),
@@ -711,6 +820,8 @@
     settingsSundayError: "",
     settingsSundayMessage: "",
     wayfinderAlphaEnabled: false,
+    wayfinderAlphaLoaded: false,
+    wayfinderAlphaLoading: false,
     wayfinderAlphaSaving: false,
     wayfinderAlphaError: "",
     wayfinderAlphaMessage: "",
@@ -782,6 +893,8 @@
     adminUsersDraft: createEmptyAdminUserDraft_(),
     adminUsersEditingUid: "",
     adminUsersEditingInviteId: "",
+    adminUsersEditorOpen: false,
+    adminUsersEditorEntering: false,
     adminUsersError: "",
     adminUsersMessage: "",
     hubLoaded: false,
@@ -1934,9 +2047,34 @@
         return;
       }
 
+      if (action === "open-admin-user-editor") {
+        event.preventDefault();
+        openAdminUserEditor_();
+        return;
+      }
+
+      if (action === "close-admin-user-editor") {
+        event.preventDefault();
+        closeAdminUserEditor_({
+          skipConfirm:
+            button.getAttribute("data-admin-close-skip-confirm") === "true",
+        });
+        return;
+      }
+
+      if (action === "apply-admin-user-preset") {
+        event.preventDefault();
+        applyAdminUserAccessPreset_(
+            button.getAttribute("data-admin-permission-preset") || "",
+        );
+        return;
+      }
+
       if (action === "reset-admin-user-form") {
         event.preventDefault();
         resetAdminUsersDraft_();
+        adminState.adminUsersEditorOpen = false;
+        adminState.adminUsersEditorEntering = false;
         renderAdmin_();
         return;
       }
@@ -2107,6 +2245,8 @@
       resetServeNeedsDraft_();
     } else if (section === "nextSteps") {
       resetNextStepsDraft_();
+    } else if (section === "roomRules") {
+      resetRoomRulesDraft_();
     }
   }
 
@@ -2650,6 +2790,9 @@
     adminState.collectionEditorExiting = "";
     adminState.collectionEditorCloseAfterExit = "";
     adminState.collectionActionsEntering = "";
+    clearAdminUserEditorCloseTimer_();
+    adminState.adminUsersEditorOpen = false;
+    adminState.adminUsersEditorEntering = false;
     cancelAdminCollectionEditorExit_();
     clearAdminActionFeedback_();
     adminState.currentPageId = getCurrentAdminPageId_();
@@ -2670,12 +2813,20 @@
       return;
     }
 
-    if (event.key !== "Escape" || !adminState.deleteConfirmOpen) {
+    if (event.key !== "Escape") {
       return;
     }
 
-    event.preventDefault();
-    closeDeleteConfirm_();
+    if (adminState.deleteConfirmOpen) {
+      event.preventDefault();
+      closeDeleteConfirm_();
+      return;
+    }
+
+    if (adminState.adminUsersEditorOpen) {
+      event.preventDefault();
+      closeAdminUserEditor_();
+    }
   }
 
   function handleAdminDragStart_(event) {
@@ -3828,6 +3979,7 @@
       adminState.adminUsersDraft.pageAccess[pageAccessFieldName] = nextValue;
       adminState.adminUsersError = "";
       adminState.adminUsersMessage = "";
+      syncAdminUserPermissionPresetState_();
       return;
     }
 
@@ -3918,6 +4070,7 @@
   function navigateToAdminPage_(pageId) {
     var nextPage = getAdminPageById_(pageId);
     var nextRoute = nextPage ? nextPage.route : "/admin";
+    var previousPageId = adminState.currentPageId;
 
     if (
       nextPage &&
@@ -3929,12 +4082,15 @@
 
     if (!nextPage || nextPage.id !== adminState.currentPageId) {
       cancelAdminCollectionEditorExit_();
+      clearAdminUserEditorCloseTimer_();
       adminState.collectionEditorOpen = "";
       adminState.collectionEditorFocusPending = false;
       adminState.collectionEditorEntering = false;
       adminState.collectionEditorExiting = "";
       adminState.collectionEditorCloseAfterExit = "";
       adminState.collectionActionsEntering = "";
+      adminState.adminUsersEditorOpen = false;
+      adminState.adminUsersEditorEntering = false;
     }
     clearAdminActionFeedback_();
     adminState.currentPageId = nextPage ? nextPage.id : "overview";
@@ -3944,7 +4100,10 @@
     if (!shouldAdminSidebarStartOpen_()) {
       adminState.sidebarOpen = false;
     }
-    markAdminPageDataStaleForNavigation_(adminState.currentPageId);
+    markAdminPageDataStaleForNavigation_(
+        adminState.currentPageId,
+        previousPageId,
+    );
     window.history.pushState({}, "", nextRoute);
     renderAdmin_();
   }
@@ -4549,6 +4708,7 @@
       "<button type=\"button\" class=\"central-admin-sidebar-scrim\" data-admin-action=\"close-sidebar\" aria-label=\"Close navigation\"></button>",
       renderAdminSidebar_(currentPage, visiblePages),
       renderAdminMain_(currentPage),
+      renderAdminUserEditorModal_(currentPage),
       renderDeleteConfirmModal_(),
       renderBulletinEventEditorModal_(currentPage),
       "</div>",
@@ -4564,6 +4724,7 @@
     syncAdminCollectionEditorFocus_();
     syncAdminCollectionActionsEntrance_();
     syncAdminQuickLinkReveal_();
+    syncAdminUserEditorModal_();
     maybeLoadCurrentPageData_();
   }
 
@@ -4774,12 +4935,33 @@
         '[data-admin-nav-panel="root"]',
     );
     var groupId = adminState.sidebarNavGroup || "";
-    var groupPanelEl = groupId ? appEl.querySelector(
-        '[data-admin-nav-panel="' + groupId + '"]',
-    ) : appEl.querySelector(".central-admin-nav-panel.is-group");
+    var groupPanelEl = appEl.querySelector(
+        ".central-admin-nav-panel.is-group",
+    );
 
     if (!stageEl || !rootPanelEl || !groupPanelEl) {
       return false;
+    }
+
+    if (groupId &&
+      groupPanelEl.getAttribute("data-admin-nav-panel") !== groupId) {
+      var nextGroup = getAdminSidebarGroupById_(groupId);
+      var nextGroupPages = getVisibleAdminSidebarGroupPages_(
+          nextGroup,
+          getVisibleAdminPages_(),
+      );
+      var currentPage = getAdminPageById_(adminState.currentPageId) ||
+        getAdminPageById_("overview");
+      if (!nextGroup || !nextGroupPages.length || !currentPage) {
+        return false;
+      }
+
+      groupPanelEl.setAttribute("data-admin-nav-panel", groupId);
+      groupPanelEl.innerHTML = renderAdminSidebarGroupNav_(
+          nextGroup,
+          nextGroupPages,
+          currentPage,
+      );
     }
 
     var showGroup = !!groupId;
@@ -4894,7 +5076,7 @@
       escapeAttr_(page.id), "\" class=\"",
       isActive ? "is-active" : "", "\"",
       isActive ? " aria-current=\"page\"" : "", ">",
-      "<span>", escapeHtml_(page.label), "</span>",
+      "<span>", escapeHtml_(page.navLabel || page.label), "</span>",
       renderAdminSidebarNavMeta_(page),
       "</a>",
     ].join("");
@@ -5215,6 +5397,18 @@
       return renderSettingsPagePanel_(currentPage);
     }
 
+    if (currentPage.id === "settings-sunday-mode") {
+      return renderSettingsSundayModePagePanel_(currentPage);
+    }
+
+    if (currentPage.id === "settings-rooms") {
+      return renderSettingsRoomsPagePanel_(currentPage);
+    }
+
+    if (currentPage.id === "settings-team") {
+      return renderSettingsTeamPagePanel_(currentPage);
+    }
+
     if (currentPage.id === "integrations") {
       return renderIntegrationsPagePanel_(currentPage);
     }
@@ -5287,7 +5481,7 @@
 
   function renderOverviewPagePanel_(currentPage) {
     var pages = getVisibleAdminPages_().filter(function(page) {
-      return page.id !== "overview";
+      return page.id !== "overview" && !page.hideFromOverview;
     });
 
     if (!adminState.user || !adminState.userEmailAllowed ||
@@ -7183,6 +7377,17 @@
   }
 
   function renderSettingsPagePanel_(currentPage) {
+    var destinationIds = [
+      "settings-sunday-mode",
+      "settings-rooms",
+      "settings-team",
+    ];
+    var destinations = destinationIds.map(function(pageId) {
+      return getAdminPageById_(pageId);
+    }).filter(function(page) {
+      return page && canAccessAdminPage_(page);
+    });
+
     return [
       "<section class=\"central-admin-panel\">",
       "<div class=\"central-admin-panel-header\">",
@@ -7190,45 +7395,162 @@
       "<h3>", escapeHtml_(currentPage.label), "</h3>",
       "<p>", escapeHtml_(currentPage.summary), "</p>",
       "</div>",
-      renderStatusPill_(currentPage.status, "is-safe"),
       "</div>",
       "<div class=\"central-admin-page-body\">",
-      "<div class=\"central-admin-page-meta\">",
-      renderInlineMeta_("Route", currentPage.route),
-      renderInlineMeta_("Sunday Settings", PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH),
-      renderInlineMeta_("Room Rules", PUBLISHED_ROOM_RULES_COLLECTION_PATH),
-      renderInlineMeta_(
-          "Public behavior",
-          "These settings update the published Firestore controls Central is using right now.",
-      ),
-      "</div>",
-      "<div class=\"central-admin-stack\">",
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\">",
-      "<strong>How this page behaves</strong>",
-      renderStatusPill_("Operational controls", "is-live"),
-      "</div>",
-      renderAdminNote_(
-          "Manage Sunday Mode, Wayfinder access, room naming, and admin accounts.",
-      ),
       adminState.settingsLoading ?
-        renderAdminNote_("Loading the current settings and room rules.") :
+        renderAdminNote_("Loading your current settings overview.") :
         "",
       adminState.settingsLoadError ?
         "<p class=\"central-admin-note\">" +
         escapeHtml_(adminState.settingsLoadError) +
         "</p>" :
         "",
+      destinations.length ? [
+        "<div class=\"central-admin-overview-grid central-admin-settings-grid\">",
+        destinations.map(function(page) {
+          return renderSettingsDestinationCard_(page);
+        }).join(""),
+        "</div>",
+      ].join("") : [
+        "<div class=\"central-admin-empty\">",
+        "<strong>No Settings destinations are available.</strong>",
+        "<p>Your account does not currently have access to Sunday Mode, Rooms, or Team & Permissions.</p>",
+        "</div>",
+      ].join(""),
       "</div>",
-      renderSettingsSundayEditor_(),
-      renderWayfinderAlphaSettings_(),
-      renderRoomRulesEditor_(),
-      renderRoomRulesWorkingList_(),
-      renderAdminUsersManager_(),
+      "</section>",
+    ].join("");
+  }
+
+  function renderSettingsDestinationCard_(page) {
+    var status = getSettingsDestinationStatus_(page && page.id);
+
+    return [
+      "<article class=\"central-admin-card central-admin-overview-card\">",
+      "<div class=\"central-admin-overview-card-top\">",
+      "<h3>", escapeHtml_(page && page.label || "Settings"), "</h3>",
+      status.label ?
+        "<div class=\"central-admin-badges\">" +
+          renderStatusPill_(status.label, status.tone) +
+        "</div>" :
+        "",
+      "</div>",
+      "<p>", escapeHtml_(page && page.summary || ""), "</p>",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-nav=\"",
+      escapeAttr_(page && page.id || "settings"),
+      "\">Open</button>",
+      "</div>",
+      "</article>",
+    ].join("");
+  }
+
+  function getSettingsDestinationStatus_(pageId) {
+    if (adminState.settingsLoading && !adminState.settingsLoaded) {
+      return {label: "Loading", tone: "is-live"};
+    }
+
+    if (pageId === "settings-sunday-mode") {
+      var overrideValue = adminState.settingsSundayDraft &&
+        adminState.settingsSundayDraft.sunday_mode_override;
+      var overrideOption = SUNDAY_MODE_OVERRIDE_OPTIONS.find(
+          function(option) {
+            return option.value === overrideValue;
+          },
+      );
+      return {
+        label: overrideOption ? overrideOption.label : "Automatic",
+        tone: overrideValue === "enabled" ? "is-live" : "is-safe",
+      };
+    }
+
+    if (pageId === "settings-rooms") {
+      var roomRuleCount = Array.isArray(adminState.roomRulesItems) ?
+        adminState.roomRulesItems.length :
+        0;
+      return {
+        label: roomRuleCount + (roomRuleCount === 1 ? " rule" : " rules"),
+        tone: roomRuleCount ? "is-safe" : "is-live",
+      };
+    }
+
+    if (pageId === "settings-team") {
+      if (!canManageAdminUsers_()) {
+        return {label: "Restricted", tone: "is-warn"};
+      }
+
+      if (adminState.adminUsersLoading && !adminState.adminUsersLoaded) {
+        return {label: "Loading", tone: "is-live"};
+      }
+
+      var teamCount = Array.isArray(adminState.adminUsersItems) ?
+        adminState.adminUsersItems.length :
+        0;
+      return {
+        label: teamCount + (teamCount === 1 ? " account" : " accounts"),
+        tone: teamCount ? "is-safe" : "is-live",
+      };
+    }
+
+    return {label: "", tone: ""};
+  }
+
+  function renderSettingsDestinationPagePanel_(currentPage, bodyHtml) {
+    return [
+      "<section class=\"central-admin-panel\">",
+      "<div class=\"central-admin-panel-header\">",
+      "<div>",
+      "<h3>", escapeHtml_(currentPage.label), "</h3>",
+      "<p>", escapeHtml_(currentPage.summary), "</p>",
+      "</div>",
+      "</div>",
+      "<div class=\"central-admin-page-body\">",
+      adminState.settingsLoadError ?
+        "<p class=\"central-admin-note\">" +
+          escapeHtml_(adminState.settingsLoadError) +
+        "</p>" :
+        "",
+      "<div class=\"central-admin-stack\">",
+      bodyHtml,
       "</div>",
       "</div>",
       "</section>",
     ].join("");
+  }
+
+  function renderSettingsSundayModePagePanel_(currentPage) {
+    return renderSettingsDestinationPagePanel_(
+        currentPage,
+        renderSettingsSundayEditor_(),
+    );
+  }
+
+  function renderSettingsRoomsPagePanel_(currentPage) {
+    return renderSettingsDestinationPagePanel_(
+        currentPage,
+        [
+          renderAdminCollectionActions_({
+            section: "roomRules",
+            label: "Add Room Rule",
+            canEdit: canEditRoomRules_(),
+            busy: adminState.roomRulesLoading ||
+              adminState.roomRulesSaving ||
+              adminState.roomRulesPublishing,
+          }),
+          renderAdminCollectionEditor_(
+              "roomRules",
+              renderRoomRulesEditor_(),
+          ),
+          renderRoomRulesWorkingList_(),
+        ].join(""),
+    );
+  }
+
+  function renderSettingsTeamPagePanel_(currentPage) {
+    return renderSettingsDestinationPagePanel_(
+        currentPage,
+        renderAdminUsersManager_(),
+    );
   }
 
   function renderSettingsSundayEditor_() {
@@ -7243,6 +7565,7 @@
     return renderCollapsibleAdminSection_({
       id: "settings-sunday-controls",
       title: "Sunday Controls",
+      collapsible: false,
       pillHtml: renderStatusPill_(
           !canEdit ?
             "Read only" :
@@ -7355,11 +7678,15 @@
     var canAdmin = permission === "admin";
     var enabled = adminState.wayfinderAlphaEnabled === true;
     return renderCollapsibleAdminSection_({
-      id: "settings-wayfinder-alpha",
-      title: "Wayfinder Staff Alpha",
+      id: "wayfinder-alpha-access",
+      title: "Staff Alpha Access",
       pillHtml: renderStatusPill_(
-          enabled ? "Enabled" : "Disabled",
-          enabled ? "is-safe" : "is-warn",
+          adminState.wayfinderAlphaLoading ?
+            "Loading" :
+            enabled ? "Enabled" : "Disabled",
+          adminState.wayfinderAlphaLoading || !enabled ?
+            "is-warn" :
+            "is-safe",
       ),
       bodyHtml: [
         renderAdminNote_(
@@ -7381,7 +7708,9 @@
         "\" data-admin-action=\"toggle-wayfinder-alpha\" data-wayfinder-enabled=\"",
         enabled ? "true" : "false",
         "\"",
-        (!canAdmin || adminState.wayfinderAlphaSaving) ? " disabled" : "",
+        (!canAdmin ||
+          adminState.wayfinderAlphaLoading ||
+          adminState.wayfinderAlphaSaving) ? " disabled" : "",
         ">",
         escapeHtml_(
             adminState.wayfinderAlphaSaving ?
@@ -7520,6 +7849,7 @@
       "<p>The backend finds approved information first, then gives only that information to Gemini. Fixed safety answers skip Gemini completely.</p>",
       "</div>",
       "</div>",
+      hasAccess ? renderWayfinderAlphaSettings_() : "",
       hasAccess ? renderWayfinderFeaturedEventHealth_() : "",
       hasAccess ? renderWayfinderWebsiteIndex_() : "",
       hasAccess ? renderWayfinderEvaluations_() : "",
@@ -8651,6 +8981,7 @@
       title: adminState.roomRulesEditingId ?
         "Edit Room Rule" :
         "Add Room Rule",
+      collapsible: false,
       pillHtml: renderStatusPill_(
           canEdit ? "Write access" : "Read only",
           canEdit ? "is-safe" : "is-warn",
@@ -8723,7 +9054,13 @@
         "</button>",
         "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reset-room-rule-form\"",
         actionDisabled ? " disabled" : "",
-        ">Reset Form</button>",
+        ">",
+        escapeHtml_(
+            adminState.roomRulesEditingId ?
+              "Cancel Edit" :
+              "Cancel",
+        ),
+        "</button>",
         "</div>",
       ].join("") : "",
       ].join(""),
@@ -8737,6 +9074,7 @@
       return renderCollapsibleAdminSection_({
         id: "settings-room-rules-list",
         title: "Current Room Rules",
+        collapsible: false,
         pillHtml: renderStatusPill_("Loading", "is-live"),
         bodyHtml: renderAdminNote_("Reading the current room rules now."),
       });
@@ -8746,6 +9084,7 @@
       return renderCollapsibleAdminSection_({
         id: "settings-room-rules-list",
         title: "Current Room Rules",
+        collapsible: false,
         pillHtml: renderStatusPill_(
             adminState.roomRulesError ? "Read failed" : "Empty collection",
             adminState.roomRulesError ? "is-warn" : "is-live",
@@ -8761,6 +9100,7 @@
     return renderCollapsibleAdminSection_({
       id: "settings-room-rules-list",
       title: "Current Room Rules",
+      collapsible: false,
       pillHtml: renderStatusPill_(
           adminState.roomRulesItems.length + " loaded",
           "is-safe",
@@ -8860,6 +9200,7 @@
       return renderCollapsibleAdminSection_({
         id: "settings-admin-users",
         title: "Admin Users",
+        collapsible: false,
         pillHtml: renderStatusPill_("Restricted", "is-warn"),
         bodyHtml: renderAdminNote_(
             "Only users with admin-level access to the Users section can add people or change permission levels.",
@@ -8867,24 +9208,21 @@
       });
     }
 
-    var isEditingCurrentAdminUser = !!(
-      adminState.user &&
-      adminState.adminUsersEditingUid &&
-      adminState.user.uid === adminState.adminUsersEditingUid
-    );
-
     return renderCollapsibleAdminSection_({
       id: "settings-admin-users",
-      title: adminState.adminUsersEditingInviteId ?
-        "Edit Admin Invite" :
-        (adminState.adminUsersEditingUid ?
-        "Edit Admin User" :
-        "Add Admin User"),
-      pillHtml: renderStatusPill_("Admin only", "is-live"),
-      bodyHtml: [
-      renderAdminNote_(
-          "Enter an email address to send an admin invite with permissions already attached. If you already know a Firebase UID, you can still add someone directly without the invite flow.",
+      title: "Team Members",
+      collapsible: false,
+      pillHtml: renderStatusPill_(
+          String(adminState.adminUsersItems.length),
+          "is-safe",
       ),
+      bodyHtml: [
+      "<div class=\"central-admin-team-toolbar\">",
+      "<p>Invite people, review pending access, and adjust permissions.</p>",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"open-admin-user-editor\"",
+      adminState.adminUsersSaving ? " disabled" : "",
+      "><span aria-hidden=\"true\">+</span> Add Team Member</button>",
+      "</div>",
       adminState.adminUsersMessage ?
         renderAdminNote_(adminState.adminUsersMessage) :
         "",
@@ -8893,87 +9231,6 @@
         escapeHtml_(adminState.adminUsersError) +
         "</p>" :
         "",
-      "<div class=\"central-admin-form-grid\">",
-      renderAdminInputField_({
-        label: "UID",
-        field: "admin-user.uid",
-        value: adminState.adminUsersDraft.uid,
-        placeholder: "Optional direct-add path",
-        maxLength: 128,
-      }),
-      renderAdminInputField_({
-        label: "Email",
-        field: "admin-user.email",
-        value: adminState.adminUsersDraft.email,
-        placeholder: "name@crosspointe.tv",
-        maxLength: 160,
-      }),
-      renderAdminInputField_({
-        label: "Display Name",
-        field: "admin-user.displayName",
-        value: adminState.adminUsersDraft.displayName,
-        placeholder: "CrossPointe Team Member",
-        maxLength: 120,
-      }),
-      "</div>",
-      renderAdminCheckboxField_({
-        label: "Active",
-        field: "admin-user.active",
-        checked: !!adminState.adminUsersDraft.active,
-        hint: "Inactive users can still exist in Firestore, but they will not be able to use the dashboard.",
-      }),
-      "<div class=\"central-admin-form-grid\">",
-      getManagedAdminPageConfigs_().map(function(pageConfig) {
-        var permissionOptions = pageConfig.key === "wayfinder" ?
-          ["none", "view", "admin"] : ADMIN_PERMISSION_OPTIONS;
-        return renderAdminSelectField_({
-          label: pageConfig.label,
-          field: "admin-user.pageAccess." + pageConfig.key,
-          value: getAdminUserDraftPermissionValue_(pageConfig.key),
-          options: permissionOptions.map(function(permission) {
-            return {
-              value: permission,
-              label: pageConfig.key === "wayfinder" && permission === "view" ?
-                "User" : (PERMISSION_LABELS[permission] || permission),
-            };
-          }),
-        });
-      }).join(""),
-      "</div>",
-      "<div class=\"central-admin-action-row\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-admin-user\"",
-      adminState.adminUsersSaving ? " disabled" : "",
-      ">",
-      adminState.adminUsersSaving ?
-        escapeHtml_(getAdminUserSaveBusyLabel_()) :
-        escapeHtml_(getAdminUserSaveButtonLabel_()),
-      "</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reset-admin-user-form\"",
-      adminState.adminUsersSaving ? " disabled" : "",
-      ">Reset Form</button>",
-      (adminState.adminUsersEditingUid || adminState.adminUsersEditingInviteId) ? [
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-admin-user\" data-admin-doc-id=\"",
-        escapeAttr_(
-            adminState.adminUsersEditingInviteId ||
-            adminState.adminUsersEditingUid,
-        ),
-        "\" data-admin-record-type=\"",
-        escapeAttr_(
-            adminState.adminUsersEditingInviteId ?
-              "invite" :
-              "user",
-        ),
-        "\"",
-        adminState.adminUsersSaving || isEditingCurrentAdminUser ? " disabled" : "",
-        ">",
-        escapeHtml_(
-            adminState.adminUsersEditingInviteId ?
-              "Delete Invite" :
-              "Delete User",
-        ),
-        "</button>",
-      ].join("") : "",
-      "</div>",
       renderAdminUsersList_(),
       ].join(""),
     });
@@ -8981,60 +9238,82 @@
 
   function renderAdminUsersList_() {
     if (adminState.adminUsersLoading && !adminState.adminUsersLoaded) {
-      return renderAdminNote_("Loading the current admin users and pending invites.");
+      return [
+        "<div class=\"central-admin-team-empty\">",
+        "<strong>Loading your team…</strong>",
+        "<p>Reading current accounts and pending invitations.</p>",
+        "</div>",
+      ].join("");
     }
 
     if (!adminState.adminUsersItems.length) {
-      return renderAdminNote_("No admin users or pending invites have been loaded yet.");
+      return [
+        "<div class=\"central-admin-team-empty\">",
+        "<strong>No team members yet</strong>",
+        "<p>Add someone to send their first Central Admin invitation.</p>",
+        "</div>",
+      ].join("");
     }
 
-    return adminState.adminUsersItems.map(function(userItem) {
+    return [
+      "<div class=\"central-admin-team-list\">",
+      adminState.adminUsersItems.map(function(userItem) {
       var isCurrentAdminUser = !!(
         adminState.user &&
         userItem.recordType !== "invite" &&
         userItem.uid === adminState.user.uid
       );
+      var statusLabel = userItem.recordType === "invite" ?
+        "Invite Pending" :
+        (userItem.active ? "Active" : "Inactive");
+      var preset = getAdminUserAccessPreset_(userItem.pageAccess);
+      var destinationCount = getAdminUserAccessibleDestinationCount_(
+          userItem.pageAccess,
+      );
 
       return [
-        "<div class=\"central-admin-list-row\">",
+        "<article class=\"central-admin-team-member\">",
+        renderAdminUserAvatar_(userItem),
+        "<div class=\"central-admin-team-member-copy\">",
+        "<div class=\"central-admin-team-member-heading\">",
         "<div>",
-        "<strong>",
-        escapeHtml_(userItem.displayName || userItem.email || userItem.uid),
-        "</strong>",
-        "<p>",
+        "<strong>", escapeHtml_(
+            userItem.displayName ||
+            userItem.email ||
+            userItem.uid ||
+            "Unnamed team member",
+        ), "</strong>",
+        "<p>", escapeHtml_(userItem.email || userItem.uid || ""), "</p>",
+        "</div>",
+        "<div class=\"central-admin-badges\">",
+        renderStatusPill_(
+            statusLabel,
+            userItem.recordType === "invite" || !userItem.active ?
+              "is-warn" :
+              "is-safe",
+        ),
+        isCurrentAdminUser ?
+          renderStatusPill_("You", "is-live") :
+          "",
+        "</div>",
+        "</div>",
+        "<p class=\"central-admin-team-access-summary\">",
+        "<strong>", escapeHtml_(preset ? preset.label : "Custom access"), "</strong>",
+        "<span>",
         escapeHtml_(
-            [
-              userItem.email || "",
-              userItem.uid || "",
-            ].filter(Boolean).join(" • "),
+            destinationCount + (destinationCount === 1 ?
+              " destination" :
+              " destinations"),
         ),
-        "</p>",
-        "<div class=\"central-admin-item-meta\">",
-        renderInlineMeta_(
-            "Status",
-            userItem.recordType === "invite" ?
-              "Invite Pending" :
-              (userItem.active ? "Active" : "Inactive"),
-        ),
-        renderInlineMeta_("Hub", getPermissionLabel_(getAdminUserPermissionValue_(userItem, "hub"))),
-        renderInlineMeta_("Settings", getPermissionLabel_(getAdminUserPermissionValue_(userItem, "settings"))),
-        renderInlineMeta_("Approvals", getPermissionLabel_(getAdminUserPermissionValue_(userItem, "changeRequests"))),
-        renderInlineMeta_("Users", getPermissionLabel_(getAdminUserPermissionValue_(userItem, "users"))),
-        userItem.recordType === "invite" && userItem.inviteSentAt ?
-          renderInlineMeta_(
-              "Sent",
-              formatAdminTimestamp_(userItem.inviteSentAt),
-          ) :
-          "",
+        "</span>",
         userItem.recordType === "invite" && userItem.inviteExpiresAt ?
-          renderInlineMeta_(
-              "Expires",
-              formatAdminTimestamp_(userItem.inviteExpiresAt),
-          ) :
+          "<span>Expires " +
+            escapeHtml_(formatAdminTimestamp_(userItem.inviteExpiresAt)) +
+          "</span>" :
           "",
+        "</p>",
         "</div>",
-        "</div>",
-        "<div class=\"central-admin-row-actions\">",
+        "<div class=\"central-admin-team-member-actions\">",
         "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-admin-user\" data-admin-doc-id=\"",
         escapeAttr_(userItem.recordType === "invite" ? userItem.inviteId : userItem.uid),
         "\" data-admin-record-type=\"",
@@ -9046,19 +9325,401 @@
           "Edit / Resend" :
           "Edit"),
         "</button>",
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-admin-user\" data-admin-doc-id=\"",
-        escapeAttr_(userItem.recordType === "invite" ? userItem.inviteId : userItem.uid),
-        "\" data-admin-record-type=\"",
-        escapeAttr_(userItem.recordType || "user"),
-        "\"",
-        adminState.adminUsersSaving || isCurrentAdminUser ? " disabled" : "",
-        ">",
-        escapeHtml_(userItem.recordType === "invite" ? "Delete Invite" : "Delete"),
-        "</button>",
         "</div>",
+        "</article>",
+      ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderAdminUserAvatar_(userItem) {
+    var label = String(
+        userItem &&
+        (userItem.displayName || userItem.email || userItem.uid) ||
+        "Team member",
+    ).trim();
+    var initials = label.split(/\s+/)
+        .slice(0, 2)
+        .map(function(part) {
+          return part.charAt(0);
+        })
+        .join("")
+        .toUpperCase() || "CP";
+
+    if (userItem && userItem.photoUrl) {
+      return [
+        "<div class=\"central-admin-team-avatar\">",
+        "<img src=\"", escapeAttr_(userItem.photoUrl),
+        "\" alt=\"\" referrerpolicy=\"no-referrer\">",
         "</div>",
       ].join("");
-    }).join("");
+    }
+
+    return [
+      "<div class=\"central-admin-team-avatar\" aria-hidden=\"true\">",
+      escapeHtml_(initials),
+      "</div>",
+    ].join("");
+  }
+
+  function renderAdminUserEditorModal_(currentPage) {
+    if (!currentPage ||
+      currentPage.id !== "settings-team" ||
+      !adminState.adminUsersEditorOpen ||
+      !canManageAdminUsers_()) {
+      return "";
+    }
+
+    var isEditingCurrentAdminUser = !!(
+      adminState.user &&
+      adminState.adminUsersEditingUid &&
+      adminState.user.uid === adminState.adminUsersEditingUid
+    );
+    var isEditing = !!(
+      adminState.adminUsersEditingUid ||
+      adminState.adminUsersEditingInviteId
+    );
+    var currentPreset = getAdminUserAccessPreset_(
+        adminState.adminUsersDraft.pageAccess,
+    );
+    var hasAnyAccess = hasAnyAdminUserPageAccess_(
+        adminState.adminUsersDraft.pageAccess,
+    );
+    var hasAnyDraftAccess = hasAnyAdminUserPageAccess_(
+        adminState.adminUsersDraft.pageAccess,
+    );
+    var modalTitle = adminState.adminUsersEditingInviteId ?
+      "Edit Pending Invite" :
+      (adminState.adminUsersEditingUid ?
+        "Edit Team Member" :
+        "Add Team Member");
+
+    return [
+      "<div class=\"central-admin-modal central-admin-team-modal",
+      adminState.adminUsersEditorEntering ? "" : " is-visible",
+      "\" role=\"presentation\" data-admin-user-editor-modal>",
+      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-admin-user-editor\" aria-label=\"Close team member editor\"",
+      adminState.adminUsersSaving ? " disabled" : "",
+      "></button>",
+      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-team-modal-title\">",
+      "<div class=\"central-admin-modal-copy\">",
+      "<span class=\"central-admin-kicker\">",
+      isEditing ? "Team Access" : "New Invitation",
+      "</span>",
+      "<h3 id=\"central-admin-team-modal-title\">",
+      escapeHtml_(modalTitle),
+      "</h3>",
+      "<p>",
+      isEditing ?
+        "Update this person's account and access." :
+        "Choose a starting access level, then customize anything that needs to be different.",
+      "</p>",
+      "</div>",
+      "<div class=\"central-admin-team-modal-fields\">",
+      adminState.adminUsersMessage ?
+        renderAdminNote_(adminState.adminUsersMessage) :
+        "",
+      adminState.adminUsersError ?
+        "<p class=\"central-admin-note central-admin-team-modal-error\">" +
+          escapeHtml_(adminState.adminUsersError) +
+        "</p>" :
+        "",
+      "<div class=\"central-admin-form-grid\">",
+      renderAdminInputField_({
+        label: "Display Name",
+        field: "admin-user.displayName",
+        value: adminState.adminUsersDraft.displayName,
+        placeholder: "CrossPointe Team Member",
+        maxLength: 120,
+      }),
+      renderAdminInputField_({
+        label: "Email",
+        field: "admin-user.email",
+        value: adminState.adminUsersDraft.email,
+        placeholder: "name@crosspointe.tv",
+        maxLength: 160,
+      }),
+      "</div>",
+      "<label class=\"central-admin-team-status\">",
+      "<input type=\"checkbox\" data-admin-field=\"admin-user.active\"",
+      adminState.adminUsersDraft.active ? " checked" : "",
+      adminState.adminUsersSaving ? " disabled" : "",
+      ">",
+      "<span><strong>Active account</strong>",
+      "<small>Inactive accounts cannot open the admin dashboard.</small></span>",
+      "</label>",
+      "<section class=\"central-admin-permission-presets\">",
+      "<div class=\"central-admin-permission-section-heading\">",
+      "<div><strong>Access Level</strong>",
+      "<p>Choose the closest match. You can fine-tune it below.</p></div>",
+      "<span class=\"central-admin-pill ",
+      hasAnyDraftAccess ? "is-live" : "is-warn",
+      " central-admin-permission-custom-status\"",
+      currentPreset ? " hidden" : "",
+      ">",
+      hasAnyDraftAccess ? "Custom access" : "Choose access",
+      "</span>",
+      "</div>",
+      "<div class=\"central-admin-permission-preset-grid\">",
+      ADMIN_USER_ACCESS_PRESETS.map(function(preset) {
+        var isSelected = !!(currentPreset && currentPreset.id === preset.id);
+        return [
+          "<button type=\"button\" class=\"central-admin-permission-preset",
+          isSelected ? " is-selected" : "",
+          "\" data-admin-action=\"apply-admin-user-preset\" data-admin-permission-preset=\"",
+          escapeAttr_(preset.id), "\"",
+          " aria-pressed=\"", isSelected ? "true" : "false", "\"",
+          adminState.adminUsersSaving ? " disabled" : "",
+          ">",
+          "<strong>", escapeHtml_(preset.label), "</strong>",
+          "<span>", escapeHtml_(preset.description), "</span>",
+          "</button>",
+        ].join("");
+      }).join(""),
+      "</div>",
+      "</section>",
+      "<details class=\"central-admin-permission-customizer\">",
+      "<summary>",
+      "<span><strong>Customize access</strong>",
+      "<small>Set individual destinations and workflows</small></span>",
+      "<span class=\"central-admin-permission-customizer-chevron\" aria-hidden=\"true\"></span>",
+      "</summary>",
+      "<div class=\"central-admin-permission-groups\">",
+      ADMIN_USER_PERMISSION_GROUPS.map(function(group) {
+        return renderAdminUserPermissionGroup_(group);
+      }).join(""),
+      "</div>",
+      "</details>",
+      "</div>",
+      "<div class=\"central-admin-action-row central-admin-modal-actions\">",
+      isEditing ? [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-team-delete\" data-admin-action=\"delete-admin-user\" data-admin-doc-id=\"",
+        escapeAttr_(
+            adminState.adminUsersEditingInviteId ||
+            adminState.adminUsersEditingUid,
+        ),
+        "\" data-admin-record-type=\"",
+        escapeAttr_(
+            adminState.adminUsersEditingInviteId ?
+              "invite" :
+              "user",
+        ),
+        "\"",
+        adminState.adminUsersSaving || isEditingCurrentAdminUser ?
+          " disabled" :
+          "",
+        ">",
+        escapeHtml_(
+            adminState.adminUsersEditingInviteId ?
+              "Delete Invite" :
+              "Remove Access",
+        ),
+        "</button>",
+      ].join("") : "",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"close-admin-user-editor\"",
+      " data-admin-close-skip-confirm=\"true\"",
+      adminState.adminUsersSaving ? " disabled" : "",
+      ">Cancel</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-admin-user\"",
+      adminState.adminUsersSaving ? " disabled" : "",
+      ">",
+      adminState.adminUsersSaving ?
+        escapeHtml_(getAdminUserSaveBusyLabel_()) :
+        escapeHtml_(getAdminUserSaveButtonLabel_()),
+      "</button>",
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+  }
+
+  function renderAdminUserPermissionGroup_(group) {
+    var configByKey = {};
+    getManagedAdminPageConfigs_().forEach(function(pageConfig) {
+      configByKey[pageConfig.key] = pageConfig;
+    });
+
+    return [
+      "<section class=\"central-admin-permission-group\">",
+      "<div class=\"central-admin-permission-group-heading\">",
+      "<strong>", escapeHtml_(group.label), "</strong>",
+      "<p>", escapeHtml_(group.description), "</p>",
+      "</div>",
+      "<div class=\"central-admin-permission-rows\">",
+      group.keys.map(function(pageAccessKey) {
+        var pageConfig = configByKey[pageAccessKey] || {
+          key: pageAccessKey,
+          label: pageAccessKey,
+        };
+        var permissionOptions = pageAccessKey === "wayfinder" ?
+          ["none", "view", "admin"] :
+          ADMIN_PERMISSION_OPTIONS;
+
+        return [
+          "<label class=\"central-admin-permission-row\">",
+          "<span>", escapeHtml_(pageConfig.label), "</span>",
+          "<select data-admin-field=\"admin-user.pageAccess.",
+          escapeAttr_(pageAccessKey), "\"",
+          adminState.adminUsersSaving ? " disabled" : "",
+          ">",
+          permissionOptions.map(function(permission) {
+            var label = pageAccessKey === "wayfinder" &&
+              permission === "view" ?
+              "User" :
+              (PERMISSION_LABELS[permission] || permission);
+            return [
+              "<option value=\"", escapeAttr_(permission), "\"",
+              getAdminUserDraftPermissionValue_(pageAccessKey) === permission ?
+                " selected" :
+                "",
+              ">",
+              escapeHtml_(label),
+              "</option>",
+            ].join("");
+          }).join(""),
+          "</select>",
+          "</label>",
+        ].join("");
+      }).join(""),
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function openAdminUserEditor_() {
+    if (!canManageAdminUsers_() || adminState.adminUsersSaving) {
+      return;
+    }
+
+    clearAdminUserEditorCloseTimer_();
+    clearAdminActionFeedback_();
+    clearAdminDirtyScope_("admin-user");
+    resetAdminUsersDraft_();
+    adminState.adminUsersEditorOpen = true;
+    adminState.adminUsersEditorEntering = true;
+    renderAdmin_();
+  }
+
+  function closeAdminUserEditor_(options) {
+    var config = options || {};
+    if (!adminState.adminUsersEditorOpen || adminState.adminUsersSaving) {
+      return;
+    }
+
+    if (!config.skipConfirm &&
+      !confirmDiscardAdminChanges_("admin-user")) {
+      return;
+    }
+
+    clearAdminUserEditorCloseTimer_();
+    clearAdminDirtyScope_("admin-user");
+    var modalEl = appEl && appEl.querySelector(
+        "[data-admin-user-editor-modal]",
+    );
+
+    if (!modalEl) {
+      finishClosingAdminUserEditor_();
+      return;
+    }
+
+    modalEl.classList.remove("is-visible");
+    modalEl.classList.add("is-closing");
+    adminUserEditorCloseTimer = window.setTimeout(function() {
+      adminUserEditorCloseTimer = null;
+      finishClosingAdminUserEditor_();
+    }, 720);
+  }
+
+  function finishClosingAdminUserEditor_() {
+    adminState.adminUsersEditorOpen = false;
+    adminState.adminUsersEditorEntering = false;
+    resetAdminUsersDraft_();
+    renderAdmin_();
+  }
+
+  function clearAdminUserEditorCloseTimer_() {
+    if (!adminUserEditorCloseTimer) {
+      return;
+    }
+
+    window.clearTimeout(adminUserEditorCloseTimer);
+    adminUserEditorCloseTimer = null;
+  }
+
+  function syncAdminUserEditorModal_() {
+    if (!appEl ||
+      !adminState.adminUsersEditorOpen ||
+      !adminState.adminUsersEditorEntering) {
+      return;
+    }
+
+    var modalEl = appEl.querySelector("[data-admin-user-editor-modal]");
+    if (!modalEl) {
+      return;
+    }
+
+    window.requestAnimationFrame(function() {
+      if (!modalEl.isConnected || !adminState.adminUsersEditorOpen) {
+        return;
+      }
+
+      modalEl.classList.add("is-visible");
+      adminState.adminUsersEditorEntering = false;
+      var firstField = modalEl.querySelector(
+          '[data-admin-field="admin-user.displayName"]',
+      );
+      if (firstField && typeof firstField.focus === "function") {
+        firstField.focus({preventScroll: true});
+      }
+    });
+  }
+
+  function applyAdminUserAccessPreset_(presetId) {
+    var preset = getAdminUserAccessPresetById_(presetId);
+    if (!preset || adminState.adminUsersSaving) {
+      return;
+    }
+
+    markAdminDirtyScope_("admin-user");
+    adminState.adminUsersDraft.pageAccess =
+      createAdminUserPresetPageAccess_(preset.id);
+    adminState.adminUsersError = "";
+    adminState.adminUsersMessage = "";
+    renderAdmin_();
+  }
+
+  function syncAdminUserPermissionPresetState_() {
+    if (!appEl || !adminState.adminUsersEditorOpen) {
+      return;
+    }
+
+    var currentPreset = getAdminUserAccessPreset_(
+        adminState.adminUsersDraft.pageAccess,
+    );
+    Array.prototype.forEach.call(
+        appEl.querySelectorAll("[data-admin-permission-preset]"),
+        function(buttonEl) {
+          var isSelected = !!(
+            currentPreset &&
+            buttonEl.getAttribute("data-admin-permission-preset") ===
+              currentPreset.id
+          );
+          buttonEl.classList.toggle("is-selected", isSelected);
+          buttonEl.setAttribute("aria-pressed", isSelected ? "true" : "false");
+        },
+    );
+    var customStatusEl = appEl.querySelector(
+        ".central-admin-permission-custom-status",
+    );
+    if (customStatusEl) {
+      customStatusEl.hidden = !!currentPreset;
+      customStatusEl.textContent = hasAnyAccess ?
+        "Custom access" :
+        "Choose access";
+      customStatusEl.classList.toggle("is-live", hasAnyAccess);
+      customStatusEl.classList.toggle("is-warn", !hasAnyAccess);
+    }
   }
 
   function renderCollapsibleAdminSection_(config) {
@@ -9070,6 +9731,18 @@
       "central-admin-section-" + sectionId :
       "";
     var isCollapsed = isAdminSectionCollapsed_(sectionId);
+
+    if (config && config.collapsible === false) {
+      return [
+        "<div class=\"central-admin-item\">",
+        "<div class=\"central-admin-item-header\">",
+        "<strong>", escapeHtml_(title), "</strong>",
+        pillHtml,
+        "</div>",
+        bodyHtml,
+        "</div>",
+      ].join("");
+    }
 
     return [
       "<div class=\"central-admin-item central-admin-collapsible-section",
@@ -12567,8 +13240,7 @@
       return;
     }
 
-    if (adminState.currentPageId === "settings" ||
-      adminState.currentPageId === "integrations") {
+    if (isSettingsDataPageId_(adminState.currentPageId)) {
       loadSettingsIfNeeded_();
       return;
     }
@@ -12584,11 +13256,22 @@
     }
 
     if (adminState.currentPageId === "wayfinder") {
+      loadWayfinderAlphaSettingIfNeeded_();
       loadWayfinderFeaturedEventHealth_(false);
       loadWayfinderWebsiteIndexStatus_(false);
       loadWayfinderFeedback_(false);
       loadWayfinderEvaluations_(false);
     }
+  }
+
+  function isSettingsDataPageId_(pageId) {
+    return [
+      "settings",
+      "settings-sunday-mode",
+      "settings-rooms",
+      "settings-team",
+      "integrations",
+    ].indexOf(String(pageId || "")) !== -1;
   }
 
   function loadHubIfNeeded_() {
@@ -12974,13 +13657,11 @@
       adminFirestore.doc(PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH).get(),
       adminFirestore.collection(PUBLISHED_ROOM_RULES_COLLECTION_PATH).get(),
       adminFirestore.doc(PUBLISHED_ROOM_RULES_META_DOC_PATH).get(),
-      adminFirestore.doc(PUBLISHED_HUB_SETTINGS_DOC_PATH).get(),
     ])
         .then(function(results) {
           var sundaySettingsSnapshot = results[0];
           var publishedSnapshot = results[1];
           var roomRulesMetaSnapshot = results[2];
-          var publicSettingsSnapshot = results[3];
           var roomRulesOverrideActive = hasPublishedListOverrideState_(
               roomRulesMetaSnapshot,
           );
@@ -13015,10 +13696,6 @@
 
                 adminState.settingsLoading = false;
                 adminState.settingsLoaded = true;
-                adminState.wayfinderAlphaEnabled = !!(
-                  publicSettingsSnapshot.exists &&
-                  publicSettingsSnapshot.data().wayfinder_enabled === true
-                );
                 adminState.settingsSundayCurrent = normalizeSettingsSundayData_(
                     sundaySettingsSnapshot.exists ?
                       sundaySettingsSnapshot.data() :
@@ -13073,9 +13750,45 @@
         .catch(function(error) {
           adminState.settingsLoading = false;
           adminState.settingsLoaded = true;
+          adminState.roomRulesLoading = false;
+          adminState.roomRulesLoaded = true;
+          adminState.adminUsersLoading = false;
           adminState.settingsLoadError = error && error.message ?
             error.message :
             "Unable to load the current settings.";
+          renderAdmin_();
+        });
+  }
+
+  function loadWayfinderAlphaSettingIfNeeded_() {
+    if (!adminFirestore ||
+      !isActiveAdminUserRecord_() ||
+      getPageAccessLevel_("wayfinder") !== "admin" ||
+      adminState.wayfinderAlphaLoaded ||
+      adminState.wayfinderAlphaLoading) {
+      return;
+    }
+
+    adminState.wayfinderAlphaLoading = true;
+    adminState.wayfinderAlphaError = "";
+    renderAdmin_();
+
+    adminFirestore.doc(PUBLISHED_HUB_SETTINGS_DOC_PATH).get()
+        .then(function(snapshot) {
+          adminState.wayfinderAlphaLoading = false;
+          adminState.wayfinderAlphaLoaded = true;
+          adminState.wayfinderAlphaEnabled = !!(
+            snapshot.exists &&
+            snapshot.data().wayfinder_enabled === true
+          );
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          adminState.wayfinderAlphaLoading = false;
+          adminState.wayfinderAlphaLoaded = true;
+          adminState.wayfinderAlphaError = error && error.message ?
+            error.message :
+            "Unable to load Wayfinder alpha access.";
           renderAdmin_();
         });
   }
@@ -13106,6 +13819,7 @@
       });
     }).then(parseAdminEndpointResponse_).then(function(result) {
       adminState.wayfinderAlphaSaving = false;
+      adminState.wayfinderAlphaLoaded = true;
       adminState.wayfinderAlphaEnabled = result.enabled === true;
       adminState.wayfinderAlphaMessage = String(result.message || "");
       renderAdmin_();
@@ -14230,6 +14944,12 @@
     adminState.settingsSundayDraft = createEmptySettingsSundayDraft_();
     adminState.settingsSundayError = "";
     adminState.settingsSundayMessage = "";
+    adminState.wayfinderAlphaEnabled = false;
+    adminState.wayfinderAlphaLoaded = false;
+    adminState.wayfinderAlphaLoading = false;
+    adminState.wayfinderAlphaSaving = false;
+    adminState.wayfinderAlphaError = "";
+    adminState.wayfinderAlphaMessage = "";
     adminState.integrationsPublishing = false;
     adminState.integrationsError = "";
     adminState.integrationsMessage = "";
@@ -14264,6 +14984,7 @@
   }
 
   function resetAdminUsersState_() {
+    clearAdminUserEditorCloseTimer_();
     adminState.adminUsersLoaded = false;
     adminState.adminUsersLoading = false;
     adminState.adminUsersSaving = false;
@@ -14271,6 +14992,8 @@
     adminState.adminUsersDraft = createEmptyAdminUserDraft_();
     adminState.adminUsersEditingUid = "";
     adminState.adminUsersEditingInviteId = "";
+    adminState.adminUsersEditorOpen = false;
+    adminState.adminUsersEditorEntering = false;
     adminState.adminUsersError = "";
     adminState.adminUsersMessage = "";
   }
@@ -18957,7 +19680,7 @@
     return "room-rule-local-" + String(Date.now()) + "-" + String(countHint || 0);
   }
 
-  function markAdminPageDataStaleForNavigation_(pageId) {
+  function markAdminPageDataStaleForNavigation_(pageId, previousPageId) {
     adminState.changeRequestsLoaded = false;
 
     if (pageId === "hub" && !hasPendingHubChanges_()) {
@@ -18992,12 +19715,17 @@
       adminState.nextStepsLoaded = false;
     }
 
-    if ((pageId === "settings" || pageId === "integrations") &&
+    if (isSettingsDataPageId_(pageId) &&
+      !isSettingsDataPageId_(previousPageId) &&
       !hasPendingSettingsChanges_() &&
       !hasPendingRoomRulesChanges_() &&
       !hasPendingAdminUsersChanges_()) {
       adminState.settingsLoaded = false;
       adminState.adminUsersLoaded = false;
+    }
+
+    if (pageId === "wayfinder" && previousPageId !== "wayfinder") {
+      adminState.wayfinderAlphaLoaded = false;
     }
 
     if (pageId === "status-banner" && !hasPendingStatusBannerChanges_()) {
@@ -20351,6 +21079,60 @@
     ];
   }
 
+  function getAdminUserAccessPresetById_(presetId) {
+    var normalizedId = String(presetId || "").trim();
+    return ADMIN_USER_ACCESS_PRESETS.find(function(preset) {
+      return preset.id === normalizedId;
+    }) || null;
+  }
+
+  function createAdminUserPresetPageAccess_(presetId) {
+    var preset = getAdminUserAccessPresetById_(presetId);
+    var nextPageAccess = createAdminUserDraftPageAccess_("none");
+    if (!preset) {
+      return nextPageAccess;
+    }
+
+    getManagedAdminPageConfigs_().forEach(function(pageConfig) {
+      var key = pageConfig.key;
+      if (key === "users" || key === "roles") {
+        nextPageAccess[key] = preset.administration;
+        return;
+      }
+
+      if (key === "changeRequests") {
+        nextPageAccess[key] = preset.changeRequests;
+        return;
+      }
+
+      if (key === "wayfinder") {
+        nextPageAccess[key] = preset.wayfinder;
+        return;
+      }
+
+      nextPageAccess[key] = preset.permission;
+    });
+
+    return normalizeAdminUserPageAccess_(nextPageAccess);
+  }
+
+  function getAdminUserAccessPreset_(pageAccess) {
+    var normalizedPageAccess = normalizeAdminUserPageAccess_(pageAccess);
+    return ADMIN_USER_ACCESS_PRESETS.find(function(preset) {
+      return areAdminValuesEqual_(
+          normalizedPageAccess,
+          createAdminUserPresetPageAccess_(preset.id),
+      );
+    }) || null;
+  }
+
+  function getAdminUserAccessibleDestinationCount_(pageAccess) {
+    var normalizedPageAccess = normalizeAdminUserPageAccess_(pageAccess);
+    return getManagedAdminPageConfigs_().filter(function(pageConfig) {
+      return normalizedPageAccess[pageConfig.key] !== "none";
+    }).length;
+  }
+
   function getAdminUserPageAccessLevel_(pageAccess, pageAccessKey) {
     var source = pageAccess || {};
 
@@ -20528,7 +21310,9 @@
       normalizedRecordType === "invite" ? "" : nextItem.uid;
     adminState.adminUsersEditingInviteId =
       normalizedRecordType === "invite" ? nextItem.inviteId : "";
-    expandAdminSection_("settings-admin-users");
+    clearAdminUserEditorCloseTimer_();
+    adminState.adminUsersEditorOpen = true;
+    adminState.adminUsersEditorEntering = true;
     adminState.adminUsersDraft = {
       inviteId: nextItem.inviteId || "",
       uid: nextItem.uid || "",
@@ -20604,7 +21388,7 @@
 
     if (!payload.uid && !payload.email) {
       adminState.adminUsersError =
-        "Enter an email address or a UID before continuing.";
+        "Enter an email address before continuing.";
       renderAdmin_();
       return;
     }
@@ -20642,7 +21426,6 @@
           adminState.adminUsersMessage = result && result.message ?
             result.message :
             "Admin user saved.";
-          resetAdminUsersDraft_();
 
           if (adminState.user &&
             result &&
@@ -20652,6 +21435,11 @@
           }
 
           loadAdminUsers_(adminState.adminUsersMessage);
+          clearAdminUserEditorCloseTimer_();
+          adminUserEditorCloseTimer = window.setTimeout(function() {
+            adminUserEditorCloseTimer = null;
+            closeAdminUserEditor_({skipConfirm: true});
+          }, ADMIN_ACTION_SUCCESS_RESET_MS);
         })
         .catch(function(error) {
           clearPendingAdminActionFeedback_();
@@ -20719,6 +21507,9 @@
                   (normalizedRecordType !== "invite" &&
                     adminState.adminUsersEditingUid === targetId)
                 ) {
+                  clearAdminUserEditorCloseTimer_();
+                  adminState.adminUsersEditorOpen = false;
+                  adminState.adminUsersEditorEntering = false;
                   resetAdminUsersDraft_();
                 }
 
@@ -21511,13 +22302,22 @@
       return false;
     }
 
-    var permission = getPageAccessLevel_(page.pageAccessKey);
+    var accessKeys = Array.isArray(page.pageAccessKeys) &&
+      page.pageAccessKeys.length ?
+      page.pageAccessKeys :
+      [page.pageAccessKey];
+    var permissions = accessKeys.map(function(pageAccessKey) {
+      return getPageAccessLevel_(pageAccessKey);
+    });
+    var permission = permissions[0] || "none";
 
     if (page.id === "wayfinder") {
       return permission === "admin";
     }
 
-    return permission !== "none";
+    return permissions.some(function(accessLevel) {
+      return accessLevel !== "none";
+    });
   }
 
   function getPageAccessLevel_(pageAccessKey) {

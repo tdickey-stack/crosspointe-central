@@ -21,6 +21,9 @@ module.exports = {
       files: [
         "wayfinder/**/*.js",
         "scripts/wayfinder-bundles.js",
+        "studio/**/*.js",
+        "scripts/generate-studio-image.mjs",
+        "scripts/refine-studio-image.mjs",
       ],
       parserOptions: {
         ecmaVersion: 2022,

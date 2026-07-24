@@ -19,6 +19,7 @@ module.exports = {
   overrides: [
     {
       files: [
+        "print-mode/**/*.js",
         "wayfinder/**/*.js",
         "scripts/wayfinder-bundles.js",
       ],

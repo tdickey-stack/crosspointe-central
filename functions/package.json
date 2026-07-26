@@ -12,6 +12,7 @@
     "studio:image": "node --env-file-if-exists=.env --env-file-if-exists=.secret.local scripts/generate-studio-image.mjs",
     "studio:refine": "node --env-file-if-exists=.env --env-file-if-exists=.secret.local scripts/refine-studio-image.mjs",
     "test:studio": "node --test studio/*.test.js",
+    "test:print-mode": "node --test print-mode/*.test.js",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",

@@ -135,7 +135,7 @@ service cloud.firestore {
         validStudioString(content.ownerItemsText, 480) &&
         validStudioString(content.processLabel, 30) &&
         validStudioString(content.processStepsText, 240) &&
-        validStudioString(content.footerNote, 130) &&
+        validStudioString(content.footerNote, 500) &&
         validStudioString(content.footerReference, 34) &&
         content.accent == "red";
     }
@@ -171,7 +171,7 @@ service cloud.firestore {
         validStudioString(content.sectionThreeItemsText, 1400) &&
         validStudioString(content.calloutLabel, 32) &&
         validStudioString(content.calloutText, 360) &&
-        validStudioString(content.footerNote, 160) &&
+        validStudioString(content.footerNote, 500) &&
         validStudioString(content.footerReference, 40) &&
         content.accent == "red";
     }
@@ -215,7 +215,7 @@ service cloud.firestore {
         validStudioString(content.title, 72) &&
         validStudioString(content.subtitle, 220) &&
         validContentBlocks(content.blocks) &&
-        validStudioString(content.footerNote, 160) &&
+        validStudioString(content.footerNote, 500) &&
         validStudioString(content.footerReference, 40) &&
         content.accent == "red";
     }

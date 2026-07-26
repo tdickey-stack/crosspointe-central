@@ -285,6 +285,19 @@ test("owner can create and edit a multi-page document atomically", async () => {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
+  await assertSucceeds(
+    db.doc("centralStudioProjects/document-a/pages/checklist-one").update({
+      "content.footerNote":
+        "For questions or issues, contact Riley Baker at rbaker@crosspointe.tv. For emergencies, call (918) 497-9557. If Riley is unavailable during an emergency, call Tyler Dickey at (580) 579-3526.",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    db.doc("centralStudioProjects/document-a/pages/checklist-one").update({
+      "content.footerNote": "x".repeat(501),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
 
   const removePageBatch = db.batch();
   removePageBatch.update(root, {

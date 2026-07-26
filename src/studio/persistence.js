@@ -244,9 +244,9 @@ function hydrateDocumentPage(snapshot) {
   } else if (data.templateId === "document-checklist") {
     content = {
       ...cloudContent,
-      sectionOneItems: textToLines(cloudContent.sectionOneItemsText, 7),
-      sectionTwoItems: textToLines(cloudContent.sectionTwoItemsText, 7),
-      sectionThreeItems: textToLines(cloudContent.sectionThreeItemsText, 7),
+      sectionOneItems: textToLines(cloudContent.sectionOneItemsText),
+      sectionTwoItems: textToLines(cloudContent.sectionTwoItemsText),
+      sectionThreeItems: textToLines(cloudContent.sectionThreeItemsText),
     };
   } else if (data.templateId === "document-content-page") {
     content = {

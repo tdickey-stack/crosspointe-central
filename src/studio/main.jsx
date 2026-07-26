@@ -1746,8 +1746,8 @@ function PolicyBrandStep({content, updateContent}) {
           label="Footer note"
           value={content.footerNote}
           onChange={(value) => updateContent({footerNote: value})}
-          maxLength={130}
-          rows={3}
+          maxLength={500}
+          rows={5}
         />
       </div>
       <div className="studio-locked-style">
@@ -2059,8 +2059,8 @@ function DocumentFooterFields({content, updateContent}) {
           label="Footer note"
           value={content.footerNote}
           onChange={(value) => updateContent({footerNote: value})}
-          maxLength={160}
-          rows={3}
+          maxLength={500}
+          rows={5}
         />
         <InputField
           label="Footer reference"
@@ -2356,9 +2356,8 @@ function ChecklistInspector({content, updateContent}) {
                   [`section${section.key}Items`]: items,
                 })
               }
-              maximum={7}
-              rows={7}
-              hint="One checklist item per line; up to 7 items."
+              rows={12}
+              hint="One entry per line: “## Heading” adds a heading, “---” adds a divider, and “- Sub-item” indents a step. The page layout adapts to the entries you add."
             />
           </div>
         </React.Fragment>

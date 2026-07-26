@@ -23,6 +23,52 @@ async function waitForFonts() {
   }
 }
 
+function nextLayoutFrame() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+function getLayoutSignature(elements) {
+  return elements
+    .map((element) => {
+      const bounds = element.getBoundingClientRect();
+      const checklistSections = Array.from(
+        element.querySelectorAll(".checklist-section"),
+      )
+        .map(
+          (section) =>
+            `${section.className}:${section.clientWidth}x${section.clientHeight}`,
+        )
+        .join(",");
+      return [
+        bounds.width,
+        bounds.height,
+        element.scrollWidth,
+        element.scrollHeight,
+        checklistSections,
+      ].join(":");
+    })
+    .join("|");
+}
+
+async function waitForStableLayout(elements, maxFrames = 8) {
+  let previousSignature = "";
+  let stableFrames = 0;
+
+  for (let frame = 0; frame < maxFrames; frame += 1) {
+    await nextLayoutFrame();
+    const signature = getLayoutSignature(elements);
+    if (signature === previousSignature) {
+      stableFrames += 1;
+      if (stableFrames >= 2) return;
+    } else {
+      previousSignature = signature;
+      stableFrames = 0;
+    }
+  }
+}
+
 function loadImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -164,6 +210,7 @@ export async function exportDocumentPdf(project, elements) {
   }
 
   await waitForFonts();
+  await waitForStableLayout(pageElements);
   const filename = `${safeFilename(project?.name, "studio-document")}.pdf`;
   const pdf = new jsPDF({
     orientation: "portrait",

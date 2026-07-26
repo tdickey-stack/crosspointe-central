@@ -26,6 +26,22 @@ function visibleItems(items) {
   return (Array.isArray(items) ? items : []).filter(hasText);
 }
 
+const CHECKLIST_DENSITY_CLASSES = [
+  "",
+  "is-density-compact",
+  "is-density-tight",
+  "is-density-maximum",
+];
+
+function checklistContentOverflows(section, list) {
+  if (!section || !list) return false;
+  const sectionRect = section.getBoundingClientRect();
+  const listRect = list.getBoundingClientRect();
+  const paddingBottom =
+    Number.parseFloat(window.getComputedStyle(section).paddingBottom) || 0;
+  return listRect.bottom > sectionRect.bottom - paddingBottom + 0.5;
+}
+
 function ListBlock({label, title, items}) {
   const filteredItems = visibleItems(items);
   if (!hasText(label) && !hasText(title) && !filteredItems.length) return null;
@@ -259,19 +275,112 @@ export function PolicyPreview({
 }
 
 function ChecklistSection({title, items}) {
-  const filteredItems = visibleItems(items);
-  if (!hasText(title) && !filteredItems.length) return null;
+  const sectionRef = React.useRef(null);
+  const listRef = React.useRef(null);
+  const [densityIndex, setDensityIndex] = React.useState(0);
+  const [fitVersion, setFitVersion] = React.useState(0);
+  const measuredLayoutRef = React.useRef("");
+  const checklistItems = visibleItems(items)
+    .map((item) => {
+      const value = String(item).trim();
+      const heading = value.match(/^#{1,3}\s+(.+)$/u);
+      const isDivider = /^-{3,}$/u.test(value);
+      const isSubItem = /^-\s+/u.test(value);
+      if (heading) {
+        return {
+          type: "heading",
+          text: heading[1].trim(),
+        };
+      }
+      if (isDivider) {
+        return {
+          type: "divider",
+          text: "",
+        };
+      }
+      return {
+        type: isSubItem ? "subitem" : "item",
+        text: isSubItem ? value.replace(/^-\s+/u, "").trim() : value,
+      };
+    })
+    .filter((item) => item.type === "divider" || hasText(item.text));
+  const contentSignature = `${String(title || "").trim()}|${checklistItems
+    .map((item) => `${item.type}:${item.text}`)
+    .join("|")}`;
+  const layoutSignature = `${contentSignature}|${fitVersion}`;
+  const density = CHECKLIST_DENSITY_CLASSES[densityIndex];
+
+  React.useLayoutEffect(() => {
+    if (measuredLayoutRef.current !== layoutSignature) {
+      measuredLayoutRef.current = layoutSignature;
+      if (densityIndex !== 0) {
+        setDensityIndex(0);
+        return;
+      }
+    }
+    if (
+      checklistContentOverflows(sectionRef.current, listRef.current) &&
+      densityIndex < CHECKLIST_DENSITY_CLASSES.length - 1
+    ) {
+      setDensityIndex((current) => current + 1);
+    }
+  }, [densityIndex, layoutSignature]);
+
+  React.useLayoutEffect(() => {
+    const section = sectionRef.current;
+    if (!section || typeof ResizeObserver === "undefined") return undefined;
+    let previousWidth = section.clientWidth;
+    let previousHeight = section.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const nextWidth = section.clientWidth;
+      const nextHeight = section.clientHeight;
+      if (nextWidth === previousWidth && nextHeight === previousHeight) return;
+      previousWidth = nextWidth;
+      previousHeight = nextHeight;
+      setFitVersion((current) => current + 1);
+    });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
+
+  if (!hasText(title) && !checklistItems.length) return null;
   return (
-    <section className="checklist-section">
+    <section
+      ref={sectionRef}
+      className={`checklist-section${density ? ` ${density}` : ""}`}
+    >
       {hasText(title) ? <h3>{title}</h3> : null}
-      {filteredItems.length ? (
-        <ul>
-          {filteredItems.map((item, index) => (
-            <li key={`${item}-${index}`}>
-              <span aria-hidden="true" />
-              <p>{item}</p>
-            </li>
-          ))}
+      {checklistItems.length ? (
+        <ul ref={listRef}>
+          {checklistItems.map((item, index) => {
+            if (item.type === "heading") {
+              return (
+                <li className="is-heading" key={`${item.text}-${index}`}>
+                  <h4>{item.text}</h4>
+                </li>
+              );
+            }
+            if (item.type === "divider") {
+              return (
+                <li
+                  aria-hidden="true"
+                  className="is-divider"
+                  key={`divider-${index}`}
+                >
+                  <hr />
+                </li>
+              );
+            }
+            return (
+              <li
+                className={item.type === "subitem" ? "is-subitem" : undefined}
+                key={`${item.text}-${index}`}
+              >
+                <span aria-hidden="true" />
+                <p>{item.text}</p>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </section>

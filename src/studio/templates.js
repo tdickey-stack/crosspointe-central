@@ -710,12 +710,12 @@ export function linesToText(lines) {
   return Array.isArray(lines) ? lines.join("\n") : "";
 }
 
-export function textToLines(value, maximum = 8) {
-  return String(value || "")
+export function textToLines(value, maximum = Number.POSITIVE_INFINITY) {
+  const lines = String(value || "")
     .split("\n")
     .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, maximum);
+    .filter(Boolean);
+  return Number.isFinite(maximum) ? lines.slice(0, maximum) : lines;
 }
 
 export function getBrandColor(value) {

@@ -371,6 +371,7 @@ const cachedYouVersionPassages = new Map();
 const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
   {key: "bulletin", label: "Print Mode"},
+  {key: "studio", label: "Studio"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
   {key: "wayfinder", label: "Wayfinder"},
@@ -6401,7 +6402,11 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
       {};
 
   MANAGED_ADMIN_PAGE_KEYS.forEach((key) => {
-    const value = (key === "integrations" || key === "bulletin") &&
+    const value = (
+      key === "integrations" ||
+      key === "bulletin" ||
+      key === "studio"
+    ) &&
       !Object.prototype.hasOwnProperty.call(source, key) ?
       source.settings :
       source[key];
@@ -11781,6 +11786,7 @@ function buildFirstAdminPageAccess_() {
   return {
     hub: "admin",
     bulletin: "admin",
+    studio: "admin",
     settings: "admin",
     integrations: "admin",
     wayfinder: "admin",

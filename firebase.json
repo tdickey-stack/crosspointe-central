@@ -11,6 +11,18 @@
         "firebase-debug.*.log",
         "*.local"
       ]
+    },
+    {
+      "source": "studio-functions",
+      "codebase": "studio",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
     }
   ],
   "firestore": {
@@ -146,6 +158,33 @@
         ]
       },
       {
+        "source": "/studio.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/studio.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/studio.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/wayfinder-chat.js",
         "headers": [
           {
@@ -219,6 +258,62 @@
       {
         "source": "/privacy/",
         "destination": "/privacy.html"
+      },
+      {
+        "source": "/studio",
+        "destination": "/studio.html"
+      },
+      {
+        "source": "/studio/**",
+        "destination": "/studio.html"
+      },
+      {
+        "source": "/api/studio/unsplash/search",
+        "function": {
+          "functionId": "studioUnsplashSearch",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/unsplash/track-download",
+        "function": {
+          "functionId": "studioUnsplashTrackDownload",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/projects/share",
+        "function": {
+          "functionId": "studioCreateShare",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/shares/accept",
+        "function": {
+          "functionId": "studioAcceptShare",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/projects/leave",
+        "function": {
+          "functionId": "studioLeaveProject",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/projects/delete",
+        "function": {
+          "functionId": "studioDeleteProject",
+          "region": "us-central1",
+          "pinTag": false
+        }
       },
       {
         "source": "/api/calendar-event.ics",

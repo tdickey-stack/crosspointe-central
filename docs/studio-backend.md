@@ -44,6 +44,11 @@ local review. It can search Unsplash through the Functions emulator when the
 local Access Key is configured, but it intentionally cannot save to Firestore,
 upload files to Storage, or share projects.
 
+Document projects use one Firestore project record plus an ordered `pages`
+subcollection. Saves batch the root and its page changes together. Deleting a
+document through the isolated Studio backend also deletes those page records;
+event graphic deletion remains a single-record operation.
+
 ## Deployment boundary
 
 Deploy only the isolated Studio backend:

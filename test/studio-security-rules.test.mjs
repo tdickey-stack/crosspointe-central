@@ -99,6 +99,112 @@ function eventProjectPayload(ownerUid = "owner") {
   };
 }
 
+function documentProjectPayload(
+  ownerUid = "owner",
+  pageOrder = ["page-one"],
+) {
+  return {
+    schemaVersion: 2,
+    ownerUid,
+    templateId: "document-project",
+    name: "Ministry Playbook",
+    status: "draft",
+    sourceType: "manual",
+    pageOrder,
+    documentSettings: {showPageNumbers: true},
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function onePagerPagePayload() {
+  return {
+    schemaVersion: 1,
+    templateId: "document-one-pager",
+    content: policyContent(),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function checklistPagePayload() {
+  return {
+    schemaVersion: 1,
+    templateId: "document-checklist",
+    content: {
+      eyebrow: "CROSSPOINTE CREATIVE",
+      audience: "MINISTRY LEADERS",
+      documentNumber: "CHECKLIST 01",
+      title: "Event Launch Checklist",
+      subtitle: "Use this page to keep a repeatable process visible.",
+      instructionsLabel: "HOW TO USE THIS",
+      instructions: "Check each item after it is fully complete.",
+      sectionOneTitle: "Before You Begin",
+      sectionOneItemsText: "Confirm the audience\nName the objective",
+      sectionTwoTitle: "Build and Review",
+      sectionTwoItemsText: "Draft the message\nReview the details",
+      sectionThreeTitle: "Publish and Follow Up",
+      sectionThreeItemsText: "Publish approved assets\nArchive the final files",
+      calloutLabel: "FINAL CHECK",
+      calloutText: "Confirm the date, time, location, and next step.",
+      footerNote: "Adjust this checklist to match the project.",
+      footerReference: "CROSSPOINTE CREATIVE",
+      accent: "red",
+    },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function contentPagePayload() {
+  return {
+    schemaVersion: 1,
+    templateId: "document-content-page",
+    content: {
+      eyebrow: "CROSSPOINTE CREATIVE",
+      audience: "MINISTRY LEADERS",
+      documentNumber: "GUIDE 02",
+      title: "Supporting Details",
+      subtitle: "A flexible branded page for explanation and callouts.",
+      blocks: [
+        {
+          id: "block-one",
+          type: "heading",
+          text: "What this page supports",
+        },
+        {
+          id: "block-two",
+          type: "paragraph",
+          text: "Use **bold** or *italic* emphasis without accepting HTML.",
+        },
+        {
+          id: "block-three",
+          type: "callout",
+          text: "Keep the main decision easy to find.",
+        },
+      ],
+      footerNote: "Supporting guidance for ministry teams.",
+      footerReference: "CROSSPOINTE CREATIVE",
+      accent: "red",
+    },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+async function createDocumentProject(db, projectId = "document-a") {
+  const batch = db.batch();
+  batch.set(
+    db.doc(`centralStudioProjects/${projectId}`),
+    documentProjectPayload(),
+  );
+  batch.set(
+    db.doc(`centralStudioProjects/${projectId}/pages/page-one`),
+    onePagerPagePayload(),
+  );
+  return batch.commit();
+}
+
 async function seedUser(uid, permission = "edit") {
   await environment.withSecurityRulesDisabled(async (context) => {
     await context
@@ -147,6 +253,108 @@ test("owner can create, read, update, and delete a strictly valid project", asyn
     }),
   );
   await assertSucceeds(reference.delete());
+});
+
+test("owner can create and edit a multi-page document atomically", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  await assertSucceeds(createDocumentProject(db));
+
+  const root = db.doc("centralStudioProjects/document-a");
+  const pageOne = db.doc("centralStudioProjects/document-a/pages/page-one");
+  await assertSucceeds(root.get());
+  await assertSucceeds(pageOne.get());
+
+  const addPageBatch = db.batch();
+  addPageBatch.update(root, {
+    pageOrder: ["page-one", "checklist-one", "content-one"],
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  addPageBatch.set(
+    db.doc("centralStudioProjects/document-a/pages/checklist-one"),
+    checklistPagePayload(),
+  );
+  addPageBatch.set(
+    db.doc("centralStudioProjects/document-a/pages/content-one"),
+    contentPagePayload(),
+  );
+  await assertSucceeds(addPageBatch.commit());
+
+  await assertSucceeds(
+    db.doc("centralStudioProjects/document-a/pages/checklist-one").update({
+      "content.calloutText": "Verify the owner and due date.",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+
+  const removePageBatch = db.batch();
+  removePageBatch.update(root, {
+    pageOrder: ["page-one", "content-one"],
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  removePageBatch.delete(
+    db.doc("centralStudioProjects/document-a/pages/checklist-one"),
+  );
+  await assertSucceeds(removePageBatch.commit());
+});
+
+test("document pages reject orphan writes and malformed content", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  await assertFails(
+    db
+      .doc("centralStudioProjects/missing/pages/orphan")
+      .set(onePagerPagePayload()),
+  );
+
+  await assertSucceeds(createDocumentProject(db));
+  const unlistedPage = db.doc(
+    "centralStudioProjects/document-a/pages/not-in-order",
+  );
+  await assertFails(unlistedPage.set(checklistPagePayload()));
+
+  const invalidBlock = contentPagePayload();
+  invalidBlock.content.blocks[0].html = "<script>alert(1)</script>";
+  const invalidBatch = db.batch();
+  invalidBatch.update(db.doc("centralStudioProjects/document-a"), {
+    pageOrder: ["page-one", "unsafe-content"],
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  invalidBatch.set(
+    db.doc("centralStudioProjects/document-a/pages/unsafe-content"),
+    invalidBlock,
+  );
+  await assertFails(invalidBatch.commit());
+
+  const tooManyPages = Array.from({length: 21}, (_, index) => `page-${index}`);
+  await assertFails(
+    db.doc("centralStudioProjects/document-a").update({
+      pageOrder: tooManyPages,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    db.doc("centralStudioProjects/document-a").update({
+      pageOrder: ["page-one", "page-one"],
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+});
+
+test("a legacy policy can migrate to a document project in one batch", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  const root = db.doc("centralStudioProjects/legacy-policy");
+  await assertSucceeds(root.set(projectPayload()));
+  const existing = await root.get();
+
+  const migration = db.batch();
+  migration.set(root, {
+    ...documentProjectPayload("owner", ["legacy-page"]),
+    createdAt: existing.data().createdAt,
+  });
+  migration.set(
+    db.doc("centralStudioProjects/legacy-policy/pages/legacy-page"),
+    onePagerPagePayload(),
+  );
+  await assertSucceeds(migration.commit());
 });
 
 test("event projects accept valid sources and reject cross-project upload paths", async () => {
@@ -337,6 +545,36 @@ test("a server-issued member can read and edit but cannot delete", async () => {
   await assertFails(
     memberDb.doc("centralStudioMemberships/member_project-a").delete(),
   );
+});
+
+test("a server-issued member can read and edit document pages but cannot orphan them", async () => {
+  const ownerDb = environment.authenticatedContext("owner").firestore();
+  await assertSucceeds(createDocumentProject(ownerDb, "shared-document"));
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context
+      .firestore()
+      .doc("centralStudioMemberships/member_shared-document")
+      .set({
+        projectId: "shared-document",
+        ownerUid: "owner",
+        memberUid: "member",
+        permission: "edit",
+        createdAt: firebase.firestore.Timestamp.now(),
+      });
+  });
+
+  const memberDb = environment.authenticatedContext("member").firestore();
+  const page = memberDb.doc(
+    "centralStudioProjects/shared-document/pages/page-one",
+  );
+  await assertSucceeds(page.get());
+  await assertSucceeds(
+    page.update({
+      "content.subtitle": "Edited by a shared Studio member.",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(page.delete());
 });
 
 test("unrelated and unauthenticated users cannot read projects", async () => {

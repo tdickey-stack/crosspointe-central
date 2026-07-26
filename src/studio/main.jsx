@@ -1,25 +1,29 @@
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
-import {exportEventPng, exportPolicyPdf} from "./export.js";
+import {exportDocumentPdf, exportEventPng, exportPolicyPdf} from "./export.js";
 import {normalizeFocalValue, normalizeImageZoom} from "./focal.js";
 import {
   createStudioCloud,
   createStudioPreviewUnsplash,
 } from "./persistence.js";
-import {StudioPreview} from "./previews.jsx";
+import {DocumentPagePreview, StudioPreview} from "./previews.jsx";
 import {
   BRAND_COLOR_OPTIONS,
+  DOCUMENT_PAGE_TEMPLATES,
   STUDIO_STEPS,
   STUDIO_STORAGE_KEY,
   TEMPLATE_CATALOG,
+  createDocumentPage,
   createStudioProject,
   getEventCompositionOptions,
   getEventFontOptions,
   getProjectWarnings,
   getTemplateById,
+  isDocumentProject,
   isEventTemplateId,
   linesToText,
+  migrateLegacyStudioProject,
   normalizeEventComposition,
   textToLines,
 } from "./templates.js";
@@ -234,38 +238,7 @@ function loadProjects() {
   try {
     const stored = JSON.parse(localStorage.getItem(STUDIO_STORAGE_KEY) || "[]");
     return Array.isArray(stored)
-      ? stored.map((project) => {
-          if (!isEventTemplateId(project.templateId) || !project.content) {
-            return project;
-          }
-          const normalizedComposition = normalizeEventComposition(
-            project.templateId,
-            project.content.composition,
-          );
-          const hasFocalPoint =
-            Number.isFinite(Number(project.content.focalX)) &&
-            Number.isFinite(Number(project.content.focalY));
-          if (
-            hasFocalPoint &&
-            normalizedComposition === project.content.composition
-          ) {
-            return project;
-          }
-          const legacyX = {
-            "left center": 25,
-            center: 50,
-            "right center": 75,
-          }[project.content.imagePosition] ?? 50;
-          return {
-            ...project,
-            content: {
-              ...project.content,
-              composition: normalizedComposition,
-              focalX: hasFocalPoint ? project.content.focalX : legacyX,
-              focalY: hasFocalPoint ? project.content.focalY : 50,
-            },
-          };
-        })
+      ? stored.map(migrateLegacyStudioProject)
       : [];
   } catch (error) {
     return [];
@@ -416,38 +389,37 @@ function StudioHeader({authState, view, onHome, saveState}) {
 
 function TemplateArtwork({templateId}) {
   const template = getTemplateById(templateId);
-  if (template.kind === "policy") {
-    return (
-      <div className="studio-template-art is-policy" aria-hidden="true">
-        <div className="template-paper-header">
-          <span />
-          <span />
-        </div>
-        <div className="template-paper-rule" />
-        <div className="template-paper-columns">
-          <span />
-          <span />
-        </div>
-        <div className="template-paper-card" />
-        <div className="template-paper-footer" />
-      </div>
-    );
-  }
+  const previewProject = useMemo(() => {
+    const project = createStudioProject(templateId);
+    if (template.kind !== "event") return project;
+
+    return {
+      ...project,
+      content: {
+        ...project.content,
+        eyebrow: template.previewCopy.eyebrow,
+        title: template.previewCopy.title,
+        subtitle: template.previewCopy.subtitle || project.content.subtitle,
+        date: template.previewCopy.date || project.content.date,
+        cta: template.previewCopy.footer,
+      },
+    };
+  }, [template, templateId]);
 
   return (
     <div
-      className={`studio-template-art is-event is-${template.variant}`}
-      style={{
-        "--template-art-font": `"${template.fonts[0].family}"`,
-      }}
+      className={[
+        "studio-template-art",
+        "is-real-template",
+        `is-${template.kind}`,
+        template.variant ? `is-${template.variant}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       aria-hidden="true"
     >
-      <span className="template-event-orbit is-one" />
-      <span className="template-event-orbit is-two" />
-      <div className="template-event-copy">
-        <span>{template.previewCopy.eyebrow}</span>
-        <strong>{template.previewCopy.title}</strong>
-        <small>{template.previewCopy.footer}</small>
+      <div className="studio-template-preview-frame">
+        <StudioPreview project={previewProject} previewRef={null} />
       </div>
     </div>
   );
@@ -461,6 +433,7 @@ function StudioHome({
   onDelete,
   cloudEnabled,
 }) {
+  const [templateFilter, setTemplateFilter] = useState("all");
   const sortedProjects = useMemo(
     () =>
       [...projects].sort(
@@ -469,6 +442,14 @@ function StudioHome({
           new Date(a.updatedAt || 0).getTime(),
       ),
     [projects],
+  );
+  const visibleTemplates = useMemo(
+    () =>
+      TEMPLATE_CATALOG.filter(
+        (template) =>
+          templateFilter === "all" || template.kind === templateFilter,
+      ),
+    [templateFilter],
   );
 
   return (
@@ -501,8 +482,30 @@ function StudioHome({
           ) : null}
         </div>
 
+        <div
+          className="studio-template-filters"
+          role="group"
+          aria-label="Filter starting templates"
+        >
+          {[
+            {value: "all", label: "All Templates"},
+            {value: "document", label: "Documents"},
+            {value: "event", label: "Event Graphics"},
+          ].map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              className={templateFilter === filter.value ? "is-active" : ""}
+              aria-pressed={templateFilter === filter.value}
+              onClick={() => setTemplateFilter(filter.value)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
         <div className="studio-template-grid">
-          {TEMPLATE_CATALOG.map((template) => (
+          {visibleTemplates.map((template) => (
             <article className="studio-template-card" key={template.id}>
               <TemplateArtwork templateId={template.id} />
               <div className="studio-template-card-body">
@@ -521,7 +524,7 @@ function StudioHome({
                   >
                     {template.fonts.map((font) => (
                       <span
-                        key={font.key}
+                        key={font.value}
                         style={{fontFamily: `"${font.family}", sans-serif`}}
                       >
                         {font.label}
@@ -559,6 +562,11 @@ function StudioHome({
           <div className="studio-project-list">
             {sortedProjects.map((project) => {
               const template = getTemplateById(project.templateId);
+              const projectDetail = isDocumentProject(project)
+                ? `${project.pages?.length || 0} page${
+                    project.pages?.length === 1 ? "" : "s"
+                  }`
+                : template.name;
               return (
                 <div
                   className="studio-project-row"
@@ -574,7 +582,7 @@ function StudioHome({
                     <span className="studio-project-copy">
                       <strong>{project.name}</strong>
                       <small>
-                        {template.name} · {project.shared ? "Shared with you · " : ""}
+                        {projectDetail} · {project.shared ? "Shared with you · " : ""}
                         Updated{" "}
                         {new Date(project.updatedAt).toLocaleDateString()}
                       </small>
@@ -604,8 +612,8 @@ function StudioHome({
             <div>
               <h3>Your first project starts above.</h3>
               <p>
-                Choose a policy document or event graphic to open the guided
-                Studio workspace.
+                Choose a document or event graphic to open the Studio
+                workspace.
               </p>
             </div>
           </div>
@@ -2028,7 +2036,1022 @@ function StepContent({
   );
 }
 
-function StudioEditor({
+function DocumentSectionHeading({eyebrow, title, description}) {
+  return (
+    <div className="studio-document-section-heading">
+      <span>{eyebrow}</span>
+      <h3>{title}</h3>
+      {description ? <p>{description}</p> : null}
+    </div>
+  );
+}
+
+function DocumentFooterFields({content, updateContent}) {
+  return (
+    <>
+      <DocumentSectionHeading
+        eyebrow="PAGE FOOTER"
+        title="Finish the page"
+        description="These details appear in the locked CrossPointe footer."
+      />
+      <div className="studio-field-grid">
+        <TextareaField
+          label="Footer note"
+          value={content.footerNote}
+          onChange={(value) => updateContent({footerNote: value})}
+          maxLength={160}
+          rows={3}
+        />
+        <InputField
+          label="Footer reference"
+          value={content.footerReference}
+          onChange={(value) => updateContent({footerReference: value})}
+          maxLength={40}
+          wide
+        />
+      </div>
+    </>
+  );
+}
+
+function OnePagerInspector({content, updateContent}) {
+  return (
+    <div className="studio-document-inspector-content">
+      <DocumentSectionHeading
+        eyebrow="ONE PAGER"
+        title="Page identity"
+        description="Every field maps to a controlled location in the page."
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Header label"
+          value={content.eyebrow}
+          onChange={(value) => updateContent({eyebrow: value})}
+          maxLength={52}
+          wide
+        />
+        <InputField
+          label="Audience label"
+          value={content.audience}
+          onChange={(value) => updateContent({audience: value})}
+          maxLength={28}
+        />
+        <InputField
+          label="Document number"
+          value={content.documentNumber}
+          onChange={(value) => updateContent({documentNumber: value})}
+          maxLength={18}
+        />
+        <InputField
+          label="Page title"
+          value={content.title}
+          onChange={(value) => updateContent({title: value})}
+          maxLength={72}
+          wide
+        />
+        <TextareaField
+          label="Purpose statement"
+          value={content.subtitle}
+          onChange={(value) => updateContent({subtitle: value})}
+          maxLength={150}
+          rows={3}
+        />
+      </div>
+
+      <DocumentSectionHeading
+        eyebrow="FEATURED RULE"
+        title="Lead with the governing idea"
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Operating rule heading"
+          value={content.operatingRuleLabel}
+          onChange={(value) => updateContent({operatingRuleLabel: value})}
+          maxLength={32}
+          wide
+        />
+        <TextareaField
+          label="Operating rule"
+          value={content.operatingRule}
+          onChange={(value) => updateContent({operatingRule: value})}
+          maxLength={320}
+          rows={5}
+          hint={`${String(content.operatingRule || "").length}/320 characters`}
+        />
+      </div>
+
+      <DocumentSectionHeading
+        eyebrow="CONTROLLED SECTIONS"
+        title="Shape the repeatable guidance"
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Primary section label"
+          value={content.primarySectionLabel}
+          onChange={(value) => updateContent({primarySectionLabel: value})}
+          maxLength={32}
+        />
+        <InputField
+          label="Primary section heading"
+          value={content.primarySectionTitle}
+          onChange={(value) => updateContent({primarySectionTitle: value})}
+          maxLength={38}
+        />
+        <LineListField
+          label="Primary items"
+          items={content.primaryItems}
+          draftValue={content.primaryItemsText}
+          onChange={({draftValue, items}) =>
+            updateContent({primaryItemsText: draftValue, primaryItems: items})
+          }
+          maximum={7}
+          rows={7}
+          hint="One item per line; up to 7 items."
+        />
+        <InputField
+          label="Secondary section label"
+          value={content.secondarySectionLabel}
+          onChange={(value) => updateContent({secondarySectionLabel: value})}
+          maxLength={32}
+        />
+        <InputField
+          label="Secondary section heading"
+          value={content.secondarySectionTitle}
+          onChange={(value) => updateContent({secondarySectionTitle: value})}
+          maxLength={38}
+        />
+        <LineListField
+          label="Secondary items"
+          items={content.secondaryItems}
+          draftValue={content.secondaryItemsText}
+          onChange={({draftValue, items}) =>
+            updateContent({
+              secondaryItemsText: draftValue,
+              secondaryItems: items,
+            })
+          }
+          maximum={7}
+          rows={7}
+          hint="One item per line; up to 7 items."
+        />
+        <InputField
+          label="Owner section label"
+          value={content.ownerLabel}
+          onChange={(value) => updateContent({ownerLabel: value})}
+          maxLength={32}
+        />
+        <InputField
+          label="Owner section heading"
+          value={content.ownerTitle}
+          onChange={(value) => updateContent({ownerTitle: value})}
+          maxLength={38}
+        />
+        <LineListField
+          label="Owner responsibilities"
+          items={content.ownerItems}
+          draftValue={content.ownerItemsText}
+          onChange={({draftValue, items}) =>
+            updateContent({ownerItemsText: draftValue, ownerItems: items})
+          }
+          maximum={3}
+          rows={5}
+          hint="Exactly three concise responsibilities work best."
+        />
+      </div>
+
+      <DocumentSectionHeading
+        eyebrow="PROCESS FOOTER"
+        title="Edit the full process strip"
+        description="The label, every process step, note, and reference are editable."
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Process label"
+          value={content.processLabel}
+          onChange={(value) => updateContent({processLabel: value})}
+          maxLength={30}
+          wide
+        />
+        <LineListField
+          label="Process steps"
+          items={content.processSteps}
+          draftValue={content.processStepsText}
+          onChange={({draftValue, items}) =>
+            updateContent({processStepsText: draftValue, processSteps: items})
+          }
+          maximum={8}
+          rows={6}
+          hint="One short process step per line; up to 8 steps."
+        />
+      </div>
+      <DocumentFooterFields
+        content={content}
+        updateContent={updateContent}
+      />
+    </div>
+  );
+}
+
+function ChecklistInspector({content, updateContent}) {
+  const checklistSections = [
+    {
+      key: "One",
+      title: content.sectionOneTitle,
+      items: content.sectionOneItems,
+      draft: content.sectionOneItemsText,
+    },
+    {
+      key: "Two",
+      title: content.sectionTwoTitle,
+      items: content.sectionTwoItems,
+      draft: content.sectionTwoItemsText,
+    },
+    {
+      key: "Three",
+      title: content.sectionThreeTitle,
+      items: content.sectionThreeItems,
+      draft: content.sectionThreeItemsText,
+    },
+  ];
+  return (
+    <div className="studio-document-inspector-content">
+      <DocumentSectionHeading
+        eyebrow="CHECKLIST"
+        title="Page identity"
+        description="Build a printable, grouped checklist inside the document system."
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Header label"
+          value={content.eyebrow}
+          onChange={(value) => updateContent({eyebrow: value})}
+          maxLength={52}
+          wide
+        />
+        <InputField
+          label="Audience label"
+          value={content.audience}
+          onChange={(value) => updateContent({audience: value})}
+          maxLength={28}
+        />
+        <InputField
+          label="Document number"
+          value={content.documentNumber}
+          onChange={(value) => updateContent({documentNumber: value})}
+          maxLength={18}
+        />
+        <InputField
+          label="Page title"
+          value={content.title}
+          onChange={(value) => updateContent({title: value})}
+          maxLength={72}
+          wide
+        />
+        <TextareaField
+          label="Purpose statement"
+          value={content.subtitle}
+          onChange={(value) => updateContent({subtitle: value})}
+          maxLength={220}
+          rows={3}
+        />
+        <InputField
+          label="Instructions label"
+          value={content.instructionsLabel}
+          onChange={(value) => updateContent({instructionsLabel: value})}
+          maxLength={32}
+          wide
+        />
+        <TextareaField
+          label="Instructions"
+          value={content.instructions}
+          onChange={(value) => updateContent({instructions: value})}
+          maxLength={360}
+          rows={4}
+        />
+      </div>
+
+      {checklistSections.map((section, index) => (
+        <React.Fragment key={section.key}>
+          <DocumentSectionHeading
+            eyebrow={`CHECKLIST GROUP ${index + 1}`}
+            title={section.title || `Group ${index + 1}`}
+          />
+          <div className="studio-field-grid">
+            <InputField
+              label="Group heading"
+              value={section.title}
+              onChange={(value) =>
+                updateContent({[`section${section.key}Title`]: value})
+              }
+              maxLength={36}
+              wide
+            />
+            <LineListField
+              label="Checklist items"
+              items={section.items}
+              draftValue={section.draft}
+              onChange={({draftValue, items}) =>
+                updateContent({
+                  [`section${section.key}ItemsText`]: draftValue,
+                  [`section${section.key}Items`]: items,
+                })
+              }
+              maximum={7}
+              rows={7}
+              hint="One checklist item per line; up to 7 items."
+            />
+          </div>
+        </React.Fragment>
+      ))}
+
+      <DocumentSectionHeading
+        eyebrow="CALLOUT"
+        title="End with one final reminder"
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Callout label"
+          value={content.calloutLabel}
+          onChange={(value) => updateContent({calloutLabel: value})}
+          maxLength={32}
+          wide
+        />
+        <TextareaField
+          label="Callout text"
+          value={content.calloutText}
+          onChange={(value) => updateContent({calloutText: value})}
+          maxLength={360}
+          rows={4}
+        />
+      </div>
+      <DocumentFooterFields
+        content={content}
+        updateContent={updateContent}
+      />
+    </div>
+  );
+}
+
+const CONTENT_BLOCK_TYPES = [
+  {value: "heading", label: "Heading"},
+  {value: "paragraph", label: "Paragraph"},
+  {value: "bullets", label: "Bulleted List"},
+  {value: "numbered", label: "Numbered List"},
+  {value: "callout", label: "Callout"},
+  {value: "divider", label: "Divider"},
+];
+
+function MarkdownTextEditor({value, onChange, rows = 4}) {
+  const textareaRef = useRef(null);
+  const applyFormat = (prefix, suffix = prefix, placeholder = "text") => {
+    const textarea = textareaRef.current;
+    const current = String(value || "");
+    const start = textarea?.selectionStart ?? current.length;
+    const end = textarea?.selectionEnd ?? current.length;
+    const selection = current.slice(start, end) || placeholder;
+    const next = `${current.slice(0, start)}${prefix}${selection}${suffix}${current.slice(end)}`;
+    onChange(next);
+    window.requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(
+        start + prefix.length,
+        start + prefix.length + selection.length,
+      );
+    });
+  };
+  return (
+    <div className="studio-markdown-editor">
+      <div className="studio-markdown-toolbar" aria-label="Text formatting">
+        <button type="button" onClick={() => applyFormat("**")} title="Bold">
+          B
+        </button>
+        <button type="button" onClick={() => applyFormat("*")} title="Italic">
+          <em>I</em>
+        </button>
+        <button
+          type="button"
+          onClick={() => applyFormat("[", "](https://)", "link text")}
+          title="Link"
+        >
+          Link
+        </button>
+      </div>
+      <textarea
+        ref={textareaRef}
+        value={value || ""}
+        rows={rows}
+        maxLength={1200}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  );
+}
+
+function ContentBlockEditor({
+  block,
+  index,
+  total,
+  updateBlock,
+  moveBlock,
+  deleteBlock,
+}) {
+  return (
+    <div className="studio-content-block-editor">
+      <div className="studio-content-block-heading">
+        <select
+          value={block.type}
+          onChange={(event) => updateBlock({type: event.target.value})}
+          aria-label={`Block ${index + 1} type`}
+        >
+          {CONTENT_BLOCK_TYPES.map((type) => (
+            <option key={type.value} value={type.value}>
+              {type.label}
+            </option>
+          ))}
+        </select>
+        <div>
+          <button
+            type="button"
+            disabled={index === 0}
+            onClick={() => moveBlock(-1)}
+            aria-label={`Move block ${index + 1} up`}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            disabled={index === total - 1}
+            onClick={() => moveBlock(1)}
+            aria-label={`Move block ${index + 1} down`}
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            onClick={deleteBlock}
+            aria-label={`Delete block ${index + 1}`}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      {block.type !== "divider" ? (
+        <MarkdownTextEditor
+          value={block.text}
+          onChange={(text) => updateBlock({text})}
+          rows={block.type === "paragraph" ? 5 : 3}
+        />
+      ) : (
+        <p className="studio-divider-note">
+          A branded divider will appear at this position.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ContentPageInspector({content, updateContent}) {
+  const blocks = Array.isArray(content.blocks) ? content.blocks : [];
+  const updateBlocks = (nextBlocks) => updateContent({blocks: nextBlocks});
+  const addBlock = (type = "paragraph") => {
+    if (blocks.length >= 8) return;
+    const id =
+      globalThis.crypto?.randomUUID?.() ||
+      `content-block-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    updateBlocks([
+      ...blocks,
+      {
+        id,
+        type,
+        text:
+          type === "heading"
+            ? "New section"
+            : type === "bullets" || type === "numbered"
+              ? "First item\nSecond item"
+              : "",
+      },
+    ]);
+  };
+  return (
+    <div className="studio-document-inspector-content">
+      <DocumentSectionHeading
+        eyebrow="BRANDED CONTENT"
+        title="Page identity"
+        description="The header and footer stay governed while the content area remains flexible."
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Header label"
+          value={content.eyebrow}
+          onChange={(value) => updateContent({eyebrow: value})}
+          maxLength={52}
+          wide
+        />
+        <InputField
+          label="Audience label"
+          value={content.audience}
+          onChange={(value) => updateContent({audience: value})}
+          maxLength={28}
+        />
+        <InputField
+          label="Document number"
+          value={content.documentNumber}
+          onChange={(value) => updateContent({documentNumber: value})}
+          maxLength={18}
+        />
+        <InputField
+          label="Page title"
+          value={content.title}
+          onChange={(value) => updateContent({title: value})}
+          maxLength={72}
+          wide
+        />
+        <TextareaField
+          label="Purpose statement"
+          value={content.subtitle}
+          onChange={(value) => updateContent({subtitle: value})}
+          maxLength={220}
+          rows={3}
+        />
+      </div>
+
+      <DocumentSectionHeading
+        eyebrow="CONTENT BLOCKS"
+        title="Build the page"
+        description="Choose a block type, write visually, and use the optional formatting shortcuts when useful."
+      />
+      <details className="studio-formatting-key">
+        <summary>Formatting key</summary>
+        <div>
+          <code>**bold**</code>
+          <span>Bold text</span>
+          <code>*italic*</code>
+          <span>Italic text</span>
+          <code>[label](https://url)</code>
+          <span>Link text</span>
+        </div>
+      </details>
+      <div className="studio-content-block-list">
+        {blocks.map((block, index) => (
+          <ContentBlockEditor
+            key={block.id}
+            block={block}
+            index={index}
+            total={blocks.length}
+            updateBlock={(changes) =>
+              updateBlocks(
+                blocks.map((item) =>
+                  item.id === block.id ? {...item, ...changes} : item,
+                ),
+              )
+            }
+            moveBlock={(direction) => {
+              const targetIndex = index + direction;
+              if (targetIndex < 0 || targetIndex >= blocks.length) return;
+              const nextBlocks = [...blocks];
+              [nextBlocks[index], nextBlocks[targetIndex]] = [
+                nextBlocks[targetIndex],
+                nextBlocks[index],
+              ];
+              updateBlocks(nextBlocks);
+            }}
+            deleteBlock={() =>
+              updateBlocks(blocks.filter((item) => item.id !== block.id))
+            }
+          />
+        ))}
+      </div>
+      <div className="studio-add-block-menu">
+        <span>Add content</span>
+        {CONTENT_BLOCK_TYPES.map((type) => (
+          <button
+            key={type.value}
+            type="button"
+            disabled={blocks.length >= 8}
+            onClick={() => addBlock(type.value)}
+          >
+            + {type.label}
+          </button>
+        ))}
+      </div>
+      <DocumentFooterFields
+        content={content}
+        updateContent={updateContent}
+      />
+    </div>
+  );
+}
+
+function DocumentPageInspector({page, updatePage}) {
+  const updateContent = (changes) =>
+    updatePage({content: {...page.content, ...changes}});
+  if (page.templateId === "document-checklist") {
+    return (
+      <ChecklistInspector
+        content={page.content}
+        updateContent={updateContent}
+      />
+    );
+  }
+  if (page.templateId === "document-content-page") {
+    return (
+      <ContentPageInspector
+        content={page.content}
+        updateContent={updateContent}
+      />
+    );
+  }
+  return (
+    <OnePagerInspector
+      content={page.content}
+      updateContent={updateContent}
+    />
+  );
+}
+
+function AddPageDialog({onAdd, onClose}) {
+  return (
+    <div className="studio-page-dialog-backdrop" role="presentation">
+      <section
+        className="studio-page-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="studio-page-dialog-title"
+      >
+        <div className="studio-page-dialog-heading">
+          <div>
+            <span className="studio-kicker">ADD A PAGE</span>
+            <h2 id="studio-page-dialog-title">Choose a page template</h2>
+            <p>
+              Each page keeps the same CrossPointe document system and can use
+              a different controlled layout.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close page picker">
+            ×
+          </button>
+        </div>
+        <div className="studio-page-template-grid">
+          {DOCUMENT_PAGE_TEMPLATES.map((template) => {
+            const page = createDocumentPage(template.id);
+            return (
+              <button
+                type="button"
+                key={template.id}
+                onClick={() => onAdd(template.id)}
+              >
+                <div className="studio-page-template-preview" aria-hidden="true">
+                  <DocumentPagePreview
+                    page={page}
+                    pageNumber={1}
+                    pageCount={1}
+                    showPageNumbers={false}
+                  />
+                </div>
+                <strong>{template.name}</strong>
+                <span>{template.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DocumentEditor({
+  project,
+  onChange,
+  onBack,
+  onDelete,
+  onShare,
+  cloud,
+}) {
+  const [activePageId, setActivePageId] = useState(project.pages?.[0]?.id || "");
+  const [showPagePicker, setShowPagePicker] = useState(false);
+  const [exportState, setExportState] = useState({status: "", message: ""});
+  const exportPageRefs = useRef(new Map());
+  const pages = project.pages || [];
+  const activePage =
+    pages.find((page) => page.id === activePageId) || pages[0] || null;
+  const activeIndex = activePage
+    ? pages.findIndex((page) => page.id === activePage.id)
+    : -1;
+  const warnings = getProjectWarnings(project);
+
+  useEffect(() => {
+    if (!pages.length) return;
+    if (!pages.some((page) => page.id === activePageId)) {
+      setActivePageId(pages[0].id);
+    }
+  }, [activePageId, pages]);
+
+  const updateProject = (changes) =>
+    onChange({...project, ...changes, updatedAt: new Date().toISOString()});
+  const updatePage = (pageId, changes) => {
+    updateProject({
+      pages: pages.map((page) =>
+        page.id === pageId ? {...page, ...changes} : page,
+      ),
+    });
+  };
+  const addPage = (templateId) => {
+    if (pages.length >= 20) return;
+    const page = createDocumentPage(templateId);
+    updateProject({pages: [...pages, page]});
+    setActivePageId(page.id);
+    setShowPagePicker(false);
+  };
+  const duplicatePage = () => {
+    if (!activePage || pages.length >= 20) return;
+    const duplicate = createDocumentPage(
+      activePage.templateId,
+      activePage.content,
+    );
+    const nextPages = [...pages];
+    nextPages.splice(activeIndex + 1, 0, duplicate);
+    updateProject({pages: nextPages});
+    setActivePageId(duplicate.id);
+  };
+  const deletePage = () => {
+    if (!activePage || pages.length <= 1) return;
+    const confirmed = window.confirm(
+      `Delete page ${activeIndex + 1}, “${activePage.content?.title || getTemplateById(activePage.templateId).name}”?`,
+    );
+    if (!confirmed) return;
+    const nextPages = pages.filter((page) => page.id !== activePage.id);
+    const nextActive = nextPages[Math.min(activeIndex, nextPages.length - 1)];
+    updateProject({pages: nextPages});
+    setActivePageId(nextActive.id);
+  };
+  const movePage = (direction) => {
+    const targetIndex = activeIndex + direction;
+    if (activeIndex < 0 || targetIndex < 0 || targetIndex >= pages.length) {
+      return;
+    }
+    const nextPages = [...pages];
+    [nextPages[activeIndex], nextPages[targetIndex]] = [
+      nextPages[targetIndex],
+      nextPages[activeIndex],
+    ];
+    updateProject({pages: nextPages});
+  };
+  const exportPdf = async () => {
+    setExportState({status: "working", message: "Preparing every page…"});
+    try {
+      const elements = pages.map((page) => exportPageRefs.current.get(page.id));
+      const result = await exportDocumentPdf(project, elements);
+      setExportState({
+        status: "success",
+        message: `${result.filename} was downloaded with ${result.pages} page${
+          result.pages === 1 ? "" : "s"
+        }.`,
+      });
+    } catch (error) {
+      setExportState({
+        status: "error",
+        message: error.message || "Studio could not export this document.",
+      });
+    }
+  };
+
+  return (
+    <main className="studio-editor is-document-editor">
+      <div className="studio-editor-titlebar">
+        <div>
+          <span className="studio-kicker">MULTI-PAGE DOCUMENT</span>
+          <h1>{project.name}</h1>
+        </div>
+        <div className="studio-editor-title-actions">
+          <StatusPill tone="draft">
+            {pages.length} PAGE{pages.length === 1 ? "" : "S"}
+          </StatusPill>
+          <button
+            className="studio-button is-primary"
+            type="button"
+            disabled={warnings.length > 0 || exportState.status === "working"}
+            onClick={exportPdf}
+          >
+            {exportState.status === "working" ? "Preparing PDF…" : "Export PDF"}
+          </button>
+          {!project.shared ? (
+            <button
+              className="studio-button is-secondary"
+              onClick={() => onShare(project.id)}
+              disabled={!cloud || !project.cloudBacked}
+            >
+              Share
+            </button>
+          ) : (
+            <StatusPill>SHARED WITH YOU</StatusPill>
+          )}
+          <button
+            className="studio-button is-danger"
+            onClick={() => onDelete(project.id)}
+          >
+            {project.shared ? "Leave" : "Delete"}
+          </button>
+          <button className="studio-button is-secondary" onClick={onBack}>
+            Finish for Now
+          </button>
+        </div>
+      </div>
+
+      {exportState.message ? (
+        <p
+          className={`studio-export-status studio-document-export-status is-${exportState.status}`}
+          role={exportState.status === "error" ? "alert" : "status"}
+        >
+          {exportState.message}
+        </p>
+      ) : null}
+
+      <div className="studio-document-workspace">
+        <nav className="studio-page-rail" aria-label="Document pages">
+          <div className="studio-page-rail-heading">
+            <span>PAGES</span>
+            <button
+              type="button"
+              onClick={() => setShowPagePicker(true)}
+              disabled={pages.length >= 20}
+            >
+              + Add Page
+            </button>
+          </div>
+          <div className="studio-page-thumbnails">
+            {pages.map((page, index) => (
+              <button
+                type="button"
+                key={page.id}
+                className={page.id === activePage?.id ? "is-active" : ""}
+                aria-current={page.id === activePage?.id ? "page" : undefined}
+                onClick={() => setActivePageId(page.id)}
+              >
+                <span>{index + 1}</span>
+                <div className="studio-page-thumbnail-preview" aria-hidden="true">
+                  <DocumentPagePreview
+                    page={page}
+                    pageNumber={index + 1}
+                    pageCount={pages.length}
+                    showPageNumbers={
+                      project.documentSettings?.showPageNumbers !== false
+                    }
+                  />
+                </div>
+                <strong>{getTemplateById(page.templateId).name}</strong>
+              </button>
+            ))}
+          </div>
+          <div className="studio-page-actions">
+            <button
+              type="button"
+              onClick={() => movePage(-1)}
+              disabled={activeIndex <= 0}
+            >
+              ↑
+              <span>Move up</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => movePage(1)}
+              disabled={activeIndex < 0 || activeIndex >= pages.length - 1}
+            >
+              ↓
+              <span>Move down</span>
+            </button>
+            <button
+              type="button"
+              onClick={duplicatePage}
+              disabled={!activePage || pages.length >= 20}
+            >
+              ⧉
+              <span>Duplicate</span>
+            </button>
+            <button
+              type="button"
+              onClick={deletePage}
+              disabled={pages.length <= 1}
+            >
+              ×
+              <span>Delete page</span>
+            </button>
+          </div>
+        </nav>
+
+        <section className="studio-document-canvas-panel">
+          <div className="studio-preview-toolbar">
+            <div>
+              <span>PAGE {activeIndex + 1}</span>
+              <strong>
+                {activePage
+                  ? getTemplateById(activePage.templateId).name
+                  : "US Letter"}
+              </strong>
+            </div>
+            {warnings.length ? (
+              <StatusPill tone="warning">
+                {warnings.length} CHECK{warnings.length === 1 ? "" : "S"}
+              </StatusPill>
+            ) : (
+              <StatusPill tone="ready">READY</StatusPill>
+            )}
+          </div>
+          <div
+            className="studio-preview-stage studio-document-preview-stage"
+          >
+            {activePage ? (
+              <DocumentPagePreview
+                page={activePage}
+                pageNumber={activeIndex + 1}
+                pageCount={pages.length}
+                showPageNumbers={
+                  project.documentSettings?.showPageNumbers !== false
+                }
+              />
+            ) : null}
+          </div>
+          <div className="studio-document-canvas-footer">
+            <ToggleField
+              label="Page numbers"
+              description="Show the current page and total in every document footer."
+              checked={project.documentSettings?.showPageNumbers !== false}
+              onChange={(showPageNumbers) =>
+                updateProject({
+                  documentSettings: {
+                    ...project.documentSettings,
+                    showPageNumbers,
+                  },
+                })
+              }
+            />
+            <button
+              className="studio-button is-secondary"
+              type="button"
+              onClick={() => window.print()}
+            >
+              System Print
+            </button>
+          </div>
+        </section>
+
+        <aside className="studio-document-inspector">
+          <div className="studio-document-inspector-header">
+            <div>
+              <span>EDIT PAGE {activeIndex + 1}</span>
+              <strong>
+                {activePage
+                  ? getTemplateById(activePage.templateId).name
+                  : "Page"}
+              </strong>
+            </div>
+            <InputField
+              label="Project name"
+              value={project.name}
+              maxLength={80}
+              onChange={(name) => updateProject({name})}
+            />
+          </div>
+          {activePage ? (
+            <DocumentPageInspector
+              page={activePage}
+              updatePage={(changes) => updatePage(activePage.id, changes)}
+            />
+          ) : null}
+        </aside>
+      </div>
+
+      <div
+        className="studio-document-export-pages"
+        data-studio-document-print
+        aria-hidden="true"
+      >
+        {pages.map((page, index) => (
+          <DocumentPagePreview
+            key={page.id}
+            page={page}
+            pageNumber={index + 1}
+            pageCount={pages.length}
+            showPageNumbers={project.documentSettings?.showPageNumbers !== false}
+            previewRef={(element) => {
+              if (element) exportPageRefs.current.set(page.id, element);
+              else exportPageRefs.current.delete(page.id);
+            }}
+          />
+        ))}
+      </div>
+
+      {showPagePicker ? (
+        <AddPageDialog
+          onAdd={addPage}
+          onClose={() => setShowPagePicker(false)}
+        />
+      ) : null}
+    </main>
+  );
+}
+
+function EventStudioEditor({
   project,
   onChange,
   onBack,
@@ -2236,6 +3259,14 @@ function StudioEditor({
   );
 }
 
+function StudioEditor(props) {
+  return isDocumentProject(props.project) ? (
+    <DocumentEditor {...props} />
+  ) : (
+    <EventStudioEditor {...props} />
+  );
+}
+
 function StudioApp() {
   const authState = useStudioAuth();
   const [projects, setProjects] = useState(loadProjects);
@@ -2358,7 +3389,9 @@ function StudioApp() {
         setProjects((current) => {
           const next = current.map((item) =>
             item.id === savedProject.id
-              ? {...item, ...savedProject, content: item.content}
+              ? isDocumentProject(item)
+                ? {...item, ...savedProject, pages: item.pages}
+                : {...item, ...savedProject, content: item.content}
               : item,
           );
           persistProjects(next);

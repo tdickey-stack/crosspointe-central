@@ -464,8 +464,16 @@ examples.
 
 Central Studio keeps creative content separate from account identity:
 
-- `centralStudioProjects/{projectId}` stores one user-owned project. It uses a
-  strict `schemaVersion: 1` schema and contains no user profile PII.
+- `centralStudioProjects/{projectId}` stores one user-owned project and contains
+  no user profile PII. Event graphics continue to use the strict
+  `schemaVersion: 1` content schema. Multi-page documents use
+  `schemaVersion: 2`, keep their ordered page IDs and page-number preference on
+  the project root, and store each page under
+  `centralStudioProjects/{projectId}/pages/{pageId}`.
+- Document page records use a strict `schemaVersion: 1` page schema. A page can
+  be a One Pager, Checklist, or Branded Content Page. The project root and its
+  page changes are written atomically so clients cannot create an unlisted
+  page or leave a deleted page in the active page order.
 - `centralStudioMemberships/{uid_projectId}` grants one signed-in Central user
   edit access to a shared project. Only the Studio backend writes membership
   records.

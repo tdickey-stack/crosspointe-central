@@ -1,4 +1,6 @@
 export const STUDIO_STORAGE_KEY = "crosspointeStudioProjectsV1";
+export const DOCUMENT_PROJECT_TEMPLATE_ID = "document-project";
+export const LEGACY_POLICY_TEMPLATE_ID = "policy-document";
 
 export const BRAND_COLOR_OPTIONS = [
   {value: "red", label: "CrossPointe Red", hex: "#EF3E2D", ink: "light"},
@@ -75,6 +77,25 @@ const EVENT_COMPOSITION_LIBRARY = {
   flat: {value: "flat", label: "Flat / No Overlay"},
 };
 
+const documentTemplate = ({
+  id,
+  name,
+  shortName,
+  description,
+  variant,
+  status = "Ready",
+}) => ({
+  id,
+  name,
+  shortName,
+  description,
+  formats: ["US Letter"],
+  status,
+  accent: "red",
+  kind: "document",
+  variant,
+});
+
 const eventTemplate = ({
   id,
   name,
@@ -106,18 +127,35 @@ const eventTemplate = ({
   defaults,
 });
 
-export const TEMPLATE_CATALOG = [
-  {
-    id: "policy-document",
-    name: "SOP / Policy Document",
-    shortName: "Policy",
+export const DOCUMENT_PAGE_TEMPLATES = [
+  documentTemplate({
+    id: "document-one-pager",
+    name: "One Pager",
+    shortName: "One Pager",
     description:
-      "A polished US Letter document for playbooks, ministry policies, and repeatable procedures.",
-    formats: ["US Letter"],
-    status: "Ready",
-    accent: "red",
-    kind: "policy",
-  },
+      "A structured one-page guide for SOPs, policies, playbooks, and ministry standards.",
+    variant: "one-pager",
+  }),
+  documentTemplate({
+    id: "document-checklist",
+    name: "Checklist",
+    shortName: "Checklist",
+    description:
+      "A practical, printable checklist with grouped tasks, guidance, and a branded callout.",
+    variant: "checklist",
+  }),
+  documentTemplate({
+    id: "document-content-page",
+    name: "Branded Content Page",
+    shortName: "Content",
+    description:
+      "A flexible branded page for headings, paragraphs, lists, callouts, and supporting copy.",
+    variant: "content-page",
+  }),
+];
+
+export const TEMPLATE_CATALOG = [
+  ...DOCUMENT_PAGE_TEMPLATES,
   eventTemplate({
     id: "event-signal-stack",
     name: "Signal Stack",
@@ -134,7 +172,13 @@ export const TEMPLATE_CATALOG = [
       "flat",
     ],
     defaultFont: "montserrat",
-    previewCopy: {eyebrow: "EVENT", title: "CREATE", footer: "WITH PURPOSE"},
+    previewCopy: {
+      eyebrow: "A PLACE TO CONNECT",
+      title: "Community Night",
+      subtitle: "Come as you are. Leave knowing someone new.",
+      date: "SEPTEMBER 18",
+      footer: "DETAILS AT CENTRAL.CROSSPOINTE.TV",
+    },
   }),
   eventTemplate({
     id: "event-rally-poster",
@@ -152,7 +196,13 @@ export const TEMPLATE_CATALOG = [
       "flat",
     ],
     defaultFont: "bebas-neue",
-    previewCopy: {eyebrow: "ONE NIGHT", title: "GATHER", footer: "SHOW UP"},
+    previewCopy: {
+      eyebrow: "ONE NIGHT",
+      title: "GATHER",
+      subtitle: "Worship. Community. Purpose.",
+      date: "OCTOBER 12",
+      footer: "SHOW UP",
+    },
     defaults: {composition: "rally-stripes", textAlignment: "center"},
     accent: "red",
   }),
@@ -172,7 +222,13 @@ export const TEMPLATE_CATALOG = [
       "flat",
     ],
     defaultFont: "unbounded",
-    previewCopy: {eyebrow: "NEXT", title: "MOVE", footer: "FORWARD"},
+    previewCopy: {
+      eyebrow: "NEXT",
+      title: "MOVE",
+      subtitle: "Students stepping into what is next.",
+      date: "AUGUST 23",
+      footer: "MOVE FORWARD",
+    },
     defaults: {
       composition: "future-grid",
       palette: "blue-charcoal",
@@ -196,7 +252,13 @@ export const TEMPLATE_CATALOG = [
       "flat",
     ],
     defaultFont: "bodoni-moda",
-    previewCopy: {eyebrow: "YOU ARE", title: "Invited", footer: "JOIN US"},
+    previewCopy: {
+      eyebrow: "YOU ARE",
+      title: "Invited",
+      subtitle: "An evening together around the table.",
+      date: "NOVEMBER 08",
+      footer: "JOIN US",
+    },
     defaults: {
       composition: "editorial-flow",
       palette: "warm-light",
@@ -220,7 +282,13 @@ export const TEMPLATE_CATALOG = [
       "flat",
     ],
     defaultFont: "niconne",
-    previewCopy: {eyebrow: "THERE IS", title: "Room", footer: "FOR YOU"},
+    previewCopy: {
+      eyebrow: "THERE IS",
+      title: "Room",
+      subtitle: "Come as you are. You are welcome here.",
+      date: "SUNDAY",
+      footer: "FOR YOU",
+    },
     defaults: {
       composition: "welcome-halo",
       flatColor: "blush",
@@ -238,6 +306,16 @@ export function isEventTemplateId(templateId) {
     TEMPLATE_CATALOG.some(
       (template) => template.id === templateId && template.kind === "event",
     )
+  );
+}
+
+export function isDocumentProject(project) {
+  return Boolean(
+    project &&
+      (project.templateId === DOCUMENT_PROJECT_TEMPLATE_ID ||
+        project.templateId === LEGACY_POLICY_TEMPLATE_ID ||
+        project.projectKind === "document" ||
+        Array.isArray(project.pages)),
   );
 }
 
@@ -269,7 +347,7 @@ export const STUDIO_STEPS = [
   },
 ];
 
-const policyContent = {
+const onePagerContent = {
   eyebrow: "CROSSPOINTE CREATIVE | OPERATING PLAYBOOK",
   audience: "MINISTRY LEADERS",
   documentNumber: "SOP 01",
@@ -318,6 +396,82 @@ const policyContent = {
   accent: "red",
 };
 
+const checklistContent = {
+  eyebrow: "CROSSPOINTE CREATIVE | CHECKLIST",
+  audience: "MINISTRY TEAMS",
+  documentNumber: "CHK 01",
+  title: "Event Readiness Checklist",
+  subtitle:
+    "Use this page to confirm the people, details, and follow-up required before launch.",
+  instructionsLabel: "BEFORE YOU BEGIN",
+  instructions:
+    "Work through each section with the project owner. Mark an item complete only when its details are confirmed.",
+  sectionOneTitle: "PLAN",
+  sectionOneItems: [
+    "Confirm the audience and objective",
+    "Name one clear next step",
+    "Verify the event date, time, and location",
+    "Assign the project owner",
+  ],
+  sectionTwoTitle: "PREPARE",
+  sectionTwoItems: [
+    "Gather approved copy and links",
+    "Confirm registration or response details",
+    "Allow time for creative review",
+    "Identify supporting ministries or teams",
+  ],
+  sectionThreeTitle: "FOLLOW THROUGH",
+  sectionThreeItems: [
+    "Review every public-facing detail",
+    "Confirm the communication schedule",
+    "Prepare participant follow-up",
+    "Evaluate results after the event",
+  ],
+  calloutLabel: "FINAL CHECK",
+  calloutText:
+    "The message, destination, and ministry follow-up should all point to the same next step.",
+  footerNote: "Complete details reduce revisions and protect the launch timeline.",
+  footerReference: "CROSSPOINTE CREATIVE",
+  accent: "red",
+};
+
+const contentPageContent = {
+  eyebrow: "CROSSPOINTE CREATIVE | DOCUMENT",
+  audience: "MINISTRY LEADERS",
+  documentNumber: "PAGE 01",
+  title: "Supporting Guidance",
+  subtitle:
+    "Use flexible content blocks to add context, explanations, examples, or supporting information.",
+  blocks: [
+    {
+      id: "content-heading",
+      type: "heading",
+      text: "What this page covers",
+    },
+    {
+      id: "content-paragraph",
+      type: "paragraph",
+      text:
+        "This page keeps the same CrossPointe document system while giving you room for longer supporting copy.",
+    },
+    {
+      id: "content-list",
+      type: "bullets",
+      text:
+        "Use clear, direct language\nKeep each section focused\nEnd with an actionable next step",
+    },
+    {
+      id: "content-callout",
+      type: "callout",
+      text:
+        "Use **bold text** for the most important idea and keep callouts concise.",
+    },
+  ],
+  footerNote: "Supporting guidance should remain concise and action-oriented.",
+  footerReference: "CROSSPOINTE CREATIVE",
+  accent: "red",
+};
+
 const eventContent = {
   eyebrow: "A PLACE TO CONNECT",
   title: "Community Night",
@@ -349,41 +503,150 @@ const eventContent = {
   textShadow: false,
 };
 
+function createId(prefix = "studio") {
+  return globalThis.crypto &&
+    typeof globalThis.crypto.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export function createDocumentPage(templateId, content = null, pageId = "") {
+  const template = DOCUMENT_PAGE_TEMPLATES.find(
+    (item) => item.id === templateId,
+  ) || DOCUMENT_PAGE_TEMPLATES[0];
+  const defaults =
+    template.id === "document-checklist"
+      ? checklistContent
+      : template.id === "document-content-page"
+        ? contentPageContent
+        : onePagerContent;
+  return {
+    id: pageId || createId("studio-page"),
+    templateId: template.id,
+    content: structuredCloneSafe_(content || defaults),
+  };
+}
+
+export function migrateLegacyStudioProject(project) {
+  if (!project || typeof project !== "object") return project;
+  if (project.templateId === LEGACY_POLICY_TEMPLATE_ID) {
+    return {
+      ...project,
+      schemaVersion: 2,
+      projectKind: "document",
+      templateId: DOCUMENT_PROJECT_TEMPLATE_ID,
+      documentSettings: {showPageNumbers: true},
+      pages: [
+        createDocumentPage(
+          "document-one-pager",
+          project.content || onePagerContent,
+          `${project.id || "legacy"}-page-1`,
+        ),
+      ],
+      legacyTemplateId: LEGACY_POLICY_TEMPLATE_ID,
+    };
+  }
+  if (isDocumentProject(project)) {
+    const pages = Array.isArray(project.pages)
+      ? project.pages
+          .slice(0, 20)
+          .map((page) =>
+            createDocumentPage(page.templateId, page.content, page.id),
+          )
+      : [createDocumentPage("document-one-pager")];
+    return {
+      ...project,
+      schemaVersion: 2,
+      projectKind: "document",
+      templateId: DOCUMENT_PROJECT_TEMPLATE_ID,
+      documentSettings: {
+        showPageNumbers: project.documentSettings?.showPageNumbers !== false,
+      },
+      pages: pages.length ? pages : [createDocumentPage("document-one-pager")],
+    };
+  }
+  if (!isEventTemplateId(project.templateId) || !project.content) {
+    return project;
+  }
+  const normalizedComposition = normalizeEventComposition(
+    project.templateId,
+    project.content.composition,
+  );
+  const hasFocalPoint =
+    Number.isFinite(Number(project.content.focalX)) &&
+    Number.isFinite(Number(project.content.focalY));
+  const legacyX = {
+    "left center": 25,
+    center: 50,
+    "right center": 75,
+  }[project.content.imagePosition] ?? 50;
+  return {
+    ...project,
+    content: {
+      ...project.content,
+      composition: normalizedComposition,
+      focalX: hasFocalPoint ? project.content.focalX : legacyX,
+      focalY: hasFocalPoint ? project.content.focalY : 50,
+    },
+  };
+}
+
 export function createStudioProject(templateId) {
   const template =
     TEMPLATE_CATALOG.find((item) => item.id === templateId) ||
     TEMPLATE_CATALOG[0];
   const createdAt = new Date().toISOString();
-  const id =
-    globalThis.crypto && typeof globalThis.crypto.randomUUID === "function"
-      ? globalThis.crypto.randomUUID()
-      : `studio-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const id = createId("studio");
 
-  const eventContentForTemplate = {
-    ...structuredCloneSafe_(eventContent),
-    ...(template.defaults || {}),
-    fontKey: template.defaultFont || "montserrat",
-  };
+  if (template.kind === "document") {
+    return {
+      id,
+      schemaVersion: 2,
+      projectKind: "document",
+      templateId: DOCUMENT_PROJECT_TEMPLATE_ID,
+      name: `Untitled ${template.name}`,
+      status: "draft",
+      sourceType: "manual",
+      createdAt,
+      updatedAt: createdAt,
+      documentSettings: {showPageNumbers: true},
+      pages: [createDocumentPage(template.id)],
+    };
+  }
 
   return {
     id,
+    schemaVersion: 1,
     templateId: template.id,
-    name:
-      template.id === "policy-document"
-        ? "Untitled Policy Document"
-        : `Untitled ${template.name}`,
+    name: `Untitled ${template.name}`,
     status: "draft",
     sourceType: "manual",
     createdAt,
     updatedAt: createdAt,
-    content:
-      template.id === "policy-document"
-        ? structuredCloneSafe_(policyContent)
-        : eventContentForTemplate,
+    content: {
+      ...structuredCloneSafe_(eventContent),
+      ...(template.defaults || {}),
+      fontKey: template.defaultFont || "montserrat",
+    },
   };
 }
 
 export function getTemplateById(templateId) {
+  if (templateId === DOCUMENT_PROJECT_TEMPLATE_ID) {
+    return {
+      id: DOCUMENT_PROJECT_TEMPLATE_ID,
+      name: "Document",
+      shortName: "Document",
+      description: "A multi-page CrossPointe document.",
+      formats: ["US Letter"],
+      status: "Ready",
+      accent: "red",
+      kind: "document-project",
+    };
+  }
+  if (templateId === LEGACY_POLICY_TEMPLATE_ID) {
+    return DOCUMENT_PAGE_TEMPLATES[0];
+  }
   if (templateId === LEGACY_EVENT_TEMPLATE_ID) {
     return TEMPLATE_CATALOG.find(
       (item) => item.id === "event-signal-stack",
@@ -463,48 +726,78 @@ export function getBrandColor(value) {
 }
 
 export function getProjectWarnings(project) {
-  if (!project || !project.content) return ["Project content is missing."];
-  const content = project.content;
+  if (!project) return ["Project data is missing."];
   const warnings = [];
 
   if (!String(project.name || "").trim()) {
     warnings.push("Give this project a name before exporting.");
   }
 
+  if (isDocumentProject(project)) {
+    if (!project.pages?.length) {
+      warnings.push("Add at least one page before exporting.");
+      return warnings;
+    }
+    project.pages.forEach((page, index) => {
+      const content = page.content || {};
+      const pageLabel = `Page ${index + 1}`;
+      if (!String(content.title || "").trim()) {
+        warnings.push(`${pageLabel} needs a title.`);
+      }
+      if (
+        page.templateId === "document-one-pager" &&
+        ![
+          content.operatingRule,
+          ...(content.primaryItems || []),
+          ...(content.secondaryItems || []),
+          ...(content.ownerItems || []),
+          ...(content.processSteps || []),
+        ].some((value) => String(value || "").trim())
+      ) {
+        warnings.push(`${pageLabel} needs at least one guidance section.`);
+      }
+      if (
+        page.templateId === "document-checklist" &&
+        ![
+          ...(content.sectionOneItems || []),
+          ...(content.sectionTwoItems || []),
+          ...(content.sectionThreeItems || []),
+        ].some((value) => String(value || "").trim())
+      ) {
+        warnings.push(`${pageLabel} needs at least one checklist item.`);
+      }
+      if (
+        page.templateId === "document-content-page" &&
+        !(content.blocks || []).some(
+          (block) =>
+            block?.type === "divider" || String(block?.text || "").trim(),
+        )
+      ) {
+        warnings.push(`${pageLabel} needs at least one content block.`);
+      }
+    });
+    return warnings;
+  }
+
+  const content = project.content || {};
   if (!String(content.title || "").trim()) {
     warnings.push("The title is required.");
   }
-
-  if (isEventTemplateId(project.templateId)) {
-    if (String(content.title || "").length > 44) {
-      warnings.push("The event title may be too long for every format.");
-    }
-    if (!String(content.date || "").trim()) {
-      warnings.push("Add an event date.");
-    }
-    if (!String(content.cta || "").trim()) {
-      warnings.push("Add a clear next step.");
-    }
-    if (
-      content.composition === "color-overlay" &&
-      !String(content.backgroundImage || "").trim()
-    ) {
-      warnings.push("Color Overlay requires a background image.");
-    }
+  if (String(content.title || "").length > 44) {
+    warnings.push("The event title may be too long for every format.");
   }
-
-  if (project.templateId === "policy-document") {
-    if (String(content.operatingRule || "").length > 320) {
-      warnings.push("The operating rule may overflow the one-page template.");
-    }
-    if (!content.primaryItems || content.primaryItems.length < 2) {
-      warnings.push("Add at least two standard workflow items.");
-    }
-    if (!content.ownerItems || content.ownerItems.length < 2) {
-      warnings.push("Add at least two owner responsibilities.");
-    }
+  if (!String(content.date || "").trim()) {
+    warnings.push("Add an event date.");
   }
-
+  if (!String(content.cta || "").trim()) {
+    warnings.push("Add a clear next step.");
+  }
+  if (
+    content.composition === "color-overlay" &&
+    !String(content.backgroundImage || "").trim()
+  ) {
+    warnings.push("Color Overlay requires a background image.");
+  }
   return warnings;
 }
 

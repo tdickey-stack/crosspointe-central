@@ -4,7 +4,9 @@ import {
   getBrandColor,
   getEventFont,
   getTemplateById,
+  isDocumentProject,
   normalizeEventComposition,
+  textToLines,
 } from "./templates.js";
 
 function BrandMark({inverse = false}) {
@@ -16,21 +18,139 @@ function BrandMark({inverse = false}) {
   );
 }
 
+function hasText(value) {
+  return Boolean(String(value || "").trim());
+}
+
+function visibleItems(items) {
+  return (Array.isArray(items) ? items : []).filter(hasText);
+}
+
 function ListBlock({label, title, items}) {
+  const filteredItems = visibleItems(items);
+  if (!hasText(label) && !hasText(title) && !filteredItems.length) return null;
   return (
     <section className="policy-card policy-list-card">
-      <span className="policy-card-label">{label}</span>
-      <h3>{title}</h3>
-      <ul>
-        {(items || []).map((item, index) => (
-          <li key={`${item}-${index}`}>{item}</li>
-        ))}
-      </ul>
+      {hasText(label) ? <span className="policy-card-label">{label}</span> : null}
+      {hasText(title) ? <h3>{title}</h3> : null}
+      {filteredItems.length ? (
+        <ul>
+          {filteredItems.map((item, index) => (
+            <li key={`${item}-${index}`}>{item}</li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }
 
-export function PolicyPreview({content, previewRef}) {
+function DocumentPageNumber({pageNumber, pageCount, showPageNumbers = true}) {
+  if (!showPageNumbers || !pageNumber || !pageCount) return null;
+  return (
+    <span className="document-page-number">
+      {pageNumber} / {pageCount}
+    </span>
+  );
+}
+
+function DocumentFooter({
+  content,
+  pageNumber,
+  pageCount,
+  showPageNumbers,
+}) {
+  const showNumber = Boolean(
+    showPageNumbers && pageNumber && pageCount,
+  );
+  if (
+    !hasText(content.footerNote) &&
+    !hasText(content.footerReference) &&
+    !showNumber
+  ) {
+    return null;
+  }
+  return (
+    <footer className="document-standard-footer">
+      {hasText(content.footerNote) ? <span>{content.footerNote}</span> : null}
+      {hasText(content.footerReference) ? (
+        <strong>{content.footerReference}</strong>
+      ) : null}
+      <DocumentPageNumber
+        pageNumber={pageNumber}
+        pageCount={pageCount}
+        showPageNumbers={showPageNumbers}
+      />
+    </footer>
+  );
+}
+
+function DocumentHeader({content}) {
+  const hasMeta = hasText(content.eyebrow) || hasText(content.audience);
+  const hasTitle =
+    hasText(content.documentNumber) ||
+    hasText(content.title) ||
+    hasText(content.subtitle);
+  if (!hasMeta && !hasTitle) return null;
+  return (
+    <header className="document-standard-hero">
+      {hasMeta ? (
+        <div className="policy-meta-row">
+          {hasText(content.eyebrow) ? (
+            <span className="policy-meta-pill">{content.eyebrow}</span>
+          ) : null}
+          {hasText(content.audience) ? (
+            <span className="policy-meta-pill is-accent">
+              {content.audience}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {hasTitle ? (
+        <div className="document-standard-title">
+          {hasText(content.documentNumber) ? (
+            <p>{content.documentNumber}</p>
+          ) : null}
+          {hasText(content.title) ? <h2>{content.title}</h2> : null}
+          {hasText(content.subtitle) ? <span>{content.subtitle}</span> : null}
+        </div>
+      ) : null}
+    </header>
+  );
+}
+
+export function PolicyPreview({
+  content,
+  previewRef,
+  pageNumber,
+  pageCount,
+  showPageNumbers = true,
+}) {
+  const primaryItems = visibleItems(content.primaryItems);
+  const secondaryItems = visibleItems(content.secondaryItems);
+  const ownerItems = visibleItems(content.ownerItems);
+  const processSteps = visibleItems(content.processSteps);
+  const showOperatingRule =
+    hasText(content.operatingRuleLabel) || hasText(content.operatingRule);
+  const showPrimary =
+    hasText(content.primarySectionLabel) ||
+    hasText(content.primarySectionTitle) ||
+    primaryItems.length > 0;
+  const showSecondary =
+    hasText(content.secondarySectionLabel) ||
+    hasText(content.secondarySectionTitle) ||
+    secondaryItems.length > 0;
+  const listSectionCount = Number(showPrimary) + Number(showSecondary);
+  const showOwner =
+    hasText(content.ownerLabel) ||
+    hasText(content.ownerTitle) ||
+    ownerItems.length > 0;
+  const showFooter =
+    hasText(content.processLabel) ||
+    processSteps.length > 0 ||
+    hasText(content.footerNote) ||
+    hasText(content.footerReference) ||
+    Boolean(showPageNumbers && pageNumber && pageCount);
+
   return (
     <article ref={previewRef} className="studio-policy-document">
       <header className="policy-hero">
@@ -46,56 +166,299 @@ export function PolicyPreview({content, previewRef}) {
       </header>
 
       <div className="policy-body">
-        <section className="policy-card policy-operating-rule">
-          <span className="policy-card-label">
-            {content.operatingRuleLabel || "OPERATING RULE"}
-          </span>
-          <p>{content.operatingRule}</p>
-        </section>
+        {showOperatingRule ? (
+          <section className="policy-card policy-operating-rule">
+            {hasText(content.operatingRuleLabel) ? (
+              <span className="policy-card-label">
+                {content.operatingRuleLabel}
+              </span>
+            ) : null}
+            {hasText(content.operatingRule) ? (
+              <p>{content.operatingRule}</p>
+            ) : null}
+          </section>
+        ) : null}
 
-        <div className="policy-two-column">
-          <ListBlock
-            label={content.primarySectionLabel}
-            title={content.primarySectionTitle}
-            items={content.primaryItems}
-          />
-          <ListBlock
-            label={content.secondarySectionLabel}
-            title={content.secondarySectionTitle}
-            items={content.secondaryItems}
-          />
-        </div>
-
-        <section className="policy-card policy-owner-card">
-          <span className="policy-card-label">{content.ownerLabel}</span>
-          <h3>{content.ownerTitle}</h3>
-          <div className="policy-owner-grid">
-            {(content.ownerItems || []).map((item, index) => (
-              <p key={`${item}-${index}`}>{item}</p>
-            ))}
+        {listSectionCount ? (
+          <div className={`policy-two-column is-count-${listSectionCount}`}>
+            {showPrimary ? (
+              <ListBlock
+                label={content.primarySectionLabel}
+                title={content.primarySectionTitle}
+                items={primaryItems}
+              />
+            ) : null}
+            {showSecondary ? (
+              <ListBlock
+                label={content.secondarySectionLabel}
+                title={content.secondarySectionTitle}
+                items={secondaryItems}
+              />
+            ) : null}
           </div>
-        </section>
+        ) : null}
 
-        <footer className="policy-footer">
-          <div className="policy-footer-label">{content.processLabel}</div>
-          <div className="policy-process-row">
-            {(content.processSteps || []).map((step, index) => (
-              <React.Fragment key={`${step}-${index}`}>
-                <span>{step}</span>
-                {index < content.processSteps.length - 1 ? (
-                  <i aria-hidden="true">•</i>
+        {showOwner ? (
+          <section className="policy-card policy-owner-card">
+            {hasText(content.ownerLabel) ? (
+              <span className="policy-card-label">{content.ownerLabel}</span>
+            ) : null}
+            {hasText(content.ownerTitle) ? <h3>{content.ownerTitle}</h3> : null}
+            {ownerItems.length ? (
+              <div
+                className="policy-owner-grid"
+                style={{"--policy-owner-columns": ownerItems.length}}
+              >
+                {ownerItems.map((item, index) => (
+                  <p key={`${item}-${index}`}>{item}</p>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {showFooter ? (
+          <footer className="policy-footer">
+            {hasText(content.processLabel) ? (
+              <div className="policy-footer-label">{content.processLabel}</div>
+            ) : null}
+            {processSteps.length ? (
+              <div className="policy-process-row">
+                {processSteps.map((step, index) => (
+                  <React.Fragment key={`${step}-${index}`}>
+                    <span>{step}</span>
+                    {index < processSteps.length - 1 ? (
+                      <i aria-hidden="true">•</i>
+                    ) : null}
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : null}
+            {hasText(content.footerNote) ||
+            hasText(content.footerReference) ||
+            (showPageNumbers && pageNumber && pageCount) ? (
+              <div className="policy-footer-note">
+                {hasText(content.footerNote) ? (
+                  <span>{content.footerNote}</span>
                 ) : null}
-              </React.Fragment>
-            ))}
-          </div>
-          <div className="policy-footer-note">
-            <span>{content.footerNote}</span>
-            <strong>{content.footerReference}</strong>
-          </div>
-        </footer>
+                {hasText(content.footerReference) ? (
+                  <strong>{content.footerReference}</strong>
+                ) : null}
+                <DocumentPageNumber
+                  pageNumber={pageNumber}
+                  pageCount={pageCount}
+                  showPageNumbers={showPageNumbers}
+                />
+              </div>
+            ) : null}
+          </footer>
+        ) : null}
       </div>
     </article>
   );
+}
+
+function ChecklistSection({title, items}) {
+  const filteredItems = visibleItems(items);
+  if (!hasText(title) && !filteredItems.length) return null;
+  return (
+    <section className="checklist-section">
+      {hasText(title) ? <h3>{title}</h3> : null}
+      {filteredItems.length ? (
+        <ul>
+          {filteredItems.map((item, index) => (
+            <li key={`${item}-${index}`}>
+              <span aria-hidden="true" />
+              <p>{item}</p>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+export function ChecklistPreview({
+  content,
+  previewRef,
+  pageNumber,
+  pageCount,
+  showPageNumbers = true,
+}) {
+  const checklistSections = [
+    {
+      key: "one",
+      title: content.sectionOneTitle,
+      items: visibleItems(content.sectionOneItems),
+    },
+    {
+      key: "two",
+      title: content.sectionTwoTitle,
+      items: visibleItems(content.sectionTwoItems),
+    },
+    {
+      key: "three",
+      title: content.sectionThreeTitle,
+      items: visibleItems(content.sectionThreeItems),
+    },
+  ].filter((section) => hasText(section.title) || section.items.length);
+  const showInstructions =
+    hasText(content.instructionsLabel) || hasText(content.instructions);
+  const showCallout =
+    hasText(content.calloutLabel) || hasText(content.calloutText);
+
+  return (
+    <article ref={previewRef} className="studio-checklist-document">
+      <DocumentHeader content={content} />
+      <div className="checklist-body">
+        {showInstructions ? (
+          <section className="checklist-instructions">
+            {hasText(content.instructionsLabel) ? (
+              <span className="policy-card-label">
+                {content.instructionsLabel}
+              </span>
+            ) : null}
+            {hasText(content.instructions) ? (
+              <p>{content.instructions}</p>
+            ) : null}
+          </section>
+        ) : null}
+        {checklistSections.length ? (
+          <div
+            className={`checklist-sections is-count-${checklistSections.length}`}
+          >
+            {checklistSections.map((section) => (
+              <ChecklistSection
+                key={section.key}
+                title={section.title}
+                items={section.items}
+              />
+            ))}
+          </div>
+        ) : null}
+        {showCallout ? (
+          <section className="checklist-callout">
+            {hasText(content.calloutLabel) ? (
+              <span>{content.calloutLabel}</span>
+            ) : null}
+            {hasText(content.calloutText) ? (
+              <p>{content.calloutText}</p>
+            ) : null}
+          </section>
+        ) : null}
+        <DocumentFooter
+          content={content}
+          pageNumber={pageNumber}
+          pageCount={pageCount}
+          showPageNumbers={showPageNumbers}
+        />
+      </div>
+    </article>
+  );
+}
+
+function renderInlineMarkdown(value) {
+  const input = String(value || "");
+  const pattern =
+    /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\))/gu;
+  return input.split(pattern).map((part, index) => {
+    if (/^\*\*[^*]+\*\*$/u.test(part)) {
+      return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    if (/^\*[^*]+\*$/u.test(part)) {
+      return <em key={`${part}-${index}`}>{part.slice(1, -1)}</em>;
+    }
+    const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/u);
+    if (link) {
+      return (
+        <a key={`${part}-${index}`} href={link[2]}>
+          {link[1]}
+        </a>
+      );
+    }
+    return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
+  });
+}
+
+function ContentBlockPreview({block}) {
+  if (block.type !== "divider" && !hasText(block.text)) return null;
+  if (block.type === "divider") {
+    return <hr className="content-page-divider" />;
+  }
+  if (block.type === "heading") {
+    return <h3>{renderInlineMarkdown(block.text)}</h3>;
+  }
+  if (block.type === "callout") {
+    return (
+      <aside className="content-page-callout">
+        {renderInlineMarkdown(block.text)}
+      </aside>
+    );
+  }
+  if (block.type === "bullets" || block.type === "numbered") {
+    const ListTag = block.type === "numbered" ? "ol" : "ul";
+    return (
+      <ListTag>
+        {textToLines(block.text, 12).map((item, index) => (
+          <li key={`${item}-${index}`}>{renderInlineMarkdown(item)}</li>
+        ))}
+      </ListTag>
+    );
+  }
+  return <p>{renderInlineMarkdown(block.text)}</p>;
+}
+
+export function ContentPagePreview({
+  content,
+  previewRef,
+  pageNumber,
+  pageCount,
+  showPageNumbers = true,
+}) {
+  const visibleBlocks = (content.blocks || []).filter(
+    (block) => block.type === "divider" || hasText(block.text),
+  );
+  return (
+    <article ref={previewRef} className="studio-content-document">
+      <DocumentHeader content={content} />
+      <div className="content-page-body">
+        <div className="content-page-blocks">
+          {visibleBlocks.map((block) => (
+            <ContentBlockPreview block={block} key={block.id} />
+          ))}
+        </div>
+        <DocumentFooter
+          content={content}
+          pageNumber={pageNumber}
+          pageCount={pageCount}
+          showPageNumbers={showPageNumbers}
+        />
+      </div>
+    </article>
+  );
+}
+
+export function DocumentPagePreview({
+  page,
+  previewRef,
+  pageNumber,
+  pageCount,
+  showPageNumbers = true,
+}) {
+  const props = {
+    content: page.content || {},
+    previewRef,
+    pageNumber,
+    pageCount,
+    showPageNumbers,
+  };
+  if (page.templateId === "document-checklist") {
+    return <ChecklistPreview {...props} />;
+  }
+  if (page.templateId === "document-content-page") {
+    return <ContentPagePreview {...props} />;
+  }
+  return <PolicyPreview {...props} />;
 }
 
 function EventGraphicDecoration({composition}) {
@@ -232,9 +595,20 @@ export function EventPreview({content, previewRef, templateId}) {
 export function StudioPreview({project, previewRef}) {
   if (!project) return null;
 
-  return project.templateId === "policy-document" ? (
-    <PolicyPreview content={project.content} previewRef={previewRef} />
-  ) : (
+  if (isDocumentProject(project)) {
+    const page = project.pages?.[0];
+    return page ? (
+      <DocumentPagePreview
+        page={page}
+        previewRef={previewRef}
+        pageNumber={1}
+        pageCount={project.pages.length}
+        showPageNumbers={project.documentSettings?.showPageNumbers !== false}
+      />
+    ) : null;
+  }
+
+  return (
     <EventPreview
       content={project.content}
       previewRef={previewRef}

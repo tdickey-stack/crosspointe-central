@@ -1,5 +1,8 @@
 import {
+  DOCUMENT_PROJECT_TEMPLATE_ID,
+  isDocumentProject,
   linesToText,
+  migrateLegacyStudioProject,
   normalizeEventComposition,
   textToLines,
 } from "./templates.js";
@@ -34,7 +37,7 @@ function legacyFocalPoint(content) {
   return positions[content.imagePosition] || positions.center;
 }
 
-function policyContentForCloud(content) {
+function onePagerContentForCloud(content) {
   return {
     eyebrow: stringValue(content.eyebrow),
     audience: stringValue(content.audience),
@@ -65,6 +68,87 @@ function policyContentForCloud(content) {
     footerNote: stringValue(content.footerNote),
     footerReference: stringValue(content.footerReference),
     accent: "red",
+  };
+}
+
+function checklistContentForCloud(content) {
+  return {
+    eyebrow: stringValue(content.eyebrow),
+    audience: stringValue(content.audience),
+    documentNumber: stringValue(content.documentNumber),
+    title: stringValue(content.title),
+    subtitle: stringValue(content.subtitle),
+    instructionsLabel: stringValue(content.instructionsLabel),
+    instructions: stringValue(content.instructions),
+    sectionOneTitle: stringValue(content.sectionOneTitle),
+    sectionOneItemsText: stringValue(
+      content.sectionOneItemsText || linesToText(content.sectionOneItems),
+    ),
+    sectionTwoTitle: stringValue(content.sectionTwoTitle),
+    sectionTwoItemsText: stringValue(
+      content.sectionTwoItemsText || linesToText(content.sectionTwoItems),
+    ),
+    sectionThreeTitle: stringValue(content.sectionThreeTitle),
+    sectionThreeItemsText: stringValue(
+      content.sectionThreeItemsText || linesToText(content.sectionThreeItems),
+    ),
+    calloutLabel: stringValue(content.calloutLabel),
+    calloutText: stringValue(content.calloutText),
+    footerNote: stringValue(content.footerNote),
+    footerReference: stringValue(content.footerReference),
+    accent: "red",
+  };
+}
+
+function contentBlocksForCloud(blocks) {
+  return (Array.isArray(blocks) ? blocks : []).slice(0, 8).map((block) => ({
+    id: stringValue(block?.id).slice(0, 80),
+    type: [
+      "heading",
+      "paragraph",
+      "bullets",
+      "numbered",
+      "callout",
+      "divider",
+    ].includes(block?.type)
+      ? block.type
+      : "paragraph",
+    text: stringValue(block?.text).slice(0, 1200),
+  }));
+}
+
+function contentPageContentForCloud(content) {
+  return {
+    eyebrow: stringValue(content.eyebrow),
+    audience: stringValue(content.audience),
+    documentNumber: stringValue(content.documentNumber),
+    title: stringValue(content.title),
+    subtitle: stringValue(content.subtitle),
+    blocks: contentBlocksForCloud(content.blocks),
+    footerNote: stringValue(content.footerNote),
+    footerReference: stringValue(content.footerReference),
+    accent: "red",
+  };
+}
+
+function documentPageForCloud(page) {
+  const templateId = [
+    "document-one-pager",
+    "document-checklist",
+    "document-content-page",
+  ].includes(page?.templateId)
+    ? page.templateId
+    : "document-one-pager";
+  const content =
+    templateId === "document-checklist"
+      ? checklistContentForCloud(page.content || {})
+      : templateId === "document-content-page"
+        ? contentPageContentForCloud(page.content || {})
+        : onePagerContentForCloud(page.content || {});
+  return {
+    schemaVersion: 1,
+    templateId,
+    content,
   };
 }
 
@@ -120,6 +204,20 @@ function eventContentForCloud(content, templateId) {
 }
 
 export function projectForCloud(project, ownerUid) {
+  if (isDocumentProject(project)) {
+    return {
+      schemaVersion: 2,
+      ownerUid,
+      templateId: DOCUMENT_PROJECT_TEMPLATE_ID,
+      name: String(project.name || "").trim(),
+      status: "draft",
+      sourceType: "manual",
+      pageOrder: (project.pages || []).slice(0, 20).map((page) => page.id),
+      documentSettings: {
+        showPageNumbers: project.documentSettings?.showPageNumbers !== false,
+      },
+    };
+  }
   return {
     schemaVersion: 1,
     ownerUid,
@@ -127,15 +225,79 @@ export function projectForCloud(project, ownerUid) {
     name: String(project.name || "").trim(),
     status: "draft",
     sourceType: "manual",
-    content:
-      project.templateId === "policy-document"
-        ? policyContentForCloud(project.content || {})
-        : eventContentForCloud(project.content || {}, project.templateId),
+    content: eventContentForCloud(project.content || {}, project.templateId),
+  };
+}
+
+function hydrateDocumentPage(snapshot) {
+  const data = snapshot.data();
+  const cloudContent = data.content || {};
+  let content = cloudContent;
+  if (data.templateId === "document-one-pager") {
+    content = {
+      ...cloudContent,
+      primaryItems: textToLines(cloudContent.primaryItemsText, 7),
+      secondaryItems: textToLines(cloudContent.secondaryItemsText, 7),
+      ownerItems: textToLines(cloudContent.ownerItemsText, 3),
+      processSteps: textToLines(cloudContent.processStepsText, 8),
+    };
+  } else if (data.templateId === "document-checklist") {
+    content = {
+      ...cloudContent,
+      sectionOneItems: textToLines(cloudContent.sectionOneItemsText, 7),
+      sectionTwoItems: textToLines(cloudContent.sectionTwoItemsText, 7),
+      sectionThreeItems: textToLines(cloudContent.sectionThreeItemsText, 7),
+    };
+  } else if (data.templateId === "document-content-page") {
+    content = {
+      ...cloudContent,
+      blocks: contentBlocksForCloud(cloudContent.blocks),
+    };
+  }
+  return {
+    id: snapshot.id,
+    templateId: data.templateId,
+    content,
+    cloudBacked: true,
   };
 }
 
 async function hydrateProject(snapshot, storage, shared = false) {
   const data = snapshot.data();
+  if (
+    data.schemaVersion === 2 &&
+    data.templateId === DOCUMENT_PROJECT_TEMPLATE_ID
+  ) {
+    const pageSnapshot = await snapshot.ref.collection("pages").get();
+    const pagesById = new Map(
+      pageSnapshot.docs.map((page) => {
+        const hydrated = hydrateDocumentPage(page);
+        return [hydrated.id, hydrated];
+      }),
+    );
+    const pages = (data.pageOrder || [])
+      .map((pageId) => pagesById.get(pageId))
+      .filter(Boolean);
+    return migrateLegacyStudioProject({
+      id: snapshot.id,
+      schemaVersion: 2,
+      projectKind: "document",
+      templateId: DOCUMENT_PROJECT_TEMPLATE_ID,
+      name: data.name,
+      status: data.status,
+      sourceType: data.sourceType,
+      createdAt:
+        data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+      updatedAt:
+        data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+      ownerUid: data.ownerUid,
+      shared,
+      cloudBacked: true,
+      documentSettings: data.documentSettings || {showPageNumbers: true},
+      pages,
+    });
+  }
+
   const cloudContent = data.content || {};
   let backgroundImage = stringValue(cloudContent.backgroundImageUrl);
   if (
@@ -172,7 +334,7 @@ async function hydrateProject(snapshot, storage, shared = false) {
             legacyFocalPoint(cloudContent).y,
           ),
         };
-  return {
+  return migrateLegacyStudioProject({
     id: snapshot.id,
     templateId: data.templateId,
     name: data.name,
@@ -186,7 +348,7 @@ async function hydrateProject(snapshot, storage, shared = false) {
     shared,
     cloudBacked: true,
     content,
-  };
+  });
 }
 
 async function authorizedJson(auth, url, options = {}) {
@@ -294,6 +456,73 @@ export function createStudioCloud({
       project,
       snapshot.exists ? snapshot.data().ownerUid : user.uid,
     );
+
+    if (isDocumentProject(project)) {
+      const batch = firestore.batch();
+      const serverTimestamp =
+        window.firebase.firestore.FieldValue.serverTimestamp();
+      const previousData = snapshot.exists ? snapshot.data() : null;
+      const previousPageIds =
+        previousData?.schemaVersion === 2 &&
+        Array.isArray(previousData.pageOrder)
+          ? previousData.pageOrder
+          : [];
+      const nextPageIds = new Set(payload.pageOrder);
+
+      if (!snapshot.exists) {
+        batch.set(reference, {
+          ...payload,
+          createdAt: serverTimestamp,
+          updatedAt: serverTimestamp,
+        });
+      } else if (previousData.schemaVersion === 2) {
+        batch.update(reference, {
+          name: payload.name,
+          status: payload.status,
+          sourceType: payload.sourceType,
+          pageOrder: payload.pageOrder,
+          documentSettings: payload.documentSettings,
+          updatedAt: serverTimestamp,
+        });
+      } else {
+        batch.set(reference, {
+          ...payload,
+          createdAt: previousData.createdAt,
+          updatedAt: serverTimestamp,
+        });
+      }
+
+      (project.pages || []).forEach((page) => {
+        const pageReference = reference.collection("pages").doc(page.id);
+        const pagePayload = documentPageForCloud(page);
+        if (previousPageIds.includes(page.id)) {
+          batch.update(pageReference, {
+            templateId: pagePayload.templateId,
+            content: pagePayload.content,
+            updatedAt: serverTimestamp,
+          });
+        } else {
+          batch.set(pageReference, {
+            ...pagePayload,
+            createdAt: serverTimestamp,
+            updatedAt: serverTimestamp,
+          });
+        }
+      });
+      previousPageIds
+        .filter((pageId) => !nextPageIds.has(pageId))
+        .forEach((pageId) => {
+          batch.delete(reference.collection("pages").doc(pageId));
+        });
+      await batch.commit();
+      return {
+        ...project,
+        schemaVersion: 2,
+        ownerUid: payload.ownerUid,
+        cloudBacked: true,
+      };
+    }
+
     if (snapshot.exists) {
       await reference.update({
         name: payload.name,

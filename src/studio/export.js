@@ -151,3 +151,43 @@ export async function exportPolicyPdf(project, element) {
   pdf.save(filename);
   return {filename, width: 8.5, height: 11};
 }
+
+export async function exportDocumentPdf(project, elements) {
+  const pageElements = Array.isArray(elements) ? elements : [];
+  if (
+    !pageElements.length ||
+    pageElements.some((element) => !element)
+  ) {
+    throw new Error(
+      "Every document page must finish rendering before Studio can export it.",
+    );
+  }
+
+  await waitForFonts();
+  const filename = `${safeFilename(project?.name, "studio-document")}.pdf`;
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "in",
+    format: "letter",
+    compress: true,
+  });
+
+  for (let index = 0; index < pageElements.length; index += 1) {
+    if (index > 0) pdf.addPage("letter", "portrait");
+    const png = await renderExactPng(pageElements[index], 2040, 2640);
+    pdf.addImage(png, "PNG", 0, 0, 8.5, 11, undefined, "FAST");
+  }
+
+  pdf.setProperties({
+    title: project?.name || "Central Studio Document",
+    subject: "Multi-page document exported from Central Studio",
+    creator: "CrossPointe Central Studio",
+  });
+  pdf.save(filename);
+  return {
+    filename,
+    width: 8.5,
+    height: 11,
+    pages: pageElements.length,
+  };
+}

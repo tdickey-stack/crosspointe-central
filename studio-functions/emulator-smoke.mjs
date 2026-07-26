@@ -58,6 +58,13 @@ await db.doc(`centralStudioProjects/${projectId}`).set({
   createdAt: Timestamp.now(),
   updatedAt: Timestamp.now(),
 });
+await db.doc(`centralStudioProjects/${projectId}/pages/example-page`).set({
+  schemaVersion: 1,
+  templateId: "document-content-page",
+  content: {},
+  createdAt: Timestamp.now(),
+  updatedAt: Timestamp.now(),
+});
 
 const share = await api("/api/studio/projects/share", owner.token, {projectId});
 assert.equal(share.response.status, 200, share.data.error);
@@ -79,7 +86,13 @@ const unsplash = await api(
   "/api/studio/unsplash/search?q=community",
   owner.token,
 );
-assert.equal(unsplash.response.status, 503);
+assert.ok(
+  [200, 503].includes(unsplash.response.status),
+  unsplash.data.error || `Unexpected Unsplash status ${unsplash.response.status}`,
+);
+if (unsplash.response.status === 200) {
+  assert.ok(Array.isArray(unsplash.data.results));
+}
 
 const deleted = await api("/api/studio/projects/delete", owner.token, {
   projectId,
@@ -88,11 +101,17 @@ assert.equal(deleted.response.status, 200, deleted.data.error);
 assert.equal((await db.doc(`centralStudioProjects/${projectId}`).get()).exists, false);
 assert.equal(
   (
+    await db.doc(`centralStudioProjects/${projectId}/pages/example-page`).get()
+  ).exists,
+  false,
+);
+assert.equal(
+  (
     await db.doc(`centralStudioMemberships/${member.uid}_${projectId}`).get()
   ).exists,
   false,
 );
 
 console.log(
-  "Studio emulator smoke test passed: auth, share, accept, Unsplash configuration guard, and delete.",
+  "Studio emulator smoke test passed: auth, share, accept, Unsplash access, and document delete.",
 );

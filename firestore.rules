@@ -299,6 +299,16 @@ service cloud.firestore {
             "color-overlay", "flat"
           ]
         ) || (
+          templateId == "event-center-stage" &&
+          composition in [
+            "center-burst", "center-frame", "color-overlay", "flat"
+          ]
+        ) || (
+          templateId == "event-timeless-center" &&
+          composition in [
+            "serif-medallion", "serif-lines", "color-overlay", "flat"
+          ]
+        ) || (
           templateId == "event-editorial-invitation" &&
           composition in [
             "editorial-flow", "editorial-frame", "editorial-column",
@@ -427,6 +437,7 @@ service cloud.firestore {
         data.templateId in [
           "policy-document", "event-promotion", "event-signal-stack",
           "event-rally-poster", "event-future-block",
+          "event-center-stage", "event-timeless-center",
           "event-editorial-invitation", "event-scripted-welcome"
         ] &&
         validStudioString(data.name, 80) && data.name.size() > 0 &&

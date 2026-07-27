@@ -1,17 +1,20 @@
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
-import {exportDocumentPdf, exportEventPng, exportPolicyPdf} from "./export.js";
+import {exportDocumentPdf, exportEventPng} from "./export.js";
 import {normalizeFocalValue, normalizeImageZoom} from "./focal.js";
 import {
   createStudioCloud,
   createStudioPreviewUnsplash,
 } from "./persistence.js";
-import {DocumentPagePreview, StudioPreview} from "./previews.jsx";
+import {
+  DocumentPagePreview,
+  EventPreview,
+  StudioPreview,
+} from "./previews.jsx";
 import {
   BRAND_COLOR_OPTIONS,
   DOCUMENT_PAGE_TEMPLATES,
-  STUDIO_STEPS,
   STUDIO_STORAGE_KEY,
   TEMPLATE_CATALOG,
   createDocumentPage,
@@ -915,7 +918,28 @@ function ImageFocalPointEditor({content, updateContent}) {
   );
 }
 
-function EventQuickToolbar({content, updateContent, templateId}) {
+const EVENT_TEXT_FIELD_OPTIONS = {
+  eyebrow: {label: "Utility label", maximum: 30},
+  title: {label: "Event title", maximum: 52},
+  subtitle: {label: "Supporting line", maximum: 110, multiline: true},
+  date: {label: "Date", maximum: 28},
+  time: {label: "Time", maximum: 24},
+  location: {label: "Location", maximum: 34},
+  cta: {label: "Call to action", maximum: 44},
+};
+
+function EventQuickToolbar({
+  content,
+  updateContent,
+  templateId,
+  selectedField,
+  onSelectField,
+  activePanel,
+  onPanelChange,
+  cloud,
+  unsplash,
+  project,
+}) {
   const alignment = content.textAlignment || "left";
   const fontOptions = getEventFontOptions(templateId);
   const compositionOptions = getEventCompositionOptions(templateId);
@@ -923,128 +947,221 @@ function EventQuickToolbar({content, updateContent, templateId}) {
     templateId,
     content.composition,
   );
+  const selectedTextOption = EVENT_TEXT_FIELD_OPTIONS[selectedField];
   return (
-    <div className="studio-event-toolbar" aria-label="Event design controls">
-      <div className="studio-toolbar-group is-alignment">
-        <span>Text</span>
-        {[
-          {value: "left", label: "Left", glyph: "≡"},
-          {value: "center", label: "Center", glyph: "≡"},
-          {value: "right", label: "Right", glyph: "≡"},
-        ].map((option) => (
-          <button
-            key={option.value}
-            className={[
-              alignment === option.value ? "is-active" : "",
-              `is-${option.value}`,
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            type="button"
-            aria-label={`Align text ${option.value}`}
-            aria-pressed={alignment === option.value}
-            onClick={() => updateContent({textAlignment: option.value})}
-          >
-            {option.glyph}
-          </button>
-        ))}
+    <div className="studio-event-toolbar-shell">
+      {selectedTextOption ? (
+        <div className="studio-event-context-tray is-text">
+          <div className="studio-context-heading">
+            <div>
+              <span>SELECTED TEXT</span>
+              <strong>{selectedTextOption.label}</strong>
+            </div>
+            <div className="studio-template-lock-note">
+              <span aria-hidden="true">⌁</span>
+              Position set by template
+            </div>
+            <button
+              type="button"
+              aria-label="Clear text selection"
+              onClick={() => onSelectField("")}
+            >
+              ×
+            </button>
+          </div>
+          <label className="studio-context-text-field">
+            <span className="studio-visually-hidden">
+              {selectedTextOption.label}
+            </span>
+            {selectedTextOption.multiline ? (
+              <textarea
+                rows="2"
+                maxLength={selectedTextOption.maximum}
+                value={content[selectedField] || ""}
+                onChange={(event) =>
+                  updateContent({[selectedField]: event.target.value})
+                }
+              />
+            ) : (
+              <input
+                type="text"
+                maxLength={selectedTextOption.maximum}
+                value={content[selectedField] || ""}
+                onChange={(event) =>
+                  updateContent({[selectedField]: event.target.value})
+                }
+              />
+            )}
+            <small>
+              {String(content[selectedField] || "").length}/
+              {selectedTextOption.maximum}
+            </small>
+          </label>
+        </div>
+      ) : null}
+
+      {activePanel === "background" ? (
+        <div className="studio-event-context-tray is-background">
+          <div className="studio-context-heading">
+            <div>
+              <span>BACKGROUND</span>
+              <strong>Image, focal point, and stock photography</strong>
+            </div>
+            <button
+              type="button"
+              aria-label="Close background controls"
+              onClick={() => onPanelChange("")}
+            >
+              ×
+            </button>
+          </div>
+          <EventBackgroundControls
+            content={content}
+            updateContent={updateContent}
+            cloud={cloud}
+            unsplash={unsplash}
+            project={project}
+          />
+        </div>
+      ) : null}
+
+      <div className="studio-event-toolbar" aria-label="Event design controls">
+        <div className="studio-toolbar-selection">
+          <span>{selectedTextOption ? "TEXT" : "CANVAS"}</span>
+          <strong>
+            {selectedTextOption?.label || "Template controls"}
+          </strong>
+        </div>
+
         <button
-          className={content.textShadow ? "is-active" : ""}
+          className={[
+            "studio-toolbar-tool",
+            activePanel === "background" ? "is-active" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           type="button"
-          aria-label="Toggle text drop shadow"
-          aria-pressed={Boolean(content.textShadow)}
-          title="Text drop shadow"
-          onClick={() => updateContent({textShadow: !content.textShadow})}
-        >
-          S
-        </button>
-      </div>
-
-      <label>
-        <span>Font</span>
-        <select
-          value={content.fontKey || fontOptions[0]?.value || "montserrat"}
-          onChange={(event) => updateContent({fontKey: event.target.value})}
-        >
-          {fontOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label>
-        <span>Ratio</span>
-        <select
-          value={content.format || "square"}
-          onChange={(event) => updateContent({format: event.target.value})}
-        >
-          {EVENT_FORMAT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label>
-        <span>Composition</span>
-        <select
-          value={selectedComposition}
-          onChange={(event) =>
-            updateContent({composition: event.target.value})
+          aria-expanded={activePanel === "background"}
+          onClick={() =>
+            onPanelChange(activePanel === "background" ? "" : "background")
           }
         >
-          {compositionOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+          <span aria-hidden="true">▧</span>
+          Background
+        </button>
 
-      {selectedComposition === "flat" ? (
-        <label className="is-color">
-          <span>Background</span>
-          <i
-            style={{
-              background:
-                BRAND_COLOR_OPTIONS.find(
-                  (option) => option.value === content.flatColor,
-                )?.hex || "#27272A",
-            }}
-          />
-          <select
-            value={content.flatColor || "charcoal"}
-            onChange={(event) =>
-              updateContent({flatColor: event.target.value})
-            }
+        <div className="studio-toolbar-divider" aria-hidden="true" />
+
+        <div className="studio-toolbar-group is-alignment">
+          <span>Alignment · entire design</span>
+          {[
+            {value: "left", label: "Left", glyph: "≡"},
+            {value: "center", label: "Center", glyph: "≡"},
+            {value: "right", label: "Right", glyph: "≡"},
+          ].map((option) => (
+            <button
+              key={option.value}
+              className={[
+                alignment === option.value ? "is-active" : "",
+                `is-${option.value}`,
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              type="button"
+              aria-label={`Align all template text ${option.value}`}
+              aria-pressed={alignment === option.value}
+              onClick={() => updateContent({textAlignment: option.value})}
+            >
+              {option.glyph}
+            </button>
+          ))}
+          <button
+            className={content.textShadow ? "is-active" : ""}
+            type="button"
+            aria-label="Toggle text drop shadow"
+            aria-pressed={Boolean(content.textShadow)}
+            title="Text drop shadow"
+            onClick={() => updateContent({textShadow: !content.textShadow})}
           >
-            {BRAND_COLOR_OPTIONS.map((option) => (
+            S
+          </button>
+        </div>
+
+        <label>
+          <span>Title font</span>
+          <select
+            value={content.fontKey || fontOptions[0]?.value || "montserrat"}
+            onChange={(event) => updateContent({fontKey: event.target.value})}
+          >
+            {fontOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
         </label>
-      ) : null}
-      {selectedComposition === "color-overlay" ? (
-        <>
+
+        <label>
+          <span>Ratio</span>
+          <select
+            value={content.format || "square"}
+            onChange={(event) => updateContent({format: event.target.value})}
+          >
+            {EVENT_FORMAT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Composition</span>
+          <select
+            value={selectedComposition}
+            onChange={(event) =>
+              updateContent({composition: event.target.value})
+            }
+          >
+            {compositionOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {!["flat", "color-overlay"].includes(selectedComposition) ? (
+          <label>
+            <span>Palette</span>
+            <select
+              value={content.palette || "charcoal-red"}
+              onChange={(event) =>
+                updateContent({palette: event.target.value})
+              }
+            >
+              <option value="charcoal-red">Charcoal + Red</option>
+              <option value="warm-light">Warm Editorial</option>
+              <option value="blue-charcoal">Blue + Charcoal</option>
+            </select>
+          </label>
+        ) : null}
+
+        {selectedComposition === "flat" ? (
           <label className="is-color">
-            <span>Color</span>
+            <span>Background color</span>
             <i
               style={{
                 background:
                   BRAND_COLOR_OPTIONS.find(
-                    (option) => option.value === content.overlayColor,
-                  )?.hex || "#EF3E2D",
+                    (option) => option.value === content.flatColor,
+                  )?.hex || "#27272A",
               }}
             />
             <select
-              value={content.overlayColor || "red"}
+              value={content.flatColor || "charcoal"}
               onChange={(event) =>
-                updateContent({overlayColor: event.target.value})
+                updateContent({flatColor: event.target.value})
               }
             >
               {BRAND_COLOR_OPTIONS.map((option) => (
@@ -1054,23 +1171,50 @@ function EventQuickToolbar({content, updateContent, templateId}) {
               ))}
             </select>
           </label>
-          <label>
-            <span>Blend</span>
-            <select
-              value={content.overlayBlendMode || "multiply"}
-              onChange={(event) =>
-                updateContent({overlayBlendMode: event.target.value})
-              }
-            >
-              {EVENT_BLEND_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      ) : null}
+        ) : null}
+        {selectedComposition === "color-overlay" ? (
+          <>
+            <label className="is-color">
+              <span>Overlay color</span>
+              <i
+                style={{
+                  background:
+                    BRAND_COLOR_OPTIONS.find(
+                      (option) => option.value === content.overlayColor,
+                    )?.hex || "#EF3E2D",
+                }}
+              />
+              <select
+                value={content.overlayColor || "red"}
+                onChange={(event) =>
+                  updateContent({overlayColor: event.target.value})
+                }
+              >
+                {BRAND_COLOR_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Blend mode</span>
+              <select
+                value={content.overlayBlendMode || "multiply"}
+                onChange={(event) =>
+                  updateContent({overlayBlendMode: event.target.value})
+                }
+              >
+                {EVENT_BLEND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -3050,6 +3194,158 @@ function DocumentEditor({
   );
 }
 
+function EventProjectBriefSheet({project, updateProject, onClose}) {
+  return (
+    <aside
+      className="studio-event-side-sheet"
+      aria-label="Project brief"
+    >
+      <div className="studio-event-sheet-header">
+        <div>
+          <span>PROJECT BRIEF</span>
+          <h2>Ground the design</h2>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close project brief">
+          ×
+        </button>
+      </div>
+      <div className="studio-event-sheet-content">
+        <p className="studio-event-sheet-intro">
+          Studio is using manually entered event information. Central and
+          Planning Center source linking will appear here when that connector
+          is ready.
+        </p>
+        <div className="studio-source-options">
+          <button className="studio-source-option is-selected" type="button">
+            <span className="studio-source-radio" aria-hidden="true" />
+            <span>
+              <strong>Manual event details</strong>
+              <small>
+                Edit the visible copy directly on the canvas and use the
+                background tool for imagery.
+              </small>
+            </span>
+            <StatusPill tone="ready">AVAILABLE</StatusPill>
+          </button>
+          <button className="studio-source-option" type="button" disabled>
+            <span className="studio-source-radio" aria-hidden="true" />
+            <span>
+              <strong>Central / Planning Center event</strong>
+              <small>
+                Re-read authoritative event facts and preserve the source
+                identity.
+              </small>
+            </span>
+            <StatusPill>NEXT MILESTONE</StatusPill>
+          </button>
+        </div>
+        <InputField
+          label="Project name"
+          value={project.name}
+          maxLength={80}
+          wide
+          onChange={(name) => updateProject({name})}
+          hint="This identifies the project in Studio and does not appear on the graphic."
+        />
+        <div className="studio-event-brief-summary">
+          <div>
+            <span>Template</span>
+            <strong>{getTemplateById(project.templateId).name}</strong>
+          </div>
+          <div>
+            <span>Source</span>
+            <strong>Manual foundation</strong>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function EventReviewSheet({
+  project,
+  warnings,
+  exportState,
+  onClose,
+  onExport,
+}) {
+  const isExporting = exportState.status === "working";
+  return (
+    <aside className="studio-event-side-sheet" aria-label="Review checks">
+      <div className="studio-event-sheet-header">
+        <div>
+          <span>REVIEW</span>
+          <h2>{warnings.length ? "A few details need attention" : "Ready to export"}</h2>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close review">
+          ×
+        </button>
+      </div>
+      <div className="studio-event-sheet-content">
+        <div className="studio-review-summary">
+          <div>
+            <span>Template</span>
+            <strong>{getTemplateById(project.templateId).name}</strong>
+          </div>
+          <div>
+            <span>Format</span>
+            <strong>
+              {project.content.format === "screen"
+                ? "16:9"
+                : project.content.format === "portrait"
+                  ? "4:5"
+                  : "1:1"}
+            </strong>
+          </div>
+          <div>
+            <span>Status</span>
+            <strong>{project.status || "draft"}</strong>
+          </div>
+        </div>
+        <div
+          className={`studio-review-checks${warnings.length ? " has-warnings" : ""}`}
+        >
+          {warnings.length ? (
+            warnings.map((warning) => (
+              <div key={warning}>
+                <span aria-hidden="true">!</span>
+                <p>{warning}</p>
+              </div>
+            ))
+          ) : (
+            <>
+              <div>
+                <span aria-hidden="true">✓</span>
+                <p>Required content is present.</p>
+              </div>
+              <div>
+                <span aria-hidden="true">✓</span>
+                <p>The selected format uses a deterministic composition.</p>
+              </div>
+            </>
+          )}
+        </div>
+        <button
+          className="studio-button is-primary studio-event-sheet-export"
+          type="button"
+          disabled={warnings.length > 0 || isExporting}
+          onClick={onExport}
+        >
+          {isExporting ? "Preparing High-Res PNG…" : "Export High-Res PNG"}
+        </button>
+        {exportState.message ? (
+          <p
+            className={`studio-export-status is-${exportState.status}`}
+            role={exportState.status === "error" ? "alert" : "status"}
+          >
+            {exportState.message}
+          </p>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
 function EventStudioEditor({
   project,
   onChange,
@@ -3058,12 +3354,24 @@ function EventStudioEditor({
   onShare,
   cloud,
   unsplash,
+  saveState,
 }) {
-  const [step, setStep] = useState(0);
-  const [previewVisible, setPreviewVisible] = useState(false);
+  const [selectedField, setSelectedField] = useState("");
+  const [activePanel, setActivePanel] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [sideSheet, setSideSheet] = useState(
+    project.name.startsWith("Untitled ") ? "brief" : "",
+  );
   const [exportState, setExportState] = useState({status: "", message: ""});
   const previewElementRef = useRef(null);
   const warnings = getProjectWarnings(project);
+  const template = getTemplateById(project.templateId);
+  const formatLabel =
+    project.content.format === "screen"
+      ? "16:9"
+      : project.content.format === "portrait"
+        ? "4:5"
+        : "1:1";
 
   const updateProject = (changes) => {
     onChange({...project, ...changes, updatedAt: new Date().toISOString()});
@@ -3071,23 +3379,51 @@ function EventStudioEditor({
   const updateContent = (changes) => {
     updateProject({content: {...project.content, ...changes}});
   };
-  const currentStep = STUDIO_STEPS[step];
-  const runExport = async (type) => {
+  const openSideSheet = (sheet) => {
+    setSideSheet(sheet);
+    setActivePanel("");
+    setSelectedField("");
+    setMenuOpen(false);
+  };
+
+  useEffect(() => {
+    setSelectedField("");
+    setActivePanel("");
+    setMenuOpen(false);
+    setSideSheet(project.name.startsWith("Untitled ") ? "brief" : "");
+  }, [project.id]);
+
+  useEffect(() => {
+    const closeTransientUi = (event) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      setActivePanel("");
+      setSideSheet("");
+      setSelectedField("");
+    };
+    window.addEventListener("keydown", closeTransientUi);
+    return () => window.removeEventListener("keydown", closeTransientUi);
+  }, []);
+
+  const runExport = async () => {
+    setSelectedField("");
+    setActivePanel("");
+    setMenuOpen(false);
+    setSideSheet("");
     setExportState({
       status: "working",
-      message: `Preparing ${type === "pdf" ? "the PDF" : "the PNG"}…`,
+      message: "Preparing the high-resolution PNG…",
     });
     try {
-      const result =
-        type === "pdf"
-          ? await exportPolicyPdf(project, previewElementRef.current)
-          : await exportEventPng(project, previewElementRef.current);
+      await new Promise((resolve) =>
+        window.requestAnimationFrame(() =>
+          window.requestAnimationFrame(resolve),
+        ),
+      );
+      const result = await exportEventPng(project, previewElementRef.current);
       setExportState({
         status: "success",
-        message:
-          type === "png"
-            ? `${result.filename} was downloaded at ${result.width} × ${result.height}px.`
-            : `${result.filename} was downloaded.`,
+        message: `${result.filename} was downloaded at ${result.width} × ${result.height}px.`,
       });
     } catch (error) {
       setExportState({
@@ -3100,160 +3436,211 @@ function EventStudioEditor({
   };
 
   return (
-    <main className="studio-editor">
-      <div className="studio-editor-titlebar">
-        <div>
-          <span className="studio-kicker">
-            {getTemplateById(project.templateId).name}
-          </span>
-          <h1>{project.name}</h1>
-        </div>
-        <div className="studio-editor-title-actions">
-          <StatusPill tone="draft">DRAFT</StatusPill>
-          {!project.shared ? (
+    <main className="studio-event-editor">
+      <header className="studio-event-editor-topbar">
+        <div className="studio-event-editor-menu-area">
+          <div className="studio-event-menu-wrap">
             <button
-              className="studio-button is-secondary"
-              onClick={() => onShare(project.id)}
-              disabled={!cloud || !project.cloudBacked}
-              title={
-                !project.cloudBacked
-                  ? "Wait for this project to finish saving before sharing."
-                  : "Create a 30-day Studio share link."
-              }
+              className="studio-event-menu-button"
+              type="button"
+              aria-label="Open project menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((current) => !current)}
             >
-              Share
+              <span aria-hidden="true">☰</span>
             </button>
-          ) : (
-            <StatusPill>SHARED WITH YOU</StatusPill>
-          )}
-          <button
-            className="studio-button is-danger"
-            onClick={() => onDelete(project.id)}
-          >
-            {project.shared ? "Leave" : "Delete"}
-          </button>
-          <button
-            className="studio-button is-secondary studio-mobile-preview-button"
-            onClick={() => setPreviewVisible(true)}
-          >
-            Preview
-          </button>
-        </div>
-      </div>
-
-      <div className="studio-workspace">
-        <nav className="studio-step-rail" aria-label="Studio workflow">
-          {STUDIO_STEPS.map((item, index) => (
-            <button
-              key={item.id}
-              className={[
-                index === step ? "is-active" : "",
-                index < step ? "is-complete" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => setStep(index)}
-              aria-current={index === step ? "step" : undefined}
-            >
-              <span>{index < step ? "✓" : String(index + 1).padStart(2, "0")}</span>
-              <div>
-                <strong>{item.label}</strong>
-                <small>{item.description}</small>
+            {menuOpen ? (
+              <div className="studio-event-project-menu" role="menu">
+                <div>
+                  <span>{template.name}</span>
+                  <strong>{project.name}</strong>
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openSideSheet("brief");
+                  }}
+                >
+                  <span aria-hidden="true">◇</span>
+                  Project Brief
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openSideSheet("review");
+                  }}
+                >
+                  <span aria-hidden="true">✓</span>
+                  Review checks
+                  {warnings.length ? <i>{warnings.length}</i> : null}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!cloud || !project.cloudBacked || project.shared}
+                  onClick={() => {
+                    onShare(project.id);
+                    setMenuOpen(false);
+                  }}
+                >
+                  <span aria-hidden="true">↗</span>
+                  Share project
+                </button>
+                <div className="studio-event-menu-divider" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={warnings.length > 0 || exportState.status === "working"}
+                  onClick={runExport}
+                >
+                  <span aria-hidden="true">↓</span>
+                  Export PNG
+                </button>
+                <button type="button" role="menuitem" onClick={onBack}>
+                  <span aria-hidden="true">←</span>
+                  All projects
+                </button>
+                <div className="studio-event-menu-divider" />
+                <button
+                  className="is-danger"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onDelete(project.id)}
+                >
+                  <span aria-hidden="true">×</span>
+                  {project.shared ? "Leave project" : "Delete project"}
+                </button>
               </div>
-            </button>
-          ))}
-        </nav>
-
-        <section className="studio-editor-panel">
-          <StepContent
-            step={step}
-            project={project}
-            updateProject={updateProject}
-            updateContent={updateContent}
-            warnings={warnings}
-            onExportPng={() => runExport("png")}
-            onExportPdf={() => runExport("pdf")}
-            exportState={exportState}
-            cloud={cloud}
-            unsplash={unsplash}
-          />
-          <footer className="studio-workflow-footer">
-            <button
-              className="studio-button is-secondary"
-              disabled={step === 0}
-              onClick={() => setStep((current) => Math.max(0, current - 1))}
-            >
-              Previous
-            </button>
-            <span>
-              Step {step + 1} of {STUDIO_STEPS.length} · {currentStep.label}
-            </span>
-            {step < STUDIO_STEPS.length - 1 ? (
-              <button
-                className="studio-button is-primary"
-                onClick={() =>
-                  setStep((current) =>
-                    Math.min(STUDIO_STEPS.length - 1, current + 1),
-                  )
-                }
-              >
-                Continue
-              </button>
-            ) : (
-              <button className="studio-button is-secondary" onClick={onBack}>
-                Finish for Now
-              </button>
-            )}
-          </footer>
-        </section>
-
-        <aside
-          className={`studio-preview-panel${previewVisible ? " is-mobile-open" : ""}`}
-        >
-          <div className="studio-preview-toolbar">
-            <div>
-              <span>LIVE PREVIEW</span>
-              <strong>
-                {project.templateId === "policy-document"
-                  ? "US Letter"
-                  : project.content.format === "screen"
-                    ? "16:9"
-                    : project.content.format === "portrait"
-                      ? "4:5"
-                      : "1:1"}
-              </strong>
-            </div>
-            <button
-              className="studio-preview-close"
-              onClick={() => setPreviewVisible(false)}
-              aria-label="Close preview"
-            >
-              ×
-            </button>
+            ) : null}
           </div>
-          <div
-            className={`studio-preview-stage is-${project.templateId}`}
-            data-studio-print-preview
+          <button
+            className="studio-event-back-button"
+            type="button"
+            onClick={onBack}
+            aria-label="Return to Studio projects"
           >
-            <StudioPreview
-              project={project}
-              previewRef={previewElementRef}
-            />
-          </div>
-          {isEventTemplateId(project.templateId) ? (
-            <EventQuickToolbar
-              content={project.content}
-              updateContent={updateContent}
-              templateId={project.templateId}
-            />
-          ) : null}
-          <div className="studio-preview-note">
-            <span aria-hidden="true">●</span>
-            The preview is composed from controlled HTML and CSS, not a
-            generated final graphic.
-          </div>
-        </aside>
-      </div>
+            <img src="/favicon.svg" alt="" />
+            <span>
+              <strong>Central</strong>
+              <b>Studio</b>
+            </span>
+          </button>
+        </div>
+
+        <div className="studio-event-project-title">
+          <span>{template.name}</span>
+          <input
+            value={project.name}
+            maxLength="80"
+            aria-label="Project name"
+            onChange={(event) => updateProject({name: event.target.value})}
+          />
+        </div>
+
+        <div className="studio-event-editor-actions">
+          {saveState ? <span>{saveState}</span> : null}
+          <button
+            className={[
+              "studio-event-review-button",
+              warnings.length ? "has-warnings" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            type="button"
+            onClick={() => openSideSheet("review")}
+          >
+            {warnings.length ? `${warnings.length} checks` : "Ready"}
+          </button>
+          <button
+            className="studio-button is-primary"
+            type="button"
+            disabled={warnings.length > 0 || exportState.status === "working"}
+            title={
+              warnings.length
+                ? "Open Review checks to resolve export warnings."
+                : "Export a high-resolution PNG."
+            }
+            onClick={runExport}
+          >
+            {exportState.status === "working" ? "Exporting…" : "Export PNG"}
+          </button>
+        </div>
+      </header>
+
+      <section
+        className="studio-event-canvas-region"
+        onPointerDownCapture={() => setMenuOpen(false)}
+      >
+        <div className="studio-event-canvas-meta">
+          <span>LIVE CANVAS</span>
+          <strong>{formatLabel}</strong>
+          <p>Click any text to edit it. Template positions remain fixed.</p>
+        </div>
+        <div
+          className={`studio-event-canvas-stage is-${project.content.format || "square"}`}
+          data-studio-print-preview
+        >
+          <EventPreview
+            content={project.content}
+            previewRef={previewElementRef}
+            templateId={project.templateId}
+            editorMode={exportState.status !== "working"}
+            selectedField={selectedField}
+            onSelectField={(field) => {
+              setSelectedField(field);
+              if (field) setActivePanel("");
+            }}
+            onEditField={(field, value) =>
+              updateContent({[field]: value})
+            }
+          />
+        </div>
+        {exportState.message && exportState.status !== "working" ? (
+          <button
+            className={`studio-event-export-toast is-${exportState.status}`}
+            type="button"
+            onClick={() => setExportState({status: "", message: ""})}
+          >
+            <span>{exportState.message}</span>
+            <i aria-hidden="true">×</i>
+          </button>
+        ) : null}
+      </section>
+
+      <EventQuickToolbar
+        content={project.content}
+        updateContent={updateContent}
+        templateId={project.templateId}
+        selectedField={selectedField}
+        onSelectField={setSelectedField}
+        activePanel={activePanel}
+        onPanelChange={(panel) => {
+          setActivePanel(panel);
+          if (panel) setSelectedField("");
+        }}
+        cloud={cloud}
+        unsplash={unsplash}
+        project={project}
+      />
+
+      {sideSheet === "brief" ? (
+        <EventProjectBriefSheet
+          project={project}
+          updateProject={updateProject}
+          onClose={() => setSideSheet("")}
+        />
+      ) : null}
+      {sideSheet === "review" ? (
+        <EventReviewSheet
+          project={project}
+          warnings={warnings}
+          exportState={exportState}
+          onClose={() => setSideSheet("")}
+          onExport={runExport}
+        />
+      ) : null}
     </main>
   );
 }
@@ -3473,12 +3860,14 @@ function StudioApp() {
 
   return (
     <div className="studio-app">
-      <StudioHeader
-        authState={authState}
-        view={currentProject ? "editor" : "home"}
-        onHome={() => setCurrentProjectId("")}
-        saveState={saveState}
-      />
+      {!currentProject || isDocumentProject(currentProject) ? (
+        <StudioHeader
+          authState={authState}
+          view={currentProject ? "editor" : "home"}
+          onHome={() => setCurrentProjectId("")}
+          saveState={saveState}
+        />
+      ) : null}
       {cloudMessage ? (
         <div className="studio-cloud-message" role="status">
           <span>{cloudMessage}</span>
@@ -3496,6 +3885,7 @@ function StudioApp() {
           onShare={shareProject}
           cloud={cloud}
           unsplash={unsplash}
+          saveState={saveState}
         />
       ) : (
         <StudioHome

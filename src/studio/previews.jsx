@@ -619,7 +619,89 @@ function EventGraphicDecoration({composition}) {
   );
 }
 
-export function EventPreview({content, previewRef, templateId}) {
+const EVENT_EDITABLE_FIELDS = {
+  eyebrow: {label: "Utility label", maximum: 30},
+  title: {label: "Event title", maximum: 52},
+  subtitle: {label: "Supporting line", maximum: 110, multiline: true},
+  date: {label: "Date", maximum: 28},
+  time: {label: "Time", maximum: 24},
+  location: {label: "Location", maximum: 34},
+  cta: {label: "Call to action", maximum: 44},
+};
+
+function EditableEventText({
+  as: Tag,
+  children,
+  editorMode,
+  field,
+  onEditField,
+  onSelectField,
+  selectedField,
+  className = "",
+}) {
+  if (!editorMode) {
+    return <Tag className={className || undefined}>{children}</Tag>;
+  }
+
+  const config = EVENT_EDITABLE_FIELDS[field];
+  const commitValue = (event) => {
+    const rawValue = config.multiline
+      ? event.currentTarget.innerText
+      : event.currentTarget.textContent;
+    const value = String(rawValue || "")
+      .replace(/\u00a0/g, " ")
+      .replace(config.multiline ? /\r/g : /[\r\n]+/g, config.multiline ? "" : " ")
+      .slice(0, config.maximum);
+    if (value !== children) onEditField(field, value);
+  };
+
+  return (
+    <Tag
+      className={[
+        className,
+        "event-editable-field",
+        selectedField === field ? "is-selected" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck
+      role="textbox"
+      aria-label={`Edit ${config.label}`}
+      aria-multiline={config.multiline || undefined}
+      data-event-field={field}
+      data-placeholder={config.label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelectField(field);
+      }}
+      onFocus={() => onSelectField(field)}
+      onBlur={commitValue}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.currentTarget.blur();
+        }
+        if (event.key === "Enter" && !config.multiline) {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+      }}
+    >
+      {children}
+    </Tag>
+  );
+}
+
+export function EventPreview({
+  content,
+  previewRef,
+  templateId,
+  editorMode = false,
+  selectedField = "",
+  onSelectField = () => {},
+  onEditField = () => {},
+}) {
   const template = getTemplateById(templateId);
   const displayFont = getEventFont(templateId, content.fontKey);
   const composition = normalizeEventComposition(
@@ -646,13 +728,16 @@ export function EventPreview({content, previewRef, templateId}) {
         `is-${content.format || "square"}`,
         `is-${composition}`,
         `is-${content.palette || "charcoal-red"}`,
+        `is-font-${content.fontKey || displayFont.value}`,
         `is-text-${content.textAlignment || "left"}`,
         content.backgroundImage ? "has-background-image" : "",
         content.textShadow ? "has-text-shadow" : "",
         usesDarkCopy ? "has-dark-copy" : "",
+        editorMode ? "is-editor-canvas" : "",
       ]
         .filter(Boolean)
         .join(" ")}
+      onClick={editorMode ? () => onSelectField("") : undefined}
       style={{
         ...backgroundStyle,
         "--event-display-font": `"${displayFont.family}"`,
@@ -683,19 +768,87 @@ export function EventPreview({content, previewRef, templateId}) {
       ) : null}
       <EventGraphicDecoration composition={composition} />
       <div className="event-graphic-copy">
-        <span className="event-eyebrow">{content.eyebrow}</span>
-        <h2>{content.title}</h2>
-        <p>{content.subtitle}</p>
+        <EditableEventText
+          as="span"
+          className="event-eyebrow"
+          editorMode={editorMode}
+          field="eyebrow"
+          onEditField={onEditField}
+          onSelectField={onSelectField}
+          selectedField={selectedField}
+        >
+          {content.eyebrow}
+        </EditableEventText>
+        <EditableEventText
+          as="h2"
+          editorMode={editorMode}
+          field="title"
+          onEditField={onEditField}
+          onSelectField={onSelectField}
+          selectedField={selectedField}
+        >
+          {content.title}
+        </EditableEventText>
+        <EditableEventText
+          as="p"
+          editorMode={editorMode}
+          field="subtitle"
+          onEditField={onEditField}
+          onSelectField={onSelectField}
+          selectedField={selectedField}
+        >
+          {content.subtitle}
+        </EditableEventText>
       </div>
       <div className="event-graphic-details">
-        <strong>{content.date}</strong>
-        <span>
-          {[content.time, content.location].filter(Boolean).join(" · ")}
+        <EditableEventText
+          as="strong"
+          editorMode={editorMode}
+          field="date"
+          onEditField={onEditField}
+          onSelectField={onSelectField}
+          selectedField={selectedField}
+        >
+          {content.date}
+        </EditableEventText>
+        <span className="event-detail-line">
+          <EditableEventText
+            as="span"
+            editorMode={editorMode}
+            field="time"
+            onEditField={onEditField}
+            onSelectField={onSelectField}
+            selectedField={selectedField}
+          >
+            {content.time}
+          </EditableEventText>
+          {content.time && content.location ? (
+            <i aria-hidden="true">·</i>
+          ) : null}
+          <EditableEventText
+            as="span"
+            editorMode={editorMode}
+            field="location"
+            onEditField={onEditField}
+            onSelectField={onSelectField}
+            selectedField={selectedField}
+          >
+            {content.location}
+          </EditableEventText>
         </span>
       </div>
       <footer className="event-graphic-footer">
         <BrandMark inverse={!usesDarkCopy} />
-        <span>{content.cta}</span>
+        <EditableEventText
+          as="span"
+          editorMode={editorMode}
+          field="cta"
+          onEditField={onEditField}
+          onSelectField={onSelectField}
+          selectedField={selectedField}
+        >
+          {content.cta}
+        </EditableEventText>
       </footer>
     </article>
   );

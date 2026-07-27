@@ -388,6 +388,22 @@ test("event projects accept valid sources and reject cross-project upload paths"
   await assertSucceeds(
     db.doc("centralStudioProjects/event-future").set(futurePayload),
   );
+  const centerStagePayload = eventProjectPayload();
+  centerStagePayload.templateId = "event-center-stage";
+  centerStagePayload.content.fontKey = "league-spartan";
+  centerStagePayload.content.composition = "center-burst";
+  await assertSucceeds(
+    db.doc("centralStudioProjects/event-center-stage").set(centerStagePayload),
+  );
+  const timelessCenterPayload = eventProjectPayload();
+  timelessCenterPayload.templateId = "event-timeless-center";
+  timelessCenterPayload.content.fontKey = "bodoni-moda";
+  timelessCenterPayload.content.composition = "serif-medallion";
+  await assertSucceeds(
+    db.doc("centralStudioProjects/event-timeless-center").set(
+      timelessCenterPayload,
+    ),
+  );
   const editorialPayload = eventProjectPayload();
   editorialPayload.templateId = "event-editorial-invitation";
   editorialPayload.content.fontKey = "bodoni-moda";
@@ -435,6 +451,15 @@ test("event projects accept valid sources and reject cross-project upload paths"
   mismatchedPayload.content.composition = "future-grid";
   await assertFails(
     db.doc("centralStudioProjects/event-mismatched").set(mismatchedPayload),
+  );
+  const mismatchedCenteredPayload = eventProjectPayload();
+  mismatchedCenteredPayload.templateId = "event-timeless-center";
+  mismatchedCenteredPayload.content.fontKey = "forum";
+  mismatchedCenteredPayload.content.composition = "center-frame";
+  await assertFails(
+    db.doc("centralStudioProjects/event-mismatched-centered").set(
+      mismatchedCenteredPayload,
+    ),
   );
   await assertSucceeds(
     reference.update({

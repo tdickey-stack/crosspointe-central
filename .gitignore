@@ -74,9 +74,6 @@ functions/.secret.local
 !.env.example
 !functions/.env.example
 
-# Local Central Studio prototype generations
-output/studio/
-
 # OS files
 .DS_Store
 

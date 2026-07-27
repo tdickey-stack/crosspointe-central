@@ -19,67 +19,6 @@
   var HOSTED_WHATS_NEW_CONFIG_URL = "/content/whats-new.json";
   var FIRST_ADMIN_BOOTSTRAP_ENDPOINT = "/api/admin/bootstrap-first-user";
   var PUBLISH_PREVIEW_CONTENT_ENDPOINT = "/api/admin/publish-preview-content";
-  var BULLETIN_MODE_ENDPOINT = "/api/admin/bulletin-mode";
-  var BULLETIN_CAMPAIGN_ICON_PATH = "/bulletin-campaign-icons/";
-  var BULLETIN_CAMPAIGN_ICONS = [
-    {id: "general", label: "General"},
-    {id: "gift", label: "Gift"},
-    {id: "backpack", label: "Backpack"},
-    {id: "house", label: "House"},
-    {id: "food", label: "Food / Meals"},
-    {id: "clothing", label: "Clothing"},
-    {id: "heart", label: "Heart / Care"},
-    {id: "helping-hands", label: "Helping Hands"},
-    {id: "praying-hands", label: "Praying Hands"},
-    {id: "school", label: "School"},
-    {id: "family", label: "Family"},
-    {id: "medical", label: "Medical"},
-    {id: "church", label: "Church"},
-    {id: "missions", label: "Missions / Globe"},
-    {id: "donation", label: "Donation"},
-    {id: "calendar", label: "Calendar"},
-  ];
-  var PRINT_MODE_STEPS = [
-    {
-      id: "layout",
-      label: "Page Layout",
-      shortLabel: "Layout",
-      description: "Choose the printed size and finishing format.",
-    },
-    {
-      id: "hero",
-      label: "Hero Info",
-      shortLabel: "Hero",
-      description: "Set the Sunday date, front heading, and main feature.",
-    },
-    {
-      id: "front",
-      label: "Front Page",
-      shortLabel: "Front",
-      description: "Choose giving, campaign, and serve information.",
-    },
-    {
-      id: "events",
-      label: "Events",
-      shortLabel: "Events",
-      description: "Build the event list for the back of the insert.",
-    },
-    {
-      id: "review",
-      label: "Review & Print",
-      shortLabel: "Print",
-      description: "Check both sides, then print or save a PDF.",
-    },
-  ];
-  var PRINT_MODE_MAX_CAMPAIGNS = 3;
-  var PRINT_MODE_MAX_SERVE_NEEDS = 3;
-  var PRINT_MODE_MAX_FRONT_CONTENT_ITEMS = 4;
-  var PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS = 45;
-  var PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS = 70;
-  var PRINT_MODE_EVENT_CONTINUATION_TRIGGER_WEIGHT = 6;
-  var PRINT_MODE_EVENT_CONTINUATION_MAX_COLUMN_WEIGHT = 7.5;
-  var PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS = 18;
-  var PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS = 12;
   var SUBMIT_CHANGE_REQUEST_ENDPOINT = "/api/admin/submit-change-request";
   var REVIEW_CHANGE_REQUEST_ENDPOINT = "/api/admin/review-change-request";
   var LIST_ADMIN_USERS_ENDPOINT = "/api/admin/list-users";
@@ -158,31 +97,12 @@
     },
     {
       id: "hub",
-      label: "Homepage",
+      label: "Hub",
       route: "/admin/hub",
       pageAccessKey: "hub",
       summary: "Main Central homepage copy plus the Sunday-mode hero and labels that belong on the Hub page.",
       collectionPath: DRAFT_HUB_SETTINGS_DOC_PATH,
       status: "Preview workflow",
-    },
-    {
-      id: "bulletin",
-      label: "Print Mode",
-      route: "/admin/bulletin",
-      pageAccessKey: "bulletin",
-      summary: "Build and print a guided Sunday insert from current Central content.",
-      collectionPath: "centralAdmin/root/public/bulletinMode",
-      status: "Print workflow",
-    },
-    {
-      id: "studio",
-      label: "Studio",
-      route: "/studio",
-      pageAccessKey: "studio",
-      summary: "Create controlled policy documents and event graphics from approved CrossPointe templates.",
-      collectionPath: "",
-      status: "Creative workspace",
-      externalRoute: true,
     },
     {
       id: "sunday",
@@ -232,43 +152,11 @@
     {
       id: "settings",
       label: "Settings",
-      navLabel: "Overview",
       route: "/admin/settings",
       pageAccessKey: "settings",
-      pageAccessKeys: ["settings", "roomRules", "users"],
-      summary: "Sunday Mode, room presentation, and access for your admin team.",
+      summary: "Operational Sunday controls, room rules, and admin user access for the dashboard.",
       collectionPath: PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
       status: "Preview workflow",
-    },
-    {
-      id: "settings-sunday-mode",
-      label: "Sunday Mode",
-      route: "/admin/settings/sunday-mode",
-      pageAccessKey: "settings",
-      summary: "Live and development Sunday Mode schedules and overrides.",
-      collectionPath: PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
-      status: "Preview workflow",
-      hideFromOverview: true,
-    },
-    {
-      id: "settings-rooms",
-      label: "Rooms",
-      route: "/admin/settings/rooms",
-      pageAccessKey: "roomRules",
-      summary: "Rename or hide Planning Center rooms when they appear in Central.",
-      collectionPath: PUBLISHED_ROOM_RULES_COLLECTION_PATH,
-      status: "Preview workflow",
-      hideFromOverview: true,
-    },
-    {
-      id: "settings-team",
-      label: "Team & Permissions",
-      route: "/admin/settings/team",
-      pageAccessKey: "users",
-      summary: "Manage admin users, invitations, account status, and page access.",
-      collectionPath: CENTRAL_ADMIN_USERS_COLLECTION_PATH,
-      status: "Admin access",
-      hideFromOverview: true,
     },
     {
       id: "integrations",
@@ -281,10 +169,10 @@
     },
     {
       id: "wayfinder",
-      label: "Wayfinder",
+      label: "Wayfinder Lab",
       route: "/admin/wayfinder",
       pageAccessKey: "wayfinder",
-      summary: "Manage Wayfinder answers, source information, and temporary notices.",
+      summary: "Private testing for Wayfinder's approved knowledge retrieval before Gemini is connected.",
       collectionPath: "centralAssistantKnowledgeDraft",
       status: "Private prototype",
     },
@@ -293,155 +181,11 @@
       label: "Change Requests",
       route: "/admin/change-requests",
       pageAccessKey: "changeRequests",
-      summary: "Review proposed changes before they go live.",
+      summary: "Approval queue for proposed edits before they publish.",
       collectionPath: CENTRAL_ADMIN_CHANGE_REQUESTS_COLLECTION_PATH,
       status: "Approval queue",
     },
   ];
-  var ADMIN_SIDEBAR_GROUPS = [
-    {
-      id: "hub",
-      label: "Hub",
-      pageIds: [
-        "hub",
-        "quick-links",
-        "status-banner",
-        "serve-needs",
-        "resources",
-        "campaigns",
-        "next-steps",
-      ],
-    },
-    {
-      id: "settings",
-      label: "Settings",
-      pageIds: [
-        "settings",
-        "settings-sunday-mode",
-        "settings-rooms",
-        "settings-team",
-      ],
-    },
-  ];
-  var ADMIN_SIDEBAR_ROOT_ITEMS = [
-    {type: "page", id: "overview"},
-    {type: "group", id: "hub"},
-    {type: "page", id: "sunday"},
-    {type: "page", id: "bulletin"},
-    {type: "page", id: "studio"},
-    {type: "group", id: "settings"},
-    {type: "page", id: "integrations"},
-    {type: "page", id: "wayfinder"},
-    {type: "page", id: "change-requests"},
-  ];
-  var ADMIN_SUCCESS_BUTTON_ACTIONS = {
-    "save-bulletin": true,
-    "publish-hub-settings": true,
-    "publish-hub-sunday": true,
-    "publish-sunday": true,
-    "publish-settings-sunday": true,
-    "publish-integrations": true,
-    "publish-wayfinder-notice": true,
-    "publish-wayfinder-knowledge": true,
-    "save-room-rule": true,
-    "publish-room-rules": true,
-    "save-admin-user": true,
-    "save-quick-link": true,
-    "publish-status-banner": true,
-    "publish-quick-links": true,
-    "save-resource": true,
-    "publish-resources": true,
-    "save-campaign": true,
-    "publish-campaigns": true,
-    "save-serve-need": true,
-    "publish-serve-needs": true,
-    "save-next-step": true,
-    "publish-next-steps": true,
-  };
-  var ADMIN_ACTION_SUCCESS_RESET_MS = 3600;
-  var ADMIN_ACTION_SUCCESS_TRANSITION_MS = 1000;
-  var ADMIN_QUICK_LINK_REVEAL_RESET_MS = 700;
-  var ADMIN_FLOATING_SAVE_BAR_EXIT_MS = 480;
-  var ADMIN_COLLECTION_EDITOR_EXIT_MS = 720;
-  var ADMIN_ACTION_DIRTY_SCOPES = {
-    "save-bulletin": "bulletin",
-    "publish-hub-settings": "hub-settings",
-    "publish-hub-sunday": "hub-sunday",
-    "publish-sunday": "sunday",
-    "publish-settings-sunday": "settings-sunday",
-    "publish-integrations": "integrations",
-    "save-quick-link": "quick-link",
-    "publish-status-banner": "status-banner",
-    "save-resource": "resource",
-    "save-campaign": "campaign",
-    "save-serve-need": "serve-need",
-    "save-next-step": "next-step",
-    "save-room-rule": "room-rule",
-    "save-admin-user": "admin-user",
-  };
-  var ADMIN_DIRTY_SCOPE_RESET_ACTIONS = {
-    "hub-settings": "reset-hub-settings",
-    "hub-sunday": "reset-hub-sunday",
-    "sunday": "reset-sunday",
-    "settings-sunday": "reset-settings-sunday",
-    "integrations": "reset-integrations",
-    "quick-link": "reset-quick-link-form",
-    "status-banner": "reset-status-banner-form",
-    "resource": "reset-resource-form",
-    "campaign": "reset-campaign-form",
-    "serve-need": "reset-serve-need-form",
-    "next-step": "reset-next-step-form",
-    "room-rule": "reset-room-rule-form",
-    "admin-user": "reset-admin-user-form",
-  };
-  var ADMIN_RESET_ACTION_DIRTY_SCOPES = Object.keys(
-      ADMIN_DIRTY_SCOPE_RESET_ACTIONS,
-  ).reduce(function(scopes, scope) {
-    scopes[ADMIN_DIRTY_SCOPE_RESET_ACTIONS[scope]] = scope;
-    return scopes;
-  }, {});
-  var ADMIN_EDIT_ACTION_DIRTY_SCOPES = {
-    "edit-quick-link": "quick-link",
-    "edit-resource": "resource",
-    "edit-campaign": "campaign",
-    "edit-serve-need": "serve-need",
-    "edit-next-step": "next-step",
-    "edit-room-rule": "room-rule",
-    "edit-admin-user": "admin-user",
-  };
-  var ADMIN_COLLECTION_EDITOR_DIRTY_SCOPES = {
-    quickLinks: "quick-link",
-    resources: "resource",
-    campaigns: "campaign",
-    serveNeeds: "serve-need",
-    nextSteps: "next-step",
-    roomRules: "room-rule",
-  };
-  var ADMIN_HIDDEN_STATUS_PILL_LABELS = {
-    "admin only": true,
-    "approval queue": true,
-    "approval required": true,
-    "approval workflow": true,
-    "can publish": true,
-    "can publish live preview": true,
-    "can change preview state": true,
-    "editable": true,
-    "edit & publish": true,
-    "foundation": true,
-    "isolated": true,
-    "next patch": true,
-    "operational controls": true,
-    "preview workflow": true,
-    "preview-safe": true,
-    "private prototype": true,
-    "production": true,
-    "published workflow": true,
-    "read only": true,
-    "ready to configure": true,
-    "restricted": true,
-    "submit for approval": true,
-    "write access": true,
-  };
   var CENTRAL_ALLOWED_EMAIL_DOMAINS = ["crosspointe.tv"];
   var CENTRAL_ALLOWED_ADMIN_EMAILS = ["tylerdickey17@gmail.com"];
   var CENTRAL_THEME_STORAGE_KEY = "central-theme-override-v2";
@@ -583,8 +327,6 @@
   ];
   var FIRST_ADMIN_PAGE_ACCESS = {
     hub: "admin",
-    bulletin: "admin",
-    studio: "admin",
     settings: "admin",
     integrations: "admin",
     wayfinder: "admin",
@@ -620,76 +362,6 @@
     "edit",
     "approve",
     "admin",
-  ];
-  var ADMIN_USER_PERMISSION_GROUPS = [
-    {
-      label: "Content",
-      description: "Everyday pages and publishing tools.",
-      keys: [
-        "hub",
-        "bulletin",
-        "thisSunday",
-        "quickLinks",
-        "statusBanner",
-        "resources",
-        "campaigns",
-        "nextSteps",
-        "serveNeeds",
-      ],
-    },
-    {
-      label: "Creative",
-      description: "Controlled document and graphic creation tools.",
-      keys: ["studio"],
-    },
-    {
-      label: "Operations",
-      description: "Site behavior, integrations, rooms, and Wayfinder.",
-      keys: ["settings", "integrations", "roomRules", "wayfinder"],
-    },
-    {
-      label: "Administration",
-      description: "Approvals and access management.",
-      keys: ["changeRequests", "users", "roles"],
-    },
-  ];
-  var ADMIN_USER_ACCESS_PRESETS = [
-    {
-      id: "viewer",
-      label: "View Only",
-      description: "Can see Central content without changing it.",
-      permission: "view",
-      changeRequests: "none",
-      administration: "none",
-      wayfinder: "view",
-    },
-    {
-      id: "contributor",
-      label: "Contributor",
-      description: "Can prepare changes for someone else to approve.",
-      permission: "propose",
-      changeRequests: "view",
-      administration: "none",
-      wayfinder: "view",
-    },
-    {
-      id: "publisher",
-      label: "Publisher",
-      description: "Can edit and publish content without managing users.",
-      permission: "edit",
-      changeRequests: "approve",
-      administration: "none",
-      wayfinder: "view",
-    },
-    {
-      id: "administrator",
-      label: "Administrator",
-      description: "Full access, including team and permission management.",
-      permission: "admin",
-      changeRequests: "admin",
-      administration: "admin",
-      wayfinder: "admin",
-    },
   ];
   var SUNDAY_MODE_OVERRIDE_OPTIONS = [
     {
@@ -742,28 +414,10 @@
   var adminWhatsNewEscapeHandler = null;
   var adminWhatsNewUnsubscribe = null;
   var hostedWhatsNewConfigPromise = null;
-  var adminUserEditorCloseTimer = null;
   var adminState = {
     bootMode: window.CENTRAL_BOOT_MODE || "public",
     currentPageId: getCurrentAdminPageId_(),
     sidebarOpen: shouldAdminSidebarStartOpen_(),
-    sidebarNavGroup: getAdminSidebarGroupForPageId_(
-        getCurrentAdminPageId_(),
-    ),
-    actionFeedbackPendingKey: "",
-    actionFeedbackSuccessKey: "",
-    actionFeedbackSuccessPlayed: false,
-    dirtyScopes: {},
-    activeDirtyScope: "",
-    floatingSaveBarScope: "",
-    floatingSaveBarExitScope: "",
-    floatingSaveBarExitLabel: "",
-    collectionEditorOpen: "",
-    collectionEditorFocusPending: false,
-    collectionEditorEntering: false,
-    collectionEditorExiting: "",
-    collectionEditorCloseAfterExit: "",
-    collectionActionsEntering: "",
     firebaseReady: false,
     firebaseProjectId: "",
     usingEmulators: shouldUseFirebaseEmulators_(),
@@ -803,7 +457,6 @@
     quickLinksDraftInitialized: false,
     quickLinksUsingPublishedFallback: false,
     quickLinksEditingId: "",
-    quickLinksRecentlyAddedId: "",
     quickLinksError: "",
     quickLinksMessage: "",
     resourcesLoaded: false,
@@ -878,8 +531,6 @@
     settingsSundayError: "",
     settingsSundayMessage: "",
     wayfinderAlphaEnabled: false,
-    wayfinderAlphaLoaded: false,
-    wayfinderAlphaLoading: false,
     wayfinderAlphaSaving: false,
     wayfinderAlphaError: "",
     wayfinderAlphaMessage: "",
@@ -951,8 +602,6 @@
     adminUsersDraft: createEmptyAdminUserDraft_(),
     adminUsersEditingUid: "",
     adminUsersEditingInviteId: "",
-    adminUsersEditorOpen: false,
-    adminUsersEditorEntering: false,
     adminUsersError: "",
     adminUsersMessage: "",
     hubLoaded: false,
@@ -972,28 +621,6 @@
     hubSundayDraft: createEmptyHubSundayDraft_(),
     hubSundayError: "",
     hubSundayMessage: "",
-    bulletinLoaded: false,
-    bulletinLoading: false,
-    bulletinSaving: false,
-    bulletinImageUploading: false,
-    bulletinCentralData: null,
-    bulletinDraft: createEmptyBulletinDraft_(),
-    bulletinEditingEventId: "",
-    bulletinEventFilter: "week1",
-    bulletinSync: null,
-    bulletinError: "",
-    bulletinMessage: "",
-    bulletinFallbackBlockEditorOpen: false,
-    bulletinFallbackBlockEditingId: "",
-    bulletinFallbackBlockDraft: createEmptyBulletinFallbackBlockDraft_(),
-    bulletinFallbackBlockImageUploading: false,
-    printModeQuickAddSection: "",
-    printModeStep: 1,
-    printModeStepDirection: "",
-    printModePreviewSide: "front",
-    printModePreviewDirection: "",
-    printModePreviewSwitching: false,
-    printModeFormatTransition: "",
     sundayLoaded: false,
     sundayLoading: false,
     sundayCurrent: null,
@@ -1049,17 +676,10 @@
   var appEl = null;
   var adminThemeMediaQuery = null;
   var adminThemeOverride = "";
-  var adminPrintThemeLocked = false;
-  var adminThemeBeforePrint = "";
-  var adminTitleBeforePrint = "";
   var adminSortDragSection = "";
   var adminSortDragDocId = "";
   var adminSortDropDocId = "";
   var adminSortDropPlacement = "";
-  var adminSortDropZone = "";
-  var adminActionSuccessResetTimer = null;
-  var adminFloatingSaveBarExitTimer = null;
-  var adminCollectionEditorExitTimer = null;
 
   if (!isAdminRoute_()) {
     return;
@@ -1089,9 +709,6 @@
     appEl.addEventListener("dragend", handleAdminDragEnd_);
     document.addEventListener("keydown", handleAdminKeyDown_);
     window.addEventListener("popstate", handleAdminPopState_);
-    window.addEventListener("beforeunload", handleAdminBeforeUnload_);
-    window.addEventListener("beforeprint", beginAdminPrintThemeLock_);
-    window.addEventListener("afterprint", endAdminPrintThemeLock_);
 
     renderAdmin_();
     initializeFirebaseFoundation_();
@@ -1121,55 +738,13 @@
   }
 
   function handleAdminThemeMediaChange_(event) {
-    if (
-      adminThemeOverride ||
-      adminPrintThemeLocked ||
-      (window.matchMedia && window.matchMedia("print").matches)
-    ) {
+    if (adminThemeOverride) {
       return;
     }
 
     applyAdminTheme_(
         event && event.matches ? CENTRAL_THEME_DARK : CENTRAL_THEME_LIGHT,
     );
-  }
-
-  function beginAdminPrintThemeLock_() {
-    if (!adminPrintThemeLocked) {
-      adminThemeBeforePrint = getResolvedAdminTheme_();
-    }
-
-    adminPrintThemeLocked = true;
-    applyAdminTheme_(adminThemeBeforePrint);
-  }
-
-  function endAdminPrintThemeLock_() {
-    var themeToRestore = adminThemeBeforePrint;
-    adminPrintThemeLocked = false;
-    adminThemeBeforePrint = "";
-
-    restoreAdminPrintTitle_();
-
-    if (isValidAdminTheme_(themeToRestore)) {
-      applyAdminTheme_(themeToRestore);
-    }
-  }
-
-  function setAdminPrintTitle_(title) {
-    if (!adminTitleBeforePrint) {
-      adminTitleBeforePrint = document.title;
-    }
-
-    document.title = String(title || document.title);
-  }
-
-  function restoreAdminPrintTitle_() {
-    if (!adminTitleBeforePrint) {
-      return;
-    }
-
-    document.title = adminTitleBeforePrint;
-    adminTitleBeforePrint = "";
   }
 
   function readStoredAdminTheme_() {
@@ -1354,8 +929,6 @@
       handlePendingAdminRedirectResult_();
 
       adminAuth.onAuthStateChanged(function(user) {
-        clearAllAdminDirtyScopes_(true);
-        clearAdminActionFeedback_();
         adminState.user = user;
         adminState.userEmailAllowed = isAllowedAdminEmail_(user && user.email);
         adminState.authLoading = false;
@@ -1512,76 +1085,6 @@
     var button = event.target.closest("[data-admin-action]");
     if (button) {
       var action = button.getAttribute("data-admin-action");
-      var resetDirtyScope = ADMIN_RESET_ACTION_DIRTY_SCOPES[action] || "";
-      var editDirtyScope = ADMIN_EDIT_ACTION_DIRTY_SCOPES[action] || "";
-
-      if (
-        action === "reset-campaign-form" &&
-        adminState.printModeQuickAddSection === "campaigns"
-      ) {
-        event.preventDefault();
-        clearAdminDirtyScope_("campaign");
-        resetCampaignsDraft_();
-        adminState.printModeQuickAddSection = "";
-        renderAdmin_();
-        return;
-      }
-
-      if (
-        action === "reset-serve-need-form" &&
-        adminState.printModeQuickAddSection === "serveNeeds"
-      ) {
-        event.preventDefault();
-        clearAdminDirtyScope_("serve-need");
-        resetServeNeedsDraft_();
-        adminState.printModeQuickAddSection = "";
-        renderAdmin_();
-        return;
-      }
-
-      if (resetDirtyScope) {
-        var resetCollectionSection =
-          getAdminCollectionSectionForDirtyScope_(resetDirtyScope);
-        if (resetCollectionSection &&
-          adminState.collectionEditorOpen === resetCollectionSection) {
-          startAdminCollectionEditorExit_(resetCollectionSection);
-        }
-        clearAdminDirtyScope_(resetDirtyScope);
-        if (resetCollectionSection) {
-          event.preventDefault();
-          return;
-        }
-      }
-
-      if (editDirtyScope) {
-        if (!confirmDiscardAdminChanges_(editDirtyScope)) {
-          event.preventDefault();
-          return;
-        }
-        clearAdminDirtyScope_(editDirtyScope);
-        var editCollectionSection =
-          getAdminCollectionSectionForDirtyScope_(editDirtyScope);
-        if (editCollectionSection) {
-          cancelAdminCollectionEditorExit_();
-          adminState.collectionEditorOpen = editCollectionSection;
-          adminState.collectionEditorFocusPending = true;
-          adminState.collectionEditorEntering = true;
-          adminState.collectionEditorExiting = "";
-          adminState.collectionActionsEntering = "";
-        }
-      }
-
-      if (isAdminSuccessButtonAction_(action)) {
-        beginAdminActionFeedback_(action);
-      }
-
-      if (action === "open-collection-editor") {
-        event.preventDefault();
-        openAdminCollectionEditor_(
-            button.getAttribute("data-admin-collection-editor") || "",
-        );
-        return;
-      }
 
       if (action === "sign-in") {
         event.preventDefault();
@@ -1603,9 +1106,6 @@
 
       if (action === "sign-out") {
         event.preventDefault();
-        if (!confirmDiscardAdminChanges_()) {
-          return;
-        }
         signOutFromAdmin_();
         return;
       }
@@ -1613,175 +1113,6 @@
       if (action === "bootstrap-first-admin") {
         event.preventDefault();
         bootstrapFirstAdminUser_();
-        return;
-      }
-
-      if (action === "save-bulletin") {
-        event.preventDefault();
-        saveBulletinMode_();
-        return;
-      }
-
-      if (action === "print-mode-step") {
-        event.preventDefault();
-        setPrintModeStep_(
-            Number(button.getAttribute("data-admin-print-mode-step")),
-        );
-        return;
-      }
-
-      if (action === "print-mode-previous") {
-        event.preventDefault();
-        setPrintModeStep_(adminState.printModeStep - 1);
-        return;
-      }
-
-      if (action === "print-mode-next") {
-        event.preventDefault();
-        setPrintModeStep_(adminState.printModeStep + 1);
-        return;
-      }
-
-      if (action === "print-mode-preview-side") {
-        event.preventDefault();
-        setPrintModePreviewSide_(
-            button.getAttribute("data-admin-print-mode-preview-side"),
-        );
-        return;
-      }
-
-      if (action === "open-print-mode-quick-add") {
-        event.preventDefault();
-        openPrintModeQuickAdd_(
-            button.getAttribute("data-admin-print-mode-quick-add"),
-        );
-        return;
-      }
-
-      if (action === "close-print-mode-quick-add") {
-        event.preventDefault();
-        closePrintModeQuickAdd_();
-        return;
-      }
-
-      if (action === "open-bulletin-fallback-block-editor") {
-        event.preventDefault();
-        openBulletinFallbackBlockEditor_();
-        return;
-      }
-
-      if (action === "edit-bulletin-fallback-block") {
-        event.preventDefault();
-        openBulletinFallbackBlockEditor_(
-            button.getAttribute("data-admin-doc-id"),
-        );
-        return;
-      }
-
-      if (action === "close-bulletin-fallback-block-editor") {
-        event.preventDefault();
-        closeBulletinFallbackBlockEditor_();
-        return;
-      }
-
-      if (action === "save-bulletin-fallback-block") {
-        event.preventDefault();
-        saveBulletinFallbackBlock_();
-        return;
-      }
-
-      if (action === "move-bulletin-fallback-block") {
-        event.preventDefault();
-        moveBulletinFallbackBlock_(
-            button.getAttribute("data-admin-doc-id"),
-            button.getAttribute("data-admin-move-direction"),
-        );
-        return;
-      }
-
-      if (action === "toggle-bulletin-fallback-block") {
-        event.preventDefault();
-        toggleBulletinFallbackBlock_(
-            button.getAttribute("data-admin-doc-id"),
-        );
-        return;
-      }
-
-      if (action === "remove-bulletin-fallback-block") {
-        event.preventDefault();
-        removeBulletinFallbackBlock_(
-            button.getAttribute("data-admin-doc-id"),
-        );
-        return;
-      }
-
-      if (action === "remove-bulletin-fallback-block-image") {
-        event.preventDefault();
-        adminState.bulletinFallbackBlockDraft.imageUrl = "";
-        adminState.bulletinFallbackBlockDraft.imageStoragePath = "";
-        renderAdmin_();
-        return;
-      }
-
-      if (action === "remove-bulletin-fallback-image") {
-        event.preventDefault();
-        markAdminDirtyScope_("bulletin");
-        adminState.bulletinDraft.fallbackHero.imageUrl = "";
-        adminState.bulletinDraft.fallbackHero.imageStoragePath = "";
-        adminState.bulletinMessage =
-          "Welcome image removed from this draft. Save your changes to keep it.";
-        renderAdmin_();
-        return;
-      }
-
-      if (action === "print-bulletin") {
-        event.preventDefault();
-        printBulletin_();
-        return;
-      }
-
-      if (action === "refresh-bulletin") {
-        event.preventDefault();
-        if (!confirmDiscardAdminChanges_("bulletin")) {
-          return;
-        }
-        adminState.bulletinEditingEventId = "";
-        adminState.bulletinError = "";
-        resetCurrentCentralDataCache_();
-        loadBulletinMode_(true);
-        return;
-      }
-
-      if (action === "edit-bulletin-event") {
-        event.preventDefault();
-        adminState.bulletinEditingEventId =
-          button.getAttribute("data-admin-bulletin-event-id") || "";
-        renderAdmin_();
-        return;
-      }
-
-      if (action === "close-bulletin-event-editor") {
-        event.preventDefault();
-        adminState.bulletinEditingEventId = "";
-        renderAdmin_();
-        return;
-      }
-
-      if (action === "filter-bulletin-events") {
-        event.preventDefault();
-        adminState.bulletinEventFilter =
-          button.getAttribute("data-admin-bulletin-filter") || "week1";
-        renderAdmin_();
-        return;
-      }
-
-      if (action === "bulk-bulletin-events") {
-        event.preventDefault();
-        markAdminDirtyScope_("bulletin");
-        updateBulletinEventBulkInclusion_(
-            button.getAttribute("data-admin-bulletin-bulk") || "",
-        );
-        renderAdmin_();
         return;
       }
 
@@ -1852,9 +1183,6 @@
       if (action === "reset-campaign-form") {
         event.preventDefault();
         resetCampaignsDraft_();
-        if (adminState.printModeQuickAddSection === "campaigns") {
-          adminState.printModeQuickAddSection = "";
-        }
         renderAdmin_();
         return;
       }
@@ -2179,9 +1507,6 @@
       if (action === "reset-serve-need-form") {
         event.preventDefault();
         resetServeNeedsDraft_();
-        if (adminState.printModeQuickAddSection === "serveNeeds") {
-          adminState.printModeQuickAddSection = "";
-        }
         renderAdmin_();
         return;
       }
@@ -2247,34 +1572,9 @@
         return;
       }
 
-      if (action === "open-admin-user-editor") {
-        event.preventDefault();
-        openAdminUserEditor_();
-        return;
-      }
-
-      if (action === "close-admin-user-editor") {
-        event.preventDefault();
-        closeAdminUserEditor_({
-          skipConfirm:
-            button.getAttribute("data-admin-close-skip-confirm") === "true",
-        });
-        return;
-      }
-
-      if (action === "apply-admin-user-preset") {
-        event.preventDefault();
-        applyAdminUserAccessPreset_(
-            button.getAttribute("data-admin-permission-preset") || "",
-        );
-        return;
-      }
-
       if (action === "reset-admin-user-form") {
         event.preventDefault();
         resetAdminUsersDraft_();
-        adminState.adminUsersEditorOpen = false;
-        adminState.adminUsersEditorEntering = false;
         renderAdmin_();
         return;
       }
@@ -2341,25 +1641,6 @@
         return;
       }
 
-      if (action === "open-sidebar-nav-group") {
-        event.preventDefault();
-        adminState.sidebarNavGroup =
-          button.getAttribute("data-admin-nav-group") || "";
-        if (!syncAdminSidebarNavGroupState_()) {
-          renderAdmin_();
-        }
-        return;
-      }
-
-      if (action === "close-sidebar-nav-group") {
-        event.preventDefault();
-        adminState.sidebarNavGroup = "";
-        if (!syncAdminSidebarNavGroupState_()) {
-          renderAdmin_();
-        }
-        return;
-      }
-
       if (action === "confirm-delete-confirm") {
         event.preventDefault();
         confirmDeleteConfirm_();
@@ -2373,15 +1654,6 @@
       }
     }
 
-    var bulletinChoice = event.target.closest("[data-admin-bulletin-choice]");
-    if (bulletinChoice) {
-      if (updateBulletinChoice_(bulletinChoice)) {
-        markAdminDirtyScope_("bulletin");
-      }
-      renderAdmin_();
-      return;
-    }
-
     var navLink = event.target.closest("[data-admin-nav]");
     if (!navLink) {
       return;
@@ -2392,703 +1664,8 @@
     navigateToAdminPage_(pageId);
   }
 
-  function isAdminSuccessButtonAction_(action) {
-    return !!ADMIN_SUCCESS_BUTTON_ACTIONS[String(action || "")];
-  }
-
-  function getAdminDirtyScopeForField_(field) {
-    var normalizedField = String(field || "").trim();
-    var fieldPrefix = normalizedField.split(".")[0];
-
-    if (fieldPrefix === "settings-sunday") {
-      return adminState.currentPageId === "integrations" ?
-        "integrations" :
-        "settings-sunday";
-    }
-
-    return {
-      bulletin: "bulletin",
-      "hub-settings": "hub-settings",
-      "hub-sunday": "hub-sunday",
-      sunday: "sunday",
-      "quick-link": "quick-link",
-      "status-banner": "status-banner",
-      resource: "resource",
-      campaign: "campaign",
-      "serve-need": "serve-need",
-      "next-step": "next-step",
-      "room-rule": "room-rule",
-      "admin-user": "admin-user",
-    }[fieldPrefix] || "";
-  }
-
-  function getAdminActionForDirtyScope_(scope) {
-    return Object.keys(ADMIN_ACTION_DIRTY_SCOPES).find(function(action) {
-      return ADMIN_ACTION_DIRTY_SCOPES[action] === scope;
-    }) || "";
-  }
-
-  function getAdminCollectionSectionForDirtyScope_(scope) {
-    return Object.keys(ADMIN_COLLECTION_EDITOR_DIRTY_SCOPES).find(
-        function(section) {
-          return ADMIN_COLLECTION_EDITOR_DIRTY_SCOPES[section] === scope;
-        },
-    ) || "";
-  }
-
-  function resetAdminCollectionDraft_(section) {
-    if (section === "quickLinks") {
-      resetQuickLinksDraft_();
-    } else if (section === "resources") {
-      resetResourcesDraft_();
-    } else if (section === "campaigns") {
-      resetCampaignsDraft_();
-    } else if (section === "serveNeeds") {
-      resetServeNeedsDraft_();
-    } else if (section === "nextSteps") {
-      resetNextStepsDraft_();
-    } else if (section === "roomRules") {
-      resetRoomRulesDraft_();
-    }
-  }
-
-  function openAdminCollectionEditor_(section) {
-    var normalizedSection = String(section || "").trim();
-    var dirtyScope = ADMIN_COLLECTION_EDITOR_DIRTY_SCOPES[
-        normalizedSection
-    ] || "";
-    if (!dirtyScope) {
-      return;
-    }
-
-    if (!confirmDiscardAdminChanges_(dirtyScope)) {
-      return;
-    }
-
-    cancelAdminCollectionEditorExit_();
-    resetAdminCollectionDraft_(normalizedSection);
-    adminState.collectionEditorOpen = normalizedSection;
-    adminState.collectionEditorFocusPending = true;
-    adminState.collectionEditorEntering = true;
-    adminState.collectionEditorExiting = "";
-    adminState.collectionEditorCloseAfterExit = "";
-    adminState.collectionActionsEntering = "";
-    renderAdmin_();
-  }
-
-  function prefersReducedAdminMotion_() {
-    return !!(
-      window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    );
-  }
-
-  function cancelAdminCollectionEditorExit_() {
-    if (adminCollectionEditorExitTimer) {
-      window.clearTimeout(adminCollectionEditorExitTimer);
-      adminCollectionEditorExitTimer = null;
-    }
-    adminState.collectionEditorExiting = "";
-  }
-
-  function startAdminCollectionEditorExit_(section) {
-    var normalizedSection = String(section || "").trim();
-    if (!normalizedSection ||
-      adminState.collectionEditorOpen !== normalizedSection ||
-      adminState.collectionEditorExiting === normalizedSection) {
-      return;
-    }
-
-    cancelAdminCollectionEditorExit_();
-    adminState.collectionEditorFocusPending = false;
-    adminState.collectionEditorEntering = false;
-    adminState.collectionEditorExiting = normalizedSection;
-    adminState.collectionEditorCloseAfterExit = "";
-    adminState.collectionActionsEntering = "";
-    renderAdmin_();
-
-    var exitDuration = prefersReducedAdminMotion_() ?
-      0 :
-      ADMIN_COLLECTION_EDITOR_EXIT_MS;
-    adminCollectionEditorExitTimer = window.setTimeout(function() {
-      adminCollectionEditorExitTimer = null;
-      if (adminState.collectionEditorExiting !== normalizedSection ||
-        adminState.collectionEditorOpen !== normalizedSection) {
-        return;
-      }
-
-      adminState.collectionEditorOpen = "";
-      adminState.collectionEditorExiting = "";
-      adminState.collectionEditorCloseAfterExit = "";
-      adminState.collectionActionsEntering = normalizedSection;
-      resetAdminCollectionDraft_(normalizedSection);
-      renderAdmin_();
-    }, exitDuration);
-  }
-
-  function isAdminDirtyScope_(scope) {
-    return !!(
-      scope &&
-      adminState.dirtyScopes &&
-      adminState.dirtyScopes[scope]
-    );
-  }
-
-  function markAdminDirtyScope_(scope) {
-    var normalizedScope = String(scope || "").trim();
-    if (!normalizedScope) {
-      return;
-    }
-
-    cancelAdminFloatingSaveBarExit_();
-    var collectionSection = getAdminCollectionSectionForDirtyScope_(
-        normalizedScope,
-    );
-    if (collectionSection &&
-      adminState.collectionEditorCloseAfterExit === collectionSection) {
-      adminState.collectionEditorCloseAfterExit = "";
-    }
-    var wasDirty = isAdminDirtyScope_(normalizedScope);
-    var previousActiveScope = adminState.activeDirtyScope;
-    adminState.dirtyScopes[normalizedScope] = true;
-    adminState.activeDirtyScope = normalizedScope;
-    syncAdminSaveBars_();
-    if (!wasDirty || previousActiveScope !== normalizedScope) {
-      syncAdminFloatingSaveBar_();
-    }
-  }
-
-  function clearAdminDirtyScope_(scope) {
-    var normalizedScope = String(scope || "").trim();
-    if (!normalizedScope) {
-      return;
-    }
-
-    var wasDirty = isAdminDirtyScope_(normalizedScope);
-    delete adminState.dirtyScopes[normalizedScope];
-    if (adminState.activeDirtyScope === normalizedScope) {
-      adminState.activeDirtyScope = Object.keys(adminState.dirtyScopes).pop() || "";
-    }
-    syncAdminSaveBars_();
-    if (
-      wasDirty &&
-      !Object.keys(adminState.dirtyScopes).length &&
-      !adminState.actionFeedbackPendingKey &&
-      !adminState.actionFeedbackSuccessKey
-    ) {
-      startAdminFloatingSaveBarExit_(
-          normalizedScope,
-          "Changes discarded",
-      );
-      return;
-    }
-    syncAdminFloatingSaveBar_();
-  }
-
-  function clearAllAdminDirtyScopes_(skipExitAnimation) {
-    adminState.dirtyScopes = {};
-    adminState.activeDirtyScope = "";
-    if (skipExitAnimation) {
-      cancelAdminFloatingSaveBarExit_();
-      cancelAdminCollectionEditorExit_();
-      adminState.floatingSaveBarScope = "";
-      adminState.collectionEditorOpen = "";
-      adminState.collectionEditorFocusPending = false;
-      adminState.collectionEditorEntering = false;
-      adminState.collectionEditorExiting = "";
-      adminState.collectionEditorCloseAfterExit = "";
-      adminState.collectionActionsEntering = "";
-    }
-    syncAdminSaveBars_();
-    syncAdminFloatingSaveBar_();
-  }
-
-  function cancelAdminFloatingSaveBarExit_() {
-    if (adminFloatingSaveBarExitTimer) {
-      window.clearTimeout(adminFloatingSaveBarExitTimer);
-      adminFloatingSaveBarExitTimer = null;
-    }
-    adminState.floatingSaveBarExitScope = "";
-    adminState.floatingSaveBarExitLabel = "";
-  }
-
-  function startAdminFloatingSaveBarExit_(scope, label) {
-    var normalizedScope = String(scope || "").trim();
-    if (!normalizedScope) {
-      return;
-    }
-
-    cancelAdminFloatingSaveBarExit_();
-    if (
-      normalizedScope === "bulletin" &&
-      adminState.currentPageId === "bulletin" &&
-      adminState.bulletinLoaded
-    ) {
-      adminState.floatingSaveBarScope = "bulletin";
-      syncAdminFloatingSaveBar_();
-      return;
-    }
-
-    adminState.floatingSaveBarExitScope = normalizedScope;
-    adminState.floatingSaveBarExitLabel = String(label || "Changes saved");
-    var collectionSection = adminState.collectionEditorCloseAfterExit;
-    if (collectionSection &&
-      adminState.collectionEditorOpen === collectionSection) {
-      startAdminCollectionEditorExit_(collectionSection);
-    }
-    syncAdminFloatingSaveBar_();
-    adminFloatingSaveBarExitTimer = window.setTimeout(function() {
-      adminFloatingSaveBarExitTimer = null;
-      if (adminState.floatingSaveBarExitScope !== normalizedScope) {
-        return;
-      }
-
-      adminState.floatingSaveBarExitScope = "";
-      adminState.floatingSaveBarExitLabel = "";
-      adminState.floatingSaveBarScope = "";
-      if (
-        adminState.currentPageId === "bulletin" &&
-        adminState.bulletinLoaded
-      ) {
-        syncAdminFloatingSaveBar_();
-        return;
-      }
-      var saveBar = appEl && appEl.querySelector(
-          "[data-admin-floating-save-bar]",
-      );
-      if (saveBar) {
-        saveBar.remove();
-      }
-      if (appEl) {
-        Array.prototype.forEach.call(
-            appEl.querySelectorAll(".is-floating-save-source"),
-            function(actionRow) {
-              actionRow.classList.remove("is-floating-save-source");
-            },
-        );
-      }
-    }, ADMIN_FLOATING_SAVE_BAR_EXIT_MS);
-  }
-
-  function hasAdminUnsavedChanges_(scope) {
-    if (scope) {
-      return isAdminDirtyScope_(scope);
-    }
-    return Object.keys(adminState.dirtyScopes || {}).length > 0;
-  }
-
-  function confirmDiscardAdminChanges_(scope) {
-    if (!hasAdminUnsavedChanges_(scope)) {
-      return true;
-    }
-
-    var confirmed = window.confirm(
-        "You have unsaved changes. Leave without saving them?",
-    );
-    if (!confirmed) {
-      return false;
-    }
-
-    if (scope) {
-      clearAdminDirtyScope_(scope);
-    } else {
-      clearAllAdminDirtyScopes_(true);
-    }
-    return true;
-  }
-
-  function handleAdminBeforeUnload_(event) {
-    if (!hasAdminUnsavedChanges_()) {
-      return;
-    }
-
-    event.preventDefault();
-    event.returnValue = "";
-  }
-
-  function getAdminSaveBarState_(action, scope) {
-    if (adminState.actionFeedbackSuccessKey === action) {
-      return "saved";
-    }
-    if (adminState.actionFeedbackPendingKey === action) {
-      return "saving";
-    }
-    return isAdminDirtyScope_(scope) ? "dirty" : "clean";
-  }
-
-  function getAdminSaveBarStatusLabel_(state) {
-    if (state === "exiting") {
-      return adminState.floatingSaveBarExitLabel || "Changes saved";
-    }
-    if (state === "saved") {
-      return "Changes saved";
-    }
-    if (state === "saving") {
-      return "Saving changes...";
-    }
-    return state === "dirty" ? "Unsaved changes" : "No unsaved changes";
-  }
-
-  function syncAdminSaveBars_() {
-    if (!appEl) {
-      return;
-    }
-
-    Object.keys(ADMIN_ACTION_DIRTY_SCOPES).forEach(function(action) {
-      var scope = ADMIN_ACTION_DIRTY_SCOPES[action];
-      var state = getAdminSaveBarState_(action, scope);
-      Array.prototype.forEach.call(
-          appEl.querySelectorAll(
-              '.central-admin-panel [data-admin-action="' + action + '"]',
-          ),
-          function(buttonEl) {
-            var actionRow = buttonEl.closest(".central-admin-action-row");
-            if (actionRow) {
-              actionRow.classList.add("central-admin-save-action-row");
-              actionRow.setAttribute("data-admin-save-scope", scope);
-            }
-
-            var storedBaseDisabled = buttonEl.getAttribute(
-                "data-admin-save-base-disabled",
-            );
-            var baseDisabled = storedBaseDisabled == null ?
-              buttonEl.disabled :
-              storedBaseDisabled === "true";
-            buttonEl.setAttribute(
-                "data-admin-save-base-disabled",
-                baseDisabled ? "true" : "false",
-            );
-            buttonEl.disabled = baseDisabled || state === "clean";
-          },
-      );
-    });
-  }
-
-  function syncAdminFloatingSaveBar_() {
-    if (!appEl) {
-      return;
-    }
-
-    var existingBar = appEl.querySelector("[data-admin-floating-save-bar]");
-    if (existingBar) {
-      existingBar.remove();
-    }
-    Array.prototype.forEach.call(
-        appEl.querySelectorAll(".is-floating-save-source"),
-        function(actionRow) {
-          actionRow.classList.remove("is-floating-save-source");
-        },
-    );
-
-    if (
-      adminState.currentPageId === "bulletin" &&
-      adminState.bulletinLoaded
-    ) {
-      syncPrintModeWorkflowDock_();
-      return;
-    }
-
-    var action = adminState.actionFeedbackPendingKey ||
-      adminState.actionFeedbackSuccessKey ||
-      getAdminActionForDirtyScope_(adminState.activeDirtyScope) ||
-      getAdminActionForDirtyScope_(adminState.floatingSaveBarExitScope);
-    var scope = ADMIN_ACTION_DIRTY_SCOPES[action] || "";
-    var state = adminState.floatingSaveBarExitScope === scope &&
-      !adminState.actionFeedbackPendingKey &&
-      !adminState.actionFeedbackSuccessKey &&
-      !isAdminDirtyScope_(scope) ?
-      "exiting" :
-      getAdminSaveBarState_(action, scope);
-    if (!action || !scope || state === "clean") {
-      adminState.floatingSaveBarScope = "";
-      return;
-    }
-
-    var sourceButton = appEl.querySelector(
-        '.central-admin-panel [data-admin-action="' + action + '"]',
-    );
-    if (!sourceButton) {
-      if (state === "exiting") {
-        cancelAdminFloatingSaveBarExit_();
-        adminState.floatingSaveBarScope = "";
-      }
-      return;
-    }
-
-    var sourceActionRow = sourceButton.closest(".central-admin-action-row");
-    if (sourceActionRow) {
-      sourceActionRow.classList.add("is-floating-save-source");
-    }
-
-    var resetAction = ADMIN_DIRTY_SCOPE_RESET_ACTIONS[scope] || "";
-    var resetButton = resetAction ? appEl.querySelector(
-        '.central-admin-panel [data-admin-action="' + resetAction + '"]',
-    ) : null;
-    var mainEl = appEl.querySelector(".central-admin-main");
-    if (!mainEl) {
-      return;
-    }
-
-    var saveBar = document.createElement("div");
-    var isNewSaveBar = adminState.floatingSaveBarScope !== scope;
-    saveBar.className = "central-admin-floating-save-bar is-" + state +
-      (state === "exiting" &&
-        adminState.floatingSaveBarExitLabel === "Changes saved" ?
-        " is-saved" : "") +
-      (isNewSaveBar && state !== "exiting" ? " is-entering" : "");
-    saveBar.setAttribute("data-admin-floating-save-bar", "true");
-    saveBar.setAttribute("data-admin-save-scope", scope);
-    saveBar.setAttribute("role", "status");
-    saveBar.setAttribute("aria-live", "polite");
-    saveBar.innerHTML = [
-      "<div class=\"central-admin-floating-save-status\">",
-      "<span class=\"central-admin-floating-save-dot\" aria-hidden=\"true\"></span>",
-      "<strong>", escapeHtml_(getAdminSaveBarStatusLabel_(state)), "</strong>",
-      "</div>",
-      "<div class=\"central-admin-floating-save-actions\">",
-      sourceButton.outerHTML,
-      resetButton ? resetButton.outerHTML : "",
-      "</div>",
-    ].join("");
-    if (state === "exiting") {
-      Array.prototype.forEach.call(
-          saveBar.querySelectorAll("button"),
-          function(buttonEl) {
-            buttonEl.disabled = true;
-          },
-      );
-    }
-    adminState.floatingSaveBarScope = scope;
-    mainEl.appendChild(saveBar);
-  }
-
-  function syncPrintModeWorkflowDock_() {
-    var mainEl = appEl && appEl.querySelector(".central-admin-main");
-    if (!mainEl) {
-      return;
-    }
-
-    var step = getPrintModeStep_();
-    var definition = getPrintModeStepDefinition_(step);
-    var saveState = getAdminSaveBarState_("save-bulletin", "bulletin");
-    var canSave = isEditorLevelPermission_(getPageAccessLevel_("bulletin"));
-    var showSave = canSave && saveState !== "clean";
-    var isNewDock = adminState.floatingSaveBarScope !== "bulletin";
-    var statusLabel = getAdminSaveBarStatusLabel_(saveState);
-    var saveLabel = adminState.bulletinSaving ? "Saving..." : "Save Changes";
-    var dock = document.createElement("div");
-
-    dock.className = [
-      "central-admin-floating-save-bar",
-      "central-admin-print-mode-dock",
-      "is-" + saveState,
-      isNewDock ? "is-entering" : "",
-    ].filter(Boolean).join(" ");
-    dock.setAttribute("data-admin-floating-save-bar", "true");
-    dock.setAttribute("data-admin-save-scope", "bulletin");
-    dock.setAttribute("role", "status");
-    dock.setAttribute("aria-live", "polite");
-    dock.innerHTML = [
-      "<div class=\"central-admin-print-mode-dock-status\">",
-      "<span class=\"central-admin-print-mode-dock-step\">Step ",
-      String(step), " of ", String(PRINT_MODE_STEPS.length), "</span>",
-      "<strong>", escapeHtml_(definition.label), "</strong>",
-      "<small><span class=\"central-admin-floating-save-dot\" aria-hidden=\"true\"></span>",
-      escapeHtml_(statusLabel), "</small>",
-      "</div>",
-      "<div class=\"central-admin-floating-save-actions central-admin-print-mode-dock-actions\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"print-mode-previous\"",
-      step === 1 || adminState.bulletinSaving ? " disabled" : "",
-      ">Previous</button>",
-      showSave ? [
-        "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-bulletin\"",
-        adminState.bulletinSaving ? " disabled" : "",
-        ">", escapeHtml_(saveLabel), "</button>",
-      ].join("") : "",
-      step < PRINT_MODE_STEPS.length ? [
-        "<button type=\"button\" class=\"central-admin-link-button ",
-        showSave ? "is-secondary" : "is-primary",
-        "\" data-admin-action=\"print-mode-next\"",
-        adminState.bulletinSaving ? " disabled" : "",
-        ">Next</button>",
-      ].join("") : [
-        "<button type=\"button\" class=\"central-admin-link-button ",
-        showSave ? "is-secondary" : "is-primary",
-        "\" data-admin-action=\"print-bulletin\"",
-        adminState.bulletinSaving ? " disabled" : "",
-        ">Print / Save PDF</button>",
-      ].join(""),
-      "</div>",
-    ].join("");
-
-    adminState.floatingSaveBarScope = "bulletin";
-    mainEl.appendChild(dock);
-  }
-
-  function beginAdminActionFeedback_(action) {
-    var actionKey = String(action || "").trim();
-    if (!isAdminSuccessButtonAction_(actionKey)) {
-      return;
-    }
-
-    clearAdminActionSuccessResetTimer_();
-    adminState.actionFeedbackPendingKey = actionKey;
-    adminState.actionFeedbackSuccessKey = "";
-    adminState.actionFeedbackSuccessPlayed = false;
-
-    window.setTimeout(function() {
-      if (adminState.actionFeedbackPendingKey !== actionKey || !appEl) {
-        return;
-      }
-
-      var buttonEl = appEl.querySelector(
-          '[data-admin-action="' + actionKey + '"]',
-      );
-      if (buttonEl && !buttonEl.disabled) {
-        adminState.actionFeedbackPendingKey = "";
-        syncAdminSaveBars_();
-        syncAdminFloatingSaveBar_();
-      }
-    }, 0);
-  }
-
-  function completePendingAdminActionFeedback_() {
-    var actionKey = adminState.actionFeedbackPendingKey;
-    if (!isAdminSuccessButtonAction_(actionKey)) {
-      return;
-    }
-
-    clearAdminActionSuccessResetTimer_();
-    adminState.actionFeedbackPendingKey = "";
-    adminState.actionFeedbackSuccessKey = actionKey;
-    adminState.actionFeedbackSuccessPlayed = false;
-    var dirtyScope = ADMIN_ACTION_DIRTY_SCOPES[actionKey] || "";
-    var collectionSection = getAdminCollectionSectionForDirtyScope_(
-        dirtyScope,
-    );
-    if (collectionSection &&
-      adminState.collectionEditorOpen === collectionSection) {
-      adminState.collectionEditorCloseAfterExit = collectionSection;
-    }
-    clearAdminDirtyScope_(dirtyScope);
-  }
-
-  function clearPendingAdminActionFeedback_() {
-    adminState.actionFeedbackPendingKey = "";
-  }
-
-  function clearAdminActionFeedback_() {
-    clearAdminActionSuccessResetTimer_();
-    adminState.actionFeedbackPendingKey = "";
-    adminState.actionFeedbackSuccessKey = "";
-    adminState.actionFeedbackSuccessPlayed = false;
-  }
-
-  function clearAdminActionSuccessResetTimer_() {
-    if (adminActionSuccessResetTimer) {
-      window.clearTimeout(adminActionSuccessResetTimer);
-      adminActionSuccessResetTimer = null;
-    }
-  }
-
-  function startAdminActionSuccessResetTimer_() {
-    clearAdminActionSuccessResetTimer_();
-    adminActionSuccessResetTimer = window.setTimeout(function() {
-      adminActionSuccessResetTimer = null;
-      var actionKey = adminState.actionFeedbackSuccessKey;
-      var buttonEls = appEl ? Array.prototype.slice.call(
-          appEl.querySelectorAll(
-              '[data-admin-action="' + actionKey + '"]',
-          ),
-      ) : [];
-
-      if (!buttonEls.some(function(buttonEl) {
-        return buttonEl.classList.contains("is-success");
-      })) {
-        adminState.actionFeedbackSuccessKey = "";
-        adminState.actionFeedbackSuccessPlayed = false;
-        var missingButtonScope = ADMIN_ACTION_DIRTY_SCOPES[actionKey] || "";
-        if (missingButtonScope && !Object.keys(adminState.dirtyScopes).length) {
-          startAdminFloatingSaveBarExit_(
-              missingButtonScope,
-              "Changes saved",
-          );
-        } else {
-          syncAdminFloatingSaveBar_();
-        }
-        return;
-      }
-
-      buttonEls.forEach(function(buttonEl) {
-        buttonEl.classList.remove("is-success");
-        buttonEl.classList.add("is-returning");
-      });
-      adminActionSuccessResetTimer = window.setTimeout(function() {
-        adminActionSuccessResetTimer = null;
-        if (adminState.actionFeedbackSuccessKey !== actionKey) {
-          return;
-        }
-
-        adminState.actionFeedbackSuccessKey = "";
-        adminState.actionFeedbackSuccessPlayed = false;
-        buttonEls.forEach(function(buttonEl) {
-          if (!buttonEl.isConnected) {
-            return;
-          }
-
-          buttonEl.classList.remove("is-returning");
-          buttonEl.removeAttribute("aria-label");
-          buttonEl.removeAttribute("aria-live");
-          var defaultLabelEl = buttonEl.querySelector(
-              ".central-admin-success-button-default",
-          );
-          var successSurfaceEl = buttonEl.querySelector(
-              ".central-admin-success-button-surface",
-          );
-          if (defaultLabelEl) {
-            defaultLabelEl.removeAttribute("aria-hidden");
-          }
-          if (successSurfaceEl) {
-            successSurfaceEl.setAttribute("aria-hidden", "true");
-          }
-        });
-        syncAdminSaveBars_();
-        var completedScope = ADMIN_ACTION_DIRTY_SCOPES[actionKey] || "";
-        if (completedScope && !Object.keys(adminState.dirtyScopes).length) {
-          startAdminFloatingSaveBarExit_(completedScope, "Changes saved");
-        } else {
-          syncAdminFloatingSaveBar_();
-        }
-      }, ADMIN_ACTION_SUCCESS_TRANSITION_MS);
-    }, ADMIN_ACTION_SUCCESS_RESET_MS);
-  }
-
   function handleAdminPopState_() {
-    var previousPage = getAdminPageById_(adminState.currentPageId);
-    if (!confirmDiscardAdminChanges_()) {
-      window.history.pushState(
-          {},
-          "",
-          previousPage ? previousPage.route : "/admin",
-      );
-      return;
-    }
-
-    adminState.collectionEditorOpen = "";
-    adminState.collectionEditorFocusPending = false;
-    adminState.collectionEditorEntering = false;
-    adminState.collectionEditorExiting = "";
-    adminState.collectionEditorCloseAfterExit = "";
-    adminState.collectionActionsEntering = "";
-    clearAdminUserEditorCloseTimer_();
-    adminState.adminUsersEditorOpen = false;
-    adminState.adminUsersEditorEntering = false;
-    cancelAdminCollectionEditorExit_();
-    clearAdminActionFeedback_();
     adminState.currentPageId = getCurrentAdminPageId_();
-    adminState.sidebarNavGroup = getAdminSidebarGroupForPageId_(
-        adminState.currentPageId,
-    );
     markAdminPageDataStaleForNavigation_(adminState.currentPageId);
     renderAdmin_();
   }
@@ -3103,20 +1680,12 @@
       return;
     }
 
-    if (event.key !== "Escape") {
+    if (event.key !== "Escape" || !adminState.deleteConfirmOpen) {
       return;
     }
 
-    if (adminState.deleteConfirmOpen) {
-      event.preventDefault();
-      closeDeleteConfirm_();
-      return;
-    }
-
-    if (adminState.adminUsersEditorOpen) {
-      event.preventDefault();
-      closeAdminUserEditor_();
-    }
+    event.preventDefault();
+    closeDeleteConfirm_();
   }
 
   function handleAdminDragStart_(event) {
@@ -3173,7 +1742,6 @@
         target.section,
         target.docId,
         target.placement,
-        target.zone,
     );
   }
 
@@ -3199,7 +1767,6 @@
       draggedDocId,
       target.docId,
       target.placement,
-      target.zone,
     );
   }
 
@@ -3208,20 +1775,6 @@
   }
 
   function resolveAdminSortDropTarget_(event) {
-    var zoneEl = event.target.closest("[data-admin-sort-zone]");
-    if (zoneEl) {
-      return {
-        section: String(
-            zoneEl.getAttribute("data-admin-sort-section") || "",
-        ).trim(),
-        docId: "",
-        placement: "after",
-        zone: String(
-            zoneEl.getAttribute("data-admin-sort-zone") || "",
-        ).trim(),
-      };
-    }
-
     var itemEl = event.target.closest("[data-admin-sort-item]");
     if (itemEl) {
       return {
@@ -3230,7 +1783,6 @@
         ).trim(),
         docId: String(itemEl.getAttribute("data-admin-doc-id") || "").trim(),
         placement: getAdminSortDropPlacement_(itemEl, event.clientY),
-        zone: "",
       };
     }
 
@@ -3253,7 +1805,6 @@
       section: section,
       docId: String(lastItemEl.getAttribute("data-admin-doc-id") || "").trim(),
       placement: "after",
-      zone: "",
     };
   }
 
@@ -3269,11 +1820,9 @@
     return clientY < (rect.top + (rect.height / 2)) ? "before" : "after";
   }
 
-  function setAdminSortDropState_(section, docId, placement, zone) {
-    var normalizedZone = String(zone || "").trim();
+  function setAdminSortDropState_(section, docId, placement) {
     if (adminSortDropDocId === docId &&
       adminSortDropPlacement === placement &&
-      adminSortDropZone === normalizedZone &&
       adminSortDragSection === section) {
       return;
     }
@@ -3281,15 +1830,6 @@
     clearAdminSortDropState_();
     adminSortDropDocId = docId;
     adminSortDropPlacement = placement;
-    adminSortDropZone = normalizedZone;
-
-    if (normalizedZone) {
-      var zoneTargetEl = getAdminSortZoneEl_(section, normalizedZone);
-      if (zoneTargetEl) {
-        zoneTargetEl.classList.add("is-sort-drop-target");
-      }
-      return;
-    }
 
     var itemEl = getAdminSortableItemEl_(section, docId);
     if (!itemEl) {
@@ -3305,26 +1845,18 @@
     if (!appEl) {
       adminSortDropDocId = "";
       adminSortDropPlacement = "";
-      adminSortDropZone = "";
       return;
     }
 
     Array.prototype.forEach.call(
-        appEl.querySelectorAll(
-            ".is-drop-before, .is-drop-after, .is-sort-drop-target",
-        ),
+        appEl.querySelectorAll(".is-drop-before, .is-drop-after"),
         function(element) {
-          element.classList.remove(
-              "is-drop-before",
-              "is-drop-after",
-              "is-sort-drop-target",
-          );
+          element.classList.remove("is-drop-before", "is-drop-after");
         },
     );
 
     adminSortDropDocId = "";
     adminSortDropPlacement = "";
-    adminSortDropZone = "";
   }
 
   function clearAdminSortDragState_() {
@@ -3357,30 +1889,6 @@
 
           if ((element.getAttribute("data-admin-sort-section") || "") === section &&
             (element.getAttribute("data-admin-doc-id") || "") === docId) {
-            match = element;
-          }
-        },
-    );
-
-    return match;
-  }
-
-  function getAdminSortZoneEl_(section, zone) {
-    if (!appEl || !section || !zone) {
-      return null;
-    }
-
-    var match = null;
-    Array.prototype.forEach.call(
-        appEl.querySelectorAll("[data-admin-sort-zone]"),
-        function(element) {
-          if (match) {
-            return;
-          }
-
-          if ((element.getAttribute("data-admin-sort-section") || "") ===
-            section &&
-            (element.getAttribute("data-admin-sort-zone") || "") === zone) {
             match = element;
           }
         },
@@ -3813,74 +2321,6 @@
     );
   }
 
-  function reorderQuickLinkItems_(
-      items,
-      draggedDocId,
-      targetDocId,
-      placement,
-      targetZone,
-  ) {
-    var groupedItems = sortQuickLinksItems_(items)
-        .filter(function(item) {
-          return item && item.active !== false;
-        })
-        .concat(sortQuickLinksItems_(items).filter(function(item) {
-          return item && item.active === false;
-        }))
-        .map(function(item) {
-          return Object.assign({}, item);
-        });
-    var draggedIndex = groupedItems.findIndex(function(item) {
-      return item && item.id === draggedDocId;
-    });
-    var targetItem = groupedItems.find(function(item) {
-      return item && item.id === targetDocId;
-    }) || null;
-    var normalizedZone = String(targetZone || "").trim();
-
-    if (draggedIndex === -1 || (!targetItem && !normalizedZone)) {
-      return groupedItems;
-    }
-
-    var draggedItem = groupedItems.splice(draggedIndex, 1)[0];
-    var nextActive = normalizedZone ?
-      normalizedZone === "visible" :
-      targetItem.active !== false;
-    draggedItem = Object.assign({}, draggedItem, {
-      active: nextActive,
-    });
-
-    if (normalizedZone) {
-      var visibleCount = groupedItems.filter(function(item) {
-        return item && item.active !== false;
-      }).length;
-      groupedItems.splice(
-          nextActive ? 0 : visibleCount,
-          0,
-          draggedItem,
-      );
-    } else {
-      var targetIndex = groupedItems.findIndex(function(item) {
-        return item && item.id === targetDocId;
-      });
-      if (targetIndex === -1) {
-        return sortQuickLinksItems_(items);
-      }
-
-      groupedItems.splice(
-          placement === "after" ? targetIndex + 1 : targetIndex,
-          0,
-          draggedItem,
-      );
-    }
-
-    return groupedItems.map(function(item, index) {
-      return Object.assign({}, item, {
-        sort: (index + 1) * 10,
-      });
-    });
-  }
-
   function applyHubModuleSectionUpdate_(section, previousItems, nextItems) {
     var moduleConfig = getHubModuleSortSectionConfig_(section);
     var actionConfig = moduleConfig ?
@@ -3996,7 +2436,6 @@
       draggedDocId,
       targetDocId,
       placement,
-      targetZone,
   ) {
     if (!canReorderSortableSection_(section)) {
       return;
@@ -4025,20 +2464,12 @@
     }
 
     var previousItems = cloneSortableSectionItems_(section);
-    var nextItems = section === "quickLinks" ?
-      reorderQuickLinkItems_(
-          previousItems,
-          draggedDocId,
-          targetDocId,
-          placement,
-          targetZone,
-      ) :
-      reorderSortableItems_(
-          previousItems,
-          draggedDocId,
-          targetDocId,
-          placement,
-      );
+    var nextItems = reorderSortableItems_(
+        previousItems,
+        draggedDocId,
+        targetDocId,
+        placement,
+    );
     var submitChangeData = buildSortableSectionChangeRequestData_(
         section,
         previousItems,
@@ -4101,81 +2532,11 @@
   }
 
   function handleAdminInput_(event) {
-    if (
-      event.type === "change" &&
-      event.target.hasAttribute("data-admin-bulletin-block-image")
-    ) {
-      uploadBulletinFallbackBlockImage_(
-          event.target.files && event.target.files[0],
-      );
-      return;
-    }
-
-    if (
-      event.type === "change" &&
-      event.target.hasAttribute("data-admin-bulletin-fallback-image")
-    ) {
-      markAdminDirtyScope_("bulletin");
-      uploadBulletinFallbackImage_(
-          event.target.files && event.target.files[0],
-      );
-      return;
-    }
-
-    var bulletinEventId = event.target.getAttribute(
-        "data-admin-bulletin-event-id",
-    );
-    var bulletinEventField = event.target.getAttribute(
-        "data-admin-bulletin-event-field",
-    );
-    if (bulletinEventId && bulletinEventField) {
-      var bulletinEventValue = event.target.type === "checkbox" ?
-        !!event.target.checked :
-        event.target.value;
-      markAdminDirtyScope_("bulletin");
-      updateBulletinEventField_(
-          bulletinEventId,
-          bulletinEventField,
-          bulletinEventValue,
-      );
-      if (bulletinEventField === "description") {
-        syncBulletinEventDescriptionGuidance_(
-            bulletinEventId,
-            bulletinEventValue,
-        );
-      }
-      return;
-    }
-
-    var bulletinCampaignIconId = event.target.getAttribute(
-        "data-admin-bulletin-campaign-icon",
-    );
-    if (bulletinCampaignIconId) {
-      if (event.type === "change") {
-        markAdminDirtyScope_("bulletin");
-        updateBulletinCampaignIcon_(
-            bulletinCampaignIconId,
-            event.target.value,
-        );
-        renderAdmin_();
-      }
-      return;
-    }
-
     var field = event.target.getAttribute("data-admin-field");
     var nextValue = event.target.type === "checkbox" ?
       !!event.target.checked :
       event.target.value;
     if (!field) {
-      return;
-    }
-
-    if (field.indexOf("bulletin-block.") === 0) {
-      var fallbackBlockField = field.replace("bulletin-block.", "");
-      adminState.bulletinFallbackBlockDraft[fallbackBlockField] = nextValue;
-      if (fallbackBlockField === "imageSide") {
-        renderAdmin_();
-      }
       return;
     }
 
@@ -4188,18 +2549,6 @@
       adminState.wayfinderQuestion = String(nextValue || "");
       adminState.wayfinderError = "";
       adminState.wayfinderAnswerError = "";
-      return;
-    }
-
-    markAdminDirtyScope_(getAdminDirtyScopeForField_(field));
-
-    if (field.indexOf("bulletin.") === 0) {
-      updateBulletinDraftField_(field.replace("bulletin.", ""), nextValue);
-      if (field === "bulletin.serviceDate" ||
-        field === "bulletin.featured.includeDescription" ||
-        event.type === "change") {
-        renderAdmin_();
-      }
       return;
     }
 
@@ -4294,7 +2643,6 @@
       adminState.adminUsersDraft.pageAccess[pageAccessFieldName] = nextValue;
       adminState.adminUsersError = "";
       adminState.adminUsersMessage = "";
-      syncAdminUserPermissionPresetState_();
       return;
     }
 
@@ -4385,40 +2733,12 @@
   function navigateToAdminPage_(pageId) {
     var nextPage = getAdminPageById_(pageId);
     var nextRoute = nextPage ? nextPage.route : "/admin";
-    var previousPageId = adminState.currentPageId;
 
-    if (
-      nextPage &&
-      nextPage.id !== adminState.currentPageId &&
-      !confirmDiscardAdminChanges_()
-    ) {
-      return;
-    }
-
-    if (!nextPage || nextPage.id !== adminState.currentPageId) {
-      cancelAdminCollectionEditorExit_();
-      clearAdminUserEditorCloseTimer_();
-      adminState.collectionEditorOpen = "";
-      adminState.collectionEditorFocusPending = false;
-      adminState.collectionEditorEntering = false;
-      adminState.collectionEditorExiting = "";
-      adminState.collectionEditorCloseAfterExit = "";
-      adminState.collectionActionsEntering = "";
-      adminState.adminUsersEditorOpen = false;
-      adminState.adminUsersEditorEntering = false;
-    }
-    clearAdminActionFeedback_();
     adminState.currentPageId = nextPage ? nextPage.id : "overview";
-    adminState.sidebarNavGroup = getAdminSidebarGroupForPageId_(
-        adminState.currentPageId,
-    );
     if (!shouldAdminSidebarStartOpen_()) {
       adminState.sidebarOpen = false;
     }
-    markAdminPageDataStaleForNavigation_(
-        adminState.currentPageId,
-        previousPageId,
-    );
+    markAdminPageDataStaleForNavigation_(adminState.currentPageId);
     window.history.pushState({}, "", nextRoute);
     renderAdmin_();
   }
@@ -5008,7 +3328,6 @@
     if (accessIsResolved && !canAccessAdminPage_(currentPage)) {
       currentPage = getAdminPageById_("overview");
       adminState.currentPageId = "overview";
-      adminState.sidebarNavGroup = "";
 
       if (window.history && window.history.replaceState) {
         window.history.replaceState({}, "", "/admin");
@@ -5023,183 +3342,14 @@
       "<button type=\"button\" class=\"central-admin-sidebar-scrim\" data-admin-action=\"close-sidebar\" aria-label=\"Close navigation\"></button>",
       renderAdminSidebar_(currentPage, visiblePages),
       renderAdminMain_(currentPage),
-      renderAdminUserEditorModal_(currentPage),
       renderDeleteConfirmModal_(),
-      renderBulletinEventEditorModal_(currentPage),
-      renderPrintModeQuickAddModal_(currentPage),
-      renderBulletinFallbackBlockModal_(currentPage),
       "</div>",
-      currentPage.id === "bulletin" && adminState.bulletinLoaded ?
-        renderBulletinPrintRoot_() :
-        "",
     ].join("");
 
-    syncAdminPageChrome_(currentPage);
-    syncAdminSaveBars_();
-    syncAdminFloatingSaveBar_();
-    syncAdminActionButtonFeedback_();
-    syncAdminCollectionEditorFocus_();
-    syncAdminCollectionActionsEntrance_();
-    syncAdminQuickLinkReveal_();
-    syncAdminUserEditorModal_();
     maybeLoadCurrentPageData_();
   }
 
-  function syncAdminPageChrome_(currentPage) {
-    if (!appEl || !currentPage || currentPage.id === "overview") {
-      return;
-    }
-
-    var panelEl = appEl.querySelector(
-        ".central-admin-main-inner > .central-admin-panel",
-    );
-    if (!panelEl) {
-      return;
-    }
-
-    panelEl.classList.add("central-admin-workspace-panel");
-    Array.prototype.forEach.call(
-        panelEl.querySelectorAll(".central-admin-item-header strong"),
-        function(titleEl) {
-          if (String(titleEl.textContent || "").trim() !==
-            "How this page behaves") {
-            return;
-          }
-
-          var introItem = titleEl.closest(".central-admin-item");
-          if (!introItem) {
-            return;
-          }
-
-          introItem.classList.add("central-admin-page-intro");
-          var introNote = Array.prototype.find.call(
-              introItem.children,
-              function(child) {
-                return child.classList &&
-                  child.classList.contains("central-admin-note");
-              },
-          );
-          if (introNote) {
-            introNote.classList.add("central-admin-page-intro-note");
-          }
-          if (introItem.children.length <= 2) {
-            introItem.classList.add("is-empty");
-          }
-        },
-    );
-  }
-
-  function syncAdminQuickLinkReveal_() {
-    var recentlyAddedId = adminState.quickLinksRecentlyAddedId;
-    if (!recentlyAddedId || !appEl) {
-      return;
-    }
-
-    var itemEl = appEl.querySelector(
-        '[data-admin-sort-section="quickLinks"][data-admin-doc-id="' +
-        recentlyAddedId + '"]',
-    );
-    var revealEl = itemEl ?
-      itemEl.closest("[data-admin-quick-link-reveal]") : null;
-    if (itemEl && revealEl) {
-      adminState.quickLinksRecentlyAddedId = "";
-      window.setTimeout(function() {
-        if (itemEl.isConnected && revealEl.parentNode) {
-          revealEl.parentNode.insertBefore(itemEl, revealEl);
-          revealEl.parentNode.removeChild(revealEl);
-        }
-      }, ADMIN_QUICK_LINK_REVEAL_RESET_MS);
-    }
-  }
-
-  function syncAdminActionButtonFeedback_() {
-    if (!appEl) {
-      return;
-    }
-
-    Array.prototype.forEach.call(
-        appEl.querySelectorAll(
-            ".central-admin-link-button.is-primary[data-admin-action]",
-        ),
-        function(buttonEl) {
-          var actionKey = buttonEl.getAttribute("data-admin-action") || "";
-          if (!isAdminSuccessButtonAction_(actionKey)) {
-            return;
-          }
-
-          var defaultLabel = String(buttonEl.textContent || "").trim();
-          var isSuccess = adminState.actionFeedbackSuccessKey === actionKey;
-          buttonEl.classList.add("central-admin-success-button");
-          buttonEl.innerHTML = [
-            "<span class=\"central-admin-success-button-default\"",
-            isSuccess ? " aria-hidden=\"true\"" : "",
-            ">", escapeHtml_(defaultLabel), "</span>",
-            "<span class=\"central-admin-success-button-surface\"",
-            isSuccess ? "" : " aria-hidden=\"true\"",
-            "><span>Success</span></span>",
-          ].join("");
-
-          if (!isSuccess) {
-            return;
-          }
-
-          buttonEl.disabled = true;
-          buttonEl.setAttribute("aria-label", "Success");
-          buttonEl.setAttribute("aria-live", "polite");
-
-          if (adminState.actionFeedbackSuccessPlayed) {
-            buttonEl.classList.add("is-success");
-            return;
-          }
-
-          window.requestAnimationFrame(function() {
-            if (
-              !buttonEl.isConnected ||
-              adminState.actionFeedbackSuccessKey !== actionKey
-            ) {
-              return;
-            }
-
-            var successSurfaceEl = buttonEl.querySelector(
-                ".central-admin-success-button-surface",
-            );
-            if (successSurfaceEl) {
-              successSurfaceEl.getBoundingClientRect();
-            }
-            window.requestAnimationFrame(function() {
-              if (
-                !buttonEl.isConnected ||
-                adminState.actionFeedbackSuccessKey !== actionKey
-              ) {
-                return;
-              }
-
-              buttonEl.classList.add("is-success");
-              adminState.actionFeedbackSuccessPlayed = true;
-              startAdminActionSuccessResetTimer_();
-            });
-          });
-        },
-    );
-  }
-
   function renderAdminSidebar_(currentPage, visiblePages) {
-    var activeGroup = getAdminSidebarGroupById_(
-        adminState.sidebarNavGroup,
-    );
-    var sidebarGroup = activeGroup || ADMIN_SIDEBAR_GROUPS[0] || null;
-    var groupPages = getVisibleAdminSidebarGroupPages_(
-        sidebarGroup,
-        visiblePages,
-    );
-
-    if (activeGroup && !groupPages.length) {
-      activeGroup = null;
-      if (!adminState.authLoading && adminState.userDocLoaded) {
-        adminState.sidebarNavGroup = "";
-      }
-    }
-
     return [
       "<aside class=\"central-admin-sidebar\" id=\"central-admin-sidebar\">",
       "<div class=\"central-admin-sidebar-top\">",
@@ -5217,187 +3367,18 @@
       "</div>",
       renderAdminUserPanel_(),
       "<nav class=\"central-admin-nav\" aria-label=\"Admin pages\">",
-      "<div class=\"central-admin-nav-stage",
-      activeGroup ? " is-group-active" : "", "\" data-admin-nav-stage",
-      activeGroup ? " data-admin-nav-group=\"" +
-        escapeAttr_(activeGroup.id) + "\"" : "",
-      ">",
-      "<div class=\"central-admin-nav-panel is-root\" data-admin-nav-panel=\"root\"",
-      activeGroup ? " aria-hidden=\"true\" inert" : " aria-hidden=\"false\"",
-      ">",
-      renderAdminSidebarRootNav_(visiblePages, currentPage),
-      "</div>",
-      sidebarGroup && groupPages.length ? [
-        "<div class=\"central-admin-nav-panel is-group\" data-admin-nav-panel=\"",
-        escapeAttr_(sidebarGroup.id), "\"",
-        activeGroup ? " aria-hidden=\"false\"" :
-          " aria-hidden=\"true\" inert",
-        ">",
-        renderAdminSidebarGroupNav_(sidebarGroup, groupPages, currentPage),
-        "</div>",
-      ].join("") : "",
-      "</div>",
+      visiblePages.map(function(page) {
+        return [
+          "<a href=\"", escapeAttr_(page.route), "\" data-admin-nav=\"",
+          escapeAttr_(page.id), "\" class=\"",
+          page.id === currentPage.id ? "is-active" : "", "\">",
+          "<span>", escapeHtml_(page.label), "</span>",
+          renderAdminSidebarNavMeta_(page),
+          "</a>",
+        ].join("");
+      }).join(""),
       "</nav>",
       "</aside>",
-    ].join("");
-  }
-
-  function syncAdminSidebarNavGroupState_() {
-    if (!appEl) {
-      return false;
-    }
-
-    var stageEl = appEl.querySelector("[data-admin-nav-stage]");
-    var rootPanelEl = appEl.querySelector(
-        '[data-admin-nav-panel="root"]',
-    );
-    var groupId = adminState.sidebarNavGroup || "";
-    var groupPanelEl = appEl.querySelector(
-        ".central-admin-nav-panel.is-group",
-    );
-
-    if (!stageEl || !rootPanelEl || !groupPanelEl) {
-      return false;
-    }
-
-    if (groupId &&
-      groupPanelEl.getAttribute("data-admin-nav-panel") !== groupId) {
-      var nextGroup = getAdminSidebarGroupById_(groupId);
-      var nextGroupPages = getVisibleAdminSidebarGroupPages_(
-          nextGroup,
-          getVisibleAdminPages_(),
-      );
-      var currentPage = getAdminPageById_(adminState.currentPageId) ||
-        getAdminPageById_("overview");
-      if (!nextGroup || !nextGroupPages.length || !currentPage) {
-        return false;
-      }
-
-      groupPanelEl.setAttribute("data-admin-nav-panel", groupId);
-      groupPanelEl.innerHTML = renderAdminSidebarGroupNav_(
-          nextGroup,
-          nextGroupPages,
-          currentPage,
-      );
-    }
-
-    var showGroup = !!groupId;
-    stageEl.classList.toggle("is-group-active", showGroup);
-    if (showGroup) {
-      stageEl.setAttribute("data-admin-nav-group", groupId);
-    } else {
-      stageEl.removeAttribute("data-admin-nav-group");
-    }
-
-    setAdminSidebarNavPanelActive_(rootPanelEl, !showGroup);
-    setAdminSidebarNavPanelActive_(groupPanelEl, showGroup);
-
-    window.requestAnimationFrame(function() {
-      var focusTarget = showGroup ?
-        groupPanelEl.querySelector(".central-admin-nav-back") :
-        rootPanelEl.querySelector(
-            '[data-admin-nav-group="' +
-            (groupPanelEl.getAttribute("data-admin-nav-panel") || "") +
-            '"]',
-        );
-      if (focusTarget) {
-        focusTarget.focus({preventScroll: true});
-      }
-    });
-
-    return true;
-  }
-
-  function setAdminSidebarNavPanelActive_(panelEl, isActive) {
-    panelEl.setAttribute("aria-hidden", isActive ? "false" : "true");
-    panelEl.toggleAttribute("inert", !isActive);
-  }
-
-  function getAdminSidebarGroupById_(groupId) {
-    return ADMIN_SIDEBAR_GROUPS.find(function(group) {
-      return group.id === groupId;
-    }) || null;
-  }
-
-  function getAdminSidebarGroupForPageId_(pageId) {
-    var group = ADMIN_SIDEBAR_GROUPS.find(function(groupItem) {
-      return groupItem.pageIds.indexOf(pageId) !== -1;
-    });
-
-    return group ? group.id : "";
-  }
-
-  function getVisibleAdminSidebarGroupPages_(group, visiblePages) {
-    if (!group) {
-      return [];
-    }
-
-    return group.pageIds.map(function(pageId) {
-      return visiblePages.find(function(page) {
-        return page.id === pageId;
-      }) || null;
-    }).filter(Boolean);
-  }
-
-  function renderAdminSidebarRootNav_(visiblePages, currentPage) {
-    return ADMIN_SIDEBAR_ROOT_ITEMS.map(function(item) {
-      if (item.type === "group") {
-        var group = getAdminSidebarGroupById_(item.id);
-        var groupPages = getVisibleAdminSidebarGroupPages_(
-            group,
-            visiblePages,
-        );
-
-        if (!group || !groupPages.length) {
-          return "";
-        }
-
-        var groupIsActive = group.pageIds.indexOf(currentPage.id) !== -1;
-        return [
-          "<button type=\"button\" data-admin-action=\"open-sidebar-nav-group\" data-admin-nav-group=\"",
-          escapeAttr_(group.id), "\" class=\"",
-          groupIsActive ? "is-active" : "", "\" aria-label=\"Open ",
-          escapeAttr_(group.label), " section\">",
-          "<span>", escapeHtml_(group.label), "</span>",
-          "<span class=\"central-admin-nav-chevron\" aria-hidden=\"true\"></span>",
-          "</button>",
-        ].join("");
-      }
-
-      var page = visiblePages.find(function(visiblePage) {
-        return visiblePage.id === item.id;
-      });
-      return page ? renderAdminSidebarPageLink_(page, currentPage) : "";
-    }).join("");
-  }
-
-  function renderAdminSidebarGroupNav_(group, groupPages, currentPage) {
-    return [
-      "<div class=\"central-admin-nav-context\">",
-      "<button type=\"button\" class=\"central-admin-nav-back\" data-admin-action=\"close-sidebar-nav-group\">",
-      "<span class=\"central-admin-nav-back-arrow\" aria-hidden=\"true\">&larr;</span>",
-      "<span>All sections</span>",
-      "</button>",
-      "<p>", escapeHtml_(group.label), "</p>",
-      "</div>",
-      groupPages.map(function(page) {
-        return renderAdminSidebarPageLink_(page, currentPage);
-      }).join(""),
-    ].join("");
-  }
-
-  function renderAdminSidebarPageLink_(page, currentPage) {
-    var isActive = page.id === currentPage.id;
-    return [
-      "<a href=\"", escapeAttr_(page.route), "\"",
-      page.externalRoute ? "" : " data-admin-nav=\"" +
-        escapeAttr_(page.id) + "\"",
-      " class=\"",
-      isActive ? "is-active" : "", "\"",
-      isActive ? " aria-current=\"page\"" : "", ">",
-      "<span>", escapeHtml_(page.navLabel || page.label), "</span>",
-      renderAdminSidebarNavMeta_(page),
-      "</a>",
     ].join("");
   }
 
@@ -5450,208 +3431,7 @@
     ].join("");
   }
 
-  function renderBulletinEventEditorModal_(currentPage) {
-    if (
-      !currentPage ||
-      currentPage.id !== "bulletin" ||
-      !adminState.bulletinEditingEventId
-    ) {
-      return "";
-    }
-
-    var item = (adminState.bulletinDraft.events || []).find(function(eventItem) {
-      return eventItem.id === adminState.bulletinEditingEventId;
-    });
-    if (!item) {
-      return "";
-    }
-
-    return [
-      "<div class=\"central-admin-modal central-admin-bulletin-event-modal\" role=\"presentation\">",
-      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-bulletin-event-editor\" aria-label=\"Close event editor\"></button>",
-      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-bulletin-event-modal-title\">",
-      "<div class=\"central-admin-modal-copy\">",
-      "<span class=\"central-admin-kicker\">Bulletin Event</span>",
-      "<h3 id=\"central-admin-bulletin-event-modal-title\">",
-      escapeHtml_(item.title || "Untitled Event"),
-      "</h3>",
-      "<p>",
-      escapeHtml_([item.date, item.time, item.location].filter(Boolean).join(" · ")),
-      "</p>",
-      "</div>",
-      "<div class=\"central-admin-bulletin-event-modal-fields\">",
-      "<label class=\"central-admin-field\"><span>Printed Title</span>",
-      "<input type=\"text\" maxlength=\"180\" value=\"", escapeAttr_(item.title),
-      "\" data-admin-bulletin-event-id=\"", escapeAttr_(item.id),
-      "\" data-admin-bulletin-event-field=\"title\"></label>",
-      "<label class=\"central-admin-field\"><span>Printed Room / Location</span>",
-      "<input type=\"text\" maxlength=\"240\" value=\"", escapeAttr_(item.location),
-      "\" data-admin-bulletin-event-id=\"", escapeAttr_(item.id),
-      "\" data-admin-bulletin-event-field=\"location\">",
-      "<small class=\"central-admin-field-hint\">Planning Center default: ",
-      escapeHtml_(item.sourceLocation || "No room provided"),
-      ". Enter another room to override it for this bulletin.</small></label>",
-      "<label class=\"central-admin-field\"><span>Printed Description</span>",
-      "<textarea rows=\"5\" maxlength=\"1200\" data-admin-bulletin-event-id=\"",
-      escapeAttr_(item.id), "\" data-admin-bulletin-event-field=\"description\">",
-      escapeHtml_(item.description), "</textarea>",
-      "<small class=\"central-admin-field-hint\">Formatting: **bold**, *italics*, headings, and - or 1. lists. Line breaks are preserved.</small>",
-      renderBulletinEventDescriptionGuidance_(item),
-      "</label>",
-      "<label class=\"central-admin-checkbox central-admin-modal-checkbox\"><input type=\"checkbox\" data-admin-bulletin-event-id=\"",
-      escapeAttr_(item.id), "\" data-admin-bulletin-event-field=\"includeDescription\"",
-      item.includeDescription ? " checked" : "", "><span>Include full description</span></label>",
-      "</div>",
-      "<div class=\"central-admin-action-row central-admin-modal-actions\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"close-bulletin-event-editor\">Done</button>",
-      "</div>",
-      "</div>",
-      "</div>",
-    ].join("");
-  }
-
-  function renderPrintModeQuickAddModal_(currentPage) {
-    var section = adminState.printModeQuickAddSection;
-    if (
-      !currentPage ||
-      currentPage.id !== "bulletin" ||
-      (section !== "campaigns" && section !== "serveNeeds")
-    ) {
-      return "";
-    }
-
-    var isCampaign = section === "campaigns";
-    var isLoading = isCampaign ?
-      adminState.campaignsLoading :
-      adminState.serveNeedsLoading;
-    var isLoaded = isCampaign ?
-      adminState.campaignsLoaded :
-      adminState.serveNeedsLoaded;
-
-    return [
-      "<div class=\"central-admin-modal central-admin-print-mode-quick-add-modal\" role=\"presentation\">",
-      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-print-mode-quick-add\" aria-label=\"Close ",
-      isCampaign ? "campaign" : "serve opportunity",
-      " editor\"></button>",
-      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-print-mode-quick-add-title\">",
-      "<div class=\"central-admin-modal-copy\">",
-      "<span class=\"central-admin-kicker\">Print Mode Shortcut</span>",
-      "<h3 id=\"central-admin-print-mode-quick-add-title\">Add ",
-      isCampaign ? "Campaign" : "Serve Opportunity",
-      "</h3><p>This publishes to the shared Central list and makes it available in Print Mode.</p>",
-      "</div>",
-      isLoading || !isLoaded ?
-        renderAdminNote_(
-            isCampaign ?
-              "Loading the Campaigns editor..." :
-              "Loading the Serve Opportunities editor...",
-        ) :
-        (isCampaign ?
-          renderCampaignsEditorForm_() :
-          renderServeNeedsEditorForm_()),
-      "</div></div>",
-    ].join("");
-  }
-
-  function renderBulletinFallbackBlockModal_(currentPage) {
-    if (
-      !currentPage ||
-      currentPage.id !== "bulletin" ||
-      !adminState.bulletinFallbackBlockEditorOpen
-    ) {
-      return "";
-    }
-
-    var draft = adminState.bulletinFallbackBlockDraft ||
-      createEmptyBulletinFallbackBlockDraft_();
-    var imageUrl = getBulletinFallbackImageUrl_(draft.imageUrl);
-    var editing = !!adminState.bulletinFallbackBlockEditingId;
-
-    return [
-      "<div class=\"central-admin-modal central-admin-bulletin-block-modal\" role=\"presentation\">",
-      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-bulletin-fallback-block-editor\" aria-label=\"Close custom block editor\"></button>",
-      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-bulletin-block-modal-title\">",
-      "<div class=\"central-admin-modal-copy\">",
-      "<span class=\"central-admin-kicker\">Custom Front Content</span>",
-      "<h3 id=\"central-admin-bulletin-block-modal-title\">",
-      editing ? "Edit Custom Block" : "Add Custom Block",
-      "</h3><p>Add useful evergreen information for Sundays without a Campaign or Serve Opportunity.</p>",
-      "</div>",
-      "<div class=\"central-admin-bulletin-block-modal-fields\">",
-      renderAdminInputField_({
-        label: "Eyebrow",
-        field: "bulletin-block.eyebrow",
-        value: draft.eyebrow,
-        maxLength: 80,
-        placeholder: "New Here?",
-      }),
-      renderAdminInputField_({
-        label: "Title",
-        field: "bulletin-block.title",
-        value: draft.title,
-        maxLength: 180,
-        placeholder: "We'd Love to Help You Get Connected",
-      }),
-      renderAdminTextareaField_({
-        label: "Description",
-        field: "bulletin-block.description",
-        value: draft.description,
-        rows: 4,
-        maxLength: 800,
-        wide: true,
-      }),
-      "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-block-image-side\">",
-      "<legend>Image Placement</legend>",
-      "<label class=\"", draft.imageSide === "left" ? "is-active" : "",
-      "\"><input type=\"radio\" name=\"bulletin-block-image-side\" value=\"left\" data-admin-field=\"bulletin-block.imageSide\"",
-      draft.imageSide === "left" ? " checked" : "",
-      "><span><strong>Image Left</strong><small>Text follows the image.</small></span></label>",
-      "<label class=\"", draft.imageSide !== "left" ? "is-active" : "",
-      "\"><input type=\"radio\" name=\"bulletin-block-image-side\" value=\"right\" data-admin-field=\"bulletin-block.imageSide\"",
-      draft.imageSide !== "left" ? " checked" : "",
-      "><span><strong>Image Right</strong><small>Text leads into the image.</small></span></label>",
-      "</fieldset>",
-      "<div class=\"central-admin-bulletin-image-editor",
-      imageUrl ? " has-image" : "", "\">",
-      imageUrl ?
-        "<img src=\"" + escapeAttr_(imageUrl) + "\" alt=\"Current custom block image\">" :
-        "<div class=\"central-admin-bulletin-image-placeholder\">Optional block image</div>",
-      "<div class=\"central-admin-bulletin-image-actions\">",
-      "<label class=\"central-admin-link-button is-secondary central-admin-file-button",
-      adminState.bulletinFallbackBlockImageUploading ? " is-disabled" : "",
-      "\"><span>",
-      adminState.bulletinFallbackBlockImageUploading ?
-        "Uploading..." :
-        (imageUrl ? "Replace image" : "Upload image"),
-      "</span><input type=\"file\" accept=\"image/jpeg,image/png,image/webp\" data-admin-bulletin-block-image",
-      adminState.bulletinFallbackBlockImageUploading ? " disabled" : "",
-      "></label>",
-      imageUrl ? [
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"remove-bulletin-fallback-block-image\"",
-        adminState.bulletinFallbackBlockImageUploading ? " disabled" : "",
-        ">Remove image</button>",
-      ].join("") : "",
-      "<small>JPEG, PNG, or WebP up to 10 MB.</small>",
-      "</div></div>",
-      "<label class=\"central-admin-checkbox central-admin-modal-checkbox\"><input type=\"checkbox\" data-admin-field=\"bulletin-block.enabled\"",
-      draft.enabled !== false ? " checked" : "",
-      "><span>Include this block when custom content is used</span></label>",
-      "</div>",
-      adminState.bulletinError ?
-        "<p class=\"central-admin-note\">" +
-          escapeHtml_(adminState.bulletinError) + "</p>" :
-        "",
-      "<div class=\"central-admin-action-row central-admin-modal-actions\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"close-bulletin-fallback-block-editor\">Cancel</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-bulletin-fallback-block\"",
-      adminState.bulletinFallbackBlockImageUploading ? " disabled" : "",
-      ">", editing ? "Save Block" : "Add Block", "</button>",
-      "</div></div></div>",
-    ].join("");
-  }
-
   function renderAdminHero_(currentPage) {
-    var heroBadgesHtml = renderAdminHeroBadges_(currentPage);
     return [
       "<section class=\"central-admin-hero\">",
       "<div class=\"central-admin-hero-top\">",
@@ -5666,12 +3446,16 @@
       "</div>",
       "</div>",
       "<div class=\"central-admin-hero-copy\">",
+      "<div class=\"central-admin-hero-bar\">",
+      "<span class=\"central-admin-kicker\">Central Admin</span>",
+      "<span class=\"central-admin-badge\">", escapeHtml_(currentPage.label), "</span>",
+      "</div>",
       "<h2>", escapeHtml_(getAdminHeroTitle_(currentPage)), "</h2>",
       "<p>", escapeHtml_(getAdminHeroDescription_(currentPage)), "</p>",
       "</div>",
-      heroBadgesHtml ?
-        "<div class=\"central-admin-badges\">" + heroBadgesHtml + "</div>" :
-        "",
+      "<div class=\"central-admin-badges\">",
+      renderAdminHeroBadges_(currentPage),
+      "</div>",
       adminState.errorMessage ?
         "<p class=\"central-admin-note central-admin-hero-note\">" +
         escapeHtml_(adminState.errorMessage) +
@@ -5682,7 +3466,24 @@
   }
 
   function renderAdminHeroBadges_(currentPage) {
-    var badges = [];
+    var badges = [
+      renderStatusPill_(
+          getAdminAccessSummaryLabel_(),
+          getAdminAccessSummaryTone_(),
+      ),
+    ];
+
+    if (currentPage && currentPage.pageAccessKey) {
+      var permission = getPageAccessLevel_(currentPage.pageAccessKey);
+      if (permission !== "none") {
+        badges.push(
+            renderStatusPill_(
+                getPermissionLabel_(permission),
+                getPermissionToneClass_(permission),
+            ),
+        );
+      }
+    }
 
     if (
       adminState.changeRequestsPendingCount > 0 &&
@@ -5695,6 +3496,8 @@
               "is-live",
           ),
       );
+    } else if (adminState.usingEmulators) {
+      badges.push(renderStatusPill_("Local preview", "is-warn"));
     }
 
     return badges.join("");
@@ -5803,7 +3606,7 @@
       return "Dashboard";
     }
 
-    return currentPage.label;
+    return "Manage " + currentPage.label;
   }
 
   function renderAdminMetricCard_(label, metric, description, toneClass) {
@@ -5824,10 +3627,6 @@
 
     if (currentPage.id === "hub") {
       return renderHubPagePanel_(currentPage);
-    }
-
-    if (currentPage.id === "bulletin") {
-      return renderBulletinPagePanel_(currentPage);
     }
 
     if (currentPage.id === "quick-links") {
@@ -5856,18 +3655,6 @@
 
     if (currentPage.id === "settings") {
       return renderSettingsPagePanel_(currentPage);
-    }
-
-    if (currentPage.id === "settings-sunday-mode") {
-      return renderSettingsSundayModePagePanel_(currentPage);
-    }
-
-    if (currentPage.id === "settings-rooms") {
-      return renderSettingsRoomsPagePanel_(currentPage);
-    }
-
-    if (currentPage.id === "settings-team") {
-      return renderSettingsTeamPagePanel_(currentPage);
     }
 
     if (currentPage.id === "integrations") {
@@ -5942,7 +3729,7 @@
 
   function renderOverviewPagePanel_(currentPage) {
     var pages = getVisibleAdminPages_().filter(function(page) {
-      return page.id !== "overview" && !page.hideFromOverview;
+      return page.id !== "overview";
     });
 
     if (!adminState.user || !adminState.userEmailAllowed ||
@@ -5957,6 +3744,10 @@
       "<h3>", escapeHtml_(currentPage.label), "</h3>",
       "<p>", escapeHtml_(currentPage.summary), "</p>",
       "</div>",
+      renderStatusPill_(
+          String(pages.length) + " page" + (pages.length === 1 ? "" : "s"),
+          "is-safe",
+      ),
       "</div>",
       "<div class=\"central-admin-page-body\">",
       pages.length ? [
@@ -6110,6 +3901,7 @@
   }
 
   function renderOverviewPageCard_(page) {
+    var permission = getPageAccessLevel_(page.pageAccessKey);
     var statusText = page.id === "change-requests" &&
       adminState.changeRequestsPendingCount > 0 ?
       String(adminState.changeRequestsPendingCount) + " pending" :
@@ -6117,26 +3909,29 @@
     var actionLabel = page.id === "change-requests" &&
       adminState.changeRequestsPendingCount > 0 ?
       "Review Requests" :
-      page.externalRoute ? "Launch Studio" : "Open Page";
+      "Open Page";
 
     return [
       "<article class=\"central-admin-card central-admin-overview-card\">",
       "<div class=\"central-admin-overview-card-top\">",
       "<h3>", escapeHtml_(page.label), "</h3>",
+      "<div class=\"central-admin-badges\">",
+      renderStatusPill_(
+          getPermissionLabel_(permission),
+          getPermissionToneClass_(permission),
+      ),
       statusText && page.id === "change-requests" ?
-        "<div class=\"central-admin-badges\">" +
-          renderStatusPill_(statusText, "is-live") + "</div>" :
+        renderStatusPill_(statusText, "is-live") :
         "",
+      "</div>",
       "</div>",
       "<p>", escapeHtml_(getAdminPageShortSummary_(page)), "</p>",
       "<div class=\"central-admin-action-row\">",
-      page.externalRoute ?
-        "<a class=\"central-admin-link-button is-secondary\" href=\"" +
-          escapeAttr_(page.route) + "\">" :
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-nav=\"" +
-          escapeAttr_(page.id) + "\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-nav=\"",
+      escapeAttr_(page.id),
+      "\">",
       escapeHtml_(actionLabel),
-      page.externalRoute ? "</a>" : "</button>",
+      "</button>",
       "</div>",
       "</article>",
     ].join("");
@@ -6149,14 +3944,6 @@
 
     if (page.id === "hub") {
       return "Homepage content and Sunday-mode copy.";
-    }
-
-    if (page.id === "bulletin") {
-      return "A guided Sunday print workflow with a live preview.";
-    }
-
-    if (page.id === "studio") {
-      return "Controlled policy documents and event graphics.";
     }
 
     if (page.id === "quick-links") {
@@ -6188,7 +3975,7 @@
     }
 
     if (page.id === "settings") {
-      return "Sunday Mode, room names, and team access.";
+      return "Operational controls, room rules, and admin access.";
     }
 
     if (page.id === "change-requests") {
@@ -6482,2044 +4269,6 @@
     ].join("");
   }
 
-  function renderBulletinPagePanel_(currentPage) {
-    var permission = getPageAccessLevel_("bulletin");
-    var canSave = isEditorLevelPermission_(permission);
-
-    if (adminState.bulletinLoading && !adminState.bulletinLoaded) {
-      return [
-        "<section class=\"central-admin-panel\">",
-        "<div class=\"central-admin-panel-header\"><div>",
-        "<h3>", escapeHtml_(currentPage.label), "</h3>",
-        "<p>", escapeHtml_(currentPage.summary), "</p>",
-        "</div>", renderStatusPill_("Loading", "is-live"), "</div>",
-        "<div class=\"central-admin-page-body\">",
-        renderAdminNote_(
-            "Loading the current Central content and saved Print Mode settings.",
-        ),
-        "</div></section>",
-      ].join("");
-    }
-
-    if (adminState.bulletinError && !adminState.bulletinLoaded) {
-      return [
-        "<section class=\"central-admin-panel\">",
-        "<div class=\"central-admin-panel-header\"><div>",
-        "<h3>", escapeHtml_(currentPage.label), "</h3>",
-        "<p>", escapeHtml_(currentPage.summary), "</p>",
-        "</div>", renderStatusPill_("Load failed", "is-warn"), "</div>",
-        "<div class=\"central-admin-page-body\">",
-        renderAdminNote_(adminState.bulletinError),
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-bulletin\">Try Again</button>",
-        "</div></section>",
-      ].join("");
-    }
-
-    return [
-      "<section class=\"central-admin-panel central-admin-bulletin-panel central-admin-print-mode-panel\">",
-      "<div class=\"central-admin-panel-header\"><div>",
-      "<h3>", escapeHtml_(currentPage.label), "</h3>",
-      "<p>", escapeHtml_(currentPage.summary), "</p>",
-      "</div></div>",
-      "<div class=\"central-admin-page-body\">",
-      adminState.bulletinMessage ?
-        "<div class=\"central-admin-print-mode-message\">" +
-          renderAdminNote_(adminState.bulletinMessage) +
-        "</div>" :
-        "",
-      adminState.bulletinError ?
-        "<p class=\"central-admin-note\">" +
-          escapeHtml_(adminState.bulletinError) + "</p>" :
-        "",
-      renderPrintModeStepRail_(),
-      "<div class=\"central-admin-print-mode-workspace\">",
-      "<div class=\"central-admin-print-mode-editor\">",
-      renderPrintModeCurrentStep_(canSave),
-      "</div>",
-      renderPrintModePreview_(),
-      "</div>",
-      "</div></section>",
-    ].join("");
-  }
-
-  function getPrintModeStep_() {
-    var step = Number(adminState.printModeStep);
-    if (!isFinite(step)) {
-      return 1;
-    }
-    return Math.max(1, Math.min(PRINT_MODE_STEPS.length, Math.round(step)));
-  }
-
-  function getPrintModeStepDefinition_(step) {
-    var definition =
-      PRINT_MODE_STEPS[Math.max(0, getPrintModeStepIndex_(step))] ||
-      PRINT_MODE_STEPS[0];
-    if (
-      Number(step) === 5 &&
-      getBulletinPrintFormat_() === "full-page"
-    ) {
-      return Object.assign({}, definition, {
-        description: "Check the finished front page, then print or save a PDF.",
-      });
-    }
-    return definition;
-  }
-
-  function getPrintModeStepIndex_(step) {
-    var normalizedStep = Number(step);
-    if (!isFinite(normalizedStep)) {
-      normalizedStep = 1;
-    }
-    return Math.max(
-        0,
-        Math.min(PRINT_MODE_STEPS.length - 1, Math.round(normalizedStep) - 1),
-    );
-  }
-
-  function setPrintModeStep_(nextStep) {
-    var currentStep = getPrintModeStep_();
-    var normalizedStep = getPrintModeStepIndex_(nextStep) + 1;
-    if (
-      getBulletinPrintFormat_() === "full-page" &&
-      normalizedStep === 4
-    ) {
-      normalizedStep = currentStep < 4 ? 5 : 3;
-    }
-    if (normalizedStep === currentStep) {
-      return;
-    }
-
-    adminState.printModeStepDirection =
-      normalizedStep > currentStep ? "forward" : "backward";
-    adminState.printModeStep = normalizedStep;
-
-    var automaticSide = getBulletinPrintFormat_() === "full-page" ?
-      "front" :
-      (normalizedStep <= 3 ?
-      "front" :
-      (normalizedStep === 4 ? "back" : ""));
-    if (automaticSide &&
-      adminState.printModePreviewSide !== automaticSide) {
-      adminState.printModePreviewDirection =
-        automaticSide === "back" ? "forward" : "backward";
-      adminState.printModePreviewSide = automaticSide;
-    }
-
-    renderAdmin_();
-  }
-
-  function setPrintModePreviewSide_(side) {
-    var normalizedSide = side === "back" ? "back" : "front";
-    if (
-      normalizedSide === "back" &&
-      getBulletinPrintFormat_() === "full-page"
-    ) {
-      return;
-    }
-    if (normalizedSide === adminState.printModePreviewSide) {
-      return;
-    }
-
-    if (adminState.printModePreviewSwitching) {
-      return;
-    }
-
-    var direction = normalizedSide === "back" ? "forward" : "backward";
-    var previewPage = document.querySelector(
-        ".central-admin-print-mode-preview-page",
-    );
-    var reduceMotion = window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (!previewPage || reduceMotion) {
-      adminState.printModePreviewDirection = direction;
-      adminState.printModePreviewSide = normalizedSide;
-      renderAdmin_();
-      return;
-    }
-
-    adminState.printModePreviewSwitching = true;
-    previewPage.classList.add("is-flip-out-" + direction);
-
-    var sideChanged = false;
-    var completeSideChange = function() {
-      if (sideChanged) {
-        return;
-      }
-      sideChanged = true;
-      adminState.printModePreviewDirection = direction;
-      adminState.printModePreviewSide = normalizedSide;
-      renderAdmin_();
-
-      window.setTimeout(function() {
-        adminState.printModePreviewSwitching = false;
-      }, 480);
-    };
-
-    previewPage.addEventListener("animationend", completeSideChange, {
-      once: true,
-    });
-    window.setTimeout(completeSideChange, 390);
-  }
-
-  function openPrintModeQuickAdd_(section) {
-    var normalizedSection = section === "serveNeeds" ?
-      "serveNeeds" : "campaigns";
-    var permission = getPageAccessLevel_(normalizedSection);
-    if (!isEditorLevelPermission_(permission)) {
-      return;
-    }
-
-    clearAdminDirtyScope_(
-        normalizedSection === "serveNeeds" ? "serve-need" : "campaign",
-    );
-    adminState.printModeQuickAddSection = normalizedSection;
-    if (normalizedSection === "campaigns") {
-      resetCampaignsDraft_();
-      if (!adminState.campaignsLoaded && !adminState.campaignsLoading) {
-        loadCampaigns_();
-        return;
-      }
-    } else {
-      resetServeNeedsDraft_();
-      if (!adminState.serveNeedsLoaded && !adminState.serveNeedsLoading) {
-        loadServeNeeds_();
-        return;
-      }
-    }
-    renderAdmin_();
-  }
-
-  function closePrintModeQuickAdd_() {
-    var section = adminState.printModeQuickAddSection;
-    var dirtyScope = section === "serveNeeds" ? "serve-need" : "campaign";
-    clearAdminDirtyScope_(dirtyScope);
-
-    if (section === "campaigns") {
-      resetCampaignsDraft_();
-    } else if (section === "serveNeeds") {
-      resetServeNeedsDraft_();
-    }
-    adminState.printModeQuickAddSection = "";
-    renderAdmin_();
-  }
-
-  function openBulletinFallbackBlockEditor_(blockId) {
-    var blocks = adminState.bulletinDraft.fallbackBlocks || [];
-    var block = blockId ? blocks.find(function(item) {
-      return item.id === blockId;
-    }) : null;
-
-    adminState.bulletinFallbackBlockEditingId = block ? block.id : "";
-    adminState.bulletinFallbackBlockDraft = block ?
-      Object.assign(createEmptyBulletinFallbackBlockDraft_(), block) :
-      createEmptyBulletinFallbackBlockDraft_();
-    adminState.bulletinFallbackBlockEditorOpen = true;
-    adminState.bulletinError = "";
-    renderAdmin_();
-  }
-
-  function closeBulletinFallbackBlockEditor_() {
-    adminState.bulletinFallbackBlockEditorOpen = false;
-    adminState.bulletinFallbackBlockEditingId = "";
-    adminState.bulletinFallbackBlockDraft =
-      createEmptyBulletinFallbackBlockDraft_();
-    adminState.bulletinFallbackBlockImageUploading = false;
-    adminState.bulletinError = "";
-    renderAdmin_();
-  }
-
-  function saveBulletinFallbackBlock_() {
-    var draft = adminState.bulletinFallbackBlockDraft ||
-      createEmptyBulletinFallbackBlockDraft_();
-    var title = String(draft.title || "").trim();
-    if (!title) {
-      adminState.bulletinError = "Custom blocks need a title.";
-      renderAdmin_();
-      return;
-    }
-
-    var blocks = (adminState.bulletinDraft.fallbackBlocks || [])
-        .map(function(block) {
-          return Object.assign({}, block);
-        });
-    var editingId = adminState.bulletinFallbackBlockEditingId;
-    var nextBlock = {
-      id: editingId ||
-        "fallback-" + Date.now().toString(36),
-      eyebrow: String(draft.eyebrow || "").trim(),
-      title: title,
-      description: String(draft.description || "").trim(),
-      imageUrl: getBulletinFallbackImageUrl_(draft.imageUrl),
-      imageStoragePath: String(draft.imageStoragePath || "").trim(),
-      imageSide: draft.imageSide === "left" ? "left" : "right",
-      enabled: draft.enabled !== false,
-    };
-    var existingIndex = blocks.findIndex(function(block) {
-      return block.id === editingId;
-    });
-
-    if (existingIndex === -1) {
-      blocks.push(nextBlock);
-    } else {
-      blocks[existingIndex] = nextBlock;
-    }
-
-    adminState.bulletinDraft.fallbackBlocks = blocks.slice(0, 4);
-    markAdminDirtyScope_("bulletin");
-    adminState.bulletinFallbackBlockEditorOpen = false;
-    adminState.bulletinFallbackBlockEditingId = "";
-    adminState.bulletinFallbackBlockDraft =
-      createEmptyBulletinFallbackBlockDraft_();
-    adminState.bulletinError = "";
-    renderAdmin_();
-  }
-
-  function moveBulletinFallbackBlock_(blockId, direction) {
-    var blocks = (adminState.bulletinDraft.fallbackBlocks || []).slice();
-    var index = blocks.findIndex(function(block) {
-      return block.id === blockId;
-    });
-    var nextIndex = direction === "up" ? index - 1 : index + 1;
-    if (
-      index < 0 ||
-      nextIndex < 0 ||
-      nextIndex >= blocks.length
-    ) {
-      return;
-    }
-
-    var movingBlock = blocks[index];
-    blocks[index] = blocks[nextIndex];
-    blocks[nextIndex] = movingBlock;
-    adminState.bulletinDraft.fallbackBlocks = blocks;
-    markAdminDirtyScope_("bulletin");
-    renderAdmin_();
-  }
-
-  function toggleBulletinFallbackBlock_(blockId) {
-    var block = (adminState.bulletinDraft.fallbackBlocks || [])
-        .find(function(item) {
-          return item.id === blockId;
-        });
-    if (!block) {
-      return;
-    }
-
-    block.enabled = block.enabled === false;
-    markAdminDirtyScope_("bulletin");
-    renderAdmin_();
-  }
-
-  function removeBulletinFallbackBlock_(blockId) {
-    var block = (adminState.bulletinDraft.fallbackBlocks || [])
-        .find(function(item) {
-          return item.id === blockId;
-        });
-    if (!block) {
-      return;
-    }
-
-    openDeleteConfirm_({
-      title: "Remove Custom Block",
-      message: "Remove " + (block.title || "this custom block") +
-        " from Print Mode?",
-      confirmLabel: "Remove Block",
-      showSkip: false,
-      onConfirm: function() {
-        adminState.bulletinDraft.fallbackBlocks =
-          (adminState.bulletinDraft.fallbackBlocks || [])
-              .filter(function(item) {
-                return item.id !== blockId;
-              });
-        markAdminDirtyScope_("bulletin");
-        renderAdmin_();
-      },
-    });
-  }
-
-  function renderPrintModeStepRail_() {
-    var activeStep = getPrintModeStep_();
-    var fullPage = getBulletinPrintFormat_() === "full-page";
-    var formatTransition = adminState.printModeFormatTransition;
-
-    var html = [
-      "<nav class=\"central-admin-print-mode-steps\" aria-label=\"Print Mode steps\">",
-      PRINT_MODE_STEPS.map(function(step, index) {
-        var stepNumber = index + 1;
-        var isUnavailable = fullPage && stepNumber === 4;
-        var isActive = stepNumber === activeStep;
-        var isComplete = stepNumber < activeStep && !isUnavailable;
-        return [
-          "<button type=\"button\" class=\"central-admin-print-mode-step",
-          isActive ? " is-active" : "",
-          isComplete ? " is-complete" : "",
-          isUnavailable ? " is-unavailable" : "",
-          stepNumber === 4 && formatTransition === "to-full" ?
-            " is-fading-out" : "",
-          stepNumber === 4 && formatTransition === "to-half" ?
-            " is-fading-in" : "",
-          "\" data-admin-action=\"print-mode-step\" data-admin-print-mode-step=\"",
-          String(stepNumber),
-          "\" aria-current=\"", isActive ? "step" : "false", "\"",
-          isUnavailable ? " disabled aria-disabled=\"true\"" : "",
-          ">",
-          "<span class=\"central-admin-print-mode-step-number\">",
-          isComplete ? "✓" : String(stepNumber),
-          "</span><span class=\"central-admin-print-mode-step-label\">",
-          escapeHtml_(step.shortLabel),
-          "</span></button>",
-        ].join("");
-      }).join(""),
-      "</nav>",
-    ].join("");
-    adminState.printModeFormatTransition = "";
-    return html;
-  }
-
-  function renderPrintModeCurrentStep_(canSave) {
-    var step = getPrintModeStep_();
-    var definition = getPrintModeStepDefinition_(step);
-    var direction = adminState.printModeStepDirection;
-    var content = "";
-
-    if (step === 1) {
-      content = renderBulletinPrintFormatEditor_(canSave);
-    } else if (step === 2) {
-      content = renderPrintModeHeroStep_(canSave);
-    } else if (step === 3) {
-      content = renderPrintModeFrontStep_(canSave);
-    } else if (step === 4) {
-      content = renderPrintModeEventsStep_(canSave);
-    } else {
-      content = renderPrintModeReviewStep_();
-    }
-
-    adminState.printModeStepDirection = "";
-
-    return [
-      "<section class=\"central-admin-print-mode-step-panel",
-      direction ? " is-" + escapeAttr_(direction) : "",
-      "\">",
-      "<div class=\"central-admin-print-mode-step-heading\">",
-      "<span>Step ", String(step), " of ", String(PRINT_MODE_STEPS.length),
-      "</span><h2>", escapeHtml_(definition.label), "</h2>",
-      "<p>", escapeHtml_(definition.description), "</p>",
-      "</div>",
-      "<div class=\"central-admin-print-mode-step-content\">",
-      content,
-      "</div></section>",
-    ].join("");
-  }
-
-  function renderPrintModeHeroStep_(canSave) {
-    var featured = getBulletinFeaturedEvent_();
-    var manualHeroIsActive = isBulletinManualHeroActive_();
-    var headings = adminState.bulletinDraft.headings || {};
-
-    return [
-      "<div class=\"central-admin-item central-admin-print-mode-basics\">",
-      "<div class=\"central-admin-form-grid\">",
-      renderAdminInputField_({
-        label: "Sunday Date",
-        field: "bulletin.serviceDate",
-        value: adminState.bulletinDraft.serviceDate,
-        type: "date",
-        disabled: !canSave,
-      }),
-      renderAdminTextareaField_({
-        label: "Front Page Heading",
-        field: "bulletin.headings.frontHeading",
-        value: headings.frontHeading,
-        rows: 2,
-        maxLength: 80,
-        wide: true,
-        disabled: !canSave,
-        hint: "Use a line break to control where the printed heading wraps.",
-      }),
-      "</div></div>",
-      "<div class=\"central-admin-item central-admin-bulletin-hero-editor\">",
-      "<div class=\"central-admin-item-header\"><strong>Main Hero</strong></div>",
-      renderBulletinHeroSourceToggle_(canSave, featured),
-      manualHeroIsActive ?
-        renderBulletinFallbackHeroEditor_(canSave, true) :
-        renderBulletinFeaturedHeroEditor_(featured, canSave),
-      "</div>",
-    ].join("");
-  }
-
-  function renderPrintModeFrontStep_(canSave) {
-    var data = adminState.bulletinCentralData || {};
-    var giving = adminState.bulletinDraft.giving || {};
-    var campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
-    var serveNeeds = Array.isArray(data.serveNeeds) ? data.serveNeeds : [];
-    var selectionState = getBulletinFrontContentSelectionState_();
-    var fullPage = getBulletinPrintFormat_() === "full-page";
-    var useFallback =
-      adminState.bulletinDraft.frontContentSource === "fallback";
-    var hasSelectedLiveContent =
-      getSelectedBulletinCampaigns_().length > 0 ||
-      getSelectedBulletinServeNeeds_().length > 0;
-
-    return [
-      fullPage ? "" : [
-        "<div class=\"central-admin-item central-admin-bulletin-settings\">",
-      "<div class=\"central-admin-item-header\"><strong>Giving Snapshot</strong></div>",
-      "<div class=\"central-admin-form-grid\">",
-      renderBulletinMoneyInput_(
-          "Monthly Budget",
-          "monthlyBudget",
-          giving.monthlyBudget,
-      ),
-      renderBulletinMoneyInput_(
-          "Month-to-Date Giving",
-          "monthToDateGiving",
-          giving.monthToDateGiving,
-      ),
-      renderBulletinMoneyInput_(
-          "Annual Budget",
-          "annualBudget",
-          giving.annualBudget,
-      ),
-      renderBulletinMoneyInput_(
-          "Year-to-Date Giving",
-          "yearToDateGiving",
-          giving.yearToDateGiving,
-      ),
-      "</div></div>",
-      ].join(""),
-      "<div class=\"central-admin-item central-admin-bulletin-front-content\">",
-      "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong></div>",
-      renderPrintModeFrontContentSourceToggle_(
-          canSave,
-          hasSelectedLiveContent,
-      ),
-      useFallback ? [
-        renderPrintModeFallbackBlocksEditor_(canSave),
-      ].join("") : [
-      "<div class=\"central-admin-print-mode-content-budget",
-      selectionState.totalCount >= selectionState.maxCount ?
-        " is-at-limit" : "",
-      "\"><strong>", String(selectionState.totalCount), " of ",
-      String(selectionState.maxCount), " front-page items selected</strong>",
-      "<span>",
-      selectionState.totalCount >= selectionState.maxCount ?
-        "Front-page limit reached. Unselect an item to choose another." :
-        "Choose any mix of Campaigns and Serve Opportunities.",
-      "</span></div>",
-      "<div class=\"central-admin-print-mode-live-content-heading\">",
-      "<div><strong>Campaigns</strong></div>",
-      renderPrintModeQuickAddAction_("campaigns"),
-      "</div>",
-      "<div class=\"central-admin-bulletin-choice-list\">",
-      campaigns.length ? campaigns.map(function(item) {
-        var checked = adminState.bulletinDraft.campaignIds.indexOf(
-            String(item.id || ""),
-        ) !== -1;
-        var disableUnchecked = !checked && (
-          selectionState.campaignCount >= PRINT_MODE_MAX_CAMPAIGNS ||
-          selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
-        );
-        return renderBulletinCampaignChoice_(
-            item,
-            checked,
-            canSave,
-            disableUnchecked,
-        );
-      }).join("") : renderAdminNote_("No active campaigns are available."),
-      "</div>",
-      "<div class=\"central-admin-print-mode-serve-heading\">",
-      "<div><strong>Serve Opportunities</strong></div>",
-      renderPrintModeQuickAddAction_("serveNeeds"),
-      "</div>",
-      "<div class=\"central-admin-bulletin-choice-list central-admin-bulletin-serve-choice-list\">",
-      serveNeeds.length ? serveNeeds.map(function(item) {
-        var checked = adminState.bulletinDraft.serveNeedIds.indexOf(
-            String(item.id || ""),
-        ) !== -1;
-        var disableUnchecked = !checked && (
-          selectionState.serveNeedCount >= PRINT_MODE_MAX_SERVE_NEEDS ||
-          selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
-        );
-        return renderBulletinServeNeedChoice_(
-            item,
-            checked,
-            canSave,
-            disableUnchecked,
-        );
-      }).join("") : renderAdminNote_(
-          "No active Serve Opportunities are available.",
-      ),
-      "</div>",
-      !hasSelectedLiveContent ? [
-        "<div class=\"central-admin-print-mode-fallback-notice\">",
-        "<strong>Custom blocks will fill this space.</strong>",
-        "<p>Nothing is selected from Campaigns or Serve Opportunities, so the saved fallback blocks will appear automatically.</p>",
-        "</div>",
-        renderPrintModeFallbackBlocksEditor_(canSave),
-      ].join("") : "",
-      ].join(""),
-      "</div>",
-    ].join("");
-  }
-
-  function renderPrintModeFrontContentSourceToggle_(
-      canSave,
-      hasSelectedLiveContent,
-  ) {
-    var selectedSource =
-      adminState.bulletinDraft.frontContentSource === "fallback" ?
-        "fallback" : "live";
-
-    return [
-      "<fieldset class=\"central-admin-bulletin-hero-source central-admin-print-mode-content-source\">",
-      "<legend>Content Source</legend>",
-      "<label class=\"", selectedSource === "live" ? "is-active" : "",
-      "\"><input type=\"radio\" name=\"bulletin-front-content-source\" value=\"live\" data-admin-field=\"bulletin.frontContentSource\"",
-      selectedSource === "live" ? " checked" : "",
-      !canSave ? " disabled" : "",
-      "><span><strong>Campaigns & Serving</strong><small>",
-      hasSelectedLiveContent ?
-        "Use selected content from the shared Central lists." :
-        "Use shared Central content when available, then fall back safely.",
-      "</small></span></label>",
-      "<label class=\"", selectedSource === "fallback" ? "is-active" : "",
-      "\"><input type=\"radio\" name=\"bulletin-front-content-source\" value=\"fallback\" data-admin-field=\"bulletin.frontContentSource\"",
-      selectedSource === "fallback" ? " checked" : "",
-      !canSave ? " disabled" : "",
-      "><span><strong>Custom Blocks</strong><small>Use your saved image-and-text blocks instead.</small></span></label>",
-      "</fieldset>",
-    ].join("");
-  }
-
-  function renderPrintModeQuickAddAction_(section) {
-    var isServeNeed = section === "serveNeeds";
-    var normalizedSection = isServeNeed ? "serveNeeds" : "campaigns";
-    if (!isEditorLevelPermission_(
-        getPageAccessLevel_(normalizedSection),
-    )) {
-      return "";
-    }
-
-    return [
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-print-mode-quick-add-button\" data-admin-action=\"open-print-mode-quick-add\" data-admin-print-mode-quick-add=\"",
-      normalizedSection, "\"><span aria-hidden=\"true\">+</span> ",
-      isServeNeed ? "Serve" : "Campaign",
-      "</button>",
-    ].join("");
-  }
-
-  function renderPrintModeFallbackBlocksEditor_(canSave) {
-    var blocks = Array.isArray(adminState.bulletinDraft.fallbackBlocks) ?
-      adminState.bulletinDraft.fallbackBlocks :
-      [];
-
-    return [
-      "<div class=\"central-admin-print-mode-fallback-editor\">",
-      "<div class=\"central-admin-print-mode-fallback-editor-header\"><div>",
-      "<strong>Custom Blocks</strong>",
-      "<p>These appear in this order whenever Custom Blocks are selected or no live content is available.</p>",
-      "</div>",
-      canSave && blocks.length < 4 ? [
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"open-bulletin-fallback-block-editor\">",
-        "<span aria-hidden=\"true\">+</span> Add Block</button>",
-      ].join("") : "",
-      "</div>",
-      blocks.length ? [
-        "<div class=\"central-admin-print-mode-fallback-list\">",
-        blocks.map(function(block, index) {
-          var imageUrl = getBulletinFallbackImageUrl_(block.imageUrl);
-          return [
-            "<article class=\"central-admin-print-mode-fallback-row",
-            block.enabled === false ? " is-disabled" : "",
-            "\">",
-            imageUrl ?
-              "<img src=\"" + escapeAttr_(imageUrl) + "\" alt=\"\">" :
-              "<span class=\"central-admin-print-mode-fallback-placeholder\" aria-hidden=\"true\">",
-            imageUrl ? "" : "Aa</span>",
-            "<div><span>", escapeHtml_(block.eyebrow || "Custom Block"),
-            "</span><strong>", escapeHtml_(block.title || "Untitled Block"),
-            "</strong><small>Image ",
-            escapeHtml_(block.imageSide === "left" ? "left" : "right"),
-            block.enabled === false ? " · hidden" : "",
-            "</small></div>",
-            canSave ? [
-              "<div class=\"central-admin-print-mode-fallback-actions\">",
-              "<button type=\"button\" data-admin-action=\"move-bulletin-fallback-block\" data-admin-doc-id=\"",
-              escapeAttr_(block.id), "\" data-admin-move-direction=\"up\" aria-label=\"Move ",
-              escapeAttr_(block.title || "block"), " up\"",
-              index === 0 ? " disabled" : "", ">↑</button>",
-              "<button type=\"button\" data-admin-action=\"move-bulletin-fallback-block\" data-admin-doc-id=\"",
-              escapeAttr_(block.id), "\" data-admin-move-direction=\"down\" aria-label=\"Move ",
-              escapeAttr_(block.title || "block"), " down\"",
-              index === blocks.length - 1 ? " disabled" : "", ">↓</button>",
-              "<button type=\"button\" data-admin-action=\"toggle-bulletin-fallback-block\" data-admin-doc-id=\"",
-              escapeAttr_(block.id), "\">",
-              block.enabled === false ? "Show" : "Hide", "</button>",
-              "<button type=\"button\" data-admin-action=\"edit-bulletin-fallback-block\" data-admin-doc-id=\"",
-              escapeAttr_(block.id), "\">Edit</button>",
-              "<button type=\"button\" data-admin-action=\"remove-bulletin-fallback-block\" data-admin-doc-id=\"",
-              escapeAttr_(block.id), "\" aria-label=\"Remove ",
-              escapeAttr_(block.title || "block"), "\">×</button>",
-              "</div>",
-            ].join("") : "",
-            "</article>",
-          ].join("");
-        }).join(""),
-        "</div>",
-      ].join("") :
-        renderAdminNote_(
-            "Add a custom block so the front page always has useful content.",
-        ),
-      "</div>",
-    ].join("");
-  }
-
-  function renderPrintModeEventsStep_(canSave) {
-    var headings = adminState.bulletinDraft.headings || {};
-    var events = getBulletinEventDraftsInWindow_();
-    var visibleEvents = getFilteredBulletinEventDrafts_(events);
-    var selectedEventCount = events.filter(function(item) {
-      return item.included;
-    }).length;
-    var weekOneCount = events.filter(function(item) {
-      return getBulletinEventWeek_(item) === "week1";
-    }).length;
-    var weekTwoCount = events.length - weekOneCount;
-
-    return [
-      "<div class=\"central-admin-item central-admin-print-mode-event-heading\">",
-      "<div class=\"central-admin-form-grid\">",
-      renderAdminInputField_({
-        label: "Back Page Eyebrow",
-        field: "bulletin.headings.backEyebrow",
-        value: headings.backEyebrow,
-        maxLength: 50,
-        disabled: !canSave,
-      }),
-      renderAdminInputField_({
-        label: "Back Page Heading",
-        field: "bulletin.headings.backHeading",
-        value: headings.backHeading,
-        maxLength: 80,
-        disabled: !canSave,
-      }),
-      "</div></div>",
-      "<div class=\"central-admin-item central-admin-print-mode-event-list\">",
-      "<div class=\"central-admin-item-header\"><strong>Next Two Weeks</strong>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-bulletin\"",
-      adminState.bulletinLoading ? " disabled" : "",
-      ">",
-      adminState.bulletinLoading ? "Refreshing..." : "Refresh Events",
-      "</button></div>",
-      "<p class=\"central-admin-note\">Choose the events that should appear on the back. Featured Event is excluded automatically.</p>",
-      events.length ?
-        renderBulletinEventFilterBar_(
-            events.length,
-            weekOneCount,
-            weekTwoCount,
-            selectedEventCount,
-        ) +
-        (visibleEvents.length ?
-          "<div class=\"central-admin-bulletin-events-grid\">" +
-            visibleEvents.map(renderBulletinEventEditor_).join("") +
-          "</div>" :
-          renderAdminNote_("No events match this view.")) :
-        renderAdminNote_(
-            "No non-featured Central events fall in this Print Mode window.",
-        ),
-      "</div>",
-    ].join("");
-  }
-
-  function renderPrintModeReviewStep_() {
-    var fullPage = getBulletinPrintFormat_() === "full-page";
-    var selectedEventCount = getBulletinEventDraftsInWindow_().filter(
-        function(item) {
-          return item.included;
-        },
-    ).length;
-    var selectedCampaignCount = getSelectedBulletinCampaigns_().length;
-    var selectedServeNeedCount = getSelectedBulletinServeNeeds_().length;
-    var fallbackCount = getBulletinFallbackBlocksForPrint_().length;
-    var usingFallback = shouldUseBulletinFallbackBlocks_();
-    var liveContentSummary = [
-      selectedCampaignCount ?
-        String(selectedCampaignCount) + " Campaign" +
-          (selectedCampaignCount === 1 ? "" : "s") :
-        "",
-      selectedServeNeedCount ?
-        String(selectedServeNeedCount) + " Serve Opportunit" +
-          (selectedServeNeedCount === 1 ? "y" : "ies") :
-        "",
-    ].filter(Boolean).join(" · ") || "No Live Content";
-
-    return [
-      "<div class=\"central-admin-print-mode-review-grid",
-      fullPage ? " is-full-page" : "", "\">",
-      "<div class=\"central-admin-item\"><span class=\"central-admin-print-mode-review-label\">Format</span>",
-      "<strong>", fullPage ? "Full-page insert" : "Half-letter insert",
-      "</strong><small>",
-      fullPage ? "Portrait · single-sided · no cutting" :
-        "Landscape · duplex · center cut",
-      "</small></div>",
-      "<div class=\"central-admin-item\"><span class=\"central-admin-print-mode-review-label\">Front Page</span>",
-      "<strong>",
-      usingFallback ?
-        String(fallbackCount) + " Custom Block" +
-          (fallbackCount === 1 ? "" : "s") :
-        liveContentSummary,
-      "</strong><small>",
-      usingFallback ?
-        "Plus the selected hero" :
-        "Plus the selected hero" +
-          (fullPage ? "" : " and giving"),
-      "</small></div>",
-      fullPage ? "" : [
-        "<div class=\"central-admin-item\"><span class=\"central-admin-print-mode-review-label\">Back Page</span>",
-      "<strong>", String(selectedEventCount), " Event",
-      selectedEventCount === 1 ? "" : "s",
-        "</strong><small>Printed on the reverse side</small></div>",
-      ].join(""),
-      "</div>",
-      "<div class=\"central-admin-item central-admin-print-mode-print-note\">",
-      "<strong>Ready to print?</strong>",
-      "<p>",
-      fullPage ?
-        "Choose portrait, single-sided printing, and 100% scale in the print dialog." :
-        "Choose two-sided printing, flip on the short edge, and 100% scale. Save as PDF uses the same imposed layout.",
-      "</p>",
-      "<p>",
-      fullPage ?
-        "Check the front preview one last time. Print / Save PDF is waiting in the workflow bar below." :
-        "Use the Front and Back control above the preview for one last check. Print / Save PDF is waiting in the workflow bar below.",
-      "</p>",
-      "</div>",
-    ].join("");
-  }
-
-  function renderBulletinPrintFormatEditor_(canSave) {
-    var printFormat = getBulletinPrintFormat_();
-
-    return [
-      "<div class=\"central-admin-item central-admin-bulletin-format-editor\">",
-      "<div class=\"central-admin-item-header\"><strong>Print Format</strong>",
-      renderStatusPill_(
-          printFormat === "full-page" ? "Full Page" : "Half Letter",
-          "is-safe",
-      ),
-      "</div>",
-      "<p class=\"central-admin-note\">Choose the layout that Print / Save PDF should generate. Your content selections remain available when you switch formats.</p>",
-      "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-print-format\">",
-      "<legend>Insert Size</legend>",
-      "<label class=\"",
-      printFormat === "half-letter" ? "is-active" : "",
-      "\"><input type=\"radio\" name=\"bulletin-print-format\" value=\"half-letter\" data-admin-field=\"bulletin.printFormat\"",
-      printFormat === "half-letter" ? " checked" : "",
-      !canSave ? " disabled" : "",
-      "><span><strong>Half-Letter Insert</strong><small>Two copies per landscape sheet with front and back pages, ready to cut.</small></span></label>",
-      "<label class=\"",
-      printFormat === "full-page" ? "is-active" : "",
-      "\"><input type=\"radio\" name=\"bulletin-print-format\" value=\"full-page\" data-admin-field=\"bulletin.printFormat\"",
-      printFormat === "full-page" ? " checked" : "",
-      !canSave ? " disabled" : "",
-      "><span><strong>Full-Page Insert</strong><small>One portrait page with the hero, campaigns, serve opportunity, and QR footer.</small></span></label>",
-      "</fieldset></div>",
-    ].join("");
-  }
-
-  function renderBulletinSettingsEditor_(canSave) {
-    var giving = adminState.bulletinDraft.giving || {};
-    var headings = adminState.bulletinDraft.headings || {};
-
-    return [
-      "<div class=\"central-admin-bulletin-editor-grid central-admin-bulletin-settings-grid\">",
-      "<div class=\"central-admin-item central-admin-bulletin-headings\">",
-      "<div class=\"central-admin-item-header\"><strong>Page Headings</strong>",
-      renderStatusPill_(canSave ? "Editable" : "Read only", canSave ? "is-safe" : "is-warn"),
-      "</div>",
-      "<div class=\"central-admin-form-grid central-admin-bulletin-heading-fields\">",
-      renderAdminTextareaField_({
-        label: "Front Page Heading",
-        field: "bulletin.headings.frontHeading",
-        value: headings.frontHeading,
-        rows: 2,
-        maxLength: 80,
-        wide: true,
-        hint: "Use a line break to control where the printed heading wraps.",
-      }),
-      renderAdminInputField_({
-        label: "Back Page Eyebrow",
-        field: "bulletin.headings.backEyebrow",
-        value: headings.backEyebrow,
-        maxLength: 50,
-      }),
-      renderAdminInputField_({
-        label: "Back Page Heading",
-        field: "bulletin.headings.backHeading",
-        value: headings.backHeading,
-        maxLength: 80,
-      }),
-      "</div></div>",
-      "<div class=\"central-admin-item central-admin-bulletin-settings\">",
-      "<div class=\"central-admin-item-header\"><strong>Bulletin Details</strong>",
-      renderStatusPill_(canSave ? "Admin only" : "Read only", canSave ? "is-safe" : "is-warn"),
-      "</div>",
-      "<div class=\"central-admin-form-grid\">",
-      renderAdminInputField_({
-        label: "Sunday Date",
-        field: "bulletin.serviceDate",
-        value: adminState.bulletinDraft.serviceDate,
-        type: "date",
-      }),
-      renderBulletinMoneyInput_("Monthly Budget", "monthlyBudget", giving.monthlyBudget),
-      renderBulletinMoneyInput_("Month-to-Date Giving", "monthToDateGiving", giving.monthToDateGiving),
-      renderBulletinMoneyInput_("Annual Budget", "annualBudget", giving.annualBudget),
-      renderBulletinMoneyInput_("Year-to-Date Giving", "yearToDateGiving", giving.yearToDateGiving),
-      "</div></div>",
-      "</div>",
-    ].join("");
-  }
-
-  function renderBulletinMoneyInput_(label, fieldName, value) {
-    return renderAdminInputField_({
-      label: label,
-      field: "bulletin.giving." + fieldName,
-      value: String(value || ""),
-      type: "number",
-      placeholder: "0",
-    });
-  }
-
-  function renderBulletinContentEditor_(canSave) {
-    var data = adminState.bulletinCentralData || {};
-    var featured = getBulletinFeaturedEvent_();
-    var manualHeroIsActive = isBulletinManualHeroActive_();
-    var events = getBulletinEventDraftsInWindow_();
-    var visibleEvents = getFilteredBulletinEventDrafts_(events);
-    var selectedEventCount = events.filter(function(item) {
-      return item.included;
-    }).length;
-    var weekOneCount = events.filter(function(item) {
-      return getBulletinEventWeek_(item) === "week1";
-    }).length;
-    var weekTwoCount = events.length - weekOneCount;
-    var campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
-    var serveNeeds = Array.isArray(data.serveNeeds) ? data.serveNeeds : [];
-    var selectionState = getBulletinFrontContentSelectionState_();
-
-    return [
-      "<div class=\"central-admin-bulletin-editor-grid\">",
-      "<div class=\"central-admin-item central-admin-bulletin-hero-editor\">",
-      "<div class=\"central-admin-item-header\"><strong>Main Hero</strong>",
-      renderStatusPill_(
-          manualHeroIsActive ? "Manual Hero Active" : "PCO Featured Active",
-          "is-safe",
-      ),
-      "</div>",
-      renderBulletinHeroSourceToggle_(canSave, featured),
-      manualHeroIsActive ?
-        renderBulletinFallbackHeroEditor_(canSave, true) :
-        renderBulletinFeaturedHeroEditor_(featured, canSave),
-      "</div>",
-      "<div class=\"central-admin-item central-admin-bulletin-front-content\">",
-      "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong>",
-      renderStatusPill_("Live sources", "is-live"), "</div>",
-      "<p class=\"central-admin-note\">Choose up to four combined Campaigns and Serve Opportunities. Each list allows up to three selections.</p>",
-      "<div class=\"central-admin-bulletin-choice-list\">",
-      campaigns.length ? campaigns.map(function(item) {
-        var checked = adminState.bulletinDraft.campaignIds.indexOf(String(item.id || "")) !== -1;
-        return renderBulletinCampaignChoice_(item, checked, canSave);
-      }).join("") : renderAdminNote_("No active campaigns are available."),
-      "</div>",
-      "<div class=\"central-admin-bulletin-choice-list central-admin-bulletin-serve-choice-list\">",
-      serveNeeds.map(function(item) {
-        var checked = adminState.bulletinDraft.serveNeedIds.indexOf(
-            String(item.id || ""),
-        ) !== -1;
-        return renderBulletinServeNeedChoice_(
-            item,
-            checked,
-            canSave,
-            !checked && (
-              selectionState.serveNeedCount >= PRINT_MODE_MAX_SERVE_NEEDS ||
-              selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
-            ),
-        );
-      }).join(""),
-      "</div>",
-      "</div>",
-      "</div>",
-      "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\"><strong>Next Two Weeks</strong>",
-      renderStatusPill_(
-          String(selectedEventCount) + " selected · " +
-          String(events.length) + " available",
-          selectedEventCount ? "is-safe" : "is-warn",
-      ),
-      "</div>",
-      renderAdminNote_(
-          "Week 1 is the default print selection for new bulletins. Week 2 stays available for events that need more advance notice. Featured Event is excluded automatically.",
-      ),
-      events.length ?
-        renderBulletinEventFilterBar_(
-            events.length,
-            weekOneCount,
-            weekTwoCount,
-            selectedEventCount,
-        ) +
-        (visibleEvents.length ?
-          "<div class=\"central-admin-bulletin-events-grid\">" +
-            visibleEvents.map(renderBulletinEventEditor_).join("") +
-          "</div>" :
-          renderAdminNote_("No events match this view.")) :
-        renderAdminNote_("No non-featured Central events fall in this bulletin window."),
-      "</div>",
-    ].join("");
-  }
-
-  function renderBulletinFeaturedHeroEditor_(featured, canSave) {
-    if (!featured) {
-      return renderAdminNote_(
-          "No Featured Event is currently available from Planning Center. Print Mode is safely using the Manual Hero.",
-      );
-    }
-
-    return [
-      "<div class=\"central-admin-bulletin-active-hero-editor\">",
-      "<p class=\"central-admin-note\">The current Planning Center Featured Event is selected for this bulletin.</p>",
-      renderAdminInputField_({
-        label: "Printed Title",
-        field: "bulletin.featured.title",
-        value: featured.title,
-        maxLength: 180,
-        disabled: !canSave,
-      }),
-      renderAdminTextareaField_({
-        label: "Printed Description",
-        field: "bulletin.featured.description",
-        value: featured.description,
-        rows: 3,
-        maxLength: 1200,
-        disabled: !canSave,
-        hint: "Formatting: **bold**, *italics*, headings, and - or 1. lists. Line breaks are preserved.",
-      }),
-      renderAdminCheckboxField_({
-        label: "Include full description",
-        field: "bulletin.featured.includeDescription",
-        checked: featured.includeDescription,
-        disabled: !canSave,
-      }),
-      "</div>",
-    ].join("");
-  }
-
-  function renderBulletinHeroSourceToggle_(canSave, featured) {
-    var selectedSource = adminState.bulletinDraft.heroSource === "manual" ?
-      "manual" : "featured";
-
-    return [
-      "<fieldset class=\"central-admin-bulletin-hero-source\">",
-      "<legend>Hero Source</legend>",
-      "<label class=\"",
-      selectedSource === "featured" ? "is-active" : "",
-      featured ? "" : " is-unavailable",
-      "\"><input type=\"radio\" name=\"bulletin-hero-source\" value=\"featured\" data-admin-field=\"bulletin.heroSource\"",
-      selectedSource === "featured" ? " checked" : "",
-      !canSave ? " disabled" : "",
-      "><span><strong>PCO Featured Event</strong><small>",
-      featured ? "Use the current Featured Event from Planning Center." :
-        "Unavailable right now; Manual Hero will be used as a fallback.",
-      "</small></span></label>",
-      "<label class=\"",
-      selectedSource === "manual" ? "is-active" : "",
-      "\"><input type=\"radio\" name=\"bulletin-hero-source\" value=\"manual\" data-admin-field=\"bulletin.heroSource\"",
-      selectedSource === "manual" ? " checked" : "",
-      !canSave ? " disabled" : "",
-      "><span><strong>Manual Hero</strong><small>Use the editable message and uploaded image below.</small></span></label>",
-      "</fieldset>",
-    ].join("");
-  }
-
-  function renderBulletinFallbackHeroEditor_(canSave, manualHeroIsActive) {
-    var fallback = adminState.bulletinDraft.fallbackHero || {};
-    var imageUrl = getBulletinFallbackImageUrl_(fallback.imageUrl);
-
-    return [
-      "<div class=\"central-admin-bulletin-fallback-editor\">",
-      "<div class=\"central-admin-bulletin-fallback-heading\"><div>",
-      "<strong>Manual Hero</strong>",
-      "<small>",
-      "Currently filling the front-page hero.",
-      "</small></div>",
-      renderStatusPill_(manualHeroIsActive ? "In use" : "Standby", "is-live"),
-      "</div>",
-      "<div class=\"central-admin-bulletin-fallback-fields\">",
-      renderAdminInputField_({
-        label: "Eyebrow",
-        field: "bulletin.fallbackHero.eyebrow",
-        value: fallback.eyebrow,
-        maxLength: 80,
-        disabled: !canSave,
-      }),
-      renderAdminInputField_({
-        label: "Title",
-        field: "bulletin.fallbackHero.title",
-        value: fallback.title,
-        maxLength: 180,
-        disabled: !canSave,
-      }),
-      renderAdminTextareaField_({
-        label: "Welcome Message",
-        field: "bulletin.fallbackHero.description",
-        value: fallback.description,
-        rows: 4,
-        maxLength: 1200,
-        wide: true,
-        disabled: !canSave,
-        hint: "Formatting: **bold**, *italics*, headings, and lists. Line breaks are preserved.",
-      }),
-      "</div>",
-      "<div class=\"central-admin-bulletin-image-editor",
-      imageUrl ? " has-image" : "",
-      "\">",
-      imageUrl ? [
-        "<img src=\"", escapeAttr_(imageUrl),
-        "\" alt=\"Current evergreen welcome graphic\">",
-      ].join("") :
-        "<div class=\"central-admin-bulletin-image-placeholder\">Optional welcome graphic</div>",
-      "<div class=\"central-admin-bulletin-image-actions\">",
-      "<label class=\"central-admin-link-button is-secondary central-admin-file-button",
-      adminState.bulletinImageUploading ? " is-disabled" : "",
-      "\"><span>",
-      adminState.bulletinImageUploading ? "Uploading..." :
-        (imageUrl ? "Replace image" : "Upload image"),
-      "</span><input type=\"file\" accept=\"image/jpeg,image/png,image/webp\" data-admin-bulletin-fallback-image",
-      !canSave || adminState.bulletinImageUploading ? " disabled" : "",
-      "></label>",
-      imageUrl ? [
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"remove-bulletin-fallback-image\"",
-        !canSave || adminState.bulletinImageUploading ? " disabled" : "",
-        ">Remove image</button>",
-      ].join("") : "",
-      "<small>JPEG, PNG, or WebP up to 10 MB. The file is stored in the Central Firebase Storage bucket.</small>",
-      "</div></div></div>",
-    ].join("");
-  }
-
-  function renderBulletinEventFilterBar_(
-      totalCount,
-      weekOneCount,
-      weekTwoCount,
-      includedCount,
-  ) {
-    var filters = [
-      {id: "week1", label: "Week 1", count: weekOneCount},
-      {id: "week2", label: "Week 2", count: weekTwoCount},
-      {id: "included", label: "Included", count: includedCount},
-      {id: "all", label: "All 14 Days", count: totalCount},
-    ];
-
-    return [
-      "<div class=\"central-admin-bulletin-event-toolbar\">",
-      "<div class=\"central-admin-bulletin-event-filters\" role=\"group\" aria-label=\"Filter bulletin events\">",
-      filters.map(function(filter) {
-        var active = adminState.bulletinEventFilter === filter.id;
-        return [
-          "<button type=\"button\" class=\"central-admin-bulletin-filter",
-          active ? " is-active" : "",
-          "\" data-admin-action=\"filter-bulletin-events\" data-admin-bulletin-filter=\"",
-          escapeAttr_(filter.id), "\" aria-pressed=\"", active ? "true" : "false", "\">",
-          escapeHtml_(filter.label), " <span>", String(filter.count), "</span></button>",
-        ].join("");
-      }).join(""),
-      "</div>",
-      "<div class=\"central-admin-bulletin-event-bulk\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"include\">Include All</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"exclude\">Exclude All</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"week1-default\">Reset to Week 1</button>",
-      "</div>",
-      "</div>",
-    ].join("");
-  }
-
-  function renderBulletinChoice_(type, id, label, checked, radio) {
-    return [
-      "<label class=\"central-admin-checkbox\">",
-      "<input type=\"", radio ? "radio" : "checkbox", "\" data-admin-bulletin-choice=\"",
-      escapeAttr_(type), "\" data-admin-doc-id=\"", escapeAttr_(String(id || "")), "\"",
-      checked ? " checked" : "", ">",
-      "<span>", escapeHtml_(label), "</span></label>",
-    ].join("");
-  }
-
-  function renderBulletinCampaignChoice_(
-      item,
-      checked,
-      canSave,
-      disableUnchecked,
-  ) {
-    var id = String(item && item.id || "");
-    var title = String(item && item.title || "Untitled campaign");
-    var iconId = getBulletinCampaignIconId_(item);
-
-    return [
-      "<div class=\"central-admin-bulletin-campaign-choice",
-      checked ? " is-selected" : "",
-      "\"><label class=\"central-admin-checkbox\">",
-      "<input type=\"checkbox\" data-admin-bulletin-choice=\"campaign\" data-admin-doc-id=\"",
-      escapeAttr_(id), "\"", checked ? " checked" : "",
-      canSave && !disableUnchecked ? "" : " disabled", ">",
-      "<span>", escapeHtml_(title), "</span></label>",
-      "<div class=\"central-admin-bulletin-campaign-icon-control\">",
-      "<span class=\"central-admin-bulletin-campaign-icon-preview\"><img src=\"",
-      escapeAttr_(getBulletinCampaignIconUrl_(iconId)),
-      "\" alt=\"\"></span>",
-      "<select data-admin-bulletin-campaign-icon=\"", escapeAttr_(id),
-      "\" aria-label=\"Print icon for ", escapeAttr_(title), "\"",
-      canSave ? "" : " disabled", ">",
-      BULLETIN_CAMPAIGN_ICONS.map(function(icon) {
-        return "<option value=\"" + escapeAttr_(icon.id) + "\"" +
-          (icon.id === iconId ? " selected" : "") + ">" +
-          escapeHtml_(icon.label) + "</option>";
-      }).join(""),
-      "</select></div></div>",
-    ].join("");
-  }
-
-  function renderBulletinServeNeedChoice_(
-      item,
-      checked,
-      canSave,
-      disableUnchecked,
-  ) {
-    var id = String(item && item.id || "");
-    var title = String(
-        item && (item.need || item.title) || "Untitled opportunity",
-    );
-    var ministry = formatBulletinServeMinistryLabel_(
-        item && item.ministry,
-    );
-
-    return [
-      "<div class=\"central-admin-bulletin-serve-choice",
-      checked ? " is-selected" : "",
-      "\"><label class=\"central-admin-checkbox\">",
-      "<input type=\"checkbox\" data-admin-bulletin-choice=\"serve-need\" data-admin-doc-id=\"",
-      escapeAttr_(id), "\"", checked ? " checked" : "",
-      canSave && !disableUnchecked ? "" : " disabled", ">",
-      "<span><small>", escapeHtml_(ministry), "</small><strong>",
-      escapeHtml_(title), "</strong></span></label></div>",
-    ].join("");
-  }
-
-  function formatBulletinServeMinistryLabel_(value) {
-    var ministry = String(value || "").trim();
-    if (!ministry) {
-      return "General Ministry";
-    }
-    return /ministry$/i.test(ministry) ? ministry : ministry + " Ministry";
-  }
-
-  function renderBulletinEventEditor_(item) {
-    return [
-      "<article class=\"central-admin-bulletin-event-editor",
-      item.included ? "" : " is-excluded",
-      "\">",
-      "<div class=\"central-admin-bulletin-event-top\">",
-      "<div class=\"central-admin-bulletin-event-schedule\">",
-      "<span class=\"central-admin-bulletin-event-date\">",
-      escapeHtml_(item.date || "Date unavailable"),
-      "</span>",
-      "<strong>", escapeHtml_(item.time || "Time unavailable"), "</strong>",
-      item.location ? "<small>" + escapeHtml_(item.location) + "</small>" : "",
-      "</div>",
-      renderBulletinChoice_("event", item.id, "Include", item.included, false),
-      "</div>",
-      "<div class=\"central-admin-bulletin-event-copy\">",
-      "<h4>", escapeHtml_(item.title || "Untitled Event"), "</h4>",
-      item.description ?
-        "<p>" + escapeHtml_(item.description) + "</p>" :
-        "<p class=\"is-empty\">No description from Planning Center.</p>",
-      renderBulletinEventDescriptionGuidance_(item),
-      "</div>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-event-edit\" data-admin-action=\"edit-bulletin-event\" data-admin-bulletin-event-id=\"",
-      escapeAttr_(item.id), "\">Edit Print Copy</button>",
-      "</article>",
-    ].join("");
-  }
-
-  function renderPrintModePreview_() {
-    var fullPage = getBulletinPrintFormat_() === "full-page";
-    var side = !fullPage && adminState.printModePreviewSide === "back" ?
-      "back" : "front";
-    var direction = adminState.printModePreviewDirection;
-    var previewPanel = side === "back" ?
-      renderBulletinPanel_("back", true) :
-      (fullPage ?
-        renderBulletinFullPagePanel_(true) :
-        renderBulletinPanel_("front", true));
-
-    adminState.printModePreviewDirection = "";
-
-    return [
-      "<aside class=\"central-admin-print-mode-preview\">",
-      "<div class=\"central-admin-print-mode-preview-toolbar\">",
-      "<div><span class=\"central-admin-kicker\">Live Preview</span>",
-      "<strong>", fullPage ? "Full Page" : "Half Letter", "</strong></div>",
-      "<div class=\"central-admin-print-mode-preview-toggle",
-      side === "back" ? " is-back" : "",
-      "\" role=\"group\" aria-label=\"Preview side\">",
-      "<span class=\"central-admin-print-mode-preview-slider\" aria-hidden=\"true\"></span>",
-      "<button type=\"button\" class=\"", side === "front" ? "is-active" : "",
-      "\" data-admin-action=\"print-mode-preview-side\" data-admin-print-mode-preview-side=\"front\" aria-pressed=\"",
-      side === "front" ? "true" : "false", "\">Front</button>",
-      "<button type=\"button\" class=\"", side === "back" ? "is-active" : "",
-      "\" data-admin-action=\"print-mode-preview-side\" data-admin-print-mode-preview-side=\"back\" aria-pressed=\"",
-      side === "back" ? "true" : "false", "\"",
-      fullPage ? " disabled aria-disabled=\"true\"" : "",
-      ">Back</button>",
-      "</div></div>",
-      "<div class=\"central-admin-print-mode-preview-stage",
-      fullPage && side === "front" ? " is-full-page" : " is-half-letter",
-      "\"><div class=\"central-admin-print-mode-preview-page",
-      direction ? " is-" + escapeAttr_(direction) : "",
-      "\">", previewPanel, "</div></div>",
-      "</aside>",
-    ].join("");
-  }
-
-  function renderBulletinPrintRoot_() {
-    if (getBulletinPrintFormat_() === "full-page") {
-      return [
-        "<div class=\"central-bulletin-print-root is-full-page\" aria-hidden=\"true\">",
-        "<section class=\"central-bulletin-full-sheet\">",
-        renderBulletinFullPagePanel_(false),
-        "</section></div>",
-      ].join("");
-    }
-
-    return [
-      "<div class=\"central-bulletin-print-root is-half-letter\" aria-hidden=\"true\">",
-      "<section class=\"central-bulletin-sheet central-bulletin-sheet-front\">",
-      renderBulletinPanel_("front", false),
-      renderBulletinPanel_("front", false),
-      "</section>",
-      "<section class=\"central-bulletin-sheet central-bulletin-sheet-back\">",
-      renderBulletinPanel_("back", false),
-      renderBulletinPanel_("back", false),
-      "</section></div>",
-    ].join("");
-  }
-
-  function renderBulletinFullPagePanel_(preview) {
-    var className = "central-bulletin-panel central-bulletin-panel-front is-full-page";
-    if (preview) {
-      className += " is-preview";
-    }
-
-    return [
-      "<article class=\"", className, "\">",
-      renderBulletinFront_({fullPage: true}),
-      "</article>",
-    ].join("");
-  }
-
-  function renderBulletinPanel_(side, preview) {
-    var className = "central-bulletin-panel central-bulletin-panel-" + side;
-    if (preview) {
-      className += " is-preview";
-    }
-
-    return [
-      "<article class=\"", className, "\">",
-      side === "front" ? renderBulletinFront_() : renderBulletinBack_(),
-      "</article>",
-    ].join("");
-  }
-
-  function renderBulletinFront_(options) {
-    var fullPage = !!(options && options.fullPage);
-    var hero = getBulletinFrontHero_();
-    var heroImageUrl = hero.source === "featured" ?
-      getBulletinFeaturedImageUrl_(hero) :
-      getBulletinFallbackImageUrl_(hero.image_url);
-    var campaigns = getSelectedBulletinCampaigns_();
-    var serveNeeds = getSelectedBulletinServeNeeds_();
-    var fallbackBlocks = getBulletinFallbackBlocksForPrint_();
-    var useFallbackBlocks = shouldUseBulletinFallbackBlocks_();
-    var giving = adminState.bulletinDraft.giving || {};
-    var headings = adminState.bulletinDraft.headings || {};
-
-    return [
-      renderBulletinBrandHeader_(),
-      "<div class=\"central-bulletin-heading\"><h1>",
-      renderBulletinHeadingText_(headings.frontHeading),
-      "</h1></div>",
-      hero ? [
-        "<section class=\"central-bulletin-card central-bulletin-featured\">",
-        heroImageUrl ? [
-          "<div class=\"central-bulletin-featured-media\">",
-          "<img src=\"", escapeAttr_(heroImageUrl),
-          "\" alt=\"\"></div>",
-        ].join("") : "",
-        "<span class=\"central-bulletin-label\">", escapeHtml_(hero.eyebrow), "</span>",
-        "<h2>", escapeHtml_(hero.title), "</h2>",
-        hero.source === "featured" && hero.doors_open_time ? "<p class=\"central-bulletin-featured-time\">Doors Open " + escapeHtml_(hero.doors_open_time) + "</p>" : "",
-        hero.source === "featured" ?
-          "<p class=\"central-bulletin-featured-time\">" +
-            escapeHtml_([hero.date, hero.time].filter(Boolean).join(" - ")) +
-          "</p>" : "",
-        hero.includeDescription && hero.description ?
-          "<div class=\"central-bulletin-description central-bulletin-body-copy central-bulletin-markdown\">" +
-            renderAdminMarkdownLite_(hero.description) + "</div>" :
-          "",
-        "</section>",
-      ].join("") : "",
-      useFallbackBlocks ? [
-        "<div class=\"central-bulletin-fallback-blocks\">",
-        fallbackBlocks.map(renderBulletinFallbackBlock_).join(""),
-        "</div>",
-      ].join("") : "",
-      !useFallbackBlocks && campaigns.length ? [
-        "<section class=\"central-bulletin-card central-bulletin-campaigns\"><span class=\"central-bulletin-label\">Current Campaigns</span>",
-        campaigns.map(function(item) {
-          var iconId = getBulletinCampaignIconId_(item);
-          return "<div class=\"central-bulletin-campaign\"><span class=\"central-bulletin-campaign-icon\"><img src=\"" +
-            escapeAttr_(getBulletinCampaignIconUrl_(iconId)) +
-            "\" alt=\"\"></span><div><strong>" +
-            escapeHtml_(item.title || "Campaign") + "</strong>" +
-            (item.description ? "<p class=\"central-bulletin-body-copy\">" +
-              escapeHtml_(item.description) + "</p>" : "") +
-            "</div></div>";
-        }).join(""),
-        "</section>",
-      ].join("") : "",
-      !useFallbackBlocks && serveNeeds.length ? [
-        "<section class=\"central-bulletin-card central-bulletin-serve\"><div>",
-        "<span class=\"central-bulletin-label\">Serve Opportunit",
-        serveNeeds.length === 1 ? "y" : "ies", "</span>",
-        "<div class=\"central-bulletin-serve-list\">",
-        serveNeeds.map(function(serveNeed) {
-          return [
-            "<article class=\"central-bulletin-serve-item\">",
-            "<span class=\"central-bulletin-serve-ministry\">",
-            escapeHtml_(
-                formatBulletinServeMinistryLabel_(serveNeed.ministry),
-            ),
-            "</span><h3>",
-            escapeHtml_(
-                serveNeed.need || serveNeed.title || "Serve at CrossPointe",
-            ),
-            "</h3>",
-            serveNeed.description ? [
-              "<p class=\"central-bulletin-body-copy\">",
-              escapeHtml_(serveNeed.description),
-              "</p>",
-            ].join("") : "",
-            "</article>",
-          ].join("");
-        }).join(""),
-        "</div></div>",
-        "<span class=\"central-bulletin-serve-cta\">Learn more at<br><strong>central.crosspointe.tv</strong></span></section>",
-      ].join("") : "",
-      fullPage ? renderBulletinDetailsCta_("central-bulletin-full-page-cta") : [
-        "<section class=\"central-bulletin-card central-bulletin-giving\"><span class=\"central-bulletin-label\">Generosity</span>",
-        "<div class=\"central-bulletin-giving-grid\">",
-        renderBulletinGivingStat_("Monthly Budget", giving.monthlyBudget),
-        renderBulletinGivingStat_("MTD Giving", giving.monthToDateGiving),
-        renderBulletinGivingStat_("Annual Budget", giving.annualBudget),
-        renderBulletinGivingStat_("YTD Giving", giving.yearToDateGiving),
-        "</div><p class=\"central-bulletin-giving-link\">Give securely at <strong>crosspointe.tv/give</strong></p></section>",
-      ].join(""),
-    ].join("");
-  }
-
-  function renderBulletinFallbackBlock_(block) {
-    var imageUrl = getBulletinFallbackImageUrl_(block && block.imageUrl);
-    var imageSide = block && block.imageSide === "left" ? "left" : "right";
-
-    return [
-      "<section class=\"central-bulletin-card central-bulletin-fallback-block is-image-",
-      imageSide, imageUrl ? " has-image" : "", "\">",
-      imageUrl ? [
-        "<div class=\"central-bulletin-fallback-media\"><img src=\"",
-        escapeAttr_(imageUrl), "\" alt=\"\"></div>",
-      ].join("") : "",
-      "<div class=\"central-bulletin-fallback-copy\">",
-      block && block.eyebrow ?
-        "<span class=\"central-bulletin-label\">" +
-          escapeHtml_(block.eyebrow) + "</span>" :
-        "",
-      "<h3>", escapeHtml_(block && block.title || "Connect at CrossPointe"),
-      "</h3>",
-      block && block.description ?
-        "<p class=\"central-bulletin-body-copy\">" +
-          escapeHtml_(block.description) + "</p>" :
-        "",
-      "</div></section>",
-    ].join("");
-  }
-
-  function renderBulletinGivingStat_(label, value) {
-    return "<div><span>" + escapeHtml_(label) + "</span><strong>" +
-      escapeHtml_(formatBulletinCurrency_(value)) + "</strong></div>";
-  }
-
-  function renderBulletinBack_() {
-    var events = getBulletinEventDraftsInWindow_().filter(function(item) {
-      return item.included;
-    });
-    var eventGroups = groupBulletinEventsByDate_(events);
-    var eventColumns = addBulletinEventContinuationFallback_(
-        splitBulletinEventGroupsIntoColumns_(eventGroups),
-    );
-    var leftGroups = eventColumns.left;
-    var rightGroups = eventColumns.right;
-    var maxRows = Math.max(
-        countBulletinEventsInGroups_(leftGroups),
-        countBulletinEventsInGroups_(rightGroups),
-    );
-    var densityClass = getBulletinEventDensityClass_(maxRows);
-    var hasContinuation = leftGroups.concat(rightGroups).some(function(group) {
-      return !!(group && group.isContinuation);
-    });
-    var maxColumnWeight = Math.max(
-        getBulletinEventGroupsLayoutWeight_(leftGroups),
-        getBulletinEventGroupsLayoutWeight_(rightGroups),
-    );
-    if (
-      densityClass.indexOf(" is-fitted") === -1 &&
-      maxColumnWeight > 4
-    ) {
-      densityClass += " is-fitted is-stretched is-dense";
-    }
-    if (hasContinuation) {
-      if (densityClass.indexOf(" is-dense") === -1) {
-        densityClass += " is-dense";
-      }
-      densityClass += " has-continuation";
-    }
-    var serviceDate = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
-    var endDate = new Date(serviceDate.getTime());
-    var headings = adminState.bulletinDraft.headings || {};
-    endDate.setUTCDate(endDate.getUTCDate() + 13);
-
-    return [
-      "<div class=\"central-bulletin-back-heading\"><span class=\"central-bulletin-label\">",
-      escapeHtml_(headings.backEyebrow), "</span>",
-      "<h1>", renderBulletinHeadingText_(headings.backHeading), "</h1><strong>",
-      escapeHtml_(formatBulletinDateRange_(serviceDate, endDate)),
-      "</strong></div>",
-      "<div class=\"central-bulletin-event-columns",
-      densityClass, "\"><div",
-      hasContinuation ? " class=\"is-continuation-source\"" : "",
-      ">",
-      leftGroups.map(renderBulletinPrintEventGroup_).join(""),
-      "</div><div",
-      hasContinuation ? " class=\"is-continuation-target\"" : "",
-      ">",
-      rightGroups.map(renderBulletinPrintEventGroup_).join(""),
-      "</div></div>",
-      renderBulletinDetailsCta_(""),
-    ].join("");
-  }
-
-  function renderBulletinDetailsCta_(extraClassName) {
-    return [
-      "<section class=\"central-bulletin-back-cta",
-      extraClassName ? " " + escapeAttr_(extraClassName) : "",
-      "\"><img class=\"central-bulletin-qr\" src=\"/central-bulletin-qr.png\" alt=\"QR code for central.crosspointe.tv\"><div>",
-      "<span class=\"central-bulletin-label\">Full Details + Next Steps</span>",
-      "<p>Visit <strong>central.crosspointe.tv</strong></p>",
-      "<small>Times, locations, and events are subject to change. Visit the website for updates.</small>",
-      "</div></section>",
-    ].join("");
-  }
-
-  function getBulletinEventDensityClass_(maxRows) {
-    if (maxRows > 10) {
-      return " is-fitted is-overflow-density";
-    }
-    if (maxRows > 8) {
-      return " is-fitted is-max-density";
-    }
-    if (maxRows > 6) {
-      return " is-fitted is-ultra-dense";
-    }
-    if (maxRows > 4) {
-      return " is-fitted is-stretched is-dense";
-    }
-    return "";
-  }
-
-  function groupBulletinEventsByDate_(events) {
-    var groups = [];
-    var groupsByDate = Object.create(null);
-
-    (Array.isArray(events) ? events : []).forEach(function(item) {
-      var dateKey = String(item && item.date || "");
-      var group = groupsByDate[dateKey];
-
-      if (!group) {
-        group = {date: dateKey, events: []};
-        groupsByDate[dateKey] = group;
-        groups.push(group);
-      }
-
-      group.events.push(item);
-    });
-
-    return groups;
-  }
-
-  function countBulletinEventsInGroups_(groups) {
-    return (Array.isArray(groups) ? groups : [])
-        .reduce(function(total, group) {
-          return total + (Array.isArray(group.events) ? group.events.length : 0);
-        }, 0);
-  }
-
-  function splitBulletinEventGroupsIntoColumns_(groups) {
-    var items = Array.isArray(groups) ? groups : [];
-    if (items.length < 2) {
-      return {left: items.slice(), right: []};
-    }
-
-    var weights = items.map(getBulletinEventGroupLayoutWeight_);
-    var totalWeight = weights.reduce(function(total, weight) {
-      return total + weight;
-    }, 0);
-    var leftWeight = 0;
-    var bestIndex = 1;
-    var bestDifference = Infinity;
-
-    for (var index = 1; index < items.length; index += 1) {
-      leftWeight += weights[index - 1];
-      var difference = Math.abs(totalWeight - (leftWeight * 2));
-      if (difference < bestDifference) {
-        bestDifference = difference;
-        bestIndex = index;
-      }
-    }
-
-    return {
-      left: items.slice(0, bestIndex),
-      right: items.slice(bestIndex),
-    };
-  }
-
-  function addBulletinEventContinuationFallback_(columns) {
-    var leftGroups = Array.isArray(columns && columns.left) ?
-      columns.left : [];
-    var rightGroups = Array.isArray(columns && columns.right) ?
-      columns.right : [];
-    var leftWeight = getBulletinEventGroupsLayoutWeight_(leftGroups);
-    var rightWeight = getBulletinEventGroupsLayoutWeight_(rightGroups);
-
-    if (
-      !leftGroups.length ||
-      leftWeight <= PRINT_MODE_EVENT_CONTINUATION_TRIGGER_WEIGHT ||
-      rightWeight >= leftWeight
-    ) {
-      return {left: leftGroups, right: rightGroups};
-    }
-
-    var sourceGroup = leftGroups[leftGroups.length - 1];
-    var sourceEvents = Array.isArray(sourceGroup && sourceGroup.events) ?
-      sourceGroup.events : [];
-    var sourceEvent = sourceEvents[sourceEvents.length - 1];
-    if (
-      !sourceEvent ||
-      !sourceEvent.includeDescription ||
-      !String(sourceEvent.description || "").trim()
-    ) {
-      return {left: leftGroups, right: rightGroups};
-    }
-
-    var split = splitBulletinDescriptionForContinuation_(
-        sourceEvent.description,
-    );
-    if (!split) {
-      return {left: leftGroups, right: rightGroups};
-    }
-
-    var primaryEvent = Object.assign({}, sourceEvent, {
-      description: split.primary,
-    });
-    var continuationEvent = Object.assign({}, sourceEvent, {
-      id: String(sourceEvent.id || "event") + "--continuation",
-      time: "",
-      location: "",
-      description: split.continuation,
-      isContinuation: true,
-    });
-    var nextSourceEvents = sourceEvents.slice();
-    nextSourceEvents[nextSourceEvents.length - 1] = primaryEvent;
-    var nextLeftGroups = leftGroups.slice();
-    nextLeftGroups[nextLeftGroups.length - 1] = Object.assign(
-        {},
-        sourceGroup,
-        {events: nextSourceEvents},
-    );
-    var continuationGroup = {
-      date: sourceGroup.date,
-      events: [continuationEvent],
-      isContinuation: true,
-    };
-    var nextRightGroups = [continuationGroup].concat(rightGroups);
-    var nextLeftWeight =
-      getBulletinEventGroupsLayoutWeight_(nextLeftGroups);
-    var nextRightWeight =
-      getBulletinEventGroupsLayoutWeight_(nextRightGroups);
-
-    if (
-      nextRightWeight > PRINT_MODE_EVENT_CONTINUATION_MAX_COLUMN_WEIGHT ||
-      nextLeftWeight >= leftWeight
-    ) {
-      return {left: leftGroups, right: rightGroups};
-    }
-
-    return {
-      left: nextLeftGroups,
-      right: nextRightGroups,
-    };
-  }
-
-  function splitBulletinDescriptionForContinuation_(value) {
-    var description = String(value || "").trim();
-    var totalWords = getBulletinEventDescriptionWordCount_(description);
-    if (
-      totalWords <
-      PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS +
-      PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS
-    ) {
-      return null;
-    }
-
-    var targetPrimaryWords = Math.max(
-        PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS,
-        Math.min(
-            Math.round(totalWords * 0.52),
-            totalWords -
-              PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS,
-        ),
-    );
-    var boundaryPattern = /(?:[.!?]+["')\]]*(?=\s|$)|\n{2,})/g;
-    var bestSplit = null;
-    var match;
-
-    while ((match = boundaryPattern.exec(description))) {
-      var primary = description.slice(
-          0,
-          match.index + match[0].length,
-      ).trim();
-      var continuation = description.slice(
-          match.index + match[0].length,
-      ).trim();
-      var primaryWords =
-        getBulletinEventDescriptionWordCount_(primary);
-      var continuationWords =
-        getBulletinEventDescriptionWordCount_(continuation);
-
-      if (
-        primaryWords < PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS ||
-        continuationWords <
-          PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS
-      ) {
-        continue;
-      }
-
-      var distance = Math.abs(primaryWords - targetPrimaryWords);
-      if (!bestSplit || distance < bestSplit.distance) {
-        bestSplit = {
-          primary: primary,
-          continuation: continuation,
-          distance: distance,
-        };
-      }
-    }
-
-    return bestSplit ? {
-      primary: bestSplit.primary,
-      continuation: bestSplit.continuation,
-    } : null;
-  }
-
-  function getBulletinEventDescriptionWordCount_(value) {
-    var words = String(value || "").trim().match(/\S+/g);
-    return words ? words.length : 0;
-  }
-
-  function getBulletinEventDescriptionLengthClass_(value) {
-    var wordCount = getBulletinEventDescriptionWordCount_(value);
-    if (wordCount > PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS) {
-      return " is-description-extra-long";
-    }
-    if (wordCount > PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS) {
-      return " is-description-long";
-    }
-    return "";
-  }
-
-  function getBulletinEventDescriptionFitSize_(item) {
-    var source = item || {};
-    var wordCount = getBulletinEventDescriptionWordCount_(
-        source.description,
-    );
-    var titleLines = Math.max(
-        1,
-        Math.ceil(String(source.title || "").length / 25),
-    );
-    var metaLength = String(source.time || "").length +
-      String(source.location || "").length;
-    var metaLines = Math.max(1, Math.ceil(metaLength / 31));
-    var layoutPressure = wordCount +
-      ((titleLines - 1) * 8) +
-      ((metaLines - 1) * 4);
-    var fontSize = 0.125;
-
-    if (layoutPressure > 30) {
-      fontSize -= Math.min(
-          layoutPressure - 30,
-          30,
-      ) * 0.0005;
-    }
-    if (layoutPressure > 60) {
-      fontSize -= Math.min(
-          layoutPressure - 60,
-          23,
-      ) * 0.000435;
-    }
-
-    return Math.max(0.1, fontSize).toFixed(4) + "in";
-  }
-
-  function getBulletinEventLayoutWeight_(item) {
-    var source = item || {};
-    var titleLines = Math.max(1, Math.ceil(String(source.title || "").length / 25));
-    var metaLength = String(source.time || "").length +
-      String(source.location || "").length;
-    var metaLines = Math.max(1, Math.ceil(metaLength / 31));
-    var descriptionWordCount = source.includeDescription ?
-      getBulletinEventDescriptionWordCount_(source.description) :
-      0;
-
-    if (!descriptionWordCount) {
-      return 0.42 + (titleLines * 0.14) + (metaLines * 0.06);
-    }
-
-    return 0.7 + (titleLines * 0.22) + (metaLines * 0.14) +
-      (descriptionWordCount / 42);
-  }
-
-  function getBulletinEventEntryLayoutWeight_(item) {
-    return Math.max(
-        0.62,
-        Math.min(3.6, getBulletinEventLayoutWeight_(item)),
-    );
-  }
-
-  function getBulletinEventGroupLayoutWeight_(group) {
-    return 0.24 + (Array.isArray(group && group.events) ? group.events : [])
-        .reduce(function(total, item) {
-          return total + getBulletinEventEntryLayoutWeight_(item);
-        }, 0);
-  }
-
-  function getBulletinEventGroupsLayoutWeight_(groups) {
-    return (Array.isArray(groups) ? groups : [])
-        .reduce(function(total, group) {
-          return total + getBulletinEventGroupLayoutWeight_(group);
-        }, 0);
-  }
-
-  function getBulletinEventDescriptionGuidanceState_(value) {
-    var wordCount = getBulletinEventDescriptionWordCount_(value);
-    var state = {
-      wordCount: wordCount,
-      className: "",
-      message: wordCount ? "Recommended length" : "No print description",
-    };
-
-    if (wordCount > PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS) {
-      state.className = " is-over-limit";
-      state.message = "Shorten for maximum readability";
-    } else if (wordCount > PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS) {
-      state.className = " is-warning";
-      state.message = "Will scale slightly to fit";
-    }
-
-    return state;
-  }
-
-  function renderBulletinEventDescriptionGuidance_(item) {
-    var source = item || {};
-    var state = getBulletinEventDescriptionGuidanceState_(
-        source.description,
-    );
-
-    return [
-      "<span class=\"central-admin-bulletin-description-guidance",
-      state.className,
-      "\" data-admin-bulletin-description-guidance=\"",
-      escapeAttr_(source.id),
-      "\"><span data-admin-bulletin-description-word-value>",
-      escapeHtml_(String(state.wordCount)),
-      " words</span><span aria-hidden=\"true\">·</span><span ",
-      "data-admin-bulletin-description-word-message>",
-      escapeHtml_(state.message),
-      "</span><small>",
-      String(PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS),
-      " words recommended</small></span>",
-    ].join("");
-  }
-
-  function syncBulletinEventDescriptionGuidance_(eventId, value) {
-    var state = getBulletinEventDescriptionGuidanceState_(value);
-    document.querySelectorAll(
-        "[data-admin-bulletin-description-guidance]",
-    ).forEach(function(element) {
-      if (
-        element.getAttribute("data-admin-bulletin-description-guidance") !==
-        String(eventId)
-      ) {
-        return;
-      }
-
-      element.classList.toggle("is-warning", state.className === " is-warning");
-      element.classList.toggle(
-          "is-over-limit",
-          state.className === " is-over-limit",
-      );
-      var countElement = element.querySelector(
-          "[data-admin-bulletin-description-word-value]",
-      );
-      var messageElement = element.querySelector(
-          "[data-admin-bulletin-description-word-message]",
-      );
-      if (countElement) {
-        countElement.textContent = String(state.wordCount) + " words";
-      }
-      if (messageElement) {
-        messageElement.textContent = state.message;
-      }
-    });
-  }
-
-  function renderBulletinPrintEventGroup_(group) {
-    if (group && group.isContinuation) {
-      return renderBulletinPrintEventContinuation_(group.events[0]);
-    }
-
-    var events = Array.isArray(group && group.events) ? group.events : [];
-    var date = parseBulletinDate_(group.date);
-    var weekday = new Intl.DateTimeFormat("en-US", {timeZone: "UTC", weekday: "short"}).format(date).toUpperCase();
-    var month = new Intl.DateTimeFormat("en-US", {timeZone: "UTC", month: "short"}).format(date).toUpperCase();
-    var day = String(date.getUTCDate());
-    var hasDescription = events.some(function(item) {
-      return item.includeDescription && String(item.description || "").trim();
-    });
-    var eventClass = "central-bulletin-event " +
-      (hasDescription ? "has-description" : "is-compact") +
-      (events.length > 1 ? " is-grouped" : "") +
-      (hasDescription || events.length > 1 ? " has-event-body" : "");
-    var layoutWeight = Math.max(
-        1,
-        getBulletinEventGroupLayoutWeight_(group),
-    ).toFixed(2);
-
-    return [
-      "<article class=\"", eventClass,
-      "\" style=\"--bulletin-event-weight:", layoutWeight, "\">",
-      "<div class=\"central-bulletin-event-date\" aria-label=\"",
-      escapeAttr_(group.date), "\"><span>", escapeHtml_(month),
-      "</span><strong>", escapeHtml_(day), "</strong><small>",
-      escapeHtml_(weekday), "</small></div>",
-      renderBulletinPrintEventHeading_(events[0]),
-      "<div class=\"central-bulletin-event-copy\">",
-      events.map(renderBulletinPrintEventEntry_).join(
-          "<div class=\"central-bulletin-event-divider\" aria-hidden=\"true\"></div>",
-      ),
-      "</div></article>",
-    ].join("");
-  }
-
-  function renderBulletinPrintEventHeading_(item) {
-    return [
-      "<div class=\"central-bulletin-event-entry-heading\">",
-      "<p class=\"central-bulletin-event-meta\">",
-      item.time ? [
-        "<span class=\"central-bulletin-event-meta-time\">",
-        escapeHtml_(item.time), "</span>",
-      ].join("") : "",
-      item.location ? [
-        "<span class=\"central-bulletin-event-meta-location\">",
-        escapeHtml_(item.location), "</span>",
-      ].join("") : "",
-      "</p><h3>", escapeHtml_(item.title), "</h3></div>",
-    ].join("");
-  }
-
-  function renderBulletinPrintEventContinuation_(item) {
-    var description = String(item && item.description || "").trim();
-    var descriptionLengthClass =
-      getBulletinEventDescriptionLengthClass_(description);
-    var descriptionFitSize =
-      getBulletinEventDescriptionFitSize_(item);
-
-    return [
-      "<article class=\"central-bulletin-event central-bulletin-event-continuation has-description\">",
-      "<div class=\"central-bulletin-event-copy\">",
-      "<h3>", escapeHtml_(item && item.title || "Event"),
-      "<span class=\"central-bulletin-continuation-title\">Continued</span></h3>",
-      description ?
-        "<div class=\"central-bulletin-event-description central-bulletin-body-copy central-bulletin-markdown" +
-          descriptionLengthClass +
-          "\" style=\"--bulletin-event-description-fit-size:" +
-          escapeAttr_(descriptionFitSize) + "\">" +
-          renderAdminMarkdownLite_(description) + "</div>" :
-        "",
-      "</div></article>",
-    ].join("");
-  }
-
-  function renderBulletinPrintEventEntry_(item, index) {
-    var description = item.includeDescription && item.description ?
-      String(item.description).trim() : "";
-    var entryWeight = getBulletinEventEntryLayoutWeight_(item).toFixed(2);
-    var descriptionLengthClass =
-      getBulletinEventDescriptionLengthClass_(description);
-    var descriptionFitSize =
-      getBulletinEventDescriptionFitSize_(item);
-
-    return [
-      "<section class=\"central-bulletin-event-entry",
-      description ? " has-description" : " is-compact",
-      index === 0 ? " is-first" : "",
-      "\" style=\"--bulletin-entry-weight:", entryWeight, "\">",
-      index === 0 ? "" : renderBulletinPrintEventHeading_(item),
-      description ?
-        "<div class=\"central-bulletin-event-description central-bulletin-body-copy central-bulletin-markdown" +
-          descriptionLengthClass +
-          "\" style=\"--bulletin-event-description-fit-size:" +
-          escapeAttr_(descriptionFitSize) + "\">" +
-          renderAdminMarkdownLite_(description) + "</div>" :
-        "",
-      "</section>",
-    ].join("");
-  }
-
-  function renderBulletinBrandHeader_() {
-    return [
-      "<header class=\"central-bulletin-brand-header\"><div class=\"central-bulletin-brand\">",
-      "<img src=\"/favicon.svg\" alt=\"\"><div><strong>CrossPointe</strong><span>Central</span></div></div>",
-      "<strong class=\"central-bulletin-sunday-date\">Sunday, ",
-      escapeHtml_(formatBulletinLongDate_(adminState.bulletinDraft.serviceDate)),
-      "</strong></header>",
-    ].join("");
-  }
-
   function renderHubPagePanel_(currentPage) {
     return [
       "<section class=\"central-admin-panel\">",
@@ -8547,7 +4296,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Update the homepage content and choose which modules appear in Central.",
+          "Hub starts from the current published values Central is showing right now. Direct publishers can publish immediately, while request-level users submit their edits for approval.",
       ),
       adminState.hubLoading ?
         renderAdminNote_("Loading the current Hub values.") :
@@ -8589,7 +4338,13 @@
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
       bodyHtml: [
-      renderAdminEditorAccessNote_(canEdit, actionConfig),
+      renderAdminNote_(
+          canEdit ?
+            (actionConfig.mode === "submit" ?
+              "These homepage edits stay local until you submit them for approval. An admin can then review them in the Change Requests page." :
+              "These homepage edits can publish directly to preview from this page.") :
+            "Your current permission level does not allow editing the homepage.",
+      ),
       adminState.hubSettingsMessage ?
         renderAdminNote_(adminState.hubSettingsMessage) :
         "",
@@ -8738,7 +4493,13 @@
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
       bodyHtml: [
-      renderAdminEditorAccessNote_(canEdit, actionConfig),
+      renderAdminNote_(
+          canEdit ?
+            (actionConfig.mode === "submit" ?
+              "These Sunday Mode edits stay local until you submit them for approval. An admin can then review them in the Change Requests page." :
+              "These Sunday Mode edits can publish directly to preview from this page.") :
+            "Your current permission level does not allow editing Sunday Mode.",
+      ),
       renderAdminNote_(
           "Force Sunday Mode, the livestream link and note, and the Bible ID now live on the Settings page so the Hub editor stays focused on homepage content.",
       ),
@@ -8916,7 +4677,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Update the sermon details shown on the Sunday page. The date automatically starts with the next Sunday, and optional fields stay hidden when left blank.",
+          "Sunday starts from what Central is showing right now. The date defaults to the current Sunday if today is Sunday, otherwise the next upcoming Sunday, and you can override it any time.",
       ),
       adminState.sundayLoading ?
         renderAdminNote_("Loading the current Sunday values.") :
@@ -8953,7 +4714,13 @@
             (actionConfig.mode === "submit" ? "is-live" : "is-safe"),
       ),
       "</div>",
-      renderAdminEditorAccessNote_(canEdit, actionConfig),
+      renderAdminNote_(
+          canEdit ?
+            (actionConfig.mode === "submit" ?
+              "These Sunday edits stay local until you submit them for approval. An admin can then review them in the Change Requests page." :
+              "These Sunday edits can publish directly to preview from this page.") :
+            "Your current permission level does not allow editing Sunday.",
+      ),
       adminState.sundayMessage ?
         renderAdminNote_(adminState.sundayMessage) :
         "",
@@ -9030,17 +4797,6 @@
   }
 
   function renderSettingsPagePanel_(currentPage) {
-    var destinationIds = [
-      "settings-sunday-mode",
-      "settings-rooms",
-      "settings-team",
-    ];
-    var destinations = destinationIds.map(function(pageId) {
-      return getAdminPageById_(pageId);
-    }).filter(function(page) {
-      return page && canAccessAdminPage_(page);
-    });
-
     return [
       "<section class=\"central-admin-panel\">",
       "<div class=\"central-admin-panel-header\">",
@@ -9048,162 +4804,45 @@
       "<h3>", escapeHtml_(currentPage.label), "</h3>",
       "<p>", escapeHtml_(currentPage.summary), "</p>",
       "</div>",
+      renderStatusPill_(currentPage.status, "is-safe"),
       "</div>",
       "<div class=\"central-admin-page-body\">",
+      "<div class=\"central-admin-page-meta\">",
+      renderInlineMeta_("Route", currentPage.route),
+      renderInlineMeta_("Sunday Settings", PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH),
+      renderInlineMeta_("Room Rules", PUBLISHED_ROOM_RULES_COLLECTION_PATH),
+      renderInlineMeta_(
+          "Public behavior",
+          "These settings update the published Firestore controls Central is using right now.",
+      ),
+      "</div>",
+      "<div class=\"central-admin-stack\">",
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\">",
+      "<strong>How this page behaves</strong>",
+      renderStatusPill_("Operational controls", "is-live"),
+      "</div>",
+      renderAdminNote_(
+          "Use Settings for the switches and rules that shape how the app behaves behind the scenes, while Hub stays focused on the homepage content itself.",
+      ),
       adminState.settingsLoading ?
-        renderAdminNote_("Loading your current settings overview.") :
+        renderAdminNote_("Loading the current settings and room rules.") :
         "",
       adminState.settingsLoadError ?
         "<p class=\"central-admin-note\">" +
         escapeHtml_(adminState.settingsLoadError) +
         "</p>" :
         "",
-      destinations.length ? [
-        "<div class=\"central-admin-overview-grid central-admin-settings-grid\">",
-        destinations.map(function(page) {
-          return renderSettingsDestinationCard_(page);
-        }).join(""),
-        "</div>",
-      ].join("") : [
-        "<div class=\"central-admin-empty\">",
-        "<strong>No Settings destinations are available.</strong>",
-        "<p>Your account does not currently have access to Sunday Mode, Rooms, or Team & Permissions.</p>",
-        "</div>",
-      ].join(""),
       "</div>",
-      "</section>",
-    ].join("");
-  }
-
-  function renderSettingsDestinationCard_(page) {
-    var status = getSettingsDestinationStatus_(page && page.id);
-
-    return [
-      "<article class=\"central-admin-card central-admin-overview-card\">",
-      "<div class=\"central-admin-overview-card-top\">",
-      "<h3>", escapeHtml_(page && page.label || "Settings"), "</h3>",
-      status.label ?
-        "<div class=\"central-admin-badges\">" +
-          renderStatusPill_(status.label, status.tone) +
-        "</div>" :
-        "",
-      "</div>",
-      "<p>", escapeHtml_(page && page.summary || ""), "</p>",
-      "<div class=\"central-admin-action-row\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-nav=\"",
-      escapeAttr_(page && page.id || "settings"),
-      "\">Open</button>",
-      "</div>",
-      "</article>",
-    ].join("");
-  }
-
-  function getSettingsDestinationStatus_(pageId) {
-    if (adminState.settingsLoading && !adminState.settingsLoaded) {
-      return {label: "Loading", tone: "is-live"};
-    }
-
-    if (pageId === "settings-sunday-mode") {
-      var overrideValue = adminState.settingsSundayDraft &&
-        adminState.settingsSundayDraft.sunday_mode_override;
-      var overrideOption = SUNDAY_MODE_OVERRIDE_OPTIONS.find(
-          function(option) {
-            return option.value === overrideValue;
-          },
-      );
-      return {
-        label: overrideOption ? overrideOption.label : "Automatic",
-        tone: overrideValue === "enabled" ? "is-live" : "is-safe",
-      };
-    }
-
-    if (pageId === "settings-rooms") {
-      var roomRuleCount = Array.isArray(adminState.roomRulesItems) ?
-        adminState.roomRulesItems.length :
-        0;
-      return {
-        label: roomRuleCount + (roomRuleCount === 1 ? " rule" : " rules"),
-        tone: roomRuleCount ? "is-safe" : "is-live",
-      };
-    }
-
-    if (pageId === "settings-team") {
-      if (!canManageAdminUsers_()) {
-        return {label: "Restricted", tone: "is-warn"};
-      }
-
-      if (adminState.adminUsersLoading && !adminState.adminUsersLoaded) {
-        return {label: "Loading", tone: "is-live"};
-      }
-
-      var teamCount = Array.isArray(adminState.adminUsersItems) ?
-        adminState.adminUsersItems.length :
-        0;
-      return {
-        label: teamCount + (teamCount === 1 ? " account" : " accounts"),
-        tone: teamCount ? "is-safe" : "is-live",
-      };
-    }
-
-    return {label: "", tone: ""};
-  }
-
-  function renderSettingsDestinationPagePanel_(currentPage, bodyHtml) {
-    return [
-      "<section class=\"central-admin-panel\">",
-      "<div class=\"central-admin-panel-header\">",
-      "<div>",
-      "<h3>", escapeHtml_(currentPage.label), "</h3>",
-      "<p>", escapeHtml_(currentPage.summary), "</p>",
-      "</div>",
-      "</div>",
-      "<div class=\"central-admin-page-body\">",
-      adminState.settingsLoadError ?
-        "<p class=\"central-admin-note\">" +
-          escapeHtml_(adminState.settingsLoadError) +
-        "</p>" :
-        "",
-      "<div class=\"central-admin-stack\">",
-      bodyHtml,
+      renderSettingsSundayEditor_(),
+      renderWayfinderAlphaSettings_(),
+      renderRoomRulesEditor_(),
+      renderRoomRulesWorkingList_(),
+      renderAdminUsersManager_(),
       "</div>",
       "</div>",
       "</section>",
     ].join("");
-  }
-
-  function renderSettingsSundayModePagePanel_(currentPage) {
-    return renderSettingsDestinationPagePanel_(
-        currentPage,
-        renderSettingsSundayEditor_(),
-    );
-  }
-
-  function renderSettingsRoomsPagePanel_(currentPage) {
-    return renderSettingsDestinationPagePanel_(
-        currentPage,
-        [
-          renderAdminCollectionActions_({
-            section: "roomRules",
-            label: "Add Room Rule",
-            canEdit: canEditRoomRules_(),
-            busy: adminState.roomRulesLoading ||
-              adminState.roomRulesSaving ||
-              adminState.roomRulesPublishing,
-          }),
-          renderAdminCollectionEditor_(
-              "roomRules",
-              renderRoomRulesEditor_(),
-          ),
-          renderRoomRulesWorkingList_(),
-        ].join(""),
-    );
-  }
-
-  function renderSettingsTeamPagePanel_(currentPage) {
-    return renderSettingsDestinationPagePanel_(
-        currentPage,
-        renderAdminUsersManager_(),
-    );
   }
 
   function renderSettingsSundayEditor_() {
@@ -9218,7 +4857,6 @@
     return renderCollapsibleAdminSection_({
       id: "settings-sunday-controls",
       title: "Sunday Controls",
-      collapsible: false,
       pillHtml: renderStatusPill_(
           !canEdit ?
             "Read only" :
@@ -9233,7 +4871,7 @@
       renderAdminNote_(
           canEdit ?
             "Live and Dev have separate Sunday Mode controls. Changing one environment will not change the other. Service integrations now live on the Integrations page." :
-            "You can view Settings, but you don't have permission to make changes.",
+            "Your current permission level does not allow editing Settings.",
       ),
       adminState.settingsSundayMessage ?
         renderAdminNote_(adminState.settingsSundayMessage) :
@@ -9331,15 +4969,11 @@
     var canAdmin = permission === "admin";
     var enabled = adminState.wayfinderAlphaEnabled === true;
     return renderCollapsibleAdminSection_({
-      id: "wayfinder-alpha-access",
-      title: "Staff Alpha Access",
+      id: "settings-wayfinder-alpha",
+      title: "Wayfinder Staff Alpha",
       pillHtml: renderStatusPill_(
-          adminState.wayfinderAlphaLoading ?
-            "Loading" :
-            enabled ? "Enabled" : "Disabled",
-          adminState.wayfinderAlphaLoading || !enabled ?
-            "is-warn" :
-            "is-safe",
+          enabled ? "Enabled" : "Disabled",
+          enabled ? "is-safe" : "is-warn",
       ),
       bodyHtml: [
         renderAdminNote_(
@@ -9361,9 +4995,7 @@
         "\" data-admin-action=\"toggle-wayfinder-alpha\" data-wayfinder-enabled=\"",
         enabled ? "true" : "false",
         "\"",
-        (!canAdmin ||
-          adminState.wayfinderAlphaLoading ||
-          adminState.wayfinderAlphaSaving) ? " disabled" : "",
+        (!canAdmin || adminState.wayfinderAlphaSaving) ? " disabled" : "",
         ">",
         escapeHtml_(
             adminState.wayfinderAlphaSaving ?
@@ -9420,7 +5052,7 @@
       renderAdminNote_(
           canEdit ?
             "Manage the services Central connects to. Each section keeps one provider's settings together." :
-            "You can view Integrations, but you don't have permission to make changes.",
+            "Your current permission level does not allow editing Integrations.",
       ),
       adminState.settingsLoading ?
         renderAdminNote_("Loading the current integration settings.") :
@@ -9502,7 +5134,6 @@
       "<p>The backend finds approved information first, then gives only that information to Gemini. Fixed safety answers skip Gemini completely.</p>",
       "</div>",
       "</div>",
-      hasAccess ? renderWayfinderAlphaSettings_() : "",
       hasAccess ? renderWayfinderFeaturedEventHealth_() : "",
       hasAccess ? renderWayfinderWebsiteIndex_() : "",
       hasAccess ? renderWayfinderEvaluations_() : "",
@@ -10634,7 +6265,6 @@
       title: adminState.roomRulesEditingId ?
         "Edit Room Rule" :
         "Add Room Rule",
-      collapsible: false,
       pillHtml: renderStatusPill_(
           canEdit ? "Write access" : "Read only",
           canEdit ? "is-safe" : "is-warn",
@@ -10643,9 +6273,9 @@
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
-              "Room Rules rename or hide Planning Center rooms in Central. Submit each rule when it is ready for review." :
-              "Room Rules rename or hide Planning Center rooms in Central.") :
-            "You can view Room Rules, but you don't have permission to make changes.",
+              "Room Rules shape how Planning Center rooms get renamed or hidden in Central. Each save sends a single approval request, so editors can submit one rule change at a time." :
+              "Room Rules shape how Planning Center rooms get renamed or hidden in Central. Each save publishes that one rule change immediately.") :
+            "Your current permission level does not allow editing room rules.",
       ),
       adminState.roomRulesMessage ?
         renderAdminNote_(adminState.roomRulesMessage) :
@@ -10707,13 +6337,7 @@
         "</button>",
         "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reset-room-rule-form\"",
         actionDisabled ? " disabled" : "",
-        ">",
-        escapeHtml_(
-            adminState.roomRulesEditingId ?
-              "Cancel Edit" :
-              "Cancel",
-        ),
-        "</button>",
+        ">Reset Form</button>",
         "</div>",
       ].join("") : "",
       ].join(""),
@@ -10727,7 +6351,6 @@
       return renderCollapsibleAdminSection_({
         id: "settings-room-rules-list",
         title: "Current Room Rules",
-        collapsible: false,
         pillHtml: renderStatusPill_("Loading", "is-live"),
         bodyHtml: renderAdminNote_("Reading the current room rules now."),
       });
@@ -10737,7 +6360,6 @@
       return renderCollapsibleAdminSection_({
         id: "settings-room-rules-list",
         title: "Current Room Rules",
-        collapsible: false,
         pillHtml: renderStatusPill_(
             adminState.roomRulesError ? "Read failed" : "Empty collection",
             adminState.roomRulesError ? "is-warn" : "is-live",
@@ -10753,7 +6375,6 @@
     return renderCollapsibleAdminSection_({
       id: "settings-room-rules-list",
       title: "Current Room Rules",
-      collapsible: false,
       pillHtml: renderStatusPill_(
           adminState.roomRulesItems.length + " loaded",
           "is-safe",
@@ -10853,7 +6474,6 @@
       return renderCollapsibleAdminSection_({
         id: "settings-admin-users",
         title: "Admin Users",
-        collapsible: false,
         pillHtml: renderStatusPill_("Restricted", "is-warn"),
         bodyHtml: renderAdminNote_(
             "Only users with admin-level access to the Users section can add people or change permission levels.",
@@ -10861,21 +6481,24 @@
       });
     }
 
+    var isEditingCurrentAdminUser = !!(
+      adminState.user &&
+      adminState.adminUsersEditingUid &&
+      adminState.user.uid === adminState.adminUsersEditingUid
+    );
+
     return renderCollapsibleAdminSection_({
       id: "settings-admin-users",
-      title: "Team Members",
-      collapsible: false,
-      pillHtml: renderStatusPill_(
-          String(adminState.adminUsersItems.length),
-          "is-safe",
-      ),
+      title: adminState.adminUsersEditingInviteId ?
+        "Edit Admin Invite" :
+        (adminState.adminUsersEditingUid ?
+        "Edit Admin User" :
+        "Add Admin User"),
+      pillHtml: renderStatusPill_("Admin only", "is-live"),
       bodyHtml: [
-      "<div class=\"central-admin-team-toolbar\">",
-      "<p>Invite people, review pending access, and adjust permissions.</p>",
-      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"open-admin-user-editor\"",
-      adminState.adminUsersSaving ? " disabled" : "",
-      "><span aria-hidden=\"true\">+</span> Add Team Member</button>",
-      "</div>",
+      renderAdminNote_(
+          "Enter an email address to send an admin invite with permissions already attached. If you already know a Firebase UID, you can still add someone directly without the invite flow.",
+      ),
       adminState.adminUsersMessage ?
         renderAdminNote_(adminState.adminUsersMessage) :
         "",
@@ -10884,207 +6507,13 @@
         escapeHtml_(adminState.adminUsersError) +
         "</p>" :
         "",
-      renderAdminUsersList_(),
-      ].join(""),
-    });
-  }
-
-  function renderAdminUsersList_() {
-    if (adminState.adminUsersLoading && !adminState.adminUsersLoaded) {
-      return [
-        "<div class=\"central-admin-team-empty\">",
-        "<strong>Loading your team…</strong>",
-        "<p>Reading current accounts and pending invitations.</p>",
-        "</div>",
-      ].join("");
-    }
-
-    if (!adminState.adminUsersItems.length) {
-      return [
-        "<div class=\"central-admin-team-empty\">",
-        "<strong>No team members yet</strong>",
-        "<p>Add someone to send their first Central Admin invitation.</p>",
-        "</div>",
-      ].join("");
-    }
-
-    return [
-      "<div class=\"central-admin-team-list\">",
-      adminState.adminUsersItems.map(function(userItem) {
-      var isCurrentAdminUser = !!(
-        adminState.user &&
-        userItem.recordType !== "invite" &&
-        userItem.uid === adminState.user.uid
-      );
-      var statusLabel = userItem.recordType === "invite" ?
-        "Invite Pending" :
-        (userItem.active ? "Active" : "Inactive");
-      var preset = getAdminUserAccessPreset_(userItem.pageAccess);
-      var destinationCount = getAdminUserAccessibleDestinationCount_(
-          userItem.pageAccess,
-      );
-
-      return [
-        "<article class=\"central-admin-team-member\">",
-        renderAdminUserAvatar_(userItem),
-        "<div class=\"central-admin-team-member-copy\">",
-        "<div class=\"central-admin-team-member-heading\">",
-        "<div>",
-        "<strong>", escapeHtml_(
-            userItem.displayName ||
-            userItem.email ||
-            userItem.uid ||
-            "Unnamed team member",
-        ), "</strong>",
-        "<p>", escapeHtml_(userItem.email || userItem.uid || ""), "</p>",
-        "</div>",
-        "<div class=\"central-admin-badges\">",
-        renderStatusPill_(
-            statusLabel,
-            userItem.recordType === "invite" || !userItem.active ?
-              "is-warn" :
-              "is-safe",
-        ),
-        isCurrentAdminUser ?
-          renderStatusPill_("You", "is-live") :
-          "",
-        "</div>",
-        "</div>",
-        "<p class=\"central-admin-team-access-summary\">",
-        "<strong>", escapeHtml_(preset ? preset.label : "Custom access"), "</strong>",
-        "<span>",
-        escapeHtml_(
-            destinationCount + (destinationCount === 1 ?
-              " destination" :
-              " destinations"),
-        ),
-        "</span>",
-        userItem.recordType === "invite" && userItem.inviteExpiresAt ?
-          "<span>Expires " +
-            escapeHtml_(formatAdminTimestamp_(userItem.inviteExpiresAt)) +
-          "</span>" :
-          "",
-        "</p>",
-        "</div>",
-        "<div class=\"central-admin-team-member-actions\">",
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-admin-user\" data-admin-doc-id=\"",
-        escapeAttr_(userItem.recordType === "invite" ? userItem.inviteId : userItem.uid),
-        "\" data-admin-record-type=\"",
-        escapeAttr_(userItem.recordType || "user"),
-        "\"",
-        adminState.adminUsersSaving ? " disabled" : "",
-        ">",
-        escapeHtml_(userItem.recordType === "invite" ?
-          "Edit / Resend" :
-          "Edit"),
-        "</button>",
-        "</div>",
-        "</article>",
-      ].join("");
-      }).join(""),
-      "</div>",
-    ].join("");
-  }
-
-  function renderAdminUserAvatar_(userItem) {
-    var label = String(
-        userItem &&
-        (userItem.displayName || userItem.email || userItem.uid) ||
-        "Team member",
-    ).trim();
-    var initials = label.split(/\s+/)
-        .slice(0, 2)
-        .map(function(part) {
-          return part.charAt(0);
-        })
-        .join("")
-        .toUpperCase() || "CP";
-
-    if (userItem && userItem.photoUrl) {
-      return [
-        "<div class=\"central-admin-team-avatar\">",
-        "<img src=\"", escapeAttr_(userItem.photoUrl),
-        "\" alt=\"\" referrerpolicy=\"no-referrer\">",
-        "</div>",
-      ].join("");
-    }
-
-    return [
-      "<div class=\"central-admin-team-avatar\" aria-hidden=\"true\">",
-      escapeHtml_(initials),
-      "</div>",
-    ].join("");
-  }
-
-  function renderAdminUserEditorModal_(currentPage) {
-    if (!currentPage ||
-      currentPage.id !== "settings-team" ||
-      !adminState.adminUsersEditorOpen ||
-      !canManageAdminUsers_()) {
-      return "";
-    }
-
-    var isEditingCurrentAdminUser = !!(
-      adminState.user &&
-      adminState.adminUsersEditingUid &&
-      adminState.user.uid === adminState.adminUsersEditingUid
-    );
-    var isEditing = !!(
-      adminState.adminUsersEditingUid ||
-      adminState.adminUsersEditingInviteId
-    );
-    var currentPreset = getAdminUserAccessPreset_(
-        adminState.adminUsersDraft.pageAccess,
-    );
-    var hasAnyAccess = hasAnyAdminUserPageAccess_(
-        adminState.adminUsersDraft.pageAccess,
-    );
-    var hasAnyDraftAccess = hasAnyAdminUserPageAccess_(
-        adminState.adminUsersDraft.pageAccess,
-    );
-    var modalTitle = adminState.adminUsersEditingInviteId ?
-      "Edit Pending Invite" :
-      (adminState.adminUsersEditingUid ?
-        "Edit Team Member" :
-        "Add Team Member");
-
-    return [
-      "<div class=\"central-admin-modal central-admin-team-modal",
-      adminState.adminUsersEditorEntering ? "" : " is-visible",
-      "\" role=\"presentation\" data-admin-user-editor-modal>",
-      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-admin-user-editor\" aria-label=\"Close team member editor\"",
-      adminState.adminUsersSaving ? " disabled" : "",
-      "></button>",
-      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-team-modal-title\">",
-      "<div class=\"central-admin-modal-copy\">",
-      "<span class=\"central-admin-kicker\">",
-      isEditing ? "Team Access" : "New Invitation",
-      "</span>",
-      "<h3 id=\"central-admin-team-modal-title\">",
-      escapeHtml_(modalTitle),
-      "</h3>",
-      "<p>",
-      isEditing ?
-        "Update this person's account and access." :
-        "Choose a starting access level, then customize anything that needs to be different.",
-      "</p>",
-      "</div>",
-      "<div class=\"central-admin-team-modal-fields\">",
-      adminState.adminUsersMessage ?
-        renderAdminNote_(adminState.adminUsersMessage) :
-        "",
-      adminState.adminUsersError ?
-        "<p class=\"central-admin-note central-admin-team-modal-error\">" +
-          escapeHtml_(adminState.adminUsersError) +
-        "</p>" :
-        "",
       "<div class=\"central-admin-form-grid\">",
       renderAdminInputField_({
-        label: "Display Name",
-        field: "admin-user.displayName",
-        value: adminState.adminUsersDraft.displayName,
-        placeholder: "CrossPointe Team Member",
-        maxLength: 120,
+        label: "UID",
+        field: "admin-user.uid",
+        value: adminState.adminUsersDraft.uid,
+        placeholder: "Optional direct-add path",
+        maxLength: 128,
       }),
       renderAdminInputField_({
         label: "Email",
@@ -11093,61 +6522,51 @@
         placeholder: "name@crosspointe.tv",
         maxLength: 160,
       }),
+      renderAdminInputField_({
+        label: "Display Name",
+        field: "admin-user.displayName",
+        value: adminState.adminUsersDraft.displayName,
+        placeholder: "CrossPointe Team Member",
+        maxLength: 120,
+      }),
       "</div>",
-      "<label class=\"central-admin-team-status\">",
-      "<input type=\"checkbox\" data-admin-field=\"admin-user.active\"",
-      adminState.adminUsersDraft.active ? " checked" : "",
+      renderAdminCheckboxField_({
+        label: "Active",
+        field: "admin-user.active",
+        checked: !!adminState.adminUsersDraft.active,
+        hint: "Inactive users can still exist in Firestore, but they will not be able to use the dashboard.",
+      }),
+      "<div class=\"central-admin-form-grid\">",
+      getManagedAdminPageConfigs_().map(function(pageConfig) {
+        var permissionOptions = pageConfig.key === "wayfinder" ?
+          ["none", "view", "admin"] : ADMIN_PERMISSION_OPTIONS;
+        return renderAdminSelectField_({
+          label: pageConfig.label,
+          field: "admin-user.pageAccess." + pageConfig.key,
+          value: getAdminUserDraftPermissionValue_(pageConfig.key),
+          options: permissionOptions.map(function(permission) {
+            return {
+              value: permission,
+              label: pageConfig.key === "wayfinder" && permission === "view" ?
+                "User" : (PERMISSION_LABELS[permission] || permission),
+            };
+          }),
+        });
+      }).join(""),
+      "</div>",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-admin-user\"",
       adminState.adminUsersSaving ? " disabled" : "",
       ">",
-      "<span><strong>Active account</strong>",
-      "<small>Inactive accounts cannot open the admin dashboard.</small></span>",
-      "</label>",
-      "<section class=\"central-admin-permission-presets\">",
-      "<div class=\"central-admin-permission-section-heading\">",
-      "<div><strong>Access Level</strong>",
-      "<p>Choose the closest match. You can fine-tune it below.</p></div>",
-      "<span class=\"central-admin-pill ",
-      hasAnyDraftAccess ? "is-live" : "is-warn",
-      " central-admin-permission-custom-status\"",
-      currentPreset ? " hidden" : "",
-      ">",
-      hasAnyDraftAccess ? "Custom access" : "Choose access",
-      "</span>",
-      "</div>",
-      "<div class=\"central-admin-permission-preset-grid\">",
-      ADMIN_USER_ACCESS_PRESETS.map(function(preset) {
-        var isSelected = !!(currentPreset && currentPreset.id === preset.id);
-        return [
-          "<button type=\"button\" class=\"central-admin-permission-preset",
-          isSelected ? " is-selected" : "",
-          "\" data-admin-action=\"apply-admin-user-preset\" data-admin-permission-preset=\"",
-          escapeAttr_(preset.id), "\"",
-          " aria-pressed=\"", isSelected ? "true" : "false", "\"",
-          adminState.adminUsersSaving ? " disabled" : "",
-          ">",
-          "<strong>", escapeHtml_(preset.label), "</strong>",
-          "<span>", escapeHtml_(preset.description), "</span>",
-          "</button>",
-        ].join("");
-      }).join(""),
-      "</div>",
-      "</section>",
-      "<details class=\"central-admin-permission-customizer\">",
-      "<summary>",
-      "<span><strong>Customize access</strong>",
-      "<small>Set individual destinations and workflows</small></span>",
-      "<span class=\"central-admin-permission-customizer-chevron\" aria-hidden=\"true\"></span>",
-      "</summary>",
-      "<div class=\"central-admin-permission-groups\">",
-      ADMIN_USER_PERMISSION_GROUPS.map(function(group) {
-        return renderAdminUserPermissionGroup_(group);
-      }).join(""),
-      "</div>",
-      "</details>",
-      "</div>",
-      "<div class=\"central-admin-action-row central-admin-modal-actions\">",
-      isEditing ? [
-        "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-team-delete\" data-admin-action=\"delete-admin-user\" data-admin-doc-id=\"",
+      adminState.adminUsersSaving ?
+        escapeHtml_(getAdminUserSaveBusyLabel_()) :
+        escapeHtml_(getAdminUserSaveButtonLabel_()),
+      "</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reset-admin-user-form\"",
+      adminState.adminUsersSaving ? " disabled" : "",
+      ">Reset Form</button>",
+      (adminState.adminUsersEditingUid || adminState.adminUsersEditingInviteId) ? [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-admin-user\" data-admin-doc-id=\"",
         escapeAttr_(
             adminState.adminUsersEditingInviteId ||
             adminState.adminUsersEditingUid,
@@ -11159,220 +6578,101 @@
               "user",
         ),
         "\"",
-        adminState.adminUsersSaving || isEditingCurrentAdminUser ?
-          " disabled" :
-          "",
+        adminState.adminUsersSaving || isEditingCurrentAdminUser ? " disabled" : "",
         ">",
         escapeHtml_(
             adminState.adminUsersEditingInviteId ?
               "Delete Invite" :
-              "Remove Access",
+              "Delete User",
         ),
         "</button>",
       ].join("") : "",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"close-admin-user-editor\"",
-      " data-admin-close-skip-confirm=\"true\"",
-      adminState.adminUsersSaving ? " disabled" : "",
-      ">Cancel</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-admin-user\"",
-      adminState.adminUsersSaving ? " disabled" : "",
-      ">",
-      adminState.adminUsersSaving ?
-        escapeHtml_(getAdminUserSaveBusyLabel_()) :
-        escapeHtml_(getAdminUserSaveButtonLabel_()),
-      "</button>",
       "</div>",
-      "</div>",
-      "</div>",
-    ].join("");
-  }
-
-  function renderAdminUserPermissionGroup_(group) {
-    var configByKey = {};
-    getManagedAdminPageConfigs_().forEach(function(pageConfig) {
-      configByKey[pageConfig.key] = pageConfig;
+      renderAdminUsersList_(),
+      ].join(""),
     });
-
-    return [
-      "<section class=\"central-admin-permission-group\">",
-      "<div class=\"central-admin-permission-group-heading\">",
-      "<strong>", escapeHtml_(group.label), "</strong>",
-      "<p>", escapeHtml_(group.description), "</p>",
-      "</div>",
-      "<div class=\"central-admin-permission-rows\">",
-      group.keys.map(function(pageAccessKey) {
-        var pageConfig = configByKey[pageAccessKey] || {
-          key: pageAccessKey,
-          label: pageAccessKey,
-        };
-        var permissionOptions = pageAccessKey === "wayfinder" ?
-          ["none", "view", "admin"] :
-          ADMIN_PERMISSION_OPTIONS;
-
-        return [
-          "<label class=\"central-admin-permission-row\">",
-          "<span>", escapeHtml_(pageConfig.label), "</span>",
-          "<select data-admin-field=\"admin-user.pageAccess.",
-          escapeAttr_(pageAccessKey), "\"",
-          adminState.adminUsersSaving ? " disabled" : "",
-          ">",
-          permissionOptions.map(function(permission) {
-            var label = pageAccessKey === "wayfinder" &&
-              permission === "view" ?
-              "User" :
-              (PERMISSION_LABELS[permission] || permission);
-            return [
-              "<option value=\"", escapeAttr_(permission), "\"",
-              getAdminUserDraftPermissionValue_(pageAccessKey) === permission ?
-                " selected" :
-                "",
-              ">",
-              escapeHtml_(label),
-              "</option>",
-            ].join("");
-          }).join(""),
-          "</select>",
-          "</label>",
-        ].join("");
-      }).join(""),
-      "</div>",
-      "</section>",
-    ].join("");
   }
 
-  function openAdminUserEditor_() {
-    if (!canManageAdminUsers_() || adminState.adminUsersSaving) {
-      return;
+  function renderAdminUsersList_() {
+    if (adminState.adminUsersLoading && !adminState.adminUsersLoaded) {
+      return renderAdminNote_("Loading the current admin users and pending invites.");
     }
 
-    clearAdminUserEditorCloseTimer_();
-    clearAdminActionFeedback_();
-    clearAdminDirtyScope_("admin-user");
-    resetAdminUsersDraft_();
-    adminState.adminUsersEditorOpen = true;
-    adminState.adminUsersEditorEntering = true;
-    renderAdmin_();
-  }
-
-  function closeAdminUserEditor_(options) {
-    var config = options || {};
-    if (!adminState.adminUsersEditorOpen || adminState.adminUsersSaving) {
-      return;
+    if (!adminState.adminUsersItems.length) {
+      return renderAdminNote_("No admin users or pending invites have been loaded yet.");
     }
 
-    if (!config.skipConfirm &&
-      !confirmDiscardAdminChanges_("admin-user")) {
-      return;
-    }
-
-    clearAdminUserEditorCloseTimer_();
-    clearAdminDirtyScope_("admin-user");
-    var modalEl = appEl && appEl.querySelector(
-        "[data-admin-user-editor-modal]",
-    );
-
-    if (!modalEl) {
-      finishClosingAdminUserEditor_();
-      return;
-    }
-
-    modalEl.classList.remove("is-visible");
-    modalEl.classList.add("is-closing");
-    adminUserEditorCloseTimer = window.setTimeout(function() {
-      adminUserEditorCloseTimer = null;
-      finishClosingAdminUserEditor_();
-    }, 720);
-  }
-
-  function finishClosingAdminUserEditor_() {
-    adminState.adminUsersEditorOpen = false;
-    adminState.adminUsersEditorEntering = false;
-    resetAdminUsersDraft_();
-    renderAdmin_();
-  }
-
-  function clearAdminUserEditorCloseTimer_() {
-    if (!adminUserEditorCloseTimer) {
-      return;
-    }
-
-    window.clearTimeout(adminUserEditorCloseTimer);
-    adminUserEditorCloseTimer = null;
-  }
-
-  function syncAdminUserEditorModal_() {
-    if (!appEl ||
-      !adminState.adminUsersEditorOpen ||
-      !adminState.adminUsersEditorEntering) {
-      return;
-    }
-
-    var modalEl = appEl.querySelector("[data-admin-user-editor-modal]");
-    if (!modalEl) {
-      return;
-    }
-
-    window.requestAnimationFrame(function() {
-      if (!modalEl.isConnected || !adminState.adminUsersEditorOpen) {
-        return;
-      }
-
-      modalEl.classList.add("is-visible");
-      adminState.adminUsersEditorEntering = false;
-      var firstField = modalEl.querySelector(
-          '[data-admin-field="admin-user.displayName"]',
+    return adminState.adminUsersItems.map(function(userItem) {
+      var isCurrentAdminUser = !!(
+        adminState.user &&
+        userItem.recordType !== "invite" &&
+        userItem.uid === adminState.user.uid
       );
-      if (firstField && typeof firstField.focus === "function") {
-        firstField.focus({preventScroll: true});
-      }
-    });
-  }
 
-  function applyAdminUserAccessPreset_(presetId) {
-    var preset = getAdminUserAccessPresetById_(presetId);
-    if (!preset || adminState.adminUsersSaving) {
-      return;
-    }
-
-    markAdminDirtyScope_("admin-user");
-    adminState.adminUsersDraft.pageAccess =
-      createAdminUserPresetPageAccess_(preset.id);
-    adminState.adminUsersError = "";
-    adminState.adminUsersMessage = "";
-    renderAdmin_();
-  }
-
-  function syncAdminUserPermissionPresetState_() {
-    if (!appEl || !adminState.adminUsersEditorOpen) {
-      return;
-    }
-
-    var currentPreset = getAdminUserAccessPreset_(
-        adminState.adminUsersDraft.pageAccess,
-    );
-    Array.prototype.forEach.call(
-        appEl.querySelectorAll("[data-admin-permission-preset]"),
-        function(buttonEl) {
-          var isSelected = !!(
-            currentPreset &&
-            buttonEl.getAttribute("data-admin-permission-preset") ===
-              currentPreset.id
-          );
-          buttonEl.classList.toggle("is-selected", isSelected);
-          buttonEl.setAttribute("aria-pressed", isSelected ? "true" : "false");
-        },
-    );
-    var customStatusEl = appEl.querySelector(
-        ".central-admin-permission-custom-status",
-    );
-    if (customStatusEl) {
-      customStatusEl.hidden = !!currentPreset;
-      customStatusEl.textContent = hasAnyAccess ?
-        "Custom access" :
-        "Choose access";
-      customStatusEl.classList.toggle("is-live", hasAnyAccess);
-      customStatusEl.classList.toggle("is-warn", !hasAnyAccess);
-    }
+      return [
+        "<div class=\"central-admin-list-row\">",
+        "<div>",
+        "<strong>",
+        escapeHtml_(userItem.displayName || userItem.email || userItem.uid),
+        "</strong>",
+        "<p>",
+        escapeHtml_(
+            [
+              userItem.email || "",
+              userItem.uid || "",
+            ].filter(Boolean).join(" • "),
+        ),
+        "</p>",
+        "<div class=\"central-admin-item-meta\">",
+        renderInlineMeta_(
+            "Status",
+            userItem.recordType === "invite" ?
+              "Invite Pending" :
+              (userItem.active ? "Active" : "Inactive"),
+        ),
+        renderInlineMeta_("Hub", getPermissionLabel_(getAdminUserPermissionValue_(userItem, "hub"))),
+        renderInlineMeta_("Settings", getPermissionLabel_(getAdminUserPermissionValue_(userItem, "settings"))),
+        renderInlineMeta_("Approvals", getPermissionLabel_(getAdminUserPermissionValue_(userItem, "changeRequests"))),
+        renderInlineMeta_("Users", getPermissionLabel_(getAdminUserPermissionValue_(userItem, "users"))),
+        userItem.recordType === "invite" && userItem.inviteSentAt ?
+          renderInlineMeta_(
+              "Sent",
+              formatAdminTimestamp_(userItem.inviteSentAt),
+          ) :
+          "",
+        userItem.recordType === "invite" && userItem.inviteExpiresAt ?
+          renderInlineMeta_(
+              "Expires",
+              formatAdminTimestamp_(userItem.inviteExpiresAt),
+          ) :
+          "",
+        "</div>",
+        "</div>",
+        "<div class=\"central-admin-row-actions\">",
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-admin-user\" data-admin-doc-id=\"",
+        escapeAttr_(userItem.recordType === "invite" ? userItem.inviteId : userItem.uid),
+        "\" data-admin-record-type=\"",
+        escapeAttr_(userItem.recordType || "user"),
+        "\"",
+        adminState.adminUsersSaving ? " disabled" : "",
+        ">",
+        escapeHtml_(userItem.recordType === "invite" ?
+          "Edit / Resend" :
+          "Edit"),
+        "</button>",
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-admin-user\" data-admin-doc-id=\"",
+        escapeAttr_(userItem.recordType === "invite" ? userItem.inviteId : userItem.uid),
+        "\" data-admin-record-type=\"",
+        escapeAttr_(userItem.recordType || "user"),
+        "\"",
+        adminState.adminUsersSaving || isCurrentAdminUser ? " disabled" : "",
+        ">",
+        escapeHtml_(userItem.recordType === "invite" ? "Delete Invite" : "Delete"),
+        "</button>",
+        "</div>",
+        "</div>",
+      ].join("");
+    }).join("");
   }
 
   function renderCollapsibleAdminSection_(config) {
@@ -11384,18 +6684,6 @@
       "central-admin-section-" + sectionId :
       "";
     var isCollapsed = isAdminSectionCollapsed_(sectionId);
-
-    if (config && config.collapsible === false) {
-      return [
-        "<div class=\"central-admin-item\">",
-        "<div class=\"central-admin-item-header\">",
-        "<strong>", escapeHtml_(title), "</strong>",
-        pillHtml,
-        "</div>",
-        bodyHtml,
-        "</div>",
-      ].join("");
-    }
 
     return [
       "<div class=\"central-admin-item central-admin-collapsible-section",
@@ -11474,14 +6762,11 @@
       "<span>", escapeHtml_(config.label || ""), "</span>",
       "<textarea data-admin-field=\"", escapeAttr_(config.field || ""), "\" rows=\"",
       escapeAttr_(String(config.rows || 3)), "\"",
-      config.maxLength ? " maxlength=\"" + escapeAttr_(String(config.maxLength)) + "\"" : "",
       config.placeholder ? " placeholder=\"" + escapeAttr_(config.placeholder) + "\"" : "",
       config.disabled ? " disabled" : "",
       ">",
       escapeHtml_(config.value || ""),
       "</textarea>",
-      config.hint ? "<small class=\"central-admin-field-hint\">" +
-        escapeHtml_(config.hint) + "</small>" : "",
       "</label>",
     ].join("");
   }
@@ -11596,85 +6881,6 @@
       "This is the current published list.";
   }
 
-  function renderAdminCollectionActions_(config) {
-    if (
-      !config ||
-      !config.canEdit ||
-      adminState.collectionEditorOpen === config.section
-    ) {
-      return "";
-    }
-
-    return [
-      "<div class=\"central-admin-collection-actions",
-      adminState.collectionActionsEntering === config.section ?
-        " is-entering" :
-        "",
-      "\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"open-collection-editor\" data-admin-collection-editor=\"",
-      escapeAttr_(config.section), "\"",
-      config.busy ? " disabled" : "",
-      ">",
-      "<span class=\"central-admin-collection-add-icon\" aria-hidden=\"true\">+</span>",
-      escapeHtml_(config.label || "Add New"),
-      "</button>",
-      "</div>",
-    ].join("");
-  }
-
-  function renderAdminCollectionEditor_(section, editorHtml) {
-    if (adminState.collectionEditorOpen !== section) {
-      return "";
-    }
-
-    return [
-      "<div class=\"central-admin-collection-editor",
-      adminState.collectionEditorEntering ? " is-entering" : "",
-      adminState.collectionEditorExiting === section ? " is-exiting" : "",
-      "\" data-admin-collection-editor-panel=\"",
-      escapeAttr_(section), "\">",
-      "<div class=\"central-admin-collection-editor-inner\">",
-      editorHtml,
-      "</div>",
-      "</div>",
-    ].join("");
-  }
-
-  function syncAdminCollectionEditorFocus_() {
-    if (!appEl || !adminState.collectionEditorFocusPending ||
-      !adminState.collectionEditorOpen) {
-      return;
-    }
-
-    var section = adminState.collectionEditorOpen;
-    adminState.collectionEditorFocusPending = false;
-    adminState.collectionEditorEntering = false;
-    window.requestAnimationFrame(function() {
-      var editorEl = appEl && appEl.querySelector(
-          '[data-admin-collection-editor-panel="' + section + '"]',
-      );
-      if (!editorEl) {
-        return;
-      }
-
-      editorEl.scrollIntoView({behavior: "smooth", block: "start"});
-      var firstField = editorEl.querySelector(
-          "input:not([type=checkbox]):not([disabled]), textarea:not([disabled]), select:not([disabled])",
-      );
-      if (firstField) {
-        firstField.focus({preventScroll: true});
-      }
-    });
-  }
-
-  function syncAdminCollectionActionsEntrance_() {
-    if (!adminState.collectionActionsEntering) {
-      return;
-    }
-
-    adminState.collectionActionsEntering = "";
-  }
-
   function renderQuickLinksPagePanel_(currentPage) {
     return [
       "<section class=\"central-admin-panel\">",
@@ -11701,17 +6907,10 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Add or edit links below, then drag them into the order you want people to see.",
+          "Quick Links act one change at a time. You can drag them into a new order, and dropping a link publishes that reorder instantly or sends it for approval.",
       ),
       "</div>",
-      renderAdminCollectionActions_({
-        section: "quickLinks",
-        label: "Add Quick Link",
-        canEdit: canEditQuickLinks_(),
-        busy: adminState.quickLinksLoading || !adminState.quickLinksLoaded ||
-          adminState.quickLinksSaving || adminState.quickLinksPublishing,
-      }),
-      renderAdminCollectionEditor_("quickLinks", renderQuickLinksEditorForm_()),
+      renderQuickLinksEditorForm_(),
       renderQuickLinksList_(),
       "</div>",
       "</div>",
@@ -11757,7 +6956,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Create the announcement shown at the top of Central, or hide it when it is no longer needed.",
+          "The banner editor starts from the published Firestore banner Central is using right now. Direct publishers can publish or hide immediately, while request-level users can submit those changes for approval.",
       ),
       "</div>",
       renderStatusBannerEditor_(),
@@ -11806,10 +7005,9 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "New links start in Visible. After publishing, drag a link below Disabled whenever you want to hide it from Central. Turn on Sunday Only when it should appear only during Sunday Mode." :
-            "You can view Quick Links, but you don't have permission to make changes.",
+            "These links feed the homepage quick links section and the Sunday morning quick actions row. Turn on Sunday Only when a link should stay hidden until Sunday Mode is active. Saving here immediately publishes the change or submits it for approval, depending on your access." :
+            "Your current permission level does not allow editing quick links.",
       ),
-      "<div class=\"central-admin-quick-links-feedback\" aria-live=\"polite\">",
       adminState.quickLinksMessage ?
         renderAdminNote_(adminState.quickLinksMessage) :
         "",
@@ -11818,7 +7016,6 @@
         escapeHtml_(adminState.quickLinksError) +
         "</p>" :
         "",
-      "</div>",
       canEdit ? [
         "<div class=\"central-admin-form-grid\">",
         "<label class=\"central-admin-field\">",
@@ -11832,6 +7029,12 @@
         "<input type=\"url\" data-admin-field=\"quick-link.url\" placeholder=\"https://crosspointe.tv\" value=\"",
         escapeAttr_(draft.url || ""),
         "\">",
+        "</label>",
+        "<label class=\"central-admin-checkbox\">",
+        "<input type=\"checkbox\" data-admin-field=\"quick-link.active\"",
+        draft.active ? " checked" : "",
+        ">",
+        "<span>Show this link in Central</span>",
         "</label>",
         "<label class=\"central-admin-checkbox\">",
         "<input type=\"checkbox\" data-admin-field=\"quick-link.sunday_only\"",
@@ -11852,7 +7055,7 @@
         escapeHtml_(
             adminState.quickLinksEditingId ?
               "Cancel Edit" :
-              "Cancel",
+              "Clear Form",
         ),
         "</button>",
         "</div>",
@@ -11862,15 +7065,8 @@
   }
 
   function renderQuickLinksList_() {
-    var sortedItems = sortQuickLinksItems_(adminState.quickLinksItems);
-    var visibleItems = sortedItems.filter(function(item) {
-      return item && item.active !== false;
-    });
-    var disabledItems = sortedItems.filter(function(item) {
-      return item && item.active === false;
-    });
     var canReorder = canReorderSortableSection_("quickLinks") &&
-      adminState.quickLinksItems.length > 0;
+      adminState.quickLinksItems.length > 1;
 
     if (!isActiveAdminUserRecord_()) {
       return "";
@@ -11914,91 +7110,52 @@
       "<div class=\"central-admin-item-header\">",
       "<strong>Current Quick Links</strong>",
       renderStatusPill_(
-          visibleItems.length + " visible",
-          visibleItems.length ? "is-safe" : "is-live",
-      ),
-      renderStatusPill_(
-          disabledItems.length + " disabled",
-          disabledItems.length ? "is-live" : "is-safe",
+          adminState.quickLinksItems.length + " loaded",
+          "is-safe",
       ),
       "</div>",
       renderAdminNote_(
-          canReorder ?
-            "Drag links to change their order. Drag a link below Disabled to hide it, or back into Visible to show it again." :
-            "This is the current Quick Links layout on preview.",
+          getSortableListInstruction_(canReorder),
       ),
       "<div class=\"central-admin-list\" data-admin-sort-list=\"true\" data-admin-sort-section=\"quickLinks\">",
-      "<div class=\"central-admin-module-divider central-admin-sort-zone\" data-admin-sort-zone=\"visible\" data-admin-sort-section=\"quickLinks\">",
-      "<span>Visible</span>",
-      "<small>Shown in Central in the order below.</small>",
-      "</div>",
-      visibleItems.length ?
-        renderQuickLinksListItems_(visibleItems, canReorder) :
-        "<div class=\"central-admin-module-empty central-admin-sort-zone\" data-admin-sort-zone=\"visible\" data-admin-sort-section=\"quickLinks\">Drag a disabled link here to show it in Central.</div>",
-      "<div class=\"central-admin-module-divider central-admin-sort-zone\" data-admin-sort-zone=\"disabled\" data-admin-sort-section=\"quickLinks\">",
-      "<span>Disabled</span>",
-      "<small>Hidden from Central until moved back to Visible.</small>",
-      "</div>",
-      disabledItems.length ?
-        renderQuickLinksListItems_(disabledItems, canReorder) :
-        "<div class=\"central-admin-module-empty central-admin-sort-zone\" data-admin-sort-zone=\"disabled\" data-admin-sort-section=\"quickLinks\">Drag a link here to disable it.</div>",
-      "</div>",
-      "</div>",
-    ].join("");
-  }
-
-  function renderQuickLinksListItems_(items, canReorder) {
-    return (Array.isArray(items) ? items : []).map(function(item) {
-      var isRecentlyAdded =
-        adminState.quickLinksRecentlyAddedId === item.id;
-      var itemMarkup = renderQuickLinksListItem_(item, canReorder);
-      return isRecentlyAdded ? [
-        "<div class=\"central-admin-list-item-reveal\" data-admin-quick-link-reveal=\"true\">",
-        "<div class=\"central-admin-list-item-reveal-inner\">",
-        itemMarkup,
-        "</div>",
-        "</div>",
-      ].join("") : itemMarkup;
-    }).join("");
-  }
-
-  function renderQuickLinksListItem_(item, canReorder) {
-    return [
-      renderSortableListItemStart_(
-          "quickLinks",
-          item,
-          !canReorder,
-          item.title || "quick link",
-          "central-admin-module-item" +
-            (item.active === false ? " is-disabled" : ""),
-      ),
-      "<div class=\"central-admin-list-main\">",
-      "<strong>", escapeHtml_(item.title || "Untitled Link"), "</strong>",
-      "<a class=\"central-admin-inline-link\" href=\"", escapeAttr_(item.url || "#"), "\" target=\"_blank\" rel=\"noopener\">",
-      escapeHtml_(item.url || "No URL"),
-      "</a>",
-      "<div class=\"central-admin-page-meta\">",
-      renderInlineMeta_(
-          "Audience",
-          item.sunday_only ? "Sunday Only" : "All Modes",
-      ),
+      adminState.quickLinksItems.map(function(item) {
+        return [
+          renderSortableListItemStart_(
+              "quickLinks",
+              item,
+              !canReorder,
+              item.title || "quick link",
+          ),
+          "<div class=\"central-admin-list-main\">",
+          "<strong>", escapeHtml_(item.title || "Untitled Link"), "</strong>",
+          "<a class=\"central-admin-inline-link\" href=\"", escapeAttr_(item.url || "#"), "\" target=\"_blank\" rel=\"noopener\">",
+          escapeHtml_(item.url || "No URL"),
+          "</a>",
+          "<div class=\"central-admin-page-meta\">",
+          renderInlineMeta_("Status", item.active ? "Active" : "Hidden"),
+          renderInlineMeta_(
+              "Audience",
+              item.sunday_only ? "Sunday Only" : "All Modes",
+          ),
+          "</div>",
+          "</div>",
+          "<div class=\"central-admin-list-actions\">",
+          "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-quick-link\" data-admin-doc-id=\"",
+          escapeAttr_(item.id),
+          "\"",
+          adminState.quickLinksSaving || adminState.quickLinksPublishing ? " disabled" : "",
+          ">Edit</button>",
+          "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-quick-link\" data-admin-doc-id=\"",
+          escapeAttr_(item.id),
+          "\"",
+          adminState.quickLinksSaving || adminState.quickLinksPublishing ? " disabled" : "",
+          ">Delete</button>",
+          "</div>",
+          "</article>",
+        ].join("");
+      }).join(""),
       "</div>",
       "</div>",
-      "<div class=\"central-admin-list-actions\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-quick-link\" data-admin-doc-id=\"",
-      escapeAttr_(item.id),
-      "\"",
-      adminState.quickLinksSaving || adminState.quickLinksPublishing ?
-        " disabled" : "",
-      ">Edit</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"delete-quick-link\" data-admin-doc-id=\"",
-      escapeAttr_(item.id),
-      "\"",
-      adminState.quickLinksSaving || adminState.quickLinksPublishing ?
-        " disabled" : "",
-      ">Delete</button>",
-      "</div>",
-      "</article>",
     ].join("");
   }
 
@@ -12048,9 +7205,9 @@
       renderAdminNote_(
           canEdit ?
             (actionConfig.mode === "submit" ?
-              "When you're ready, submit the banner for review." :
-              "Publish the banner when it is ready, or hide it without deleting the saved copy.") :
-            "You can view the Status Banner, but you don't have permission to make changes.",
+              "Submit banner changes for approval here. An admin can then approve or reject them from the Change Requests page." :
+              "Publish updates the Central banner immediately. Hide changes the published banner state right away.") :
+            "Your current permission level does not allow editing the status banner.",
       ),
       adminState.statusBannerMessage ?
         renderAdminNote_(adminState.statusBannerMessage) :
@@ -12231,17 +7388,10 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Add helpful links, guides, and tools, then drag them into the order you want people to see.",
+          "Resources act one change at a time. You can drag them into a new order, and dropping a resource publishes that reorder instantly or sends it for approval.",
       ),
       "</div>",
-      renderAdminCollectionActions_({
-        section: "resources",
-        label: "Add Resource",
-        canEdit: canEditResources_(),
-        busy: adminState.resourcesLoading || !adminState.resourcesLoaded ||
-          adminState.resourcesSaving || adminState.resourcesPublishing,
-      }),
-      renderAdminCollectionEditor_("resources", renderResourcesEditorForm_()),
+      renderResourcesEditorForm_(),
       renderResourcesList_(),
       "</div>",
       "</div>",
@@ -12287,8 +7437,8 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "Use Resources for helpful links, guides, and tools." :
-            "You can view Resources, but you don't have permission to make changes.",
+            "Use Resources for helpful links, guides, and tools. Saving here immediately publishes the change or submits it for approval, depending on your access." :
+            "Your current permission level does not allow editing resources.",
       ),
       adminState.resourcesMessage ?
         renderAdminNote_(adminState.resourcesMessage) :
@@ -12349,7 +7499,7 @@
         escapeHtml_(
             adminState.resourcesEditingId ?
               "Cancel Edit" :
-              "Cancel",
+              "Clear Form",
         ),
         "</button>",
         "</div>",
@@ -12530,17 +7680,10 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Add church-wide initiatives and featured calls to action, then drag them into the order you want people to see.",
+          "Campaigns act one change at a time. You can drag them into a new order, and dropping a campaign publishes that reorder instantly or sends it for approval.",
       ),
       "</div>",
-      renderAdminCollectionActions_({
-        section: "campaigns",
-        label: "Add Campaign",
-        canEdit: canEditCampaigns_(),
-        busy: adminState.campaignsLoading || !adminState.campaignsLoaded ||
-          adminState.campaignsSaving || adminState.campaignsPublishing,
-      }),
-      renderAdminCollectionEditor_("campaigns", renderCampaignsEditorForm_()),
+      renderCampaignsEditorForm_(),
       renderCampaignsList_(),
       "</div>",
       "</div>",
@@ -12586,8 +7729,8 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "Use Campaigns for church-wide initiatives and featured calls to action." :
-            "You can view Campaigns, but you don't have permission to make changes.",
+            "Use Campaigns for church-wide initiatives and featured calls to action. Saving here immediately publishes the change or submits it for approval, depending on your access." :
+            "Your current permission level does not allow editing campaigns.",
       ),
       adminState.campaignsMessage ?
         renderAdminNote_(adminState.campaignsMessage) :
@@ -12664,7 +7807,7 @@
         escapeHtml_(
             adminState.campaignsEditingId ?
               "Cancel Edit" :
-              "Cancel",
+              "Clear Form",
         ),
         "</button>",
         "</div>",
@@ -12845,17 +7988,10 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Add volunteer opportunities, then drag them into the order you want people to see.",
+          "Serve Needs act one change at a time. You can drag them into a new order, and dropping a need publishes that reorder instantly or sends it for approval.",
       ),
       "</div>",
-      renderAdminCollectionActions_({
-        section: "serveNeeds",
-        label: "Add Serve Need",
-        canEdit: canEditServeNeeds_(),
-        busy: adminState.serveNeedsLoading || !adminState.serveNeedsLoaded ||
-          adminState.serveNeedsSaving || adminState.serveNeedsPublishing,
-      }),
-      renderAdminCollectionEditor_("serveNeeds", renderServeNeedsEditorForm_()),
+      renderServeNeedsEditorForm_(),
       renderServeNeedsList_(),
       "</div>",
       "</div>",
@@ -12902,7 +8038,7 @@
       renderAdminNote_(
           canEdit ?
             "Use Serve Needs for ministry volunteer opportunities. The public button opens a contact form, and this record stores the ministry contact email that will receive the interest." :
-            "You can view Serve Needs, but you don't have permission to make changes.",
+            "Your current permission level does not allow editing serve needs.",
       ),
       adminState.serveNeedsMessage ?
         renderAdminNote_(adminState.serveNeedsMessage) :
@@ -12974,7 +8110,7 @@
         escapeHtml_(
             adminState.serveNeedsEditingId ?
               "Cancel Edit" :
-              "Cancel",
+              "Clear Form",
         ),
         "</button>",
         "</div>",
@@ -13157,17 +8293,10 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Add connection cards and action pathways, then drag them into the order you want people to see.",
+          "Next Steps act one change at a time. You can drag them into a new order, and dropping a card publishes that reorder instantly or sends it for approval.",
       ),
       "</div>",
-      renderAdminCollectionActions_({
-        section: "nextSteps",
-        label: "Add Next Step",
-        canEdit: canEditNextSteps_(),
-        busy: adminState.nextStepsLoading || !adminState.nextStepsLoaded ||
-          adminState.nextStepsSaving || adminState.nextStepsPublishing,
-      }),
-      renderAdminCollectionEditor_("nextSteps", renderNextStepsEditorForm_()),
+      renderNextStepsEditorForm_(),
       renderNextStepsList_(),
       "</div>",
       "</div>",
@@ -13213,8 +8342,8 @@
       "</div>",
       renderAdminNote_(
           canEdit ?
-            "Use Next Steps for connection cards and action pathways." :
-            "You can view Next Steps, but you don't have permission to make changes.",
+            "Use Next Steps for connection cards and action pathways. Saving here immediately publishes the change or submits it for approval, depending on your access." :
+            "Your current permission level does not allow editing Next Steps.",
       ),
       adminState.nextStepsMessage ?
         renderAdminNote_(adminState.nextStepsMessage) :
@@ -13269,7 +8398,7 @@
         escapeHtml_(
             adminState.nextStepsEditingId ?
               "Cancel Edit" :
-              "Cancel",
+              "Clear Form",
         ),
         "</button>",
         "</div>",
@@ -14858,11 +9987,6 @@
       return;
     }
 
-    if (adminState.currentPageId === "bulletin") {
-      loadBulletinModeIfNeeded_();
-      return;
-    }
-
     if (adminState.currentPageId === "quick-links") {
       loadQuickLinksIfNeeded_();
       return;
@@ -14893,7 +10017,8 @@
       return;
     }
 
-    if (isSettingsDataPageId_(adminState.currentPageId)) {
+    if (adminState.currentPageId === "settings" ||
+      adminState.currentPageId === "integrations") {
       loadSettingsIfNeeded_();
       return;
     }
@@ -14909,22 +10034,11 @@
     }
 
     if (adminState.currentPageId === "wayfinder") {
-      loadWayfinderAlphaSettingIfNeeded_();
       loadWayfinderFeaturedEventHealth_(false);
       loadWayfinderWebsiteIndexStatus_(false);
       loadWayfinderFeedback_(false);
       loadWayfinderEvaluations_(false);
     }
-  }
-
-  function isSettingsDataPageId_(pageId) {
-    return [
-      "settings",
-      "settings-sunday-mode",
-      "settings-rooms",
-      "settings-team",
-      "integrations",
-    ].indexOf(String(pageId || "")) !== -1;
   }
 
   function loadHubIfNeeded_() {
@@ -14937,110 +10051,6 @@
     }
 
     loadHub_();
-  }
-
-  function loadBulletinModeIfNeeded_() {
-    if (!adminState.user || !isActiveAdminUserRecord_()) {
-      return;
-    }
-
-    if (adminState.bulletinLoaded || adminState.bulletinLoading) {
-      return;
-    }
-
-    loadBulletinMode_();
-  }
-
-  function loadBulletinMode_(forceRefresh) {
-    var refreshRequested = forceRefresh === true;
-    var wasLoaded = adminState.bulletinLoaded;
-    adminState.bulletinLoading = true;
-    adminState.bulletinError = "";
-    adminState.bulletinMessage = refreshRequested ?
-      "Refreshing events and rooms from Planning Center. You can keep working while this finishes." :
-      "";
-    renderAdmin_();
-
-    callBulletinModeEndpoint_("GET", {
-      refresh: refreshRequested,
-    }).then(function(result) {
-      var centralData = Object.assign({}, result && result.content || {});
-      var bulletinEvents = result && result.events || {};
-      if (Array.isArray(bulletinEvents.today)) {
-        centralData.today = bulletinEvents.today;
-      }
-      if (Array.isArray(bulletinEvents.upcoming)) {
-        centralData.events = bulletinEvents.upcoming;
-      }
-      adminState.bulletinLoading = false;
-      adminState.bulletinLoaded = true;
-      adminState.bulletinSync = result && result.sync || null;
-      adminState.bulletinCentralData = centralData;
-      adminState.bulletinDraft = normalizeBulletinDraft_(
-          result && result.config,
-          adminState.bulletinCentralData,
-      );
-      adminState.bulletinMessage = getBulletinSyncMessage_(
-          adminState.bulletinSync,
-          refreshRequested,
-      );
-      renderAdmin_();
-    }).catch(function(error) {
-      adminState.bulletinLoading = false;
-      adminState.bulletinLoaded = wasLoaded;
-      adminState.bulletinMessage = wasLoaded ?
-        "Your cached Print Mode content is still available below." : "";
-      adminState.bulletinError = error && error.message ?
-        error.message :
-        "Unable to load Print Mode.";
-      renderAdmin_();
-    });
-  }
-
-  function getBulletinSyncMessage_(sync, refreshRequested) {
-    var source = sync && typeof sync === "object" ? sync : {};
-    var status = String(source.status || "");
-    var timestamp = formatBulletinSyncTimestamp_(source.fetchedAtMs);
-
-    if (status === "empty") {
-      return "No cached Planning Center content is available yet. Choose Refresh Events in Step 4 to prepare the event snapshot.";
-    }
-
-    if (refreshRequested && status === "refreshed") {
-      return "Central content refreshed from Planning Center" +
-        (timestamp ? " at " + timestamp : "") + ".";
-    }
-
-    if (refreshRequested && status === "fresh") {
-      return "Central content is already current" +
-        (timestamp ? " as of " + timestamp : "") + ".";
-    }
-
-    if (refreshRequested && status === "stale") {
-      return "Planning Center is busy or rate limited, so Print Mode kept the last cached content" +
-        (timestamp ? " from " + timestamp : "") + ".";
-    }
-
-    if (timestamp) {
-      return "Showing cached Planning Center content from " + timestamp +
-        ". Use Refresh Events in Step 4 when you need the latest events and rooms.";
-    }
-
-    return "Showing cached Planning Center content. Use Refresh Events in Step 4 when you need the latest events and rooms.";
-  }
-
-  function formatBulletinSyncTimestamp_(value) {
-    var timestamp = Number(value);
-    if (!isFinite(timestamp) || timestamp <= 0) {
-      return "";
-    }
-
-    return new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(timestamp));
   }
 
   function loadSundayIfNeeded_() {
@@ -15310,11 +10320,13 @@
       adminFirestore.doc(PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH).get(),
       adminFirestore.collection(PUBLISHED_ROOM_RULES_COLLECTION_PATH).get(),
       adminFirestore.doc(PUBLISHED_ROOM_RULES_META_DOC_PATH).get(),
+      adminFirestore.doc(PUBLISHED_HUB_SETTINGS_DOC_PATH).get(),
     ])
         .then(function(results) {
           var sundaySettingsSnapshot = results[0];
           var publishedSnapshot = results[1];
           var roomRulesMetaSnapshot = results[2];
+          var publicSettingsSnapshot = results[3];
           var roomRulesOverrideActive = hasPublishedListOverrideState_(
               roomRulesMetaSnapshot,
           );
@@ -15349,6 +10361,10 @@
 
                 adminState.settingsLoading = false;
                 adminState.settingsLoaded = true;
+                adminState.wayfinderAlphaEnabled = !!(
+                  publicSettingsSnapshot.exists &&
+                  publicSettingsSnapshot.data().wayfinder_enabled === true
+                );
                 adminState.settingsSundayCurrent = normalizeSettingsSundayData_(
                     sundaySettingsSnapshot.exists ?
                       sundaySettingsSnapshot.data() :
@@ -15403,45 +10419,9 @@
         .catch(function(error) {
           adminState.settingsLoading = false;
           adminState.settingsLoaded = true;
-          adminState.roomRulesLoading = false;
-          adminState.roomRulesLoaded = true;
-          adminState.adminUsersLoading = false;
           adminState.settingsLoadError = error && error.message ?
             error.message :
             "Unable to load the current settings.";
-          renderAdmin_();
-        });
-  }
-
-  function loadWayfinderAlphaSettingIfNeeded_() {
-    if (!adminFirestore ||
-      !isActiveAdminUserRecord_() ||
-      getPageAccessLevel_("wayfinder") !== "admin" ||
-      adminState.wayfinderAlphaLoaded ||
-      adminState.wayfinderAlphaLoading) {
-      return;
-    }
-
-    adminState.wayfinderAlphaLoading = true;
-    adminState.wayfinderAlphaError = "";
-    renderAdmin_();
-
-    adminFirestore.doc(PUBLISHED_HUB_SETTINGS_DOC_PATH).get()
-        .then(function(snapshot) {
-          adminState.wayfinderAlphaLoading = false;
-          adminState.wayfinderAlphaLoaded = true;
-          adminState.wayfinderAlphaEnabled = !!(
-            snapshot.exists &&
-            snapshot.data().wayfinder_enabled === true
-          );
-          renderAdmin_();
-        })
-        .catch(function(error) {
-          adminState.wayfinderAlphaLoading = false;
-          adminState.wayfinderAlphaLoaded = true;
-          adminState.wayfinderAlphaError = error && error.message ?
-            error.message :
-            "Unable to load Wayfinder alpha access.";
           renderAdmin_();
         });
   }
@@ -15472,7 +10452,6 @@
       });
     }).then(parseAdminEndpointResponse_).then(function(result) {
       adminState.wayfinderAlphaSaving = false;
-      adminState.wayfinderAlphaLoaded = true;
       adminState.wayfinderAlphaEnabled = result.enabled === true;
       adminState.wayfinderAlphaMessage = String(result.message || "");
       renderAdmin_();
@@ -15578,1155 +10557,6 @@
       sunday_scripture_helper_text: "",
       sunday_modules: createDefaultHubSundayModules_(),
     };
-  }
-
-  function createDefaultBulletinFallbackBlocks_() {
-    return [
-      {
-        id: "new-here",
-        eyebrow: "New Here?",
-        title: "We'd Love to Help You Get Connected",
-        description: [
-          "Find your next step, learn more about CrossPointe, and discover",
-          "ways to get involved at central.crosspointe.tv.",
-        ].join(" "),
-        imageUrl: "",
-        imageStoragePath: "",
-        imageSide: "right",
-        enabled: true,
-      },
-      {
-        id: "stay-connected",
-        eyebrow: "Stay Connected",
-        title: "Everything You Need for the Week Ahead",
-        description: [
-          "Explore events, groups, resources, and serving opportunities",
-          "anytime at central.crosspointe.tv.",
-        ].join(" "),
-        imageUrl: "",
-        imageStoragePath: "",
-        imageSide: "left",
-        enabled: true,
-      },
-    ];
-  }
-
-  function createEmptyBulletinFallbackBlockDraft_() {
-    return {
-      id: "",
-      eyebrow: "",
-      title: "",
-      description: "",
-      imageUrl: "",
-      imageStoragePath: "",
-      imageSide: "right",
-      enabled: true,
-    };
-  }
-
-  function createEmptyBulletinDraft_() {
-    return {
-      serviceDate: getDefaultSundayDateInputValue_(),
-      printFormat: "half-letter",
-      heroSource: "featured",
-      frontContentSource: "live",
-      headings: {
-        frontHeading: "This Week at\nCrossPointe",
-        backEyebrow: "See You There",
-        backHeading: "The Next Two Weeks",
-      },
-      giving: {
-        monthlyBudget: 0,
-        monthToDateGiving: 0,
-        annualBudget: 0,
-        yearToDateGiving: 0,
-      },
-      featuredEvent: {
-        id: "",
-        title: "",
-        description: "",
-        includeDescription: true,
-      },
-      fallbackHero: {
-        eyebrow: "Welcome to CrossPointe",
-        title: "We're Glad You're Here",
-        description: [
-          "Whether this is your first Sunday or CrossPointe is already home,",
-          "we're glad you're here. Discover events, groups, serving",
-          "opportunities, and next steps at central.crosspointe.tv.",
-        ].join(" "),
-        imageUrl: "",
-        imageStoragePath: "",
-      },
-      events: [],
-      campaignIds: [],
-      campaignIcons: {},
-      serveNeedIds: [],
-      fallbackBlocks: createDefaultBulletinFallbackBlocks_(),
-    };
-  }
-
-  function normalizeBulletinDraft_(savedConfig, centralData) {
-    var source = savedConfig && typeof savedConfig === "object" ?
-      savedConfig :
-      {};
-    var data = centralData || {};
-    var draft = createEmptyBulletinDraft_();
-    var savedHeadings = source.headings &&
-      typeof source.headings === "object" ? source.headings : {};
-    var savedGiving = source.giving || {};
-    var currentFeatured = data.featuredEvent || null;
-    var savedFeatured = source.featuredEvent || {};
-    var savedFallback = source.fallbackHero &&
-      typeof source.fallbackHero === "object" ? source.fallbackHero : {};
-    var savedFallbackBlocks = Array.isArray(source.fallbackBlocks) ?
-      source.fallbackBlocks :
-      createDefaultBulletinFallbackBlocks_();
-    var savedEventsById = {};
-    var savedCampaignIconsById = {};
-
-    var automaticServiceDate = getDefaultSundayDateInputValue_();
-    var savedServiceDate = normalizeSundayDateInputValue_(source.serviceDate);
-    draft.serviceDate = savedServiceDate &&
-      savedServiceDate >= automaticServiceDate ?
-      savedServiceDate : automaticServiceDate;
-    draft.printFormat = source.printFormat === "full-page" ?
-      "full-page" : "half-letter";
-    draft.heroSource = source.heroSource === "manual" ?
-      "manual" : "featured";
-    draft.frontContentSource = source.frontContentSource === "fallback" ?
-      "fallback" : "live";
-    draft.headings = {
-      frontHeading: normalizeBulletinHeadingText_(
-          savedHeadings.frontHeading,
-          "This Week at\nCrossPointe",
-          80,
-          2,
-      ),
-      backEyebrow: normalizeBulletinHeadingText_(
-          savedHeadings.backEyebrow,
-          "See You There",
-          50,
-          1,
-      ),
-      backHeading: normalizeBulletinHeadingText_(
-          savedHeadings.backHeading,
-          "The Next Two Weeks",
-          80,
-          2,
-      ),
-    };
-    draft.giving = {
-      monthlyBudget: normalizeBulletinMoney_(savedGiving.monthlyBudget),
-      monthToDateGiving: normalizeBulletinMoney_(
-          savedGiving.monthToDateGiving,
-      ),
-      annualBudget: normalizeBulletinMoney_(savedGiving.annualBudget),
-      yearToDateGiving: normalizeBulletinMoney_(
-          savedGiving.yearToDateGiving,
-      ),
-    };
-    draft.fallbackHero = {
-      eyebrow: String(
-          savedFallback.eyebrow || draft.fallbackHero.eyebrow,
-      ),
-      title: String(savedFallback.title || draft.fallbackHero.title),
-      description: String(
-          savedFallback.description || draft.fallbackHero.description,
-      ),
-      imageUrl: getBulletinFallbackImageUrl_(savedFallback.imageUrl),
-      imageStoragePath: String(savedFallback.imageStoragePath || ""),
-    };
-    draft.fallbackBlocks = savedFallbackBlocks.slice(0, 4)
-        .map(function(item, index) {
-          var block = item && typeof item === "object" ? item : {};
-          return {
-            id: String(block.id || ("fallback-" + String(index + 1))),
-            eyebrow: String(block.eyebrow || ""),
-            title: String(block.title || ""),
-            description: String(block.description || ""),
-            imageUrl: getBulletinFallbackImageUrl_(block.imageUrl),
-            imageStoragePath: String(block.imageStoragePath || ""),
-            imageSide: block.imageSide === "left" ? "left" : "right",
-            enabled: block.enabled !== false,
-          };
-        })
-        .filter(function(block) {
-          return block.title;
-        });
-
-    if (currentFeatured) {
-      var featuredId = getBulletinItemId_(currentFeatured);
-      var savedFeaturedMatches = !savedFeatured.id ||
-        savedFeatured.id === featuredId;
-      draft.featuredEvent = {
-        id: featuredId,
-        title: savedFeaturedMatches && savedFeatured.title ?
-          String(savedFeatured.title) :
-          String(currentFeatured.title || ""),
-        description: savedFeaturedMatches && savedFeatured.description ?
-          String(savedFeatured.description) :
-          String(currentFeatured.description || ""),
-        includeDescription: savedFeaturedMatches ?
-          savedFeatured.includeDescription !== false :
-          true,
-      };
-    }
-
-    (Array.isArray(source.events) ? source.events : []).forEach(function(item) {
-      if (item && item.id) {
-        savedEventsById[String(item.id)] = item;
-      }
-    });
-
-    draft.events = getBulletinSourceEvents_(data).map(function(item) {
-      var id = getBulletinItemId_(item);
-      var hasSavedEvent = Object.prototype.hasOwnProperty.call(
-          savedEventsById,
-          id,
-      );
-      var saved = savedEventsById[id] || {};
-      var sourceLocation = String(item.location || item.venue || "").trim();
-      var savedLocation = String(saved.location || "").trim();
-      var defaultWeekTwoStart = parseBulletinDate_(draft.serviceDate);
-      defaultWeekTwoStart.setUTCDate(defaultWeekTwoStart.getUTCDate() + 7);
-      return {
-        id: id,
-        title: saved.title ? String(saved.title) : String(item.title || ""),
-        description: Object.prototype.hasOwnProperty.call(saved, "description") ?
-          String(saved.description || "") :
-          String(item.description || ""),
-        included: hasSavedEvent ?
-          saved.included !== false :
-          parseBulletinDate_(item.date).getTime() <
-            defaultWeekTwoStart.getTime(),
-        includeDescription: saved.includeDescription !== false,
-        date: String(item.date || ""),
-        time: String(item.time || ""),
-        doors_open_time: String(item.doors_open_time || ""),
-        location: savedLocation || sourceLocation,
-        sourceLocation: sourceLocation,
-      };
-    });
-
-    (Array.isArray(source.campaignIcons) ? source.campaignIcons : [])
-        .forEach(function(item) {
-          var id = String(item && item.id || "");
-          if (id) {
-            savedCampaignIconsById[id] = normalizeBulletinCampaignIconId_(
-                item.icon,
-            );
-          }
-        });
-
-    (Array.isArray(data.campaigns) ? data.campaigns : [])
-        .forEach(function(item) {
-          var id = String(item && item.id || "");
-          if (!id) {
-            return;
-          }
-          draft.campaignIcons[id] = Object.prototype.hasOwnProperty.call(
-              savedCampaignIconsById,
-              id,
-          ) ? savedCampaignIconsById[id] :
-            getSuggestedBulletinCampaignIconId_(item);
-        });
-
-    var campaignIds = Array.isArray(source.campaignIds) ?
-      source.campaignIds.map(String) :
-      [];
-    draft.campaignIds = (campaignIds.length ? campaignIds :
-      (Array.isArray(data.campaigns) ? data.campaigns : [])
-          .slice(0, PRINT_MODE_MAX_CAMPAIGNS)
-          .map(function(item) {
-            return String(item.id || "");
-          })
-          .filter(Boolean))
-        .slice(0, PRINT_MODE_MAX_CAMPAIGNS);
-    var hasSavedServeNeedIds = Array.isArray(source.serveNeedIds);
-    var savedServeNeedIds = hasSavedServeNeedIds ?
-      source.serveNeedIds.map(String) :
-      (source.serveNeedId ? [String(source.serveNeedId)] : []);
-    if (!hasSavedServeNeedIds && !savedServeNeedIds.length) {
-      savedServeNeedIds = [
-        String(data.serveNeeds && data.serveNeeds[0] &&
-          data.serveNeeds[0].id || ""),
-      ].filter(Boolean);
-    }
-    var remainingFrontItemSlots = Math.max(
-        0,
-        PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - draft.campaignIds.length,
-    );
-    draft.serveNeedIds = savedServeNeedIds
-        .filter(function(id, index, ids) {
-          return id && ids.indexOf(id) === index;
-        })
-        .slice(
-            0,
-            Math.min(PRINT_MODE_MAX_SERVE_NEEDS, remainingFrontItemSlots),
-        );
-
-    return draft;
-  }
-
-  function getBulletinSourceEvents_(data) {
-    var source = data || {};
-    var featured = source.featuredEvent || null;
-    var events = [];
-    var seen = {};
-
-    (Array.isArray(source.today) ? source.today : [])
-        .concat(Array.isArray(source.events) ? source.events : [])
-        .forEach(function(item) {
-      var id = getBulletinItemId_(item);
-      if (!id || isBulletinFeaturedSourceEvent_(item, featured) || seen[id]) {
-        return;
-      }
-          seen[id] = true;
-          events.push(item);
-        });
-
-    return events.sort(function(left, right) {
-      return parseBulletinDate_(left.date).getTime() -
-        parseBulletinDate_(right.date).getTime();
-    });
-  }
-
-  function isBulletinFeaturedSourceEvent_(item, featured) {
-    if (!item || !featured) {
-      return false;
-    }
-
-    var itemId = String(item.id || "").trim();
-    var featuredId = String(featured.id || "").trim();
-    if (itemId && featuredId && itemId === featuredId) {
-      return true;
-    }
-
-    var itemChurchCenterUrl = String(item.church_center_url || "").trim();
-    var featuredChurchCenterUrl = String(
-        featured.church_center_url || "",
-    ).trim();
-    if (
-      itemChurchCenterUrl &&
-      featuredChurchCenterUrl &&
-      itemChurchCenterUrl === featuredChurchCenterUrl
-    ) {
-      return true;
-    }
-
-    var itemTitle = String(item.title || "").trim();
-    var featuredTitle = String(featured.title || "").trim();
-    var datesMatch = String(item.date || "").trim() ===
-      String(featured.date || "").trim();
-    if (!datesMatch) {
-      return false;
-    }
-
-    if (itemTitle === featuredTitle) {
-      return true;
-    }
-
-    var itemTokens = getBulletinTitleTokens_(itemTitle);
-    var featuredTokens = getBulletinTitleTokens_(featuredTitle);
-    var shorterTokens = itemTokens.length <= featuredTokens.length ?
-      itemTokens : featuredTokens;
-    var longerTokens = itemTokens.length <= featuredTokens.length ?
-      featuredTokens : itemTokens;
-
-    return shorterTokens.length >= 3 && shorterTokens.every(function(token) {
-      return longerTokens.indexOf(token) !== -1;
-    });
-  }
-
-  function getBulletinTitleTokens_(title) {
-    return String(title || "")
-        .toLowerCase()
-        .replace(/['’]s\b/g, "")
-        .replace(/[^a-z0-9]+/g, " ")
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-  }
-
-  function getBulletinItemId_(item) {
-    var source = item || {};
-    return String(source.id || [
-      source.title,
-      source.date,
-      source.time,
-    ].filter(Boolean).join("|"));
-  }
-
-  function getBulletinFeaturedEvent_() {
-    var data = adminState.bulletinCentralData || {};
-    var source = data.featuredEvent;
-    if (!source) {
-      return null;
-    }
-
-    return Object.assign({}, source, adminState.bulletinDraft.featuredEvent || {});
-  }
-
-  function getBulletinFeaturedImageUrl_(featured) {
-    var imageUrl = String(featured && featured.image_url || "").trim();
-    return /^https:\/\//i.test(imageUrl) ? imageUrl : "";
-  }
-
-  function getBulletinFallbackImageUrl_(value) {
-    var imageUrl = String(value || "").trim();
-    return (
-      /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i.test(imageUrl) ||
-      /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):9199\/v0\/b\//i.test(
-          imageUrl,
-      )
-    ) ? imageUrl : "";
-  }
-
-  function getBulletinFrontHero_() {
-    var featured = getBulletinFeaturedEvent_();
-    if (featured && !isBulletinManualHeroActive_()) {
-      return Object.assign({}, featured, {
-        source: "featured",
-        eyebrow: "Featured Event",
-      });
-    }
-
-    var fallback = adminState.bulletinDraft.fallbackHero || {};
-    return {
-      source: "fallback",
-      eyebrow: fallback.eyebrow || "Welcome to CrossPointe",
-      title: fallback.title || "We're Glad You're Here",
-      description: fallback.description || "",
-      image_url: getBulletinFallbackImageUrl_(fallback.imageUrl),
-      includeDescription: true,
-    };
-  }
-
-  function isBulletinManualHeroActive_() {
-    return adminState.bulletinDraft.heroSource === "manual" ||
-      !getBulletinFeaturedEvent_();
-  }
-
-  function getBulletinPrintFormat_() {
-    return adminState.bulletinDraft.printFormat === "full-page" ?
-      "full-page" : "half-letter";
-  }
-
-  function getBulletinEventDraftsInWindow_() {
-    var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
-    var end = new Date(start.getTime());
-    end.setUTCDate(end.getUTCDate() + 13);
-
-    return (adminState.bulletinDraft.events || []).filter(function(item) {
-      var date = parseBulletinDate_(item.date);
-      return date.getTime() >= start.getTime() &&
-        date.getTime() <= end.getTime();
-    });
-  }
-
-  function getBulletinEventWeek_(item) {
-    var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
-    var weekTwoStart = new Date(start.getTime());
-    weekTwoStart.setUTCDate(weekTwoStart.getUTCDate() + 7);
-    return parseBulletinDate_(item && item.date).getTime() <
-      weekTwoStart.getTime() ? "week1" : "week2";
-  }
-
-  function getFilteredBulletinEventDrafts_(events) {
-    var source = Array.isArray(events) ?
-      events :
-      getBulletinEventDraftsInWindow_();
-    var filter = String(adminState.bulletinEventFilter || "week1");
-
-    if (filter === "included") {
-      return source.filter(function(item) {
-        return item.included;
-      });
-    }
-
-    if (filter === "week1" || filter === "week2") {
-      return source.filter(function(item) {
-        return getBulletinEventWeek_(item) === filter;
-      });
-    }
-
-    return source;
-  }
-
-  function updateBulletinEventBulkInclusion_(mode) {
-    var events = getBulletinEventDraftsInWindow_();
-
-    if (mode === "week1-default") {
-      events.forEach(function(item) {
-        item.included = getBulletinEventWeek_(item) === "week1";
-      });
-      adminState.bulletinEventFilter = "week1";
-      return;
-    }
-
-    if (mode !== "include" && mode !== "exclude") {
-      return;
-    }
-
-    var shouldInclude = mode === "include";
-    events.forEach(function(item) {
-      item.included = shouldInclude;
-    });
-  }
-
-  function normalizeBulletinCampaignIconId_(value) {
-    var iconId = String(value || "").trim().toLowerCase();
-    var isAllowed = BULLETIN_CAMPAIGN_ICONS.some(function(icon) {
-      return icon.id === iconId;
-    });
-    return isAllowed ? iconId : "general";
-  }
-
-  function getBulletinCampaignIconUrl_(value) {
-    return BULLETIN_CAMPAIGN_ICON_PATH +
-      normalizeBulletinCampaignIconId_(value) + ".svg";
-  }
-
-  function getSuggestedBulletinCampaignIconId_(item) {
-    var searchText = [
-      item && item.title,
-      item && item.description,
-    ].filter(Boolean).join(" ").toLowerCase();
-
-    if (/backpack/.test(searchText)) {
-      return "backpack";
-    }
-    if (/(christmas|gift|toy|basket)/.test(searchText)) {
-      return "gift";
-    }
-    if (/(roof|house|home|housing)/.test(searchText)) {
-      return "house";
-    }
-    if (/(prayer|praying|pray)/.test(searchText)) {
-      return "praying-hands";
-    }
-    if (/(food|pantry|meal|grocery)/.test(searchText)) {
-      return "food";
-    }
-    if (/(clothing|clothes|coat|shirt)/.test(searchText)) {
-      return "clothing";
-    }
-    if (/(medical|health|clinic)/.test(searchText)) {
-      return "medical";
-    }
-    if (/(school|student|classroom)/.test(searchText)) {
-      return "school";
-    }
-    if (/(family|kids|baby|child)/.test(searchText)) {
-      return "family";
-    }
-    if (/(mission|global|outreach)/.test(searchText)) {
-      return "missions";
-    }
-    if (/(donation|fund|giving|generosity)/.test(searchText)) {
-      return "donation";
-    }
-    if (/(serve|volunteer|helper)/.test(searchText)) {
-      return "helping-hands";
-    }
-    if (/(church|building|campus)/.test(searchText)) {
-      return "church";
-    }
-    if (/(calendar|event|conference)/.test(searchText)) {
-      return "calendar";
-    }
-    if (/(heart|care|support)/.test(searchText)) {
-      return "heart";
-    }
-    return "general";
-  }
-
-  function getBulletinCampaignIconId_(item) {
-    var id = String(item && item.id || "");
-    var icons = adminState.bulletinDraft.campaignIcons || {};
-    if (Object.prototype.hasOwnProperty.call(icons, id)) {
-      return normalizeBulletinCampaignIconId_(icons[id]);
-    }
-    return getSuggestedBulletinCampaignIconId_(item);
-  }
-
-  function updateBulletinCampaignIcon_(campaignId, iconId) {
-    var id = String(campaignId || "");
-    if (!id) {
-      return;
-    }
-    if (!adminState.bulletinDraft.campaignIcons) {
-      adminState.bulletinDraft.campaignIcons = {};
-    }
-    adminState.bulletinDraft.campaignIcons[id] =
-      normalizeBulletinCampaignIconId_(iconId);
-    adminState.bulletinError = "";
-    adminState.bulletinMessage = "";
-  }
-
-  function getSelectedBulletinCampaigns_() {
-    var data = adminState.bulletinCentralData || {};
-    var selectedIds = adminState.bulletinDraft.campaignIds || [];
-    return (Array.isArray(data.campaigns) ? data.campaigns : [])
-        .filter(function(item) {
-          return selectedIds.indexOf(String(item.id || "")) !== -1;
-        })
-        .slice(0, PRINT_MODE_MAX_CAMPAIGNS);
-  }
-
-  function getSelectedBulletinServeNeeds_() {
-    var data = adminState.bulletinCentralData || {};
-    var selectedIds = adminState.bulletinDraft.serveNeedIds || [];
-    return (Array.isArray(data.serveNeeds) ? data.serveNeeds : [])
-        .filter(function(item) {
-          return selectedIds.indexOf(String(item.id || "")) !== -1;
-        })
-        .slice(0, PRINT_MODE_MAX_SERVE_NEEDS);
-  }
-
-  function getBulletinFrontContentSelectionState_() {
-    var campaignCount = getSelectedBulletinCampaigns_().length;
-    var serveNeedCount = getSelectedBulletinServeNeeds_().length;
-    return {
-      campaignCount: campaignCount,
-      serveNeedCount: serveNeedCount,
-      totalCount: campaignCount + serveNeedCount,
-      maxCount: PRINT_MODE_MAX_FRONT_CONTENT_ITEMS,
-    };
-  }
-
-  function getBulletinFallbackBlocksForPrint_() {
-    return (
-      Array.isArray(adminState.bulletinDraft.fallbackBlocks) ?
-        adminState.bulletinDraft.fallbackBlocks :
-        []
-    ).filter(function(block) {
-      return block && block.enabled !== false && String(block.title || "").trim();
-    }).slice(0, 4);
-  }
-
-  function shouldUseBulletinFallbackBlocks_() {
-    return (
-      adminState.bulletinDraft.frontContentSource === "fallback" ||
-      (
-        !getSelectedBulletinCampaigns_().length &&
-        !getSelectedBulletinServeNeeds_().length
-      )
-    );
-  }
-
-  function updateBulletinDraftField_(fieldName, value) {
-    if (
-      fieldName === "printFormat" &&
-      value !== adminState.bulletinDraft.printFormat
-    ) {
-      adminState.printModeFormatTransition =
-        value === "full-page" ? "to-full" : "to-half";
-      if (value === "full-page") {
-        adminState.printModePreviewSide = "front";
-        adminState.printModePreviewDirection = "backward";
-        if (getPrintModeStep_() === 4) {
-          adminState.printModeStep = 5;
-          adminState.printModeStepDirection = "forward";
-        }
-      }
-    }
-
-    if (fieldName.indexOf("giving.") === 0) {
-      adminState.bulletinDraft.giving[fieldName.replace("giving.", "")] =
-        normalizeBulletinMoney_(value);
-    } else if (fieldName.indexOf("headings.") === 0) {
-      adminState.bulletinDraft.headings[
-          fieldName.replace("headings.", "")
-      ] = value;
-    } else if (fieldName.indexOf("featured.") === 0) {
-      adminState.bulletinDraft.featuredEvent[
-          fieldName.replace("featured.", "")
-      ] = value;
-    } else if (fieldName.indexOf("fallbackHero.") === 0) {
-      adminState.bulletinDraft.fallbackHero[
-          fieldName.replace("fallbackHero.", "")
-      ] = value;
-    } else {
-      adminState.bulletinDraft[fieldName] = value;
-    }
-    adminState.bulletinError = "";
-    adminState.bulletinMessage = "";
-  }
-
-  function updateBulletinEventField_(eventId, fieldName, value) {
-    var item = (adminState.bulletinDraft.events || []).find(function(eventItem) {
-      return eventItem.id === eventId;
-    });
-    if (!item) {
-      return;
-    }
-    item[fieldName] = value;
-    adminState.bulletinError = "";
-    adminState.bulletinMessage = "";
-  }
-
-  function updateBulletinChoice_(input) {
-    var choiceType = input.getAttribute("data-admin-bulletin-choice") || "";
-    var id = input.getAttribute("data-admin-doc-id") || "";
-    var selectionState = getBulletinFrontContentSelectionState_();
-
-    if (choiceType === "campaign") {
-      var ids = adminState.bulletinDraft.campaignIds.slice();
-      var index = ids.indexOf(id);
-      if (
-        input.checked &&
-        index === -1 &&
-        ids.length < PRINT_MODE_MAX_CAMPAIGNS &&
-        selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
-      ) {
-        ids.push(id);
-      } else if (!input.checked && index !== -1) {
-        ids.splice(index, 1);
-      } else {
-        input.checked = index !== -1;
-        return false;
-      }
-      adminState.bulletinDraft.campaignIds = ids;
-      return true;
-    }
-
-    if (choiceType === "serve-need") {
-      var serveNeedIds =
-        (adminState.bulletinDraft.serveNeedIds || []).slice();
-      var serveNeedIndex = serveNeedIds.indexOf(id);
-      if (
-        input.checked &&
-        serveNeedIndex === -1 &&
-        serveNeedIds.length < PRINT_MODE_MAX_SERVE_NEEDS &&
-        selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
-      ) {
-        serveNeedIds.push(id);
-      } else if (!input.checked && serveNeedIndex !== -1) {
-        serveNeedIds.splice(serveNeedIndex, 1);
-      } else {
-        input.checked = serveNeedIndex !== -1;
-        return false;
-      }
-      adminState.bulletinDraft.serveNeedIds = serveNeedIds;
-      return true;
-    }
-
-    if (choiceType === "event") {
-      updateBulletinEventField_(id, "included", !!input.checked);
-      return true;
-    }
-
-    return false;
-  }
-
-  function buildBulletinModePayload_() {
-    var draft = adminState.bulletinDraft;
-    var campaignIds = (draft.campaignIds || [])
-        .slice(0, PRINT_MODE_MAX_CAMPAIGNS);
-    var serveNeedIds = (draft.serveNeedIds || []).slice(
-        0,
-        Math.min(
-            PRINT_MODE_MAX_SERVE_NEEDS,
-            Math.max(
-                0,
-                PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - campaignIds.length,
-            ),
-        ),
-    );
-    return {
-      serviceDate: normalizeSundayDateInputValue_(draft.serviceDate),
-      printFormat: draft.printFormat === "full-page" ?
-        "full-page" : "half-letter",
-      heroSource: draft.heroSource === "manual" ? "manual" : "featured",
-      frontContentSource: draft.frontContentSource === "fallback" ?
-        "fallback" : "live",
-      headings: {
-        frontHeading: normalizeBulletinHeadingText_(
-            draft.headings.frontHeading,
-            "This Week at\nCrossPointe",
-            80,
-            2,
-        ),
-        backEyebrow: normalizeBulletinHeadingText_(
-            draft.headings.backEyebrow,
-            "See You There",
-            50,
-            1,
-        ),
-        backHeading: normalizeBulletinHeadingText_(
-            draft.headings.backHeading,
-            "The Next Two Weeks",
-            80,
-            2,
-        ),
-      },
-      giving: {
-        monthlyBudget: normalizeBulletinMoney_(draft.giving.monthlyBudget),
-        monthToDateGiving: normalizeBulletinMoney_(
-            draft.giving.monthToDateGiving,
-        ),
-        annualBudget: normalizeBulletinMoney_(draft.giving.annualBudget),
-        yearToDateGiving: normalizeBulletinMoney_(
-            draft.giving.yearToDateGiving,
-        ),
-      },
-      featuredEvent: {
-        id: String(draft.featuredEvent.id || ""),
-        title: String(draft.featuredEvent.title || "").trim(),
-        description: String(draft.featuredEvent.description || "").trim(),
-        includeDescription: draft.featuredEvent.includeDescription !== false,
-      },
-      fallbackHero: {
-        eyebrow: String(draft.fallbackHero.eyebrow || "").trim(),
-        title: String(draft.fallbackHero.title || "").trim(),
-        description: String(draft.fallbackHero.description || "").trim(),
-        imageUrl: getBulletinFallbackImageUrl_(draft.fallbackHero.imageUrl),
-        imageStoragePath: String(
-            draft.fallbackHero.imageStoragePath || "",
-        ).trim(),
-      },
-      fallbackBlocks: (draft.fallbackBlocks || []).slice(0, 4)
-          .map(function(block) {
-            return {
-              id: String(block.id || "").trim(),
-              eyebrow: String(block.eyebrow || "").trim(),
-              title: String(block.title || "").trim(),
-              description: String(block.description || "").trim(),
-              imageUrl: getBulletinFallbackImageUrl_(block.imageUrl),
-              imageStoragePath: String(
-                  block.imageStoragePath || "",
-              ).trim(),
-              imageSide: block.imageSide === "left" ? "left" : "right",
-              enabled: block.enabled !== false,
-            };
-          }),
-      // Only persist events that belong to this bulletin. The Planning Center
-      // feed intentionally includes extra days so a future Sunday can be
-      // selected, but saving those hidden events can crowd editable events out
-      // of the backend payload limit.
-      events: getBulletinEventDraftsInWindow_().map(function(item) {
-        return {
-          id: item.id,
-          title: String(item.title || "").trim(),
-          description: String(item.description || "").trim(),
-          location: String(item.location || "").trim(),
-          included: item.included !== false,
-          includeDescription: item.includeDescription !== false,
-        };
-      }),
-      campaignIds: campaignIds,
-      campaignIcons: Object.keys(draft.campaignIcons || {})
-          .slice(0, 12)
-          .map(function(id) {
-            return {
-              id: String(id),
-              icon: normalizeBulletinCampaignIconId_(
-                  draft.campaignIcons[id],
-              ),
-            };
-          }),
-      serveNeedIds: serveNeedIds,
-      // Keep the first selection for older clients until Print Mode has been
-      // promoted everywhere.
-      serveNeedId: String(serveNeedIds[0] || ""),
-    };
-  }
-
-  function uploadBulletinFallbackImage_(file) {
-    if (!file) {
-      return;
-    }
-
-    if (!isEditorLevelPermission_(getPageAccessLevel_("bulletin"))) {
-      adminState.bulletinError =
-        "Your current access level does not allow uploading Bulletin images.";
-      renderAdmin_();
-      return;
-    }
-
-    var allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-    if (allowedTypes.indexOf(String(file.type || "").toLowerCase()) === -1) {
-      adminState.bulletinError = "Choose a JPEG, PNG, or WebP image.";
-      renderAdmin_();
-      return;
-    }
-
-    if (!file.size || file.size > 10 * 1024 * 1024) {
-      adminState.bulletinError = "Bulletin images must be 10 MB or smaller.";
-      renderAdmin_();
-      return;
-    }
-
-    adminState.bulletinImageUploading = true;
-    adminState.bulletinError = "";
-    adminState.bulletinMessage = "Uploading the welcome image...";
-    renderAdmin_();
-
-    readAdminFileAsDataUrl_(file)
-        .then(function(dataUrl) {
-          return callBulletinModeEndpoint_("POST", {
-            action: "uploadFallbackImage",
-            fileName: String(file.name || "bulletin-welcome-image"),
-            contentType: String(file.type || ""),
-            dataUrl: dataUrl,
-          });
-        })
-        .then(function(result) {
-          var imageUrl = getBulletinFallbackImageUrl_(
-              result && result.imageUrl,
-          );
-          if (!imageUrl) {
-            throw new Error("Firebase Storage did not return a usable image link.");
-          }
-
-          adminState.bulletinDraft.fallbackHero.imageUrl = imageUrl;
-          adminState.bulletinDraft.fallbackHero.imageStoragePath = String(
-              result && result.storagePath || "",
-          );
-          adminState.bulletinImageUploading = false;
-          adminState.bulletinMessage =
-            "Welcome image uploaded. Save your changes to keep it with the evergreen hero.";
-          renderAdmin_();
-        })
-        .catch(function(error) {
-          adminState.bulletinImageUploading = false;
-          adminState.bulletinMessage = "";
-          adminState.bulletinError = error && error.message ?
-            error.message :
-            "Unable to upload the Print Mode welcome image.";
-          renderAdmin_();
-        });
-  }
-
-  function uploadBulletinFallbackBlockImage_(file) {
-    if (!file) {
-      return;
-    }
-
-    var allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-    if (allowedTypes.indexOf(String(file.type || "").toLowerCase()) === -1) {
-      adminState.bulletinError = "Choose a JPEG, PNG, or WebP image.";
-      renderAdmin_();
-      return;
-    }
-
-    if (!file.size || file.size > 10 * 1024 * 1024) {
-      adminState.bulletinError = "Print Mode images must be 10 MB or smaller.";
-      renderAdmin_();
-      return;
-    }
-
-    adminState.bulletinFallbackBlockImageUploading = true;
-    adminState.bulletinError = "";
-    renderAdmin_();
-
-    readAdminFileAsDataUrl_(file)
-        .then(function(dataUrl) {
-          return callBulletinModeEndpoint_("POST", {
-            action: "uploadFallbackImage",
-            fileName: String(file.name || "print-mode-custom-block"),
-            contentType: String(file.type || ""),
-            dataUrl: dataUrl,
-          });
-        })
-        .then(function(result) {
-          var imageUrl = getBulletinFallbackImageUrl_(
-              result && result.imageUrl,
-          );
-          if (!imageUrl) {
-            throw new Error(
-                "Firebase Storage did not return a usable image link.",
-            );
-          }
-
-          adminState.bulletinFallbackBlockDraft.imageUrl = imageUrl;
-          adminState.bulletinFallbackBlockDraft.imageStoragePath = String(
-              result && result.storagePath || "",
-          );
-          adminState.bulletinFallbackBlockImageUploading = false;
-          renderAdmin_();
-        })
-        .catch(function(error) {
-          adminState.bulletinFallbackBlockImageUploading = false;
-          adminState.bulletinError = error && error.message ?
-            error.message :
-            "Unable to upload the custom block image.";
-          renderAdmin_();
-        });
-  }
-
-  function readAdminFileAsDataUrl_(file) {
-    return new Promise(function(resolve, reject) {
-      var reader = new FileReader();
-      reader.addEventListener("load", function() {
-        resolve(String(reader.result || ""));
-      }, {once: true});
-      reader.addEventListener("error", function() {
-        reject(new Error("The selected image could not be read."));
-      }, {once: true});
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function saveBulletinMode_() {
-    if (!isEditorLevelPermission_(getPageAccessLevel_("bulletin"))) {
-      adminState.bulletinError =
-        "Your current access level does not allow saving Print Mode.";
-      renderAdmin_();
-      return;
-    }
-
-    adminState.bulletinSaving = true;
-    adminState.bulletinError = "";
-    syncAdminFloatingSaveBar_();
-    syncAdminActionButtonFeedback_();
-
-    callBulletinModeEndpoint_("POST", buildBulletinModePayload_())
-        .then(function() {
-          completePendingAdminActionFeedback_();
-          adminState.bulletinSaving = false;
-          adminState.bulletinMessage = "";
-          syncAdminFloatingSaveBar_();
-          syncAdminActionButtonFeedback_();
-        })
-        .catch(function(error) {
-          clearPendingAdminActionFeedback_();
-          adminState.bulletinSaving = false;
-          adminState.bulletinError = error && error.message ?
-            error.message :
-            "Unable to save Print Mode settings.";
-          renderAdmin_();
-        });
-  }
-
-  function printBulletin_() {
-    renderAdmin_();
-
-    var images = appEl ? Array.prototype.slice.call(
-        appEl.querySelectorAll(".central-bulletin-print-root img"),
-    ) : [];
-    var imageWaits = images.map(function(image) {
-      if (image.complete) {
-        return Promise.resolve();
-      }
-
-      return new Promise(function(resolve) {
-        var timeoutId = window.setTimeout(resolve, 3000);
-        image.addEventListener("load", function() {
-          window.clearTimeout(timeoutId);
-          resolve();
-        }, {once: true});
-        image.addEventListener("error", function() {
-          window.clearTimeout(timeoutId);
-          resolve();
-        }, {once: true});
-      });
-    });
-
-    Promise.all(imageWaits).then(function() {
-      setAdminPrintTitle_(getBulletinPdfTitle_());
-      beginAdminPrintThemeLock_();
-
-      try {
-        window.print();
-      } catch (error) {
-        endAdminPrintThemeLock_();
-        throw error;
-      }
-    });
-  }
-
-  function getBulletinPdfTitle_() {
-    var serviceDate = parseBulletinDate_(
-        adminState.bulletinDraft.serviceDate,
-    );
-    var year = String(serviceDate.getUTCFullYear()).slice(-2);
-    var month = String(serviceDate.getUTCMonth() + 1).padStart(2, "0");
-    var day = String(serviceDate.getUTCDate()).padStart(2, "0");
-    var formatLabel = getBulletinPrintFormat_() === "full-page" ?
-      "Full Page" : "Half-Page";
-
-    return "CrossPointe Central - " + formatLabel + " - " +
-      year + month + day;
-  }
-
-  function normalizeBulletinMoney_(value) {
-    var parsed = Number(String(value == null ? "" : value).replace(/[$,\s]/g, ""));
-    return isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : 0;
-  }
-
-  function formatBulletinCurrency_(value) {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(normalizeBulletinMoney_(value));
-  }
-
-  function normalizeBulletinHeadingText_(
-      value,
-      fallbackValue,
-      maxLength,
-      maxLines,
-  ) {
-    var normalized = String(value == null ? "" : value)
-        .replace(/\r\n?/g, "\n")
-        .split("\n")
-        .map(function(line) {
-          return line.replace(/\s+/g, " ").trim();
-        })
-        .filter(Boolean)
-        .slice(0, Math.max(1, Number(maxLines) || 1))
-        .join("\n")
-        .trim();
-    var fallback = String(fallbackValue || "").trim();
-    return (normalized || fallback).slice(0, Number(maxLength) || 80);
-  }
-
-  function renderBulletinHeadingText_(value) {
-    return escapeHtml_(String(value || "")).replace(/\n/g, "<br>");
-  }
-
-  function parseBulletinDate_(value) {
-    var normalized = normalizeSundayDateInputValue_(value);
-    if (normalized) {
-      var parts = normalized.split("-");
-      return new Date(Date.UTC(
-          Number(parts[0]),
-          Number(parts[1]) - 1,
-          Number(parts[2]),
-          12,
-      ));
-    }
-
-    var parsed = new Date(String(value || "") + " 12:00:00 UTC");
-    return Number.isNaN(parsed.getTime()) ?
-      new Date(Date.UTC(1970, 0, 1, 12)) :
-      parsed;
-  }
-
-  function formatBulletinLongDate_(value) {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    }).format(parseBulletinDate_(value));
-  }
-
-  function formatBulletinDateRange_(start, end) {
-    var startMonth = new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      month: "long",
-    }).format(start).toUpperCase();
-    var endMonth = new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      month: "long",
-    }).format(end).toUpperCase();
-    return startMonth + " " + start.getUTCDate() + " - " +
-      endMonth + " " + end.getUTCDate();
   }
 
   function createEmptySettingsSundayDraft_() {
@@ -16856,12 +10686,6 @@
     adminState.settingsSundayDraft = createEmptySettingsSundayDraft_();
     adminState.settingsSundayError = "";
     adminState.settingsSundayMessage = "";
-    adminState.wayfinderAlphaEnabled = false;
-    adminState.wayfinderAlphaLoaded = false;
-    adminState.wayfinderAlphaLoading = false;
-    adminState.wayfinderAlphaSaving = false;
-    adminState.wayfinderAlphaError = "";
-    adminState.wayfinderAlphaMessage = "";
     adminState.integrationsPublishing = false;
     adminState.integrationsError = "";
     adminState.integrationsMessage = "";
@@ -16896,7 +10720,6 @@
   }
 
   function resetAdminUsersState_() {
-    clearAdminUserEditorCloseTimer_();
     adminState.adminUsersLoaded = false;
     adminState.adminUsersLoading = false;
     adminState.adminUsersSaving = false;
@@ -16904,8 +10727,6 @@
     adminState.adminUsersDraft = createEmptyAdminUserDraft_();
     adminState.adminUsersEditingUid = "";
     adminState.adminUsersEditingInviteId = "";
-    adminState.adminUsersEditorOpen = false;
-    adminState.adminUsersEditorEntering = false;
     adminState.adminUsersError = "";
     adminState.adminUsersMessage = "";
   }
@@ -17914,15 +11735,6 @@
           adminState.campaignsPublishedItems = publishedItems;
           adminState.campaignsUsingPublishedFallback = false;
           adminState.campaignsItems = publishedItems;
-          if (
-            adminState.currentPageId === "bulletin" &&
-            adminState.bulletinCentralData
-          ) {
-            adminState.bulletinCentralData.campaigns =
-              publishedItems.filter(function(item) {
-                return item.active;
-              });
-          }
           renderAdmin_();
         })
         .catch(function(error) {
@@ -17977,15 +11789,6 @@
           adminState.serveNeedsPublishedItems = publishedItems;
           adminState.serveNeedsUsingPublishedFallback = false;
           adminState.serveNeedsItems = publishedItems;
-          if (
-            adminState.currentPageId === "bulletin" &&
-            adminState.bulletinCentralData
-          ) {
-            adminState.bulletinCentralData.serveNeeds =
-              publishedItems.filter(function(item) {
-                return item.active;
-              });
-          }
           renderAdmin_();
         })
         .catch(function(error) {
@@ -18470,7 +12273,6 @@
     adminState.quickLinksDraftInitialized = false;
     adminState.quickLinksUsingPublishedFallback = false;
     adminState.quickLinksEditingId = "";
-    adminState.quickLinksRecentlyAddedId = "";
     adminState.quickLinksError = "";
     adminState.quickLinksMessage = "";
   }
@@ -18491,10 +12293,6 @@
 
   function normalizeQuickLinkListItem_(item, index) {
     var source = item || {};
-    var hasActiveValue = Object.prototype.hasOwnProperty.call(
-        source,
-        "active",
-    );
 
     return {
       id: String(source.id || ("quick-link-" + String(index + 1))).trim(),
@@ -18503,10 +12301,8 @@
       sort: Number.isFinite(Number(source.sort)) ?
         Number(source.sort) :
         50,
-      active: hasActiveValue ?
-        source.active === true ||
-          String(source.active || "").toLowerCase() === "true" :
-        true,
+      active: source.active === true ||
+        String(source.active || "").toLowerCase() === "true",
       sunday_only: source.sunday_only === true ||
         String(source.sunday_only || "").toLowerCase() === "true",
     };
@@ -18609,30 +12405,7 @@
           adminState.quickLinksMessage = result && result.message ?
             result.message :
             successMessage;
-
-          if (actionConfig.mode === "publish") {
-            var publishedItems = sortQuickLinksItems_(
-                items.filter(function(item) {
-                  return item.id !== nextItem.id;
-                }).concat([nextItem]),
-            );
-            adminState.quickLinksLoading = false;
-            adminState.quickLinksLoaded = true;
-            adminState.quickLinksBaselineItems = cloneQuickLinksItems_(
-                publishedItems,
-            );
-            adminState.quickLinksPendingChangesById = {};
-            adminState.quickLinksPublishedItems = cloneQuickLinksItems_(
-                publishedItems,
-            );
-            adminState.quickLinksDraftInitialized = false;
-            adminState.quickLinksUsingPublishedFallback = false;
-            adminState.quickLinksItems = publishedItems;
-            adminState.quickLinksRecentlyAddedId = previousItem ?
-              "" : nextItem.id;
-          }
-
-          renderAdmin_();
+          loadQuickLinks_();
         })
         .catch(function(error) {
           adminState.quickLinksSaving = false;
@@ -18709,10 +12482,6 @@
     var data = docSnapshot && typeof docSnapshot.data === "function" ?
       docSnapshot.data() || {} :
       {};
-    var hasActiveValue = Object.prototype.hasOwnProperty.call(
-        data,
-        "active",
-    );
 
     return {
       id: docSnapshot.id,
@@ -18721,10 +12490,7 @@
       sort: Number.isFinite(Number(data.sort)) ?
         Number(data.sort) :
         50,
-      active: hasActiveValue ?
-        data.active === true ||
-          String(data.active || "").toLowerCase() === "true" :
-        true,
+      active: data.active === true || String(data.active || "").toLowerCase() === "true",
       sunday_only: data.sunday_only === true ||
         String(data.sunday_only || "").toLowerCase() === "true",
     };
@@ -20346,9 +14112,6 @@
           adminState.campaignsMessage = result && result.message ?
             result.message :
             successMessage;
-          if (adminState.printModeQuickAddSection === "campaigns") {
-            adminState.printModeQuickAddSection = "";
-          }
           loadCampaigns_();
         })
         .catch(function(error) {
@@ -20908,9 +14671,6 @@
           adminState.serveNeedsMessage = result && result.message ?
             result.message :
             successMessage;
-          if (adminState.printModeQuickAddSection === "serveNeeds") {
-            adminState.printModeQuickAddSection = "";
-          }
           loadServeNeeds_();
         })
         .catch(function(error) {
@@ -21616,15 +15376,11 @@
     return "room-rule-local-" + String(Date.now()) + "-" + String(countHint || 0);
   }
 
-  function markAdminPageDataStaleForNavigation_(pageId, previousPageId) {
+  function markAdminPageDataStaleForNavigation_(pageId) {
     adminState.changeRequestsLoaded = false;
 
     if (pageId === "hub" && !hasPendingHubChanges_()) {
       adminState.hubLoaded = false;
-    }
-
-    if (pageId === "bulletin") {
-      adminState.bulletinLoaded = false;
     }
 
     if (pageId === "quick-links" && !hasPendingQuickLinksChanges_()) {
@@ -21651,17 +15407,12 @@
       adminState.nextStepsLoaded = false;
     }
 
-    if (isSettingsDataPageId_(pageId) &&
-      !isSettingsDataPageId_(previousPageId) &&
+    if ((pageId === "settings" || pageId === "integrations") &&
       !hasPendingSettingsChanges_() &&
       !hasPendingRoomRulesChanges_() &&
       !hasPendingAdminUsersChanges_()) {
       adminState.settingsLoaded = false;
       adminState.adminUsersLoaded = false;
-    }
-
-    if (pageId === "wayfinder" && previousPageId !== "wayfinder") {
-      adminState.wayfinderAlphaLoaded = false;
     }
 
     if (pageId === "status-banner" && !hasPendingStatusBannerChanges_()) {
@@ -21903,7 +15654,6 @@
 
   function runSectionPrimaryAction_(config) {
     var permission = String(config && config.permission || "").trim().toLowerCase();
-    var actionPromise = null;
     var requestPayload = {
       section: config && config.section || "",
       operation: config && config.operation || "publish",
@@ -21917,27 +15667,19 @@
     }
 
     if (isDirectPublishPermission_(permission)) {
-      actionPromise = callPreviewPublishEndpoint_(requestPayload);
-    } else if (isSubmitForApprovalPermission_(permission)) {
-      actionPromise = callSubmitChangeRequestEndpoint_(requestPayload)
+      return callPreviewPublishEndpoint_(requestPayload);
+    }
+
+    if (isSubmitForApprovalPermission_(permission)) {
+      return callSubmitChangeRequestEndpoint_(requestPayload)
           .then(function(result) {
             adminState.changeRequestsLoaded = false;
             loadChangeRequestsSummaryIfNeeded_();
             return result;
           });
-    } else {
-      actionPromise = Promise.reject(new Error(
-          "Your current access level cannot publish or submit this section.",
-      ));
     }
 
-    return actionPromise.then(function(result) {
-      completePendingAdminActionFeedback_();
-      return result;
-    }, function(error) {
-      clearPendingAdminActionFeedback_();
-      throw error;
-    });
+    return Promise.reject(new Error("Your current access level cannot publish or submit this section."));
   }
 
   function callPreviewPublishEndpoint_(payload) {
@@ -21962,41 +15704,6 @@
           resetCurrentCentralDataCache_();
           return result;
         });
-  }
-
-  function callBulletinModeEndpoint_(method, payload) {
-    if (!adminState.user) {
-      return Promise.reject(new Error("Sign in before using Print Mode."));
-    }
-
-    var normalizedMethod = method === "POST" ? "POST" : "GET";
-    var endpoint = BULLETIN_MODE_ENDPOINT;
-    if (
-      normalizedMethod === "GET" &&
-      payload &&
-      payload.refresh === true
-    ) {
-      endpoint += "?refresh=1";
-    }
-
-    return adminState.user.getIdToken()
-        .then(function(idToken) {
-          var requestOptions = {
-            method: normalizedMethod,
-            headers: {
-              Authorization: "Bearer " + idToken,
-              Accept: "application/json",
-            },
-          };
-
-          if (normalizedMethod === "POST") {
-            requestOptions.headers["Content-Type"] = "application/json";
-            requestOptions.body = JSON.stringify(payload || {});
-          }
-
-          return fetch(endpoint, requestOptions);
-        })
-        .then(parseAdminEndpointResponse_);
   }
 
   function runWayfinderPrototypeQuery_(questionOverride) {
@@ -22470,7 +16177,6 @@
       action: "publish",
       draftId: draft.id,
     }).then(function(result) {
-      completePendingAdminActionFeedback_();
       adminState.wayfinderNoticeWorking = false;
       adminState.wayfinderNoticeDraft = null;
       adminState.wayfinderNoticeMessage =
@@ -22479,7 +16185,6 @@
       loadWayfinderManagers_();
       renderAdmin_();
     }).catch(function(error) {
-      clearPendingAdminActionFeedback_();
       adminState.wayfinderNoticeWorking = false;
       adminState.wayfinderNoticeError = error && error.message ?
         error.message : "The notice could not be published.";
@@ -22650,7 +16355,6 @@
       action: "publish",
       draftId: draft.id,
     }).then(function(result) {
-      completePendingAdminActionFeedback_();
       adminState.wayfinderKnowledgeWorking = false;
       adminState.wayfinderKnowledgeDraft = null;
       adminState.wayfinderKnowledgeMessage =
@@ -22658,7 +16362,6 @@
       loadWayfinderManagers_();
       renderAdmin_();
     }).catch(function(error) {
-      clearPendingAdminActionFeedback_();
       adminState.wayfinderKnowledgeWorking = false;
       adminState.wayfinderKnowledgeError = error && error.message ?
         error.message : "The permanent change could not be approved.";
@@ -22997,8 +16700,6 @@
   function getManagedAdminPageConfigs_() {
     return [
       {key: "hub", label: "Hub"},
-      {key: "bulletin", label: "Print Mode"},
-      {key: "studio", label: "Studio"},
       {key: "settings", label: "Settings"},
       {key: "integrations", label: "Integrations"},
       {key: "wayfinder", label: "Wayfinder"},
@@ -23016,60 +16717,6 @@
     ];
   }
 
-  function getAdminUserAccessPresetById_(presetId) {
-    var normalizedId = String(presetId || "").trim();
-    return ADMIN_USER_ACCESS_PRESETS.find(function(preset) {
-      return preset.id === normalizedId;
-    }) || null;
-  }
-
-  function createAdminUserPresetPageAccess_(presetId) {
-    var preset = getAdminUserAccessPresetById_(presetId);
-    var nextPageAccess = createAdminUserDraftPageAccess_("none");
-    if (!preset) {
-      return nextPageAccess;
-    }
-
-    getManagedAdminPageConfigs_().forEach(function(pageConfig) {
-      var key = pageConfig.key;
-      if (key === "users" || key === "roles") {
-        nextPageAccess[key] = preset.administration;
-        return;
-      }
-
-      if (key === "changeRequests") {
-        nextPageAccess[key] = preset.changeRequests;
-        return;
-      }
-
-      if (key === "wayfinder") {
-        nextPageAccess[key] = preset.wayfinder;
-        return;
-      }
-
-      nextPageAccess[key] = preset.permission;
-    });
-
-    return normalizeAdminUserPageAccess_(nextPageAccess);
-  }
-
-  function getAdminUserAccessPreset_(pageAccess) {
-    var normalizedPageAccess = normalizeAdminUserPageAccess_(pageAccess);
-    return ADMIN_USER_ACCESS_PRESETS.find(function(preset) {
-      return areAdminValuesEqual_(
-          normalizedPageAccess,
-          createAdminUserPresetPageAccess_(preset.id),
-      );
-    }) || null;
-  }
-
-  function getAdminUserAccessibleDestinationCount_(pageAccess) {
-    var normalizedPageAccess = normalizeAdminUserPageAccess_(pageAccess);
-    return getManagedAdminPageConfigs_().filter(function(pageConfig) {
-      return normalizedPageAccess[pageConfig.key] !== "none";
-    }).length;
-  }
-
   function getAdminUserPageAccessLevel_(pageAccess, pageAccessKey) {
     var source = pageAccess || {};
 
@@ -23078,8 +16725,6 @@
     }
 
     if (pageAccessKey === "hub" ||
-      pageAccessKey === "bulletin" ||
-      pageAccessKey === "studio" ||
       pageAccessKey === "integrations" ||
       pageAccessKey === "resources" ||
       pageAccessKey === "nextSteps" ||
@@ -23106,18 +16751,6 @@
 
     if (!Object.prototype.hasOwnProperty.call(source, "integrations")) {
       nextPageAccess.integrations = normalizeAdminPermissionValue_(
-          source.settings,
-      );
-    }
-
-    if (!Object.prototype.hasOwnProperty.call(source, "bulletin")) {
-      nextPageAccess.bulletin = normalizeAdminPermissionValue_(
-          source.settings,
-      );
-    }
-
-    if (!Object.prototype.hasOwnProperty.call(source, "studio")) {
-      nextPageAccess.studio = normalizeAdminPermissionValue_(
           source.settings,
       );
     }
@@ -23254,9 +16887,7 @@
       normalizedRecordType === "invite" ? "" : nextItem.uid;
     adminState.adminUsersEditingInviteId =
       normalizedRecordType === "invite" ? nextItem.inviteId : "";
-    clearAdminUserEditorCloseTimer_();
-    adminState.adminUsersEditorOpen = true;
-    adminState.adminUsersEditorEntering = true;
+    expandAdminSection_("settings-admin-users");
     adminState.adminUsersDraft = {
       inviteId: nextItem.inviteId || "",
       uid: nextItem.uid || "",
@@ -23332,7 +16963,7 @@
 
     if (!payload.uid && !payload.email) {
       adminState.adminUsersError =
-        "Enter an email address before continuing.";
+        "Enter an email address or a UID before continuing.";
       renderAdmin_();
       return;
     }
@@ -23365,11 +16996,11 @@
 
     callUpsertAdminUserEndpoint_(payload)
         .then(function(result) {
-          completePendingAdminActionFeedback_();
           adminState.adminUsersSaving = false;
           adminState.adminUsersMessage = result && result.message ?
             result.message :
             "Admin user saved.";
+          resetAdminUsersDraft_();
 
           if (adminState.user &&
             result &&
@@ -23379,14 +17010,8 @@
           }
 
           loadAdminUsers_(adminState.adminUsersMessage);
-          clearAdminUserEditorCloseTimer_();
-          adminUserEditorCloseTimer = window.setTimeout(function() {
-            adminUserEditorCloseTimer = null;
-            closeAdminUserEditor_({skipConfirm: true});
-          }, ADMIN_ACTION_SUCCESS_RESET_MS);
         })
         .catch(function(error) {
-          clearPendingAdminActionFeedback_();
           adminState.adminUsersSaving = false;
           adminState.adminUsersError = error && error.message ?
             error.message :
@@ -23451,9 +17076,6 @@
                   (normalizedRecordType !== "invite" &&
                     adminState.adminUsersEditingUid === targetId)
                 ) {
-                  clearAdminUserEditorCloseTimer_();
-                  adminState.adminUsersEditorOpen = false;
-                  adminState.adminUsersEditorEntering = false;
                   resetAdminUsersDraft_();
                 }
 
@@ -24119,14 +17741,9 @@
   }
 
   function renderStatusPill_(label, toneClass) {
-    var normalizedLabel = String(label || "").trim();
-    if (ADMIN_HIDDEN_STATUS_PILL_LABELS[normalizedLabel.toLowerCase()]) {
-      return "";
-    }
-
     return [
       "<span class=\"central-admin-pill ", toneClass || "", "\">",
-      escapeHtml_(normalizedLabel),
+      escapeHtml_(label),
       "</span>",
     ].join("");
   }
@@ -24137,22 +17754,6 @@
       escapeHtml_(text),
       "</p>",
     ].join("");
-  }
-
-  function renderAdminEditorAccessNote_(canEdit, actionConfig) {
-    if (!canEdit) {
-      return renderAdminNote_(
-          "You can view this section, but you don't have permission to make changes.",
-      );
-    }
-
-    if (actionConfig && actionConfig.mode === "submit") {
-      return renderAdminNote_(
-          "When you're ready, submit your changes for review.",
-      );
-    }
-
-    return "";
   }
 
   function renderInlineMeta_(label, value) {
@@ -24246,22 +17847,13 @@
       return false;
     }
 
-    var accessKeys = Array.isArray(page.pageAccessKeys) &&
-      page.pageAccessKeys.length ?
-      page.pageAccessKeys :
-      [page.pageAccessKey];
-    var permissions = accessKeys.map(function(pageAccessKey) {
-      return getPageAccessLevel_(pageAccessKey);
-    });
-    var permission = permissions[0] || "none";
+    var permission = getPageAccessLevel_(page.pageAccessKey);
 
     if (page.id === "wayfinder") {
       return permission === "admin";
     }
 
-    return permissions.some(function(accessLevel) {
-      return accessLevel !== "none";
-    });
+    return permission !== "none";
   }
 
   function getPageAccessLevel_(pageAccessKey) {
@@ -24275,8 +17867,7 @@
       return normalizeAdminPermissionValue_(pageAccess[pageAccessKey]);
     }
 
-    if (pageAccessKey === "hub" || pageAccessKey === "integrations" ||
-      pageAccessKey === "bulletin" || pageAccessKey === "studio") {
+    if (pageAccessKey === "hub" || pageAccessKey === "integrations") {
       return normalizeAdminPermissionValue_(pageAccess.settings);
     }
 

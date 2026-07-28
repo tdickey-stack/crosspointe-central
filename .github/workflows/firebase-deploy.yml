@@ -47,8 +47,14 @@ jobs:
       - name: Install Functions dependencies
         run: npm ci --prefix functions
 
+      - name: Install Studio Functions dependencies
+        run: npm ci --prefix studio-functions
+
       - name: Restore generated YouVersion bundle
         run: pnpm run build:youversion
+
+      - name: Build Central Studio
+        run: pnpm run build:studio
 
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
@@ -64,7 +70,7 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
       - name: Deploy live Firebase project
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only hosting,functions,firestore --non-interactive
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only hosting,functions,firestore,storage --non-interactive
 
   deploy-preview:
     if: github.ref == 'refs/heads/dev'
@@ -95,8 +101,14 @@ jobs:
       - name: Install Functions dependencies
         run: npm ci --prefix functions
 
+      - name: Install Studio Functions dependencies
+        run: npm ci --prefix studio-functions
+
       - name: Restore generated YouVersion bundle
         run: pnpm run build:youversion
+
+      - name: Build Central Studio
+        run: pnpm run build:studio
 
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax

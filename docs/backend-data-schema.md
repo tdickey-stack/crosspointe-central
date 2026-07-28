@@ -22,6 +22,10 @@ Admin browser
   |     Cloud Function validates and normalizes the payload
   |     then writes `centralApp/...` or `centralContent/...`
   |
+  |-- GET/POST /api/admin/bulletin-mode
+  |     reads live Planning Center events and stores only private bulletin
+  |     settings, giving figures, and per-event print overrides
+  |
   `-- POST /api/admin/submit-change-request
         writes `centralAdmin/root/changeRequests/{requestId}`
         approval merges the requested upserts/removals and publishes them
@@ -92,6 +96,7 @@ have equivalent persisted draft collections.
 | `centralAdmin/root/pages/{pageId}` | Reserved/readable admin page records |
 | `centralAdmin/root/roles/{roleId}` | Reserved/readable role records |
 | `centralAdmin/root/public/whatsNew` | Admin What's New fallback document |
+| `centralAdmin/root/public/bulletinMode` | Private Bulletin Mode giving figures and print overrides |
 
 ### Operational data
 
@@ -99,10 +104,18 @@ have equivalent persisted draft collections.
 | --- | --- |
 | `centralServeNeeds/root/interests/{submissionId}` | Public Serve Needs interest submissions and notification status |
 | `mail/{mailId}` | Legacy/optional mail-delivery status source watched by a trigger; the collection name can be changed with `CENTRAL_MAIL_COLLECTION_PATH` |
+| `centralCache/planningCenter/calendar/{cacheId}` | Server-only, last-known-good Planning Center calendar snapshots and refresh leases |
+| `centralCache/planningCenter/bulletin/{cacheId}` | Server-only prepared Bulletin Mode event and featured-event snapshots used for immediate admin loads |
+| `centralCache/planningCenter/rooms/{cacheId}` | Server-only raw room assignments and refresh leases keyed to a Planning Center event instance |
 
 Planning Center events, today's schedule, the Central Featured event,
 Registrations signups, and setlists are fetched at runtime; they are not
-currently maintained as the primary Firestore content collections. The
+currently maintained as the primary Firestore content collections. Bulletin,
+calendar, and room cache documents are disposable derivatives
+that reduce Planning Center API traffic; Planning Center remains the source of
+truth. These cache paths are accessible only to Cloud Functions through the
+Admin SDK and remain
+covered by the client rules' default deny. The
 featured event is the next future instance tagged both `Central` and
 `Central Featured`; its description and image come directly from the parent
 Planning Center event.
@@ -218,6 +231,53 @@ button_text
 The hosted `public/content/whats-new.json` adds an `enabled` switch and contains
 separate `public` and `admin` objects with the same practical fields.
 
+### Bulletin Mode
+
+`centralAdmin/root/public/bulletinMode` is readable only to active admin users
+and is written through the authenticated Bulletin Mode Cloud Function. It is
+not included in `/api/central-data`, so giving figures never appear on the
+public Central frontend.
+
+```text
+serviceDate
+printFormat (half-letter | full-page)
+heroSource (featured | manual)
+headings.frontHeading
+headings.backEyebrow
+headings.backHeading
+giving.monthlyBudget
+giving.monthToDateGiving
+giving.annualBudget
+giving.yearToDateGiving
+featuredEvent.id
+featuredEvent.title
+featuredEvent.description
+featuredEvent.includeDescription
+fallbackHero.eyebrow
+fallbackHero.title
+fallbackHero.description
+fallbackHero.imageUrl
+fallbackHero.imageStoragePath
+events[].id
+events[].title
+events[].description
+events[].location
+events[].included
+events[].includeDescription
+campaignIds[]
+campaignIcons[].id
+campaignIcons[].icon
+serveNeedId
+updatedAt
+updatedByUid
+updatedByEmail
+```
+
+Event IDs are Planning Center event-instance IDs. Bulletin Mode stores only
+print-specific overrides; schedules and Planning Center defaults continue to
+come from Planning Center through the live Central data flow. `printFormat`
+defaults to `half-letter` for existing documents that do not have the field.
+
 ## What "Upsert" Means Here
 
 An upsert creates a document when its ID does not exist and updates it when the
@@ -290,6 +350,7 @@ Request body:
   "active": true,
   "pageAccess": {
     "hub": "edit",
+    "studio": "edit",
     "settings": "view",
     "users": "none"
   }
@@ -321,7 +382,9 @@ updatedAt
 ```
 
 Valid `pageAccess` values are `none`, `view`, `propose`, `edit`, `approve`, and
-`admin`.
+`admin`. Studio uses the `studio` page key. Existing records without that key
+temporarily inherit their `settings` access while the new permission is rolled
+out.
 
 ## Serve Needs Interest Shape
 
@@ -397,3 +460,29 @@ durable history, not the `changeRequests` collection.
 See `firestore.rules` for the exact rule expressions and
 `docs/admin-firestore-bootstrap.md` for first-admin setup and editor-specific
 examples.
+## Central Studio
+
+Central Studio keeps creative content separate from account identity:
+
+- `centralStudioProjects/{projectId}` stores one user-owned project and contains
+  no user profile PII. Event graphics continue to use the strict
+  `schemaVersion: 1` content schema. Multi-page documents use
+  `schemaVersion: 2`, keep their ordered page IDs and page-number preference on
+  the project root, and store each page under
+  `centralStudioProjects/{projectId}/pages/{pageId}`.
+- Document page records use a strict `schemaVersion: 1` page schema. A page can
+  be a One Pager, Checklist, or Branded Content Page. The project root and its
+  page changes are written atomically so clients cannot create an unlisted
+  page or leave a deleted page in the active page order.
+- `centralStudioMemberships/{uid_projectId}` grants one signed-in Central user
+  edit access to a shared project. Only the Studio backend writes membership
+  records.
+- `centralStudioShares/{sha256Token}` stores a 30-day, server-only share grant.
+  The raw token appears only in the share URL and is never stored.
+- `studio-projects/{projectId}/{assetId}` in Firebase Storage contains uploaded
+  JPG, PNG, or WebP backgrounds smaller than 8 MiB.
+
+Owned projects are queried by `ownerUid`. Shared projects are discovered by a
+membership query on `memberUid`, followed by exact project document reads.
+Unsplash images remain hosted by Unsplash and store attribution fields with
+the project.

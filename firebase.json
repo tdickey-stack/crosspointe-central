@@ -11,11 +11,26 @@
         "firebase-debug.*.log",
         "*.local"
       ]
+    },
+    {
+      "source": "studio-functions",
+      "codebase": "studio",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
     }
   ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
   },
   "hosting": {
     "public": "public",
@@ -143,6 +158,33 @@
         ]
       },
       {
+        "source": "/studio.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/studio.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/studio.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/wayfinder-chat.js",
         "headers": [
           {
@@ -218,6 +260,62 @@
         "destination": "/privacy.html"
       },
       {
+        "source": "/studio",
+        "destination": "/studio.html"
+      },
+      {
+        "source": "/studio/**",
+        "destination": "/studio.html"
+      },
+      {
+        "source": "/api/studio/unsplash/search",
+        "function": {
+          "functionId": "studioUnsplashSearch",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/unsplash/track-download",
+        "function": {
+          "functionId": "studioUnsplashTrackDownload",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/projects/share",
+        "function": {
+          "functionId": "studioCreateShare",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/shares/accept",
+        "function": {
+          "functionId": "studioAcceptShare",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/projects/leave",
+        "function": {
+          "functionId": "studioLeaveProject",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/projects/delete",
+        "function": {
+          "functionId": "studioDeleteProject",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/calendar-event.ics",
         "function": {
           "functionId": "centralCalendarEvent",
@@ -242,6 +340,13 @@
         "source": "/api/admin/publish-preview-content",
         "function": {
           "functionId": "publishPreviewContent",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/bulletin-mode",
+        "function": {
+          "functionId": "bulletinMode",
           "pinTag": false
         }
       },
@@ -396,6 +501,9 @@
     },
     "hosting": {
       "port": 5005
+    },
+    "storage": {
+      "port": 9199
     },
     "ui": {
       "enabled": true,

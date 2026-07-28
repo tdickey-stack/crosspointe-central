@@ -40,8 +40,11 @@ jobs:
       - name: Restore generated YouVersion bundle
         run: pnpm run build:youversion
 
+      - name: Build Central Studio
+        run: pnpm run build:studio
+
       - name: Verify Hosting JavaScript syntax
-        run: node --check public/app.js && node --check public/admin.js
+        run: node --check public/app.js && node --check public/admin.js && node --check scripts/build-studio.mjs
 
       - name: Validate hosted What's New JSON
         run: node -e "JSON.parse(require('fs').readFileSync('public/content/whats-new.json', 'utf8'))"

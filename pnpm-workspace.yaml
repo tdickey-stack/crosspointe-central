@@ -1,7 +1,10 @@
 packages:
   - .
+  - studio-functions
 
 allowBuilds:
+  '@firebase/util': false
+  core-js: false
   esbuild: true
   protobufjs: false
   re2: false

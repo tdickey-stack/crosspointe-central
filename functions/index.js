@@ -1,5 +1,41 @@
 import crypto from "node:crypto";
 
+import {
+  areServeNeedsComparisonItemsEqual_,
+  buildFirstAdminPageAccess_,
+  formatDate_,
+  formatTime_,
+  formatTimeRange_,
+  getBearerToken_,
+  getCampaignConflictLabel_,
+  getFirestoreTimestampMillis_,
+  getFirstAdminBootstrapErrorMessage_,
+  getOptionalBooleanConfigValue_,
+  getResourceConflictLabel_,
+  getServeNeedConflictLabel_,
+  htmlToPlainText_,
+  isTruthyValue_,
+  looksLikeEmailAddress_,
+  looksLikeHtml_,
+  looksLikePassageText_,
+  mapCampaignsComparisonItemsById_,
+  mapResourcesComparisonItemsById_,
+  mapServeNeedsComparisonItemsById_,
+  normalizeOptionalBooleanConfigValue_,
+  normalizePassageText_,
+  normalizePreviewPublishOperation_,
+  normalizePreviewPublishSection_,
+  normalizeSortValue_,
+  normalizeSundayModeOverrideValue_,
+  normalizeYouVersionBookAlias_,
+  parsePlanningCenterServiceTypes_,
+  parsePositiveInt_,
+  sanitizePassageHtml_,
+  sortCampaignsComparisonItems_,
+  sortServeNeedsComparisonItems_,
+  trimFirestoreStringValue_,
+} from "./helpers/helpers.js";
+
 import admin from "firebase-admin";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
@@ -47,6 +83,15 @@ import {
   getCentralRegistrationSignups,
 } from
   "./planning-center/registrations.js";
+import {
+  createRequestStartGate,
+  fetchJsonWithRetry,
+} from "./planning-center/request-control.js";
+import {getSharedCachedValue} from
+  "./planning-center/shared-cache.js";
+import {createPrintModeFunction} from "./print-mode/function.js";
+import {createPrintModePlanningCenterService} from
+  "./print-mode/planning-center.js";
 import {
   createWayfinderNoticeCommandHandler,
   createWayfinderNoticeDraftGenerator,
@@ -311,6 +356,14 @@ const PCO_CALENDAR_LOOKAHEAD_DAYS = parsePositiveInt_(
     process.env.PCO_CALENDAR_LOOKAHEAD_DAYS,
     14,
 );
+const PCO_REQUEST_MIN_INTERVAL_MS = Math.max(
+    100,
+    parsePositiveInt_(process.env.PCO_REQUEST_MIN_INTERVAL_MS, 250),
+);
+const PCO_CALENDAR_CACHE_TTL_MS = 5 * 60 * 1000;
+const PCO_ROOM_CACHE_TTL_MS = 30 * 60 * 1000;
+const PCO_CACHE_REFRESH_LEASE_MS = 45 * 1000;
+const PCO_CACHE_WAIT_MS = 50 * 1000;
 const PCO_SERVICE_TYPES = parsePlanningCenterServiceTypes_(
     process.env.PCO_SERVICE_TYPES || "2346:9:00,2345:10:30",
 );
@@ -340,6 +393,9 @@ const YOUVERSION_API_BASE_URL = "https://api.youversion.com/v1";
 const YOUVERSION_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const cachedCentralDataByMode = new Map();
+const waitForPcoRequestStart = createRequestStartGate({
+  minIntervalMs: PCO_REQUEST_MIN_INTERVAL_MS,
+});
 const CENTRAL_DATA_ENVIRONMENT_LIVE = "live";
 const CENTRAL_DATA_ENVIRONMENT_DEV = "dev";
 const CENTRAL_DATA_CACHE_KEY_PREFIX = "published:";
@@ -350,6 +406,8 @@ function clearCentralDataCache_() {
 const cachedYouVersionPassages = new Map();
 const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
+  {key: "bulletin", label: "Print Mode"},
+  {key: "studio", label: "Studio"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
   {key: "wayfinder", label: "Wayfinder"},
@@ -490,15 +548,41 @@ export const centralData = onRequest(
           return;
         }
 
-        const combinedData = await buildCentralDataPayload_(environment);
-        const payload = {
-          ...combinedData,
-          youVersionAppKey: YOUVERSION_APP_KEY,
-        };
+        if (cachedEntry && cachedEntry.promise) {
+          const pendingPayload = await cachedEntry.promise;
+          response.set("Cache-Control", "no-store");
+          response.status(200).json(pendingPayload);
+          return;
+        }
+
+        const payloadPromise = buildCentralDataPayload_(environment)
+            .then((combinedData) => {
+              const payload = {
+                ...combinedData,
+                youVersionAppKey: YOUVERSION_APP_KEY,
+              };
+              cachedCentralDataByMode.set(cacheKey, {
+                data: payload,
+                fetchedAt: Date.now(),
+                promise: null,
+              });
+              return payload;
+            })
+            .catch((error) => {
+              if (cachedEntry && cachedEntry.data) {
+                cachedCentralDataByMode.set(cacheKey, cachedEntry);
+              } else {
+                cachedCentralDataByMode.delete(cacheKey);
+              }
+              throw error;
+            });
+
         cachedCentralDataByMode.set(cacheKey, {
-          data: payload,
-          fetchedAt: Date.now(),
+          data: cachedEntry && cachedEntry.data || null,
+          fetchedAt: cachedEntry && cachedEntry.fetchedAt || 0,
+          promise: payloadPromise,
         });
+        const payload = await payloadPromise;
 
         response.set("Cache-Control", "no-store");
         response.status(200).json(payload);
@@ -1330,6 +1414,32 @@ export const claimAdminInvite = onRequest(
       }
     },
 );
+
+const printModePlanningCenter = createPrintModePlanningCenterService({
+  firestore,
+  getCentralCalendarEvents: getCentralCalendarEvents_,
+  getCentralFeaturedEvent: getCentralFeaturedEvent_,
+  createRoomRulesComparisonHash: createRoomRulesComparisonHash_,
+  isValidCalendarEventsValue: isValidCalendarEventsValue_,
+  dateKey: dateKey_,
+  timezone: PCO_TIMEZONE,
+  cacheRefreshLeaseMs: PCO_CACHE_REFRESH_LEASE_MS,
+  cacheWaitMs: PCO_CACHE_WAIT_MS,
+});
+
+export const bulletinMode = createPrintModeFunction({
+  admin,
+  firestore,
+  planningCenter: printModePlanningCenter,
+  planningCenterSecrets: PLANNING_CENTER_SECRETS,
+  calendarSigningKey: CENTRAL_CALENDAR_SIGNING_KEY,
+  allowedAdminEmailDomains: CENTRAL_ALLOWED_ADMIN_EMAIL_DOMAINS,
+  allowedAdminEmails: CENTRAL_ALLOWED_ADMIN_EMAILS,
+  getFirestoreRoomRulesOverride: getFirestoreRoomRulesOverride_,
+  getFirestoreCampaignsOverride: getFirestoreCampaignsOverride_,
+  getFirestoreServeNeedsOverride: getFirestoreServeNeedsOverride_,
+  getDefaultRoomRules: getDefaultCentralRoomRules_,
+});
 
 export const publishPreviewContent = onRequest(
     {
@@ -3276,6 +3386,7 @@ function toCentralCampaignFromFirestoreDoc_(snapshot) {
   const ongoing = getNormalizedCampaignOngoingValue_(data);
 
   return {
+    id: String(snapshot && snapshot.id || "").trim(),
     active: isTruthyValue_(data.active) ? "TRUE" : "FALSE",
     title: String(data.title || "").trim(),
     description: String(data.description || "").trim(),
@@ -3748,42 +3859,135 @@ async function fetchPcoJson_(url) {
       credentials.appId + ":" + credentials.secret,
   ).toString("base64");
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: "Basic " + token,
-      Accept: "application/json",
+  return fetchJsonWithRetry(url, {
+    waitForRequestStart: waitForPcoRequestStart,
+    maxAttempts: 3,
+    maxRetryAfterMs: 20000,
+    requestOptions: {
+      method: "GET",
+      headers: {
+        Authorization: "Basic " + token,
+        Accept: "application/json",
+      },
+    },
+  });
+}
+
+async function fetchPcoCollectionJson_(url) {
+  const combined = {
+    data: [],
+    included: [],
+  };
+  const seenUrls = new Set();
+  let nextUrl = String(url || "").trim();
+  let pageCount = 0;
+
+  while (nextUrl && !seenUrls.has(nextUrl) && pageCount < 25) {
+    seenUrls.add(nextUrl);
+    const page = await fetchPcoJson_(nextUrl);
+    combined.data.push(...(Array.isArray(page.data) ? page.data : []));
+    combined.included.push(
+        ...(Array.isArray(page.included) ? page.included : []),
+    );
+    nextUrl = String(page.links && page.links.next || "").trim();
+    if (nextUrl && !/^https?:\/\//i.test(nextUrl)) {
+      nextUrl = new URL(
+          nextUrl,
+          "https://api.planningcenteronline.com",
+      ).toString();
+    }
+    pageCount += 1;
+  }
+
+  return combined;
+}
+
+async function getCentralCalendarEvents_(roomRules, lookaheadDays, options = {}) {
+  const normalizedLookaheadDays = normalizeCalendarLookaheadDays_(
+      lookaheadDays,
+  );
+  const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
+  const roomRulesHash = createRoomRulesComparisonHash_(normalizedRoomRules);
+  const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
+  const cacheId = [
+    "v1",
+    normalizedLookaheadDays,
+    roomRulesHash.slice(0, 32),
+  ].join("-");
+  const docRef = firestore.doc(
+      "centralCache/planningCenter/calendar/" + cacheId,
+  );
+  const cachedResult = await getSharedCachedValue({
+    firestore,
+    docRef,
+    ttlMs: PCO_CALENDAR_CACHE_TTL_MS,
+    leaseMs: PCO_CACHE_REFRESH_LEASE_MS,
+    waitForRefreshMs: PCO_CACHE_WAIT_MS,
+    validateValue: isValidCalendarEventsValue_,
+    isEntryCurrent: (entry) => {
+      return entry.dateKey === todayKey &&
+        Number(entry.lookaheadDays) === normalizedLookaheadDays &&
+        entry.roomRulesHash === roomRulesHash;
+    },
+    metadata: {
+      cacheType: "planning-center-calendar",
+      dateKey: todayKey,
+      lookaheadDays: normalizedLookaheadDays,
+      roomRulesHash,
+    },
+    forceRefresh: options.forceRefresh === true,
+    loadFresh: () => fetchCentralCalendarEvents_(
+        normalizedRoomRules,
+        normalizedLookaheadDays,
+    ),
+    onError: (phase, error) => {
+      console.warn(
+          "Planning Center calendar cache " + phase + " failed.",
+          error,
+      );
     },
   });
 
-  const body = await response.text();
-
-  if (!response.ok) {
-    throw new Error("Planning Center API error " + response.status + ": " + body);
-  }
-
-  return JSON.parse(body);
+  return cachedResult.value;
 }
 
-async function getCentralCalendarEvents_(roomRules) {
+function normalizeCalendarLookaheadDays_(lookaheadDays) {
+  const parsed = Number(lookaheadDays);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return PCO_CALENDAR_LOOKAHEAD_DAYS;
+  }
+  return Math.min(90, Math.max(1, Math.floor(parsed)));
+}
+
+function isValidCalendarEventsValue_(value) {
+  return !!value &&
+    Array.isArray(value.today) &&
+    Array.isArray(value.upcoming);
+}
+
+async function fetchCentralCalendarEvents_(roomRules, lookaheadDays) {
   const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
   const twoWeeksFromNow = new Date();
   twoWeeksFromNow.setDate(
-      twoWeeksFromNow.getDate() + PCO_CALENDAR_LOOKAHEAD_DAYS,
+      twoWeeksFromNow.getDate() + lookaheadDays,
   );
   const endKey = dateKey_(twoWeeksFromNow, PCO_TIMEZONE);
+  const queryStartDate = new Date(todayKey + "T00:00:00Z");
+  const queryEndDate = new Date(endKey + "T23:59:59Z");
+  queryStartDate.setUTCDate(queryStartDate.getUTCDate() - 1);
+  queryEndDate.setUTCDate(queryEndDate.getUTCDate() + 1);
 
   const url =
     "https://api.planningcenteronline.com/calendar/v2/event_instances" +
     "?include=tags,event" +
     "&order=starts_at" +
     "&where[starts_at][gte]=" +
-    encodeURIComponent(todayKey + "T00:00:00Z") +
+    encodeURIComponent(queryStartDate.toISOString()) +
     "&where[starts_at][lte]=" +
-    encodeURIComponent(endKey + "T23:59:59Z") +
+    encodeURIComponent(queryEndDate.toISOString()) +
     "&per_page=100";
 
-  const data = await fetchPcoJson_(url);
+  const data = await fetchPcoCollectionJson_(url);
   const tagMap = {};
   const eventMap = {};
 
@@ -3812,7 +4016,8 @@ async function getCentralCalendarEvents_(roomRules) {
 
         const startsDate = new Date(startsAt);
         if (Number.isNaN(startsDate.getTime())) return null;
-        if (dateKey_(startsDate, PCO_TIMEZONE) < todayKey) return null;
+        const startsDateKey = dateKey_(startsDate, PCO_TIMEZONE);
+        if (startsDateKey < todayKey || startsDateKey > endKey) return null;
 
         const eventRef = instance.relationships &&
           instance.relationships.event &&
@@ -4058,6 +4263,7 @@ async function buildCentralCalendarItem_(
   ) ? String(eventAttrs.registration_url).trim() : "";
 
   return {
+    id: String(instance.id || "").trim(),
     active: "TRUE",
     featured: featured ? "TRUE" : "FALSE",
     title: title,
@@ -4438,6 +4644,47 @@ function buildCalendarFilename_(title) {
 }
 
 async function getEventInstanceRooms_(instanceId, roomRules) {
+  const normalizedInstanceId = String(instanceId || "").trim();
+  if (!normalizedInstanceId) return [];
+
+  const cacheId = "v1-" + crypto.createHash("sha256")
+      .update(normalizedInstanceId)
+      .digest("hex")
+      .slice(0, 40);
+  const docRef = firestore.doc(
+      "centralCache/planningCenter/rooms/" + cacheId,
+  );
+  const cachedResult = await getSharedCachedValue({
+    firestore,
+    docRef,
+    ttlMs: PCO_ROOM_CACHE_TTL_MS,
+    leaseMs: PCO_CACHE_REFRESH_LEASE_MS,
+    waitForRefreshMs: PCO_CACHE_WAIT_MS,
+    validateValue: (value) => {
+      return Array.isArray(value) && value.every((room) => {
+        return typeof room === "string";
+      });
+    },
+    metadata: {
+      cacheType: "planning-center-event-rooms",
+      instanceId: normalizedInstanceId,
+    },
+    loadFresh: () => fetchEventInstanceRooms_(normalizedInstanceId),
+    onError: (phase, error) => {
+      console.warn(
+          "Planning Center room cache " + phase + " failed.",
+          error,
+      );
+    },
+  });
+
+  return applyRoomRules_(
+      cachedResult.value,
+      Array.isArray(roomRules) ? roomRules : [],
+  );
+}
+
+async function fetchEventInstanceRooms_(instanceId) {
   const url =
     "https://api.planningcenteronline.com/calendar/v2/event_instances/" +
     encodeURIComponent(instanceId) +
@@ -4470,7 +4717,7 @@ async function getEventInstanceRooms_(instanceId, roomRules) {
       })
       .filter(Boolean);
 
-  return applyRoomRules_(rawRooms, roomRules);
+  return rawRooms;
 }
 
 /**
@@ -4771,30 +5018,6 @@ function getExplicitSundayModeOverrideValue_(source) {
   return "";
 }
 
-function normalizeSundayModeOverrideValue_(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-
-  if (
-    normalized === "enabled" ||
-    normalized === "on" ||
-    normalized === "force_on" ||
-    normalized === "true"
-  ) {
-    return "enabled";
-  }
-
-  if (
-    normalized === "disabled" ||
-    normalized === "off" ||
-    normalized === "force_off" ||
-    normalized === "false"
-  ) {
-    return "disabled";
-  }
-
-  return "auto";
-}
-
 function isSundayModeWindow_(date, timezone, sundaySettings) {
   const dayName = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -4913,6 +5136,7 @@ function getLocalMinutes_(date, timezone) {
 
 function toTodayItem_(item) {
   return {
+    id: item.id,
     active: "TRUE",
     title: item.title,
     date: item.date,
@@ -4938,6 +5162,7 @@ function toTodayItem_(item) {
 
 function toUpcomingItem_(item) {
   return {
+    id: item.id,
     active: "TRUE",
     featured: item.featured,
     title: item.title,
@@ -4981,20 +5206,6 @@ function isActive_(item) {
   return String((item && item.active) || "").toLowerCase() === "true";
 }
 
-function isTruthyValue_(value) {
-  if (typeof value === "boolean") return value;
-
-  const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "true" ||
-    normalized === "1" ||
-    normalized === "yes";
-}
-
-function normalizeSortValue_(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
 function dateKey_(date, timezone) {
   const parts = getTimeZoneParts_(date, timezone);
   return parts.year + "-" + parts.month + "-" + parts.day;
@@ -5019,59 +5230,6 @@ function getTimeZoneParts_(date, timezone) {
   }, {});
 }
 
-function formatDate_(date, timezone) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
-}
-
-function formatTime_(date, timezone) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date).replace(/\s/g, " ");
-}
-
-function formatTimeRange_(startsDate, endsAt, timezone) {
-  const start = formatTime_(startsDate, timezone);
-  if (!endsAt) return start;
-
-  const endDate = new Date(endsAt);
-  if (Number.isNaN(endDate.getTime())) return start;
-
-  return start + " - " + formatTime_(endDate, timezone);
-}
-
-function parsePlanningCenterServiceTypes_(value) {
-  return String(value || "")
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const parts = entry.split(":");
-        const serviceTypeId = String(parts[0] || "").trim();
-        const serviceLabel = parts.slice(1).join(":").trim();
-
-        if (!serviceTypeId || !serviceLabel) return null;
-
-        return {
-          serviceTypeId: serviceTypeId,
-          serviceLabel: serviceLabel,
-        };
-      })
-      .filter(Boolean);
-}
-
-function parsePositiveInt_(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function buildYouVersionBookLookup_() {
   const lookup = {};
 
@@ -5082,14 +5240,6 @@ function buildYouVersionBookLookup_() {
   });
 
   return lookup;
-}
-
-function normalizeYouVersionBookAlias_(value) {
-  return String(value || "")
-      .toLowerCase()
-      .replace(/[.]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
 }
 
 function parseYouVersionReference_(reference) {
@@ -5226,49 +5376,6 @@ function rankStringCandidates_(candidates, preferredPatterns) {
   return scoredCandidates[0].candidate;
 }
 
-function looksLikeHtml_(value) {
-  return /<(p|div|span|sup|br|em|strong)\b/i.test(String(value || ""));
-}
-
-function looksLikePassageText_(value) {
-  const text = String(value || "").trim();
-
-  if (text.length < 30) return false;
-  if (/^https?:\/\//i.test(text)) return false;
-
-  return /[A-Za-z]/.test(text) && /\s/.test(text);
-}
-
-function sanitizePassageHtml_(html) {
-  return String(html || "")
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/\son\w+="[^"]*"/gi, "")
-      .replace(/\son\w+='[^']*'/gi, "")
-      .replace(/javascript:/gi, "");
-}
-
-function htmlToPlainText_(html) {
-  return normalizePassageText_(
-      String(html || "")
-          .replace(/<br\s*\/?>/gi, "\n")
-          .replace(/<\/p>/gi, "\n\n")
-          .replace(/<\/div>/gi, "\n")
-          .replace(/<[^>]*>/g, "")
-          .replace(/&nbsp;/g, " ")
-          .replace(/&amp;/g, "&")
-          .replace(/&quot;/g, "\"")
-          .replace(/&#39;/g, "'"),
-  );
-}
-
-function normalizePassageText_(text) {
-  return String(text || "")
-      .replace(/\r\n/g, "\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-}
-
 function extractBestMessage_(payload) {
   const candidates = [];
   collectStringCandidates_(payload, "", candidates, 0);
@@ -5287,42 +5394,6 @@ function extractBestMessage_(payload) {
   );
 
   return preferredMessage ? String(preferredMessage.value).trim() : "";
-}
-
-function getBearerToken_(authorizationHeader) {
-  const headerValue = String(authorizationHeader || "").trim();
-  if (!headerValue.toLowerCase().startsWith("bearer ")) {
-    return "";
-  }
-
-  return headerValue.slice(7).trim();
-}
-
-function normalizePreviewPublishSection_(value) {
-  const section = String(value || "").trim();
-
-  if (
-    section === "hubSettings" ||
-    section === "hubSunday" ||
-    section === "settingsSunday" ||
-    section === "integrations" ||
-    section === "thisSunday" ||
-    section === "campaigns" ||
-    section === "nextSteps" ||
-    section === "serveNeeds" ||
-    section === "resources" ||
-    section === "roomRules" ||
-    section === "quickLinks" ||
-    section === "statusBanner"
-  ) {
-    return section;
-  }
-
-  return "";
-}
-
-function normalizePreviewPublishOperation_(value) {
-  return String(value || "").trim() === "hide" ? "hide" : "publish";
 }
 
 async function verifyPreviewPublisherAccess_(decodedToken, section) {
@@ -6189,7 +6260,11 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
       {};
 
   MANAGED_ADMIN_PAGE_KEYS.forEach((key) => {
-    const value = key === "integrations" &&
+    const value = (
+      key === "integrations" ||
+      key === "bulletin" ||
+      key === "studio"
+    ) &&
       !Object.prototype.hasOwnProperty.call(source, key) ?
       source.settings :
       source[key];
@@ -8626,15 +8701,6 @@ function normalizeCampaignComparisonItem_(item, index) {
   };
 }
 
-function sortCampaignsComparisonItems_(a, b) {
-  const sortDelta = Number(a && a.sort || 999) - Number(b && b.sort || 999);
-  if (sortDelta !== 0) {
-    return sortDelta;
-  }
-
-  return String(a && a.id || "").localeCompare(String(b && b.id || ""));
-}
-
 function summarizeCampaignsChangeSet_(currentItems, proposedItems) {
   const currentById = new Map();
   const proposedById = new Map();
@@ -8794,20 +8860,6 @@ function applyCampaignsChangeSet_(baselineItems, changeSet, currentItems) {
   return Array.from(mergedById.values()).sort(sortCampaignsComparisonItems_);
 }
 
-function mapCampaignsComparisonItemsById_(items) {
-  const itemsById = new Map();
-
-  (Array.isArray(items) ? items : []).forEach((item) => {
-    if (!item || !item.id) {
-      return;
-    }
-
-    itemsById.set(item.id, item);
-  });
-
-  return itemsById;
-}
-
 function areCampaignsComparisonItemsEqual_(currentItem, proposedItem) {
   return String(currentItem && currentItem.title || "") ===
     String(proposedItem && proposedItem.title || "") &&
@@ -8827,15 +8879,6 @@ function areCampaignsComparisonItemsEqual_(currentItem, proposedItem) {
       Number(proposedItem && proposedItem.sort || 50) &&
     Boolean(currentItem && currentItem.active) ===
       Boolean(proposedItem && proposedItem.active);
-}
-
-function getCampaignConflictLabel_(proposedItem, currentItem, fallbackId) {
-  return trimFirestoreStringValue_(
-      proposedItem && proposedItem.title ||
-      currentItem && currentItem.title ||
-      fallbackId ||
-      "this campaign",
-  ) || "this campaign";
 }
 
 function buildCampaignsChangeRequestSummary_(breakdown) {
@@ -9320,15 +9363,6 @@ function normalizeServeNeedComparisonItem_(item, index) {
   };
 }
 
-function sortServeNeedsComparisonItems_(a, b) {
-  const sortDelta = Number(a && a.sort || 999) - Number(b && b.sort || 999);
-  if (sortDelta !== 0) {
-    return sortDelta;
-  }
-
-  return String(a && a.id || "").localeCompare(String(b && b.id || ""));
-}
-
 function summarizeServeNeedsChangeSet_(currentItems, proposedItems) {
   const currentById = new Map();
   const proposedById = new Map();
@@ -9486,48 +9520,6 @@ function applyServeNeedsChangeSet_(baselineItems, changeSet, currentItems) {
   });
 
   return Array.from(mergedById.values()).sort(sortServeNeedsComparisonItems_);
-}
-
-function mapServeNeedsComparisonItemsById_(items) {
-  const itemsById = new Map();
-
-  (Array.isArray(items) ? items : []).forEach((item) => {
-    if (!item || !item.id) {
-      return;
-    }
-
-    itemsById.set(item.id, item);
-  });
-
-  return itemsById;
-}
-
-function areServeNeedsComparisonItemsEqual_(currentItem, proposedItem) {
-  return String(currentItem && currentItem.need || "") ===
-    String(proposedItem && proposedItem.need || "") &&
-    String(currentItem && currentItem.ministry || "") ===
-      String(proposedItem && proposedItem.ministry || "") &&
-    String(currentItem && currentItem.priority || "normal") ===
-      String(proposedItem && proposedItem.priority || "normal") &&
-    String(currentItem && currentItem.description || "") ===
-      String(proposedItem && proposedItem.description || "") &&
-    String(currentItem && currentItem.button_text || "") ===
-      String(proposedItem && proposedItem.button_text || "") &&
-    String(currentItem && currentItem.contact_email || "") ===
-      String(proposedItem && proposedItem.contact_email || "") &&
-    Number(currentItem && currentItem.sort || 50) ===
-      Number(proposedItem && proposedItem.sort || 50) &&
-    Boolean(currentItem && currentItem.active) ===
-      Boolean(proposedItem && proposedItem.active);
-}
-
-function getServeNeedConflictLabel_(proposedItem, currentItem, fallbackId) {
-  return trimFirestoreStringValue_(
-      proposedItem && proposedItem.need ||
-      currentItem && currentItem.need ||
-      fallbackId ||
-      "this serve need",
-  ) || "this serve need";
 }
 
 function buildServeNeedsChangeRequestSummary_(breakdown) {
@@ -9862,20 +9854,6 @@ function applyResourcesChangeSet_(baselineItems, changeSet, currentItems) {
   return Array.from(mergedById.values()).sort(sortResourcesComparisonItems_);
 }
 
-function mapResourcesComparisonItemsById_(items) {
-  const itemsById = new Map();
-
-  (Array.isArray(items) ? items : []).forEach((item) => {
-    if (!item || !item.id) {
-      return;
-    }
-
-    itemsById.set(item.id, item);
-  });
-
-  return itemsById;
-}
-
 function mergeResourcesItemChange_(id, baselineItem, proposedItem, currentItem) {
   if (!baselineItem) {
     if (proposedItem && currentItem) {
@@ -9954,15 +9932,6 @@ function areResourcesComparisonItemsEqual_(currentItem, proposedItem) {
       Number(proposedItem && proposedItem.sort || 50) &&
     Boolean(currentItem && currentItem.active) ===
       Boolean(proposedItem && proposedItem.active);
-}
-
-function getResourceConflictLabel_(proposedItem, currentItem, fallbackId) {
-  return trimFirestoreStringValue_(
-      proposedItem && proposedItem.title ||
-      currentItem && currentItem.title ||
-      fallbackId ||
-      "this resource",
-  ) || "this resource";
 }
 
 function buildResourcesChangeRequestSummary_(breakdown) {
@@ -11320,77 +11289,8 @@ function formatThisSundayDisplayDate_(value) {
   }).format(parsedDate);
 }
 
-function trimFirestoreStringValue_(value) {
-  return String(value || "").trim();
-}
-
-function normalizeOptionalBooleanConfigValue_(value) {
-  if (value === true || value === false) {
-    return value;
-  }
-
-  const normalized = trimFirestoreStringValue_(value).toLowerCase();
-
-  if (!normalized) {
-    return null;
-  }
-
-  if (
-    normalized === "true" ||
-    normalized === "1" ||
-    normalized === "yes" ||
-    normalized === "on"
-  ) {
-    return true;
-  }
-
-  if (
-    normalized === "false" ||
-    normalized === "0" ||
-    normalized === "no" ||
-    normalized === "off"
-  ) {
-    return false;
-  }
-
-  return null;
-}
-
-function getOptionalBooleanConfigValue_(source, ...keys) {
-  if (!source || typeof source !== "object") {
-    return null;
-  }
-
-  for (const key of keys) {
-    if (!Object.prototype.hasOwnProperty.call(source, key)) {
-      continue;
-    }
-
-    return normalizeOptionalBooleanConfigValue_(source[key]);
-  }
-
-  return null;
-}
-
 function trimEnvString_(value) {
   return String(value || "").trim();
-}
-
-function getFirestoreTimestampMillis_(value) {
-  if (value && typeof value.toMillis === "function") {
-    return value.toMillis();
-  }
-
-  if (value && typeof value.toDate === "function") {
-    return value.toDate().getTime();
-  }
-
-  if (value instanceof Date) {
-    return value.getTime();
-  }
-
-  const parsedDate = new Date(value);
-  return Number.isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime();
 }
 
 function serializeAdminTimestampForJson_(value) {
@@ -11407,24 +11307,6 @@ function hashCentralOpaqueToken_(value) {
       .createHash("sha256")
       .update(String(value || ""))
       .digest("hex");
-}
-
-function looksLikeEmailAddress_(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-      trimFirestoreStringValue_(value).toLowerCase(),
-  );
-}
-
-function hasQuickLinksDraftBeenInitialized_(draftSnapshot, draftMetaSnapshot) {
-  if (draftSnapshot && !draftSnapshot.empty) {
-    return true;
-  }
-
-  if (!draftMetaSnapshot || !draftMetaSnapshot.exists) {
-    return false;
-  }
-
-  return isTruthyValue_(draftMetaSnapshot.get("initialized"));
 }
 
 async function writePreviewPublishAuditLog_(
@@ -11565,31 +11447,6 @@ function buildFirstAdminUserDoc_(decodedToken) {
   };
 }
 
-function buildFirstAdminPageAccess_() {
-  return {
-    hub: "admin",
-    settings: "admin",
-    integrations: "admin",
-    wayfinder: "admin",
-    sundaySettings: "admin",
-    thisSunday: "admin",
-    whatsNew: "admin",
-    statusBanner: "admin",
-    today: "admin",
-    events: "admin",
-    setlist: "admin",
-    campaigns: "admin",
-    nextSteps: "admin",
-    serveNeeds: "admin",
-    resources: "admin",
-    quickLinks: "admin",
-    roomRules: "admin",
-    users: "admin",
-    roles: "admin",
-    changeRequests: "admin",
-  };
-}
-
 function getCentralAdminUserDocPath_(uid) {
   return CENTRAL_ADMIN_USERS_COLLECTION_PATH + "/" + String(uid || "").trim();
 }
@@ -11613,17 +11470,4 @@ function isAllowedCentralAdminEmail_(email) {
   return CENTRAL_ALLOWED_ADMIN_EMAIL_DOMAINS.some((domain) => {
     return email.endsWith("@" + domain);
   });
-}
-
-function getFirstAdminBootstrapErrorMessage_(error) {
-  if (error && error.code === "bootstrap-closed") {
-    return [
-      "Automatic bootstrap is closed because an admin user already exists.",
-      "If you still need access, add your Firestore user document manually.",
-    ].join(" ");
-  }
-
-  return error && error.message ?
-    error.message :
-    "Unable to create the first admin user document.";
 }

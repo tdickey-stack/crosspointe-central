@@ -1,0 +1,402 @@
+import {toCanvas} from "html-to-image";
+import {jsPDF} from "jspdf";
+
+const EVENT_EXPORT_SIZES = {
+  square: {width: 2160, height: 2160, label: "1x1"},
+  portrait: {width: 2160, height: 2700, label: "4x5"},
+  screen: {width: 3840, height: 2160, label: "16x9"},
+};
+
+function safeFilename(value, fallback) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72);
+  return normalized || fallback;
+}
+
+async function waitForFonts() {
+  if (document.fonts && document.fonts.ready) {
+    await document.fonts.ready;
+  }
+}
+
+function nextLayoutFrame() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+function getLayoutSignature(elements) {
+  return elements
+    .map((element) => {
+      const bounds = element.getBoundingClientRect();
+      const checklistSections = Array.from(
+        element.querySelectorAll(".checklist-section"),
+      )
+        .map(
+          (section) =>
+            `${section.className}:${section.clientWidth}x${section.clientHeight}`,
+        )
+        .join(",");
+      return [
+        bounds.width,
+        bounds.height,
+        element.scrollWidth,
+        element.scrollHeight,
+        checklistSections,
+      ].join(":");
+    })
+    .join("|");
+}
+
+async function waitForStableLayout(elements, maxFrames = 8) {
+  let previousSignature = "";
+  let stableFrames = 0;
+
+  for (let frame = 0; frame < maxFrames; frame += 1) {
+    await nextLayoutFrame();
+    const signature = getLayoutSignature(elements);
+    if (signature === previousSignature) {
+      stableFrames += 1;
+      if (stableFrames >= 2) return;
+    } else {
+      previousSignature = signature;
+      stableFrames = 0;
+    }
+  }
+}
+
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("The rendered preview could not be loaded."));
+    image.src = dataUrl;
+  });
+}
+
+function highResolutionUnsplashUrl(value, width) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.hostname !== "images.unsplash.com") return "";
+    url.searchParams.set("w", String(Math.max(2160, width)));
+    url.searchParams.set("q", "90");
+    url.searchParams.set("fit", "max");
+    return url.toString();
+  } catch (error) {
+    return "";
+  }
+}
+
+async function useHighResolutionBackground(element, content, width) {
+  if (
+    !element ||
+    content?.backgroundImageSource !== "unsplash" ||
+    !content?.backgroundImage
+  ) {
+    return () => {};
+  }
+  const upgradedUrl = highResolutionUnsplashUrl(content.backgroundImage, width);
+  const backgroundElement =
+    element.querySelector(".event-background-media") || element;
+  const previousBackground = backgroundElement.style.backgroundImage;
+  if (!upgradedUrl || !previousBackground.includes(content.backgroundImage)) {
+    return () => {};
+  }
+  backgroundElement.style.backgroundImage = previousBackground.replace(
+    content.backgroundImage,
+    upgradedUrl,
+  );
+  try {
+    await loadImage(upgradedUrl);
+  } catch (error) {
+    backgroundElement.style.backgroundImage = previousBackground;
+    return () => {};
+  }
+  return () => {
+    backgroundElement.style.backgroundImage = previousBackground;
+  };
+}
+
+async function renderExactPng(element, width, height) {
+  if (!element) {
+    throw new Error("The Studio preview is not available for export.");
+  }
+
+  await waitForFonts();
+  const bounds = element.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) {
+    throw new Error("The Studio preview has no measurable export size.");
+  }
+
+  const renderedCanvas = await toCanvas(element, {
+    cacheBust: true,
+    includeQueryParams: true,
+    pixelRatio: Math.max(width / bounds.width, height / bounds.height),
+    skipAutoScale: true,
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", {alpha: false});
+  if (!context) {
+    throw new Error("This browser could not create the export canvas.");
+  }
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(renderedCanvas, 0, 0, width, height);
+  return canvas.toDataURL("image/png");
+}
+
+function downloadDataUrl(dataUrl, filename) {
+  const link = document.createElement("a");
+  link.download = filename;
+  link.href = dataUrl;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+async function prepareDirectoryImages(element, resolvePlanningCenterImage) {
+  const images = Array.from(
+    element?.querySelectorAll("img[data-studio-directory-image]") || [],
+  );
+  const restorers = [];
+  for (const image of images) {
+    const originalSource = image.getAttribute("src") || "";
+    if (
+      !originalSource ||
+      originalSource.startsWith("data:") ||
+      !originalSource.includes("groups-production.s3.amazonaws.com")
+    ) {
+      continue;
+    }
+    if (typeof resolvePlanningCenterImage !== "function") {
+      throw new Error(
+        "Studio could not securely prepare a Planning Center image for export.",
+      );
+    }
+    const resolvedSource = await resolvePlanningCenterImage(originalSource);
+    await loadImage(resolvedSource);
+    image.setAttribute("src", resolvedSource);
+    restorers.push(() => image.setAttribute("src", originalSource));
+    await nextLayoutFrame();
+    if (!image.complete || !image.naturalWidth) {
+      throw new Error("The Planning Center image could not be prepared for export.");
+    }
+  }
+  return () => restorers.reverse().forEach((restore) => restore());
+}
+
+export async function exportEventPng(project, element) {
+  const format = project?.content?.format || "square";
+  const size = EVENT_EXPORT_SIZES[format] || EVENT_EXPORT_SIZES.square;
+  const restoreBackground = await useHighResolutionBackground(
+    element,
+    project?.content,
+    size.width,
+  );
+  try {
+    const png = await renderExactPng(element, size.width, size.height);
+    const filename = `${safeFilename(project?.name, "event-promotion")}-${size.label}.png`;
+    downloadDataUrl(png, filename);
+    return {filename, width: size.width, height: size.height};
+  } finally {
+    restoreBackground();
+  }
+}
+
+export async function exportPolicyPdf(project, element) {
+  const png = await renderExactPng(element, 2040, 2640);
+  const filename = `${safeFilename(project?.name, "policy-document")}.pdf`;
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "in",
+    format: "letter",
+    compress: true,
+  });
+  pdf.addImage(png, "PNG", 0, 0, 8.5, 11, undefined, "FAST");
+  pdf.setProperties({
+    title: project?.content?.title || project?.name || "Central Studio Policy",
+    subject: "Exported from Central Studio",
+    creator: "CrossPointe Central Studio",
+  });
+  pdf.save(filename);
+  return {filename, width: 8.5, height: 11};
+}
+
+export async function exportDocumentPdf(
+  project,
+  elements,
+  {resolvePlanningCenterImage} = {},
+) {
+  const pageElements = Array.isArray(elements) ? elements : [];
+  if (
+    !pageElements.length ||
+    pageElements.some((element) => !element)
+  ) {
+    throw new Error(
+      "Every document page must finish rendering before Studio can export it.",
+    );
+  }
+
+  await waitForFonts();
+  await waitForStableLayout(pageElements);
+  const filename = `${safeFilename(project?.name, "studio-document")}.pdf`;
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "in",
+    format: "letter",
+    compress: true,
+  });
+
+  for (let index = 0; index < pageElements.length; index += 1) {
+    if (index > 0) pdf.addPage("letter", "portrait");
+    const restoreImages = await prepareDirectoryImages(
+      pageElements[index],
+      resolvePlanningCenterImage,
+    );
+    try {
+      const png = await renderExactPng(pageElements[index], 2040, 2640);
+      pdf.addImage(png, "PNG", 0, 0, 8.5, 11, undefined, "FAST");
+    } finally {
+      restoreImages();
+    }
+  }
+
+  pdf.setProperties({
+    title: project?.name || "Central Studio Document",
+    subject: "Multi-page document exported from Central Studio",
+    creator: "CrossPointe Central Studio",
+  });
+  pdf.save(filename);
+  return {
+    filename,
+    width: 8.5,
+    height: 11,
+    pages: pageElements.length,
+  };
+}
+
+function stylesheetLoad(documentTarget, href) {
+  return new Promise((resolve) => {
+    const link = documentTarget.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    link.onload = resolve;
+    link.onerror = resolve;
+    documentTarget.head.appendChild(link);
+  });
+}
+
+function waitForDocumentImages(documentTarget) {
+  return Promise.all(
+    Array.from(documentTarget.images).map((image) => {
+      if (image.complete && image.naturalWidth) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () =>
+          reject(new Error("A directory image could not be prepared for printing."));
+      });
+    }),
+  );
+}
+
+export async function openDocumentSystemPrint(
+  project,
+  container,
+  {resolvePlanningCenterImage} = {},
+) {
+  if (!container) {
+    throw new Error("The printable document pages are not available yet.");
+  }
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("Allow pop-ups for Central Studio to use System Print.");
+  }
+  const restoreImages = await prepareDirectoryImages(
+    container,
+    resolvePlanningCenterImage,
+  ).catch((error) => {
+    printWindow.close();
+    throw error;
+  });
+  try {
+    const printDocument = printWindow.document;
+    printDocument.open();
+    printDocument.write(
+      "<!doctype html><html><head><meta charset=\"utf-8\">" +
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+        "</head><body class=\"studio-system-print-window\"></body></html>",
+    );
+    printDocument.close();
+    printDocument.title = project?.name || "Central Studio Document";
+
+    const style = printDocument.createElement("style");
+    style.textContent = `
+      @page { size: letter; margin: 0; }
+      html, body {
+        width: 8.5in !important;
+        min-height: 11in !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+      }
+      [data-studio-document-print] {
+        position: static !important;
+        display: block !important;
+        width: 8.5in !important;
+        gap: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      [data-studio-document-print] > article {
+        width: 8.5in !important;
+        height: 11in !important;
+        margin: 0 !important;
+        break-after: page;
+        page-break-after: always;
+        box-shadow: none !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+      [data-studio-document-print] > article:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+    `;
+    printDocument.head.appendChild(style);
+
+    const stylesheetUrls = Array.from(
+      document.querySelectorAll('link[rel="stylesheet"]'),
+    ).map((link) => link.href);
+    const stylesheetReady = Promise.all(
+      stylesheetUrls.map((href) => stylesheetLoad(printDocument, href)),
+    );
+    const printablePages = container.cloneNode(true);
+    printablePages.removeAttribute("aria-hidden");
+    printDocument.body.appendChild(printablePages);
+
+    await stylesheetReady;
+    if (printDocument.fonts?.ready) await printDocument.fonts.ready;
+    await waitForDocumentImages(printDocument);
+    await new Promise((resolve) =>
+      printWindow.requestAnimationFrame(() =>
+        printWindow.requestAnimationFrame(resolve),
+      ),
+    );
+    printWindow.addEventListener("afterprint", () => printWindow.close(), {
+      once: true,
+    });
+    printWindow.focus();
+    printWindow.print();
+  } catch (error) {
+    printWindow.close();
+    throw error;
+  } finally {
+    restoreImages();
+  }
+}

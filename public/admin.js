@@ -175,6 +175,16 @@
       status: "Print workflow",
     },
     {
+      id: "studio",
+      label: "Studio",
+      route: "/studio",
+      pageAccessKey: "studio",
+      summary: "Create controlled policy documents and event graphics from approved CrossPointe templates.",
+      collectionPath: "",
+      status: "Creative workspace",
+      externalRoute: true,
+    },
+    {
       id: "sunday",
       label: "Sunday",
       route: "/admin/sunday",
@@ -318,6 +328,7 @@
     {type: "group", id: "hub"},
     {type: "page", id: "sunday"},
     {type: "page", id: "bulletin"},
+    {type: "page", id: "studio"},
     {type: "group", id: "settings"},
     {type: "page", id: "integrations"},
     {type: "page", id: "wayfinder"},
@@ -573,6 +584,7 @@
   var FIRST_ADMIN_PAGE_ACCESS = {
     hub: "admin",
     bulletin: "admin",
+    studio: "admin",
     settings: "admin",
     integrations: "admin",
     wayfinder: "admin",
@@ -624,6 +636,11 @@
         "nextSteps",
         "serveNeeds",
       ],
+    },
+    {
+      label: "Creative",
+      description: "Controlled document and graphic creation tools.",
+      keys: ["studio"],
     },
     {
       label: "Operations",
@@ -5372,8 +5389,10 @@
   function renderAdminSidebarPageLink_(page, currentPage) {
     var isActive = page.id === currentPage.id;
     return [
-      "<a href=\"", escapeAttr_(page.route), "\" data-admin-nav=\"",
-      escapeAttr_(page.id), "\" class=\"",
+      "<a href=\"", escapeAttr_(page.route), "\"",
+      page.externalRoute ? "" : " data-admin-nav=\"" +
+        escapeAttr_(page.id) + "\"",
+      " class=\"",
       isActive ? "is-active" : "", "\"",
       isActive ? " aria-current=\"page\"" : "", ">",
       "<span>", escapeHtml_(page.navLabel || page.label), "</span>",
@@ -6098,7 +6117,7 @@
     var actionLabel = page.id === "change-requests" &&
       adminState.changeRequestsPendingCount > 0 ?
       "Review Requests" :
-      "Open Page";
+      page.externalRoute ? "Launch Studio" : "Open Page";
 
     return [
       "<article class=\"central-admin-card central-admin-overview-card\">",
@@ -6111,11 +6130,13 @@
       "</div>",
       "<p>", escapeHtml_(getAdminPageShortSummary_(page)), "</p>",
       "<div class=\"central-admin-action-row\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-nav=\"",
-      escapeAttr_(page.id),
-      "\">",
+      page.externalRoute ?
+        "<a class=\"central-admin-link-button is-secondary\" href=\"" +
+          escapeAttr_(page.route) + "\">" :
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-nav=\"" +
+          escapeAttr_(page.id) + "\">",
       escapeHtml_(actionLabel),
-      "</button>",
+      page.externalRoute ? "</a>" : "</button>",
       "</div>",
       "</article>",
     ].join("");
@@ -6132,6 +6153,10 @@
 
     if (page.id === "bulletin") {
       return "A guided Sunday print workflow with a live preview.";
+    }
+
+    if (page.id === "studio") {
+      return "Controlled policy documents and event graphics.";
     }
 
     if (page.id === "quick-links") {
@@ -22973,6 +22998,7 @@
     return [
       {key: "hub", label: "Hub"},
       {key: "bulletin", label: "Print Mode"},
+      {key: "studio", label: "Studio"},
       {key: "settings", label: "Settings"},
       {key: "integrations", label: "Integrations"},
       {key: "wayfinder", label: "Wayfinder"},
@@ -23053,6 +23079,7 @@
 
     if (pageAccessKey === "hub" ||
       pageAccessKey === "bulletin" ||
+      pageAccessKey === "studio" ||
       pageAccessKey === "integrations" ||
       pageAccessKey === "resources" ||
       pageAccessKey === "nextSteps" ||
@@ -23085,6 +23112,12 @@
 
     if (!Object.prototype.hasOwnProperty.call(source, "bulletin")) {
       nextPageAccess.bulletin = normalizeAdminPermissionValue_(
+          source.settings,
+      );
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(source, "studio")) {
+      nextPageAccess.studio = normalizeAdminPermissionValue_(
           source.settings,
       );
     }
@@ -24243,7 +24276,7 @@
     }
 
     if (pageAccessKey === "hub" || pageAccessKey === "integrations" ||
-      pageAccessKey === "bulletin") {
+      pageAccessKey === "bulletin" || pageAccessKey === "studio") {
       return normalizeAdminPermissionValue_(pageAccess.settings);
     }
 

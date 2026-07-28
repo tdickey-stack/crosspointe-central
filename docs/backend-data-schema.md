@@ -350,6 +350,7 @@ Request body:
   "active": true,
   "pageAccess": {
     "hub": "edit",
+    "studio": "edit",
     "settings": "view",
     "users": "none"
   }
@@ -381,7 +382,9 @@ updatedAt
 ```
 
 Valid `pageAccess` values are `none`, `view`, `propose`, `edit`, `approve`, and
-`admin`.
+`admin`. Studio uses the `studio` page key. Existing records without that key
+temporarily inherit their `settings` access while the new permission is rolled
+out.
 
 ## Serve Needs Interest Shape
 
@@ -457,3 +460,29 @@ durable history, not the `changeRequests` collection.
 See `firestore.rules` for the exact rule expressions and
 `docs/admin-firestore-bootstrap.md` for first-admin setup and editor-specific
 examples.
+## Central Studio
+
+Central Studio keeps creative content separate from account identity:
+
+- `centralStudioProjects/{projectId}` stores one user-owned project and contains
+  no user profile PII. Event graphics continue to use the strict
+  `schemaVersion: 1` content schema. Multi-page documents use
+  `schemaVersion: 2`, keep their ordered page IDs and page-number preference on
+  the project root, and store each page under
+  `centralStudioProjects/{projectId}/pages/{pageId}`.
+- Document page records use a strict `schemaVersion: 1` page schema. A page can
+  be a One Pager, Checklist, or Branded Content Page. The project root and its
+  page changes are written atomically so clients cannot create an unlisted
+  page or leave a deleted page in the active page order.
+- `centralStudioMemberships/{uid_projectId}` grants one signed-in Central user
+  edit access to a shared project. Only the Studio backend writes membership
+  records.
+- `centralStudioShares/{sha256Token}` stores a 30-day, server-only share grant.
+  The raw token appears only in the share URL and is never stored.
+- `studio-projects/{projectId}/{assetId}` in Firebase Storage contains uploaded
+  JPG, PNG, or WebP backgrounds smaller than 8 MiB.
+
+Owned projects are queried by `ownerUid`. Shared projects are discovered by a
+membership query on `memberUid`, followed by exact project document reads.
+Unsplash images remain hosted by Unsplash and store attribution fields with
+the project.

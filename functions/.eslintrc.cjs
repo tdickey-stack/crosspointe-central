@@ -21,6 +21,7 @@ module.exports = {
       files: [
         "print-mode/**/*.js",
         "wayfinder/**/*.js",
+        "helpers/**/*.js",
         "scripts/wayfinder-bundles.js",
         "studio/**/*.js",
         "scripts/generate-studio-image.mjs",

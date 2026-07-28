@@ -13,7 +13,6 @@ import {
   getOptionalBooleanConfigValue_,
   getResourceConflictLabel_,
   getServeNeedConflictLabel_,
-  hasQuickLinksDraftBeenInitialized_,
   htmlToPlainText_,
   isTruthyValue_,
   looksLikeEmailAddress_,
@@ -34,8 +33,8 @@ import {
   sanitizePassageHtml_,
   sortCampaignsComparisonItems_,
   sortServeNeedsComparisonItems_,
-  trimFirestoreStringValue_
-} from './helpers/helpers.js';
+  trimFirestoreStringValue_,
+} from "./helpers/helpers.js";
 
 import admin from "firebase-admin";
 import {setGlobalOptions} from "firebase-functions/v2";

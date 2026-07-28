@@ -192,6 +192,73 @@ function contentPagePayload() {
   };
 }
 
+function signupSheetPagePayload() {
+  return {
+    schemaVersion: 1,
+    templateId: "document-signup-sheet",
+    content: {
+      eyebrow: "CROSSPOINTE CREATIVE | SIGN-UP SHEET",
+      audience: "MINISTRY TEAMS",
+      documentNumber: "SIGN-UP 01",
+      title: "Serve Team Sign-Up",
+      subtitle: "Add your name and contact information below.",
+      instructionsLabel: "HOW TO USE THIS SHEET",
+      instructions: "Please print clearly.",
+      signupCount: 12,
+      columnOneLabel: "NAME",
+      columnTwoLabel: "EMAIL OR PHONE",
+      columnThreeLabel: "NOTES",
+      showNumbers: true,
+      footerNote: "Return completed sheets to the ministry leader.",
+      footerReference: "CROSSPOINTE CREATIVE",
+      accent: "red",
+    },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function directoryCardPayload(
+  cardId = "manual-card",
+  projectId = "document-a",
+) {
+  return {
+    id: cardId,
+    name: "Young Adults",
+    subtitle: "Tuesdays at 7:00 PM",
+    details: "Community for young adults.",
+    imageUrl:
+      "https://firebasestorage.googleapis.com/v0/b/example/o/group.jpg",
+    imageStoragePath:
+      `studio-projects/${projectId}/directory-group.jpg`,
+    sourceType: "manual",
+    sourceId: "",
+    publicUrl: "",
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function directoryPagePayload(cardOrder = []) {
+  return {
+    schemaVersion: 1,
+    templateId: "document-directory",
+    content: {
+      eyebrow: "CROSSPOINTE CREATIVE | DIRECTORY",
+      audience: "FIND YOUR PLACE",
+      documentNumber: "DIR 01",
+      title: "Pointe Groups Directory",
+      subtitle: "Find a place to connect and grow.",
+      cardOrder,
+      footerNote: "Find current details at central.crosspointe.tv.",
+      footerReference: "CROSSPOINTE CREATIVE",
+      accent: "red",
+    },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
 async function createDocumentProject(db, projectId = "document-a") {
   const batch = db.batch();
   batch.set(
@@ -255,6 +322,13 @@ test("owner can create, read, update, and delete a strictly valid project", asyn
   await assertSucceeds(reference.delete());
 });
 
+test("project IDs reject characters that could alter storage path matching", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  await assertFails(
+    db.doc("centralStudioProjects/project.*").set(projectPayload()),
+  );
+});
+
 test("owner can create and edit a multi-page document atomically", async () => {
   const db = environment.authenticatedContext("owner").firestore();
   await assertSucceeds(createDocumentProject(db));
@@ -266,12 +340,26 @@ test("owner can create and edit a multi-page document atomically", async () => {
 
   const addPageBatch = db.batch();
   addPageBatch.update(root, {
-    pageOrder: ["page-one", "checklist-one", "content-one"],
+    pageOrder: [
+      "page-one",
+      "checklist-one",
+      "signup-one",
+      "directory-one",
+      "content-one",
+    ],
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
   addPageBatch.set(
     db.doc("centralStudioProjects/document-a/pages/checklist-one"),
     checklistPagePayload(),
+  );
+  addPageBatch.set(
+    db.doc("centralStudioProjects/document-a/pages/signup-one"),
+    signupSheetPagePayload(),
+  );
+  addPageBatch.set(
+    db.doc("centralStudioProjects/document-a/pages/directory-one"),
+    directoryPagePayload(),
   );
   addPageBatch.set(
     db.doc("centralStudioProjects/document-a/pages/content-one"),
@@ -301,7 +389,7 @@ test("owner can create and edit a multi-page document atomically", async () => {
 
   const removePageBatch = db.batch();
   removePageBatch.update(root, {
-    pageOrder: ["page-one", "content-one"],
+    pageOrder: ["page-one", "signup-one", "directory-one", "content-one"],
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
   removePageBatch.delete(
@@ -350,6 +438,69 @@ test("document pages reject orphan writes and malformed content", async () => {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
+
+  const invalidSignup = signupSheetPagePayload();
+  invalidSignup.content.signupCount = 25;
+  const invalidSignupBatch = db.batch();
+  invalidSignupBatch.update(db.doc("centralStudioProjects/document-a"), {
+    pageOrder: ["page-one", "invalid-signup"],
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  invalidSignupBatch.set(
+    db.doc("centralStudioProjects/document-a/pages/invalid-signup"),
+    invalidSignup,
+  );
+  await assertFails(invalidSignupBatch.commit());
+
+  const invalidDirectory = directoryPagePayload(["unsafe-card"]);
+  const invalidDirectoryBatch = db.batch();
+  invalidDirectoryBatch.update(db.doc("centralStudioProjects/document-a"), {
+    pageOrder: ["page-one", "invalid-directory"],
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  invalidDirectoryBatch.set(
+    db.doc("centralStudioProjects/document-a/pages/invalid-directory"),
+    invalidDirectory,
+  );
+  await assertSucceeds(invalidDirectoryBatch.commit());
+  await assertFails(
+    db
+      .doc(
+        "centralStudioProjects/document-a/pages/invalid-directory/cards/unsafe-card",
+      )
+      .set(directoryCardPayload("unsafe-card", "someone-else")),
+  );
+
+});
+
+test("a full eight-card directory stays within the rules budget", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  await assertSucceeds(createDocumentProject(db));
+  const cardIds = Array.from(
+    {length: 8},
+    (_, index) => `directory-card-${index + 1}`,
+  );
+  const fullDirectory = directoryPagePayload(cardIds);
+  await assertSucceeds(
+    db.doc("centralStudioProjects/document-a").update({
+    pageOrder: ["page-one", "full-directory"],
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    db
+      .doc("centralStudioProjects/document-a/pages/full-directory")
+      .set(fullDirectory),
+  );
+  for (const cardId of cardIds) {
+    await assertSucceeds(
+      db
+        .doc(
+          `centralStudioProjects/document-a/pages/full-directory/cards/${cardId}`,
+        )
+        .set(directoryCardPayload(cardId)),
+    );
+  }
 });
 
 test("a legacy policy can migrate to a document project in one batch", async () => {

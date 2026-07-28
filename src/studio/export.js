@@ -1,4 +1,4 @@
-import {toPng} from "html-to-image";
+import {toCanvas} from "html-to-image";
 import {jsPDF} from "jspdf";
 
 const EVENT_EXPORT_SIZES = {
@@ -132,13 +132,12 @@ async function renderExactPng(element, width, height) {
     throw new Error("The Studio preview has no measurable export size.");
   }
 
-  const renderedDataUrl = await toPng(element, {
+  const renderedCanvas = await toCanvas(element, {
     cacheBust: true,
     includeQueryParams: true,
     pixelRatio: Math.max(width / bounds.width, height / bounds.height),
     skipAutoScale: true,
   });
-  const renderedImage = await loadImage(renderedDataUrl);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -148,7 +147,7 @@ async function renderExactPng(element, width, height) {
   }
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(renderedImage, 0, 0, width, height);
+  context.drawImage(renderedCanvas, 0, 0, width, height);
   return canvas.toDataURL("image/png");
 }
 
@@ -159,6 +158,37 @@ function downloadDataUrl(dataUrl, filename) {
   document.body.appendChild(link);
   link.click();
   link.remove();
+}
+
+async function prepareDirectoryImages(element, resolvePlanningCenterImage) {
+  const images = Array.from(
+    element?.querySelectorAll("img[data-studio-directory-image]") || [],
+  );
+  const restorers = [];
+  for (const image of images) {
+    const originalSource = image.getAttribute("src") || "";
+    if (
+      !originalSource ||
+      originalSource.startsWith("data:") ||
+      !originalSource.includes("groups-production.s3.amazonaws.com")
+    ) {
+      continue;
+    }
+    if (typeof resolvePlanningCenterImage !== "function") {
+      throw new Error(
+        "Studio could not securely prepare a Planning Center image for export.",
+      );
+    }
+    const resolvedSource = await resolvePlanningCenterImage(originalSource);
+    await loadImage(resolvedSource);
+    image.setAttribute("src", resolvedSource);
+    restorers.push(() => image.setAttribute("src", originalSource));
+    await nextLayoutFrame();
+    if (!image.complete || !image.naturalWidth) {
+      throw new Error("The Planning Center image could not be prepared for export.");
+    }
+  }
+  return () => restorers.reverse().forEach((restore) => restore());
 }
 
 export async function exportEventPng(project, element) {
@@ -198,7 +228,11 @@ export async function exportPolicyPdf(project, element) {
   return {filename, width: 8.5, height: 11};
 }
 
-export async function exportDocumentPdf(project, elements) {
+export async function exportDocumentPdf(
+  project,
+  elements,
+  {resolvePlanningCenterImage} = {},
+) {
   const pageElements = Array.isArray(elements) ? elements : [];
   if (
     !pageElements.length ||
@@ -221,8 +255,16 @@ export async function exportDocumentPdf(project, elements) {
 
   for (let index = 0; index < pageElements.length; index += 1) {
     if (index > 0) pdf.addPage("letter", "portrait");
-    const png = await renderExactPng(pageElements[index], 2040, 2640);
-    pdf.addImage(png, "PNG", 0, 0, 8.5, 11, undefined, "FAST");
+    const restoreImages = await prepareDirectoryImages(
+      pageElements[index],
+      resolvePlanningCenterImage,
+    );
+    try {
+      const png = await renderExactPng(pageElements[index], 2040, 2640);
+      pdf.addImage(png, "PNG", 0, 0, 8.5, 11, undefined, "FAST");
+    } finally {
+      restoreImages();
+    }
   }
 
   pdf.setProperties({
@@ -237,4 +279,124 @@ export async function exportDocumentPdf(project, elements) {
     height: 11,
     pages: pageElements.length,
   };
+}
+
+function stylesheetLoad(documentTarget, href) {
+  return new Promise((resolve) => {
+    const link = documentTarget.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    link.onload = resolve;
+    link.onerror = resolve;
+    documentTarget.head.appendChild(link);
+  });
+}
+
+function waitForDocumentImages(documentTarget) {
+  return Promise.all(
+    Array.from(documentTarget.images).map((image) => {
+      if (image.complete && image.naturalWidth) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () =>
+          reject(new Error("A directory image could not be prepared for printing."));
+      });
+    }),
+  );
+}
+
+export async function openDocumentSystemPrint(
+  project,
+  container,
+  {resolvePlanningCenterImage} = {},
+) {
+  if (!container) {
+    throw new Error("The printable document pages are not available yet.");
+  }
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("Allow pop-ups for Central Studio to use System Print.");
+  }
+  const restoreImages = await prepareDirectoryImages(
+    container,
+    resolvePlanningCenterImage,
+  ).catch((error) => {
+    printWindow.close();
+    throw error;
+  });
+  try {
+    const printDocument = printWindow.document;
+    printDocument.open();
+    printDocument.write(
+      "<!doctype html><html><head><meta charset=\"utf-8\">" +
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+        "</head><body class=\"studio-system-print-window\"></body></html>",
+    );
+    printDocument.close();
+    printDocument.title = project?.name || "Central Studio Document";
+
+    const style = printDocument.createElement("style");
+    style.textContent = `
+      @page { size: letter; margin: 0; }
+      html, body {
+        width: 8.5in !important;
+        min-height: 11in !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+      }
+      [data-studio-document-print] {
+        position: static !important;
+        display: block !important;
+        width: 8.5in !important;
+        gap: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      [data-studio-document-print] > article {
+        width: 8.5in !important;
+        height: 11in !important;
+        margin: 0 !important;
+        break-after: page;
+        page-break-after: always;
+        box-shadow: none !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+      [data-studio-document-print] > article:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+    `;
+    printDocument.head.appendChild(style);
+
+    const stylesheetUrls = Array.from(
+      document.querySelectorAll('link[rel="stylesheet"]'),
+    ).map((link) => link.href);
+    const stylesheetReady = Promise.all(
+      stylesheetUrls.map((href) => stylesheetLoad(printDocument, href)),
+    );
+    const printablePages = container.cloneNode(true);
+    printablePages.removeAttribute("aria-hidden");
+    printDocument.body.appendChild(printablePages);
+
+    await stylesheetReady;
+    if (printDocument.fonts?.ready) await printDocument.fonts.ready;
+    await waitForDocumentImages(printDocument);
+    await new Promise((resolve) =>
+      printWindow.requestAnimationFrame(() =>
+        printWindow.requestAnimationFrame(resolve),
+      ),
+    );
+    printWindow.addEventListener("afterprint", () => printWindow.close(), {
+      once: true,
+    });
+    printWindow.focus();
+    printWindow.print();
+  } catch (error) {
+    printWindow.close();
+    throw error;
+  } finally {
+    restoreImages();
+  }
 }

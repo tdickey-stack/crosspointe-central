@@ -1,7 +1,11 @@
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
-import {exportDocumentPdf, exportEventPng} from "./export.js";
+import {
+  exportDocumentPdf,
+  exportEventPng,
+  openDocumentSystemPrint,
+} from "./export.js";
 import {normalizeFocalValue, normalizeImageZoom} from "./focal.js";
 import {
   createStudioCloud,
@@ -256,6 +260,17 @@ function prepareProjectForStorage(project) {
     String(stored.content.backgroundImage || "").startsWith("data:")
   ) {
     stored.content.backgroundImage = "";
+  }
+  if (isDocumentProject(stored)) {
+    (stored.pages || []).forEach((page) => {
+      if (page.templateId !== "document-directory") return;
+      (page.content?.cards || []).forEach((card) => {
+        if (String(card.imageUrl || "").startsWith("data:")) {
+          card.imageUrl = "";
+          card.imageStoragePath = "";
+        }
+      });
+    });
   }
   return stored;
 }
@@ -2535,6 +2550,578 @@ function ChecklistInspector({content, updateContent}) {
   );
 }
 
+function SignupSheetInspector({content, updateContent}) {
+  const signupCount = Math.min(
+    24,
+    Math.max(4, Number(content.signupCount) || 12),
+  );
+  return (
+    <div className="studio-document-inspector-content">
+      <DocumentSectionHeading
+        eyebrow="SIGN-UP SHEET"
+        title="Page identity"
+        description="Create a printable sheet with a controlled number of writable rows."
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Header label"
+          value={content.eyebrow}
+          onChange={(value) => updateContent({eyebrow: value})}
+          maxLength={52}
+          wide
+        />
+        <InputField
+          label="Audience label"
+          value={content.audience}
+          onChange={(value) => updateContent({audience: value})}
+          maxLength={28}
+        />
+        <InputField
+          label="Document number"
+          value={content.documentNumber}
+          onChange={(value) => updateContent({documentNumber: value})}
+          maxLength={18}
+        />
+        <InputField
+          label="Page title"
+          value={content.title}
+          onChange={(value) => updateContent({title: value})}
+          maxLength={72}
+          wide
+        />
+        <TextareaField
+          label="Purpose statement"
+          value={content.subtitle}
+          onChange={(value) => updateContent({subtitle: value})}
+          maxLength={220}
+          rows={3}
+        />
+        <InputField
+          label="Instructions label"
+          value={content.instructionsLabel}
+          onChange={(value) => updateContent({instructionsLabel: value})}
+          maxLength={32}
+          wide
+        />
+        <TextareaField
+          label="Instructions"
+          value={content.instructions}
+          onChange={(value) => updateContent({instructions: value})}
+          maxLength={360}
+          rows={3}
+        />
+      </div>
+
+      <DocumentSectionHeading
+        eyebrow="SIGN-UP LINES"
+        title="Control the writing space"
+        description="Every line stays the same size. Fewer sign-ups simply leave more blank space on the page."
+      />
+      <div className="studio-count-control">
+        <div>
+          <strong>{signupCount}</strong>
+          <span>available sign-ups</span>
+        </div>
+        <input
+          type="range"
+          min="4"
+          max="24"
+          step="1"
+          value={signupCount}
+          aria-label="Number of sign-up lines"
+          onChange={(event) =>
+            updateContent({signupCount: Number(event.target.value)})
+          }
+        />
+        <div className="studio-count-control-actions">
+          <button
+            type="button"
+            disabled={signupCount <= 4}
+            onClick={() => updateContent({signupCount: signupCount - 1})}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            disabled={signupCount >= 24}
+            onClick={() => updateContent({signupCount: signupCount + 1})}
+          >
+            +
+          </button>
+        </div>
+      </div>
+      <div className="studio-field-grid">
+        <InputField
+          label="First column"
+          value={content.columnOneLabel}
+          onChange={(value) => updateContent({columnOneLabel: value})}
+          maxLength={28}
+        />
+        <InputField
+          label="Second column"
+          value={content.columnTwoLabel}
+          onChange={(value) => updateContent({columnTwoLabel: value})}
+          maxLength={28}
+        />
+        <InputField
+          label="Third column"
+          value={content.columnThreeLabel}
+          onChange={(value) => updateContent({columnThreeLabel: value})}
+          maxLength={28}
+        />
+      </div>
+      <ToggleField
+        label="Number each row"
+        description="Show a small sequence number beside every sign-up."
+        checked={content.showNumbers !== false}
+        onChange={(showNumbers) => updateContent({showNumbers})}
+      />
+      <DocumentFooterFields
+        content={content}
+        updateContent={updateContent}
+      />
+    </div>
+  );
+}
+
+function createDirectoryCard(changes = {}) {
+  return {
+    id:
+      globalThis.crypto?.randomUUID?.() ||
+      `directory-card-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: "",
+    subtitle: "",
+    details: "",
+    imageUrl: "",
+    imageStoragePath: "",
+    sourceType: "manual",
+    sourceId: "",
+    publicUrl: "",
+    ...changes,
+  };
+}
+
+function DirectoryCardEditor({
+  card,
+  index,
+  total,
+  project,
+  page,
+  cloud,
+  updateCard,
+  moveCard,
+  deleteCard,
+}) {
+  const fileInputRef = useRef(null);
+  const [uploadState, setUploadState] = useState({status: "", message: ""});
+  const handleImage = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setUploadState({status: "error", message: "Use a JPG, PNG, or WebP image."});
+      return;
+    }
+    if (file.size >= 8 * 1024 * 1024) {
+      setUploadState({status: "error", message: "Use an image smaller than 8 MB."});
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () =>
+      updateCard({
+        imageUrl: String(reader.result || ""),
+        imageStoragePath: "",
+        sourceType: "manual",
+      });
+    reader.readAsDataURL(file);
+    if (!cloud) {
+      setUploadState({
+        status: "success",
+        message: "Preview loaded for this browser session.",
+      });
+      return;
+    }
+    setUploadState({status: "working", message: "Saving directory image…"});
+    try {
+      const image = await cloud.uploadDirectoryImage(
+        project,
+        page.id,
+        card.id,
+        file,
+      );
+      updateCard({...image, sourceType: card.sourceType || "manual"});
+      setUploadState({status: "success", message: "Directory image saved."});
+    } catch (error) {
+      setUploadState({status: "error", message: error.message});
+    }
+  };
+  return (
+    <div className="studio-directory-card-editor">
+      <div className="studio-content-block-heading">
+        <strong>Card {index + 1}</strong>
+        <div>
+          <button
+            type="button"
+            disabled={index === 0}
+            onClick={() => moveCard(-1)}
+            aria-label={`Move directory card ${index + 1} up`}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            disabled={index === total - 1}
+            onClick={() => moveCard(1)}
+            aria-label={`Move directory card ${index + 1} down`}
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            onClick={deleteCard}
+            aria-label={`Delete directory card ${index + 1}`}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      <div className="studio-directory-image-editor">
+        <div
+          className={card.imageUrl ? "has-image" : ""}
+          style={
+            card.imageUrl
+              ? {backgroundImage: `url("${card.imageUrl}")`}
+              : undefined
+          }
+        >
+          {!card.imageUrl ? String(card.name || "C").slice(0, 1) : null}
+        </div>
+        <div>
+          <input
+            ref={fileInputRef}
+            className="studio-file-input"
+            type="file"
+            accept="image/*"
+            onChange={handleImage}
+          />
+          <button
+            className="studio-button is-secondary"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {card.imageUrl ? "Replace Photo" : "Add Photo"}
+          </button>
+          {card.imageUrl ? (
+            <button
+              className="studio-button is-secondary"
+              type="button"
+              onClick={() =>
+                updateCard({imageUrl: "", imageStoragePath: ""})
+              }
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {uploadState.message ? (
+        <p className={`studio-export-status is-${uploadState.status}`}>
+          {uploadState.message}
+        </p>
+      ) : null}
+      <div className="studio-field-grid">
+        <InputField
+          label="Name"
+          value={card.name}
+          onChange={(name) => updateCard({name})}
+          maxLength={80}
+          wide
+        />
+        <InputField
+          label="Schedule or subtitle"
+          value={card.subtitle}
+          onChange={(subtitle) => updateCard({subtitle})}
+          maxLength={100}
+          wide
+        />
+        <TextareaField
+          label="Description"
+          value={card.details}
+          onChange={(details) => updateCard({details})}
+          maxLength={360}
+          rows={5}
+        />
+      </div>
+      {card.sourceType === "planning-center" ? (
+        <p className="studio-directory-source-note">
+          Imported from Planning Center Groups. The card stays editable after
+          import.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PlanningCenterGroupPicker({service, cards, onImport}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [state, setState] = useState({status: "", message: ""});
+  const search = async () => {
+    if (!service?.searchPlanningCenterGroups) return;
+    setState({status: "working", message: "Loading published PCO Groups…"});
+    try {
+      const data = await service.searchPlanningCenterGroups(query);
+      setResults(Array.isArray(data.groups) ? data.groups : []);
+      setSelectedIds([]);
+      setState({
+        status: "success",
+        message: `${Number(data.total || data.groups?.length || 0)} published group${
+          Number(data.total || data.groups?.length || 0) === 1 ? "" : "s"
+        } available.`,
+      });
+    } catch (error) {
+      setState({status: "error", message: error.message});
+    }
+  };
+  const availableSlots = Math.max(0, 8 - cards.length);
+  const importSelected = () => {
+    const imported = results
+      .filter((group) => selectedIds.includes(group.id))
+      .slice(0, availableSlots)
+      .map((group) =>
+        createDirectoryCard({
+          name: group.name,
+          subtitle: [group.schedule, group.typeName].filter(Boolean).join(" · "),
+          details: group.description,
+          imageUrl: group.imageUrl,
+          sourceType: "planning-center",
+          sourceId: group.id,
+          publicUrl: group.publicUrl,
+        }),
+      );
+    onImport(imported);
+    setSelectedIds([]);
+    setState({
+      status: "success",
+      message: `${imported.length} group card${imported.length === 1 ? "" : "s"} added.`,
+    });
+  };
+  return (
+    <div className="studio-pco-group-picker">
+      <div className="studio-pco-group-search">
+        <input
+          type="search"
+          value={query}
+          placeholder="Filter by group name, type, or schedule"
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              search();
+            }
+          }}
+        />
+        <button
+          className="studio-button is-secondary"
+          type="button"
+          disabled={!service?.searchPlanningCenterGroups || state.status === "working"}
+          onClick={search}
+        >
+          {state.status === "working" ? "Loading…" : "Browse PCO Groups"}
+        </button>
+      </div>
+      {!service?.searchPlanningCenterGroups ? (
+        <p className="studio-directory-source-note">
+          Planning Center import becomes available through the Studio backend.
+          Manual cards remain fully available.
+        </p>
+      ) : null}
+      {state.message ? (
+        <p className={`studio-export-status is-${state.status}`}>
+          {state.message}
+        </p>
+      ) : null}
+      {results.length ? (
+        <>
+          <div className="studio-pco-group-results">
+            {results.map((group) => {
+              const alreadyAdded = cards.some(
+                (card) =>
+                  card.sourceType === "planning-center" &&
+                  card.sourceId === group.id,
+              );
+              const selected = selectedIds.includes(group.id);
+              return (
+                <label key={group.id}>
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    disabled={
+                      alreadyAdded ||
+                      (!selected && selectedIds.length >= availableSlots)
+                    }
+                    onChange={(event) =>
+                      setSelectedIds((current) =>
+                        event.target.checked
+                          ? [...current, group.id]
+                          : current.filter((id) => id !== group.id),
+                      )
+                    }
+                  />
+                  <span
+                    className={group.imageUrl ? "has-image" : ""}
+                    style={
+                      group.imageUrl
+                        ? {backgroundImage: `url("${group.imageUrl}")`}
+                        : undefined
+                    }
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <strong>{group.name}</strong>
+                    <small>
+                      {[group.schedule, group.typeName]
+                        .filter(Boolean)
+                        .join(" · ") || "Published group"}
+                    </small>
+                  </span>
+                  {alreadyAdded ? <em>ADDED</em> : null}
+                </label>
+              );
+            })}
+          </div>
+          <button
+            className="studio-button is-primary"
+            type="button"
+            disabled={!selectedIds.length || availableSlots === 0}
+            onClick={importSelected}
+          >
+            Add Selected Groups
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function DirectoryInspector({
+  content,
+  updateContent,
+  project,
+  page,
+  cloud,
+  services,
+}) {
+  const cards = Array.isArray(content.cards) ? content.cards : [];
+  const updateCards = (nextCards) => updateContent({cards: nextCards});
+  return (
+    <div className="studio-document-inspector-content">
+      <DocumentSectionHeading
+        eyebrow="DIRECTORY"
+        title="Page identity"
+        description="Build a branded card directory manually or start with published Planning Center Groups."
+      />
+      <div className="studio-field-grid">
+        <InputField
+          label="Header label"
+          value={content.eyebrow}
+          onChange={(value) => updateContent({eyebrow: value})}
+          maxLength={52}
+          wide
+        />
+        <InputField
+          label="Audience label"
+          value={content.audience}
+          onChange={(value) => updateContent({audience: value})}
+          maxLength={28}
+        />
+        <InputField
+          label="Document number"
+          value={content.documentNumber}
+          onChange={(value) => updateContent({documentNumber: value})}
+          maxLength={18}
+        />
+        <InputField
+          label="Page title"
+          value={content.title}
+          onChange={(value) => updateContent({title: value})}
+          maxLength={72}
+          wide
+        />
+        <TextareaField
+          label="Purpose statement"
+          value={content.subtitle}
+          onChange={(value) => updateContent({subtitle: value})}
+          maxLength={220}
+          rows={3}
+        />
+      </div>
+
+      <DocumentSectionHeading
+        eyebrow="PLANNING CENTER"
+        title="Import published groups"
+        description="Select the groups you want. Studio creates editable cards from their public information."
+      />
+      <PlanningCenterGroupPicker
+        service={services}
+        cards={cards}
+        onImport={(groups) => updateCards([...cards, ...groups].slice(0, 8))}
+      />
+
+      <DocumentSectionHeading
+        eyebrow="DIRECTORY CARDS"
+        title={`${cards.length} of 8 cards`}
+        description="Use another Directory page when this collection needs more than 8 entries."
+      />
+      <div className="studio-directory-card-editor-list">
+        {cards.map((card, index) => (
+          <DirectoryCardEditor
+            key={card.id}
+            card={card}
+            index={index}
+            total={cards.length}
+            project={project}
+            page={page}
+            cloud={cloud}
+            updateCard={(changes) =>
+              updateCards(
+                cards.map((item) =>
+                  item.id === card.id ? {...item, ...changes} : item,
+                ),
+              )
+            }
+            moveCard={(direction) => {
+              const targetIndex = index + direction;
+              if (targetIndex < 0 || targetIndex >= cards.length) return;
+              const nextCards = [...cards];
+              [nextCards[index], nextCards[targetIndex]] = [
+                nextCards[targetIndex],
+                nextCards[index],
+              ];
+              updateCards(nextCards);
+            }}
+            deleteCard={() =>
+              updateCards(cards.filter((item) => item.id !== card.id))
+            }
+          />
+        ))}
+      </div>
+      <button
+        className="studio-button is-secondary studio-add-directory-card"
+        type="button"
+        disabled={cards.length >= 8}
+        onClick={() => updateCards([...cards, createDirectoryCard()])}
+      >
+        + Add Blank Card
+      </button>
+      <DocumentFooterFields
+        content={content}
+        updateContent={updateContent}
+      />
+    </div>
+  );
+}
+
 const CONTENT_BLOCK_TYPES = [
   {value: "heading", label: "Heading"},
   {value: "paragraph", label: "Paragraph"},
@@ -2786,7 +3373,13 @@ function ContentPageInspector({content, updateContent}) {
   );
 }
 
-function DocumentPageInspector({page, updatePage}) {
+function DocumentPageInspector({
+  page,
+  updatePage,
+  project,
+  cloud,
+  services,
+}) {
   const updateContent = (changes) =>
     updatePage({content: {...page.content, ...changes}});
   if (page.templateId === "document-checklist") {
@@ -2794,6 +3387,26 @@ function DocumentPageInspector({page, updatePage}) {
       <ChecklistInspector
         content={page.content}
         updateContent={updateContent}
+      />
+    );
+  }
+  if (page.templateId === "document-signup-sheet") {
+    return (
+      <SignupSheetInspector
+        content={page.content}
+        updateContent={updateContent}
+      />
+    );
+  }
+  if (page.templateId === "document-directory") {
+    return (
+      <DirectoryInspector
+        content={page.content}
+        updateContent={updateContent}
+        project={project}
+        page={page}
+        cloud={cloud}
+        services={services}
       />
     );
   }
@@ -2870,11 +3483,13 @@ function DocumentEditor({
   onDelete,
   onShare,
   cloud,
+  unsplash,
 }) {
   const [activePageId, setActivePageId] = useState(project.pages?.[0]?.id || "");
   const [showPagePicker, setShowPagePicker] = useState(false);
   const [exportState, setExportState] = useState({status: "", message: ""});
   const exportPageRefs = useRef(new Map());
+  const printPagesRef = useRef(null);
   const pages = project.pages || [];
   const activePage =
     pages.find((page) => page.id === activePageId) || pages[0] || null;
@@ -2944,7 +3559,10 @@ function DocumentEditor({
     setExportState({status: "working", message: "Preparing every page…"});
     try {
       const elements = pages.map((page) => exportPageRefs.current.get(page.id));
-      const result = await exportDocumentPdf(project, elements);
+      const result = await exportDocumentPdf(project, elements, {
+        resolvePlanningCenterImage: (cloud || unsplash)
+          ?.resolvePlanningCenterImage,
+      });
       setExportState({
         status: "success",
         message: `${result.filename} was downloaded with ${result.pages} page${
@@ -2955,6 +3573,24 @@ function DocumentEditor({
       setExportState({
         status: "error",
         message: error.message || "Studio could not export this document.",
+      });
+    }
+  };
+  const systemPrint = async () => {
+    setExportState({status: "working", message: "Preparing System Print…"});
+    try {
+      await openDocumentSystemPrint(project, printPagesRef.current, {
+        resolvePlanningCenterImage: (cloud || unsplash)
+          ?.resolvePlanningCenterImage,
+      });
+      setExportState({
+        status: "success",
+        message: "System Print opened with the document pages only.",
+      });
+    } catch (error) {
+      setExportState({
+        status: "error",
+        message: error.message || "Studio could not open System Print.",
       });
     }
   };
@@ -3131,7 +3767,8 @@ function DocumentEditor({
             <button
               className="studio-button is-secondary"
               type="button"
-              onClick={() => window.print()}
+              onClick={systemPrint}
+              disabled={exportState.status === "working"}
             >
               System Print
             </button>
@@ -3159,12 +3796,16 @@ function DocumentEditor({
             <DocumentPageInspector
               page={activePage}
               updatePage={(changes) => updatePage(activePage.id, changes)}
+              project={project}
+              cloud={cloud}
+              services={cloud || unsplash}
             />
           ) : null}
         </aside>
       </div>
 
       <div
+        ref={printPagesRef}
         className="studio-document-export-pages"
         data-studio-document-print
         aria-hidden="true"

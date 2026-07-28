@@ -86,6 +86,88 @@ export function unsplashPhotoResult(photo) {
   };
 }
 
+export function planningCenterGroupResult(group, groupTypes = new Map()) {
+  const attributes = group?.attributes || {};
+  const groupTypeId = String(
+    group?.relationships?.group_type?.data?.id || "",
+  );
+  const headerImage =
+    attributes.header_image && typeof attributes.header_image === "object"
+      ? attributes.header_image
+      : {};
+  return {
+    id: String(group?.id || "").slice(0, 80),
+    name: cleanPublicText(attributes.name, 80),
+    description: cleanPublicText(
+      attributes.description_as_plain_text || attributes.description,
+      360,
+    ),
+    schedule: cleanPublicText(attributes.schedule, 100),
+    typeName: cleanPublicText(groupTypes.get(groupTypeId), 100),
+    imageUrl: safePublicHttpsUrl(
+      headerImage.medium || headerImage.thumbnail || headerImage.original,
+      1000,
+    ),
+    publicUrl: safePublicHttpsUrl(
+      attributes.public_church_center_web_url,
+      500,
+    ),
+  };
+}
+
+export function isPublishedPlanningCenterGroup(group) {
+  const attributes = group?.attributes || {};
+  return Boolean(
+    group?.id &&
+      attributes.listed === true &&
+      !attributes.archived_at &&
+      safePublicHttpsUrl(attributes.public_church_center_web_url, 500),
+  );
+}
+
+export function isSafePlanningCenterGroupsUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "api.planningcenteronline.com" &&
+      url.pathname === "/groups/v2/groups"
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
+export function isSafePlanningCenterGroupImageUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "groups-production.s3.amazonaws.com" &&
+      url.pathname.startsWith("/uploads/group/header_image/")
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
+function cleanPublicText(value, maximum) {
+  return String(value || "")
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, maximum);
+}
+
+function safePublicHttpsUrl(value, maximum) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" ? url.toString().slice(0, maximum) : "";
+  } catch (error) {
+    return "";
+  }
+}
+
 function appendUnsplashUtm(value) {
   try {
     const url = new URL(String(value || ""));

@@ -12,8 +12,12 @@ import {
   createShareToken,
   hasStudioAccess,
   hashShareToken,
+  isPublishedPlanningCenterGroup,
+  isSafePlanningCenterGroupImageUrl,
+  isSafePlanningCenterGroupsUrl,
   isSafeUnsplashDownloadUrl,
   membershipId,
+  planningCenterGroupResult,
   unsplashPhotoResult,
 } from "./studio-core.js";
 
@@ -21,7 +25,10 @@ if (!getApps().length) initializeApp();
 
 const db = getFirestore();
 const unsplashAccessKey = defineSecret("UNSPLASH_ACCESS_KEY");
+const pcoAppId = defineSecret("PCO_APP_ID");
+const pcoSecret = defineSecret("PCO_SECRET");
 const region = "us-central1";
+let planningCenterGroupsCache = {expiresAt: 0, groups: []};
 
 function sendJson(response, status, body) {
   response.status(status).set("Cache-Control", "no-store").json(body);
@@ -98,6 +105,73 @@ async function callUnsplash(path, accessKey) {
   return response.json();
 }
 
+async function callPlanningCenterGroups(url, appId, secret) {
+  if (!isSafePlanningCenterGroupsUrl(url)) {
+    const error = new Error("Planning Center returned an invalid page URL.");
+    error.status = 502;
+    throw error;
+  }
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${appId}:${secret}`).toString("base64")}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const error = new Error(`Planning Center returned ${response.status}.`);
+    error.status = [401, 403].includes(response.status) ? 503 : 502;
+    throw error;
+  }
+  return response.json();
+}
+
+async function loadPublishedPlanningCenterGroups(appId, secret) {
+  if (
+    planningCenterGroupsCache.expiresAt > Date.now() &&
+    planningCenterGroupsCache.groups.length
+  ) {
+    return planningCenterGroupsCache.groups;
+  }
+  const start = new URL(
+    "https://api.planningcenteronline.com/groups/v2/groups",
+  );
+  start.searchParams.set("filter", "published");
+  start.searchParams.set("include", "group_type");
+  start.searchParams.set("order", "name");
+  start.searchParams.set("per_page", "100");
+  const pages = [];
+  let nextUrl = start.toString();
+  for (let page = 0; nextUrl && page < 5; page += 1) {
+    const payload = await callPlanningCenterGroups(nextUrl, appId, secret);
+    pages.push(payload);
+    nextUrl =
+      typeof payload?.links?.next === "string" &&
+      isSafePlanningCenterGroupsUrl(payload.links.next)
+        ? payload.links.next
+        : "";
+  }
+  const groupTypes = new Map();
+  pages.forEach((payload) => {
+    (Array.isArray(payload.included) ? payload.included : []).forEach((item) => {
+      if (item?.type !== "GroupType" || !item.id) return;
+      const attributes = item.attributes || {};
+      if (attributes.church_center_visible === false) return;
+      groupTypes.set(String(item.id), String(attributes.name || ""));
+    });
+  });
+  const groups = pages
+    .flatMap((payload) => (Array.isArray(payload.data) ? payload.data : []))
+    .filter(isPublishedPlanningCenterGroup)
+    .map((group) => planningCenterGroupResult(group, groupTypes))
+    .filter((group) => group.id && group.name && group.publicUrl)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  planningCenterGroupsCache = {
+    expiresAt: Date.now() + 5 * 60 * 1000,
+    groups,
+  };
+  return groups;
+}
+
 export const studioUnsplashSearch = onRequest(
   {region, secrets: [unsplashAccessKey], timeoutSeconds: 30},
   async (request, response) => {
@@ -138,6 +212,106 @@ export const studioUnsplashSearch = onRequest(
       });
     } catch (error) {
       handleError(response, error, "Studio Unsplash search failed");
+    }
+  },
+);
+
+export const studioPlanningCenterGroups = onRequest(
+  {
+    region,
+    secrets: [pcoAppId, pcoSecret],
+    timeoutSeconds: 30,
+  },
+  async (request, response) => {
+    if (!allowRequest(request, response, ["GET"])) return;
+    try {
+      await requireStudioUser(request, false, true);
+      const appId = String(pcoAppId.value() || "").trim();
+      const secret = String(pcoSecret.value() || "").trim();
+      if (!appId || !secret) {
+        const error = new Error(
+          "Planning Center Groups is not configured for Studio yet.",
+        );
+        error.status = 503;
+        throw error;
+      }
+      const query = String(request.query.q || "")
+        .trim()
+        .toLowerCase()
+        .slice(0, 100);
+      const allGroups = await loadPublishedPlanningCenterGroups(appId, secret);
+      const matchingGroups = query
+        ? allGroups.filter((group) =>
+            [
+              group.name,
+              group.description,
+              group.schedule,
+              group.typeName,
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(query),
+          )
+        : allGroups;
+      sendJson(response, 200, {
+        total: matchingGroups.length,
+        groups: matchingGroups.slice(0, 100),
+      });
+    } catch (error) {
+      handleError(response, error, "Studio Planning Center Groups failed");
+    }
+  },
+);
+
+export const studioPlanningCenterImage = onRequest(
+  {region, timeoutSeconds: 30},
+  async (request, response) => {
+    if (!allowRequest(request, response, ["GET"])) return;
+    try {
+      await requireStudioUser(request, false, true);
+      const imageUrl = String(request.query.url || "").trim();
+      if (!isSafePlanningCenterGroupImageUrl(imageUrl)) {
+        sendJson(response, 400, {error: "Invalid Planning Center image URL."});
+        return;
+      }
+      const upstream = await fetch(imageUrl, {
+        headers: {Accept: "image/avif,image/webp,image/png,image/jpeg"},
+        redirect: "error",
+      });
+      if (!upstream.ok) {
+        const error = new Error(`Planning Center image returned ${upstream.status}.`);
+        error.status = 502;
+        throw error;
+      }
+      const contentType = String(upstream.headers.get("content-type") || "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+      if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(contentType)) {
+        const error = new Error("Planning Center returned an unsupported image.");
+        error.status = 502;
+        throw error;
+      }
+      const declaredSize = Number(upstream.headers.get("content-length") || 0);
+      if (declaredSize >= 8 * 1024 * 1024) {
+        const error = new Error("Planning Center returned an image that is too large.");
+        error.status = 502;
+        throw error;
+      }
+      const image = Buffer.from(await upstream.arrayBuffer());
+      if (!image.length || image.length >= 8 * 1024 * 1024) {
+        const error = new Error("Planning Center returned an invalid image.");
+        error.status = 502;
+        throw error;
+      }
+      response
+        .status(200)
+        .set("Content-Type", contentType)
+        .set("Cache-Control", "private, max-age=3600")
+        .set("Content-Length", String(image.length))
+        .send(image);
+    } catch (error) {
+      handleError(response, error, "Studio Planning Center image failed");
     }
   },
 );

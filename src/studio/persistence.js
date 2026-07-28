@@ -131,10 +131,66 @@ function contentPageContentForCloud(content) {
   };
 }
 
+function signupSheetContentForCloud(content) {
+  const signupCount = Number(content.signupCount);
+  return {
+    eyebrow: stringValue(content.eyebrow),
+    audience: stringValue(content.audience),
+    documentNumber: stringValue(content.documentNumber),
+    title: stringValue(content.title),
+    subtitle: stringValue(content.subtitle),
+    instructionsLabel: stringValue(content.instructionsLabel),
+    instructions: stringValue(content.instructions),
+    signupCount: Number.isInteger(signupCount)
+      ? Math.min(24, Math.max(4, signupCount))
+      : 12,
+    columnOneLabel: stringValue(content.columnOneLabel),
+    columnTwoLabel: stringValue(content.columnTwoLabel),
+    columnThreeLabel: stringValue(content.columnThreeLabel),
+    showNumbers: content.showNumbers !== false,
+    footerNote: stringValue(content.footerNote),
+    footerReference: stringValue(content.footerReference),
+    accent: "red",
+  };
+}
+
+function directoryCardForCloud(card) {
+  const imageUrl = stringValue(card?.imageUrl);
+  return {
+    id: stringValue(card?.id).slice(0, 80),
+    name: stringValue(card?.name).slice(0, 80),
+    subtitle: stringValue(card?.subtitle).slice(0, 100),
+    details: stringValue(card?.details).slice(0, 360),
+    imageUrl: imageUrl.startsWith("data:") ? "" : imageUrl.slice(0, 1000),
+    imageStoragePath: stringValue(card?.imageStoragePath).slice(0, 500),
+    sourceType:
+      card?.sourceType === "planning-center" ? "planning-center" : "manual",
+    sourceId: stringValue(card?.sourceId).slice(0, 80),
+    publicUrl: stringValue(card?.publicUrl).slice(0, 500),
+  };
+}
+
+function directoryContentForCloud(content) {
+  const cards = (Array.isArray(content.cards) ? content.cards : []).slice(0, 8);
+  return {
+    eyebrow: stringValue(content.eyebrow),
+    audience: stringValue(content.audience),
+    documentNumber: stringValue(content.documentNumber),
+    title: stringValue(content.title),
+    subtitle: stringValue(content.subtitle),
+    cardOrder: cards.map((card) => stringValue(card?.id).slice(0, 80)),
+    footerNote: stringValue(content.footerNote),
+    footerReference: stringValue(content.footerReference),
+    accent: "red",
+  };
+}
+
 function documentPageForCloud(page) {
   const templateId = [
     "document-one-pager",
     "document-checklist",
+    "document-signup-sheet",
+    "document-directory",
     "document-content-page",
   ].includes(page?.templateId)
     ? page.templateId
@@ -142,6 +198,10 @@ function documentPageForCloud(page) {
   const content =
     templateId === "document-checklist"
       ? checklistContentForCloud(page.content || {})
+      : templateId === "document-signup-sheet"
+        ? signupSheetContentForCloud(page.content || {})
+        : templateId === "document-directory"
+          ? directoryContentForCloud(page.content || {})
       : templateId === "document-content-page"
         ? contentPageContentForCloud(page.content || {})
         : onePagerContentForCloud(page.content || {});
@@ -229,7 +289,7 @@ export function projectForCloud(project, ownerUid) {
   };
 }
 
-function hydrateDocumentPage(snapshot) {
+async function hydrateDocumentPage(snapshot) {
   const data = snapshot.data();
   const cloudContent = data.content || {};
   let content = cloudContent;
@@ -253,6 +313,25 @@ function hydrateDocumentPage(snapshot) {
       ...cloudContent,
       blocks: contentBlocksForCloud(cloudContent.blocks),
     };
+  } else if (data.templateId === "document-directory") {
+    const cardSnapshot = await snapshot.ref.collection("cards").get();
+    const cardsById = new Map(
+      cardSnapshot.docs.map((cardDocument) => [
+        cardDocument.id,
+        directoryCardForCloud(cardDocument.data()),
+      ]),
+    );
+    content = {
+      ...cloudContent,
+      cards: (Array.isArray(cloudContent.cardOrder)
+        ? cloudContent.cardOrder
+        : []
+      )
+        .slice(0, 8)
+        .map((cardId) => cardsById.get(cardId))
+        .filter(Boolean),
+    };
+    delete content.cardOrder;
   }
   return {
     id: snapshot.id,
@@ -269,11 +348,11 @@ async function hydrateProject(snapshot, storage, shared = false) {
     data.templateId === DOCUMENT_PROJECT_TEMPLATE_ID
   ) {
     const pageSnapshot = await snapshot.ref.collection("pages").get();
+    const hydratedPages = await Promise.all(
+      pageSnapshot.docs.map((page) => hydrateDocumentPage(page)),
+    );
     const pagesById = new Map(
-      pageSnapshot.docs.map((page) => {
-        const hydrated = hydrateDocumentPage(page);
-        return [hydrated.id, hydrated];
-      }),
+      hydratedPages.map((page) => [page.id, page]),
     );
     const pages = (data.pageOrder || [])
       .map((pageId) => pagesById.get(pageId))
@@ -385,6 +464,44 @@ async function localPreviewJson(url, options = {}) {
   return data;
 }
 
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () =>
+      reject(new Error("Central Studio could not prepare that image."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function imageResponseToDataUrl(response) {
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(
+      data.error || "Central Studio could not prepare that image for export.",
+    );
+  }
+  return blobToDataUrl(await response.blob());
+}
+
+async function localPreviewImageDataUrl(url) {
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: {"X-Central-Studio-Preview": "1"},
+  });
+  return imageResponseToDataUrl(response);
+}
+
+async function authorizedImageDataUrl(auth, url) {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Sign in to Central Studio first.");
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: {Authorization: `Bearer ${token}`},
+  });
+  return imageResponseToDataUrl(response);
+}
+
 export function createStudioPreviewUnsplash() {
   return {
     searchUnsplash(query, orientation) {
@@ -409,6 +526,21 @@ export function createStudioPreviewUnsplash() {
         unsplashPhotographerUrl: photo.photographerUrl,
         unsplashPhotoUrl: photo.photoUrl,
       };
+    },
+    searchPlanningCenterGroups(query = "") {
+      const parameters = new URLSearchParams();
+      if (String(query || "").trim()) {
+        parameters.set("q", String(query).trim());
+      }
+      return localPreviewJson(
+        `/api/studio/pco/groups?${parameters.toString()}`,
+      );
+    },
+    resolvePlanningCenterImage(imageUrl) {
+      const parameters = new URLSearchParams({url: String(imageUrl || "")});
+      return localPreviewImageDataUrl(
+        `/api/studio/pco/image?${parameters.toString()}`,
+      );
     },
   };
 }
@@ -458,7 +590,6 @@ export function createStudioCloud({
     );
 
     if (isDocumentProject(project)) {
-      const batch = firestore.batch();
       const serverTimestamp =
         window.firebase.firestore.FieldValue.serverTimestamp();
       const previousData = snapshot.exists ? snapshot.data() : null;
@@ -470,13 +601,13 @@ export function createStudioCloud({
       const nextPageIds = new Set(payload.pageOrder);
 
       if (!snapshot.exists) {
-        batch.set(reference, {
+        await reference.set({
           ...payload,
           createdAt: serverTimestamp,
           updatedAt: serverTimestamp,
         });
       } else if (previousData.schemaVersion === 2) {
-        batch.update(reference, {
+        await reference.update({
           name: payload.name,
           status: payload.status,
           sourceType: payload.sourceType,
@@ -485,36 +616,84 @@ export function createStudioCloud({
           updatedAt: serverTimestamp,
         });
       } else {
-        batch.set(reference, {
+        await reference.set({
           ...payload,
           createdAt: previousData.createdAt,
           updatedAt: serverTimestamp,
         });
       }
 
-      (project.pages || []).forEach((page) => {
+      for (const page of project.pages || []) {
         const pageReference = reference.collection("pages").doc(page.id);
+        const pageSnapshot = await pageReference.get();
+        const previousPageData = pageSnapshot.exists
+          ? pageSnapshot.data()
+          : null;
+        const previousCardSnapshot =
+          previousPageData?.templateId === "document-directory"
+            ? await pageReference.collection("cards").get()
+            : null;
         const pagePayload = documentPageForCloud(page);
-        if (previousPageIds.includes(page.id)) {
-          batch.update(pageReference, {
+        if (pageSnapshot.exists) {
+          await pageReference.update({
             templateId: pagePayload.templateId,
             content: pagePayload.content,
             updatedAt: serverTimestamp,
           });
         } else {
-          batch.set(pageReference, {
+          await pageReference.set({
             ...pagePayload,
             createdAt: serverTimestamp,
             updatedAt: serverTimestamp,
           });
         }
-      });
-      previousPageIds
-        .filter((pageId) => !nextPageIds.has(pageId))
-        .forEach((pageId) => {
-          batch.delete(reference.collection("pages").doc(pageId));
-        });
-      await batch.commit();
+
+        const previousCardIds = new Set(
+          previousCardSnapshot?.docs.map((card) => card.id) || [],
+        );
+        if (page.templateId === "document-directory") {
+          const cards = (Array.isArray(page.content?.cards)
+            ? page.content.cards
+            : []
+          ).slice(0, 8);
+          const nextCardIds = new Set(cards.map((card) => card.id));
+          for (const card of cards) {
+            const cardReference = pageReference.collection("cards").doc(card.id);
+            const cardPayload = directoryCardForCloud(card);
+            if (previousCardIds.has(card.id)) {
+              await cardReference.update({
+                ...cardPayload,
+                updatedAt: serverTimestamp,
+              });
+            } else {
+              await cardReference.set({
+                ...cardPayload,
+                createdAt: serverTimestamp,
+                updatedAt: serverTimestamp,
+              });
+            }
+          }
+          for (const cardId of previousCardIds) {
+            if (!nextCardIds.has(cardId)) {
+              await pageReference.collection("cards").doc(cardId).delete();
+            }
+          }
+        } else {
+          for (const cardId of previousCardIds) {
+            await pageReference.collection("cards").doc(cardId).delete();
+          }
+        }
+      }
+
+      for (const pageId of previousPageIds) {
+        if (nextPageIds.has(pageId)) continue;
+        const pageReference = reference.collection("pages").doc(pageId);
+        const cardSnapshot = await pageReference.collection("cards").get();
+        for (const cardDocument of cardSnapshot.docs) {
+          await cardDocument.ref.delete();
+        }
+        await pageReference.delete();
+      }
       return {
         ...project,
         schemaVersion: 2,
@@ -576,10 +755,42 @@ export function createStudioCloud({
     };
   }
 
+  async function uploadDirectoryImage(project, pageId, cardId, file) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      throw new Error("Use a JPG, PNG, or WebP image.");
+    }
+    if (file.size >= 8 * 1024 * 1024) {
+      throw new Error("Directory images must be smaller than 8 MB.");
+    }
+    const extension =
+      file.type === "image/png"
+        ? "png"
+        : file.type === "image/webp"
+          ? "webp"
+          : "jpg";
+    const assetId =
+      globalThis.crypto?.randomUUID?.() ||
+      `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await saveProject(project);
+    const path =
+      `studio-projects/${project.id}/directory-${String(pageId).slice(0, 36)}-` +
+      `${String(cardId).slice(0, 36)}-${assetId}.${extension}`;
+    const reference = storage.ref(path);
+    await reference.put(file, {
+      contentType: file.type,
+      cacheControl: "private,max-age=3600",
+    });
+    return {
+      imageUrl: await reference.getDownloadURL(),
+      imageStoragePath: path,
+    };
+  }
+
   return {
     loadProjects,
     saveProject,
     uploadBackground,
+    uploadDirectoryImage,
     searchUnsplash(query, orientation) {
       const parameters = new URLSearchParams({q: query});
       if (orientation) parameters.set("orientation", orientation);
@@ -603,6 +814,23 @@ export function createStudioCloud({
         unsplashPhotographerUrl: photo.photographerUrl,
         unsplashPhotoUrl: photo.photoUrl,
       };
+    },
+    searchPlanningCenterGroups(query = "") {
+      const parameters = new URLSearchParams();
+      if (String(query || "").trim()) {
+        parameters.set("q", String(query).trim());
+      }
+      return authorizedJson(
+        auth,
+        `/api/studio/pco/groups?${parameters.toString()}`,
+      );
+    },
+    resolvePlanningCenterImage(imageUrl) {
+      const parameters = new URLSearchParams({url: String(imageUrl || "")});
+      return authorizedImageDataUrl(
+        auth,
+        `/api/studio/pco/image?${parameters.toString()}`,
+      );
     },
     createShare(projectId) {
       return authorizedJson(auth, "/api/studio/projects/share", {

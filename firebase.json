@@ -276,6 +276,22 @@
         }
       },
       {
+        "source": "/api/studio/pco/groups",
+        "function": {
+          "functionId": "studioPlanningCenterGroups",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/studio/pco/image",
+        "function": {
+          "functionId": "studioPlanningCenterImage",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/studio/unsplash/track-download",
         "function": {
           "functionId": "studioUnsplashTrackDownload",

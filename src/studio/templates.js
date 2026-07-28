@@ -149,6 +149,22 @@ export const DOCUMENT_PAGE_TEMPLATES = [
     variant: "checklist",
   }),
   documentTemplate({
+    id: "document-signup-sheet",
+    name: "Sign-Up Sheet",
+    shortName: "Sign-Up",
+    description:
+      "A printable registration sheet with customizable columns and a controlled number of sign-up lines.",
+    variant: "signup-sheet",
+  }),
+  documentTemplate({
+    id: "document-directory",
+    name: "Directory",
+    shortName: "Directory",
+    description:
+      "A card-based directory for groups, ministries, staff, or other collections with photos and key details.",
+    variant: "directory",
+  }),
+  documentTemplate({
     id: "document-content-page",
     name: "Branded Content Page",
     shortName: "Content",
@@ -496,6 +512,62 @@ const checklistContent = {
   accent: "red",
 };
 
+const signupSheetContent = {
+  eyebrow: "CROSSPOINTE CREATIVE | SIGN-UP SHEET",
+  audience: "MINISTRY TEAMS",
+  documentNumber: "SIGN-UP 01",
+  title: "Sunday Serve Team Sign-Up",
+  subtitle:
+    "Add your name and contact information below. A ministry leader will follow up with next steps.",
+  instructionsLabel: "HOW TO USE THIS SHEET",
+  instructions:
+    "Please print clearly and include the best way to reach you.",
+  signupCount: 12,
+  columnOneLabel: "NAME",
+  columnTwoLabel: "EMAIL OR PHONE",
+  columnThreeLabel: "NOTES",
+  showNumbers: true,
+  footerNote: "Return completed sheets to the ministry leader.",
+  footerReference: "CROSSPOINTE CREATIVE",
+  accent: "red",
+};
+
+const directoryContent = {
+  eyebrow: "CROSSPOINTE CREATIVE | DIRECTORY",
+  audience: "FIND YOUR PLACE",
+  documentNumber: "DIR 01",
+  title: "Pointe Groups Directory",
+  subtitle:
+    "Explore a few of the places where people can connect, grow, and follow Jesus together.",
+  cards: [
+    {
+      id: "directory-card-one",
+      name: "Young Adults",
+      subtitle: "Tuesdays · 7:00 PM",
+      details: "A place for young adults to build community and grow in faith.",
+      imageUrl: "",
+      imageStoragePath: "",
+      sourceType: "manual",
+      sourceId: "",
+      publicUrl: "",
+    },
+    {
+      id: "directory-card-two",
+      name: "Women at CrossPointe",
+      subtitle: "Wednesday Evenings",
+      details: "Conversation, encouragement, and Scripture for women in every season.",
+      imageUrl: "",
+      imageStoragePath: "",
+      sourceType: "manual",
+      sourceId: "",
+      publicUrl: "",
+    },
+  ],
+  footerNote: "Find current group details and next steps at central.crosspointe.tv.",
+  footerReference: "CROSSPOINTE CREATIVE",
+  accent: "red",
+};
+
 const contentPageContent = {
   eyebrow: "CROSSPOINTE CREATIVE | DOCUMENT",
   audience: "MINISTRY LEADERS",
@@ -578,6 +650,10 @@ export function createDocumentPage(templateId, content = null, pageId = "") {
   const defaults =
     template.id === "document-checklist"
       ? checklistContent
+      : template.id === "document-signup-sheet"
+        ? signupSheetContent
+        : template.id === "document-directory"
+          ? directoryContent
       : template.id === "document-content-page"
         ? contentPageContent
         : onePagerContent;
@@ -826,6 +902,14 @@ export function getProjectWarnings(project) {
         ].some((value) => String(value || "").trim())
       ) {
         warnings.push(`${pageLabel} needs at least one checklist item.`);
+      }
+      if (
+        page.templateId === "document-directory" &&
+        !(content.cards || []).some((card) =>
+          String(card?.name || "").trim(),
+        )
+      ) {
+        warnings.push(`${pageLabel} needs at least one directory card.`);
       }
       if (
         page.templateId === "document-content-page" &&

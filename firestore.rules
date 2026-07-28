@@ -99,6 +99,18 @@ service cloud.firestore {
       return value is string && value.size() <= maximum;
     }
 
+    function validStudioProjectId(projectId) {
+      return projectId is string &&
+        projectId.size() > 0 &&
+        projectId.size() <= 128 &&
+        projectId.matches("^[A-Za-z0-9_-]+$");
+    }
+
+    function validStudioHttpsUrl(value, maximum) {
+      return validStudioString(value, maximum) &&
+        (value.size() == 0 || value.matches("^https://.*"));
+    }
+
     function validPolicyContent(content) {
       return content is map &&
         content.keys().hasAll([
@@ -220,6 +232,111 @@ service cloud.firestore {
         content.accent == "red";
     }
 
+    function validSignupSheetContent(content) {
+      return content is map &&
+        content.keys().hasAll([
+          "eyebrow", "audience", "documentNumber", "title", "subtitle",
+          "instructionsLabel", "instructions", "signupCount",
+          "columnOneLabel", "columnTwoLabel", "columnThreeLabel", "showNumbers",
+          "footerNote", "footerReference", "accent"
+        ]) &&
+        content.keys().hasOnly([
+          "eyebrow", "audience", "documentNumber", "title", "subtitle",
+          "instructionsLabel", "instructions", "signupCount",
+          "columnOneLabel", "columnTwoLabel", "columnThreeLabel", "showNumbers",
+          "footerNote", "footerReference", "accent"
+        ]) &&
+        validStudioString(content.eyebrow, 52) &&
+        validStudioString(content.audience, 28) &&
+        validStudioString(content.documentNumber, 18) &&
+        validStudioString(content.title, 72) &&
+        validStudioString(content.subtitle, 220) &&
+        validStudioString(content.instructionsLabel, 32) &&
+        validStudioString(content.instructions, 360) &&
+        content.signupCount is int &&
+        content.signupCount >= 4 && content.signupCount <= 24 &&
+        validStudioString(content.columnOneLabel, 28) &&
+        validStudioString(content.columnTwoLabel, 28) &&
+        validStudioString(content.columnThreeLabel, 28) &&
+        content.showNumbers is bool &&
+        validStudioString(content.footerNote, 500) &&
+        validStudioString(content.footerReference, 40) &&
+        content.accent == "red";
+    }
+
+    function validDirectoryCard(card, projectId) {
+      return card is map &&
+        card.keys().hasAll([
+          "id", "name", "subtitle", "details", "imageUrl",
+          "imageStoragePath", "sourceType", "sourceId", "publicUrl",
+          "createdAt", "updatedAt"
+        ]) &&
+        card.keys().hasOnly([
+          "id", "name", "subtitle", "details", "imageUrl",
+          "imageStoragePath", "sourceType", "sourceId", "publicUrl",
+          "createdAt", "updatedAt"
+        ]) &&
+        validStudioString(card.id, 80) && card.id.size() > 0 &&
+        validStudioString(card.name, 80) &&
+        validStudioString(card.subtitle, 100) &&
+        validStudioString(card.details, 360) &&
+        validStudioHttpsUrl(card.imageUrl, 1000) &&
+        validStudioString(card.imageStoragePath, 500) &&
+        (
+          card.imageStoragePath.size() == 0 ||
+          card.imageStoragePath.matches(
+            "^studio-projects/" + projectId + "/[^/]+$"
+          )
+        ) &&
+        card.sourceType in ["manual", "planning-center"] &&
+        validStudioString(card.sourceId, 80) &&
+        validStudioHttpsUrl(card.publicUrl, 500) &&
+        card.createdAt is timestamp &&
+        card.updatedAt is timestamp;
+    }
+
+    function validDirectoryCardId(value) {
+      return value is string &&
+        value.size() > 0 &&
+        value.size() <= 80 &&
+        value.matches("^[A-Za-z0-9_-]+$");
+    }
+
+    function validDirectoryCardOrder(cardOrder) {
+      return cardOrder is list &&
+        cardOrder.size() <= 8 &&
+        cardOrder.toSet().size() == cardOrder.size() &&
+        (cardOrder.size() < 1 || validDirectoryCardId(cardOrder[0])) &&
+        (cardOrder.size() < 2 || validDirectoryCardId(cardOrder[1])) &&
+        (cardOrder.size() < 3 || validDirectoryCardId(cardOrder[2])) &&
+        (cardOrder.size() < 4 || validDirectoryCardId(cardOrder[3])) &&
+        (cardOrder.size() < 5 || validDirectoryCardId(cardOrder[4])) &&
+        (cardOrder.size() < 6 || validDirectoryCardId(cardOrder[5])) &&
+        (cardOrder.size() < 7 || validDirectoryCardId(cardOrder[6])) &&
+        (cardOrder.size() < 8 || validDirectoryCardId(cardOrder[7]));
+    }
+
+    function validDirectoryContent(content) {
+      return content is map &&
+        content.keys().hasAll([
+          "eyebrow", "audience", "documentNumber", "title", "subtitle",
+          "cardOrder", "footerNote", "footerReference", "accent"
+        ]) &&
+        content.keys().hasOnly([
+          "eyebrow", "audience", "documentNumber", "title", "subtitle",
+          "cardOrder", "footerNote", "footerReference", "accent"
+        ]) &&
+        validStudioString(content.eyebrow, 52) &&
+        validStudioString(content.audience, 28) &&
+        validStudioString(content.documentNumber, 18) &&
+        validStudioString(content.title, 72) &&
+        validStudioString(content.subtitle, 220) &&
+        validDirectoryCardOrder(content.cardOrder) &&
+        validStudioString(content.footerNote, 500) &&
+        validStudioString(content.footerReference, 40) &&
+        content.accent == "red";
+    }
+
     function validDocumentPage(data) {
       return data is map &&
         data.keys().hasAll([
@@ -230,7 +347,8 @@ service cloud.firestore {
         ]) &&
         data.schemaVersion == 1 &&
         data.templateId in [
-          "document-one-pager", "document-checklist", "document-content-page"
+          "document-one-pager", "document-checklist", "document-signup-sheet",
+          "document-directory", "document-content-page"
         ] &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp &&
@@ -239,6 +357,10 @@ service cloud.firestore {
             validPolicyContent(data.content) :
           data.templateId == "document-checklist" ?
             validChecklistContent(data.content) :
+          data.templateId == "document-signup-sheet" ?
+            validSignupSheetContent(data.content) :
+          data.templateId == "document-directory" ?
+            validDirectoryContent(data.content) :
             validContentPageContent(data.content)
         );
     }
@@ -474,7 +596,8 @@ service cloud.firestore {
     }
 
     function validStudioProject(data, projectId) {
-      return data is map && (
+      return data is map &&
+        validStudioProjectId(projectId) && (
         (data.schemaVersion == 1 && validLegacyStudioProject(data, projectId)) ||
         (data.schemaVersion == 2 && validDocumentProject(data))
       );
@@ -690,6 +813,52 @@ service cloud.firestore {
             !existsAfter(parentProjectPath()) ||
             !(pageId in getAfter(parentProjectPath()).data.pageOrder)
           );
+
+        match /cards/{cardId} {
+          function directoryPagePath() {
+            return /databases/$(database)/documents/centralStudioProjects/$(projectId)/pages/$(pageId);
+          }
+
+          function isActiveDirectoryPage() {
+            return exists(directoryPagePath()) &&
+              pageId in get(parentProjectPath()).data.pageOrder &&
+              get(directoryPagePath()).data.templateId == "document-directory";
+          }
+
+          function directoryCardIsListed() {
+            return isActiveDirectoryPage() &&
+              cardId in get(directoryPagePath()).data.content.cardOrder;
+          }
+
+          allow read: if canReadParentProject();
+          allow create: if canEditParentProject() &&
+            directoryCardIsListed() &&
+            request.resource.data.id == cardId &&
+            request.resource.data.createdAt == request.time &&
+            request.resource.data.updatedAt == request.time &&
+            validDirectoryCard(request.resource.data, projectId);
+          allow update: if canEditParentProject() &&
+            directoryCardIsListed() &&
+            request.resource.data.id == cardId &&
+            request.resource.data.createdAt == resource.data.createdAt &&
+            request.resource.data.updatedAt == request.time &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "name", "subtitle", "details", "imageUrl", "imageStoragePath",
+              "sourceType", "sourceId", "publicUrl", "updatedAt"
+            ]) &&
+            validDirectoryCard(request.resource.data, projectId);
+          allow delete: if canEditParentProject() &&
+            (
+              !exists(directoryPagePath()) ||
+              !(pageId in get(parentProjectPath()).data.pageOrder) ||
+              get(directoryPagePath()).data.templateId !=
+                "document-directory" ||
+              !(
+                cardId in
+                get(directoryPagePath()).data.content.cardOrder
+              )
+            );
+        }
       }
     }
 

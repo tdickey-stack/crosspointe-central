@@ -466,6 +466,156 @@ export function ChecklistPreview({
   );
 }
 
+export function SignupSheetPreview({
+  content,
+  previewRef,
+  pageNumber,
+  pageCount,
+  showPageNumbers = true,
+}) {
+  const signupCount = Math.min(
+    24,
+    Math.max(4, Number(content.signupCount) || 12),
+  );
+  const columns = [
+    content.columnOneLabel,
+    content.columnTwoLabel,
+    content.columnThreeLabel,
+  ];
+  const showInstructions =
+    hasText(content.instructionsLabel) || hasText(content.instructions);
+  return (
+    <article ref={previewRef} className="studio-signup-document">
+      <DocumentHeader content={content} />
+      <div className="signup-sheet-body">
+        {showInstructions ? (
+          <section className="signup-sheet-instructions">
+            {hasText(content.instructionsLabel) ? (
+              <span className="policy-card-label">
+                {content.instructionsLabel}
+              </span>
+            ) : null}
+            {hasText(content.instructions) ? (
+              <p>{content.instructions}</p>
+            ) : null}
+          </section>
+        ) : null}
+        <div
+          className={`signup-sheet-table${
+            content.showNumbers !== false ? " has-numbers" : ""
+          }`}
+          style={{"--signup-row-count": signupCount}}
+        >
+          <div className="signup-sheet-row is-header">
+            {content.showNumbers !== false ? (
+              <span className="signup-sheet-number">#</span>
+            ) : null}
+            {columns.map((label, index) => (
+              <strong key={`${label}-${index}`}>{label}</strong>
+            ))}
+          </div>
+          {Array.from({length: signupCount}, (_, index) => (
+            <div className="signup-sheet-row" key={`signup-row-${index}`}>
+              {content.showNumbers !== false ? (
+                <span className="signup-sheet-number">{index + 1}</span>
+              ) : null}
+              {columns.map((label, columnIndex) => (
+                <span
+                  aria-hidden="true"
+                  key={`${label}-${columnIndex}-${index}`}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+        <DocumentFooter
+          content={content}
+          pageNumber={pageNumber}
+          pageCount={pageCount}
+          showPageNumbers={showPageNumbers}
+        />
+      </div>
+    </article>
+  );
+}
+
+function DirectoryCard({card}) {
+  if (!hasText(card?.name) && !hasText(card?.details)) return null;
+  const meetingDay = [
+    ["SUNDAY", /\bsun(?:day)?s?\b/i],
+    ["MONDAY", /\bmon(?:day)?s?\b/i],
+    ["TUESDAY", /\btue(?:sday)?s?\b/i],
+    ["WEDNESDAY", /\bwed(?:nesday)?s?\b/i],
+    ["THURSDAY", /\bthu(?:rsday)?s?\b/i],
+    ["FRIDAY", /\bfri(?:day)?s?\b/i],
+    ["SATURDAY", /\bsat(?:urday)?s?\b/i],
+  ].find(([, pattern]) => pattern.test(String(card.subtitle || "")))?.[0];
+  return (
+    <article className="directory-card">
+      <div
+        className={`directory-card-image${
+          hasText(card.imageUrl) ? " has-image" : ""
+        }`}
+      >
+        {hasText(card.imageUrl) ? (
+          <img
+            alt=""
+            data-studio-directory-image
+            src={card.imageUrl}
+          />
+        ) : (
+          <span aria-hidden="true">
+            {String(card.name || "C").trim().slice(0, 1).toUpperCase()}
+          </span>
+        )}
+      </div>
+      <div className="directory-card-copy">
+        <div>
+          <h3>{card.name}</h3>
+          {meetingDay ? (
+            <span className="directory-meeting-day">{meetingDay}</span>
+          ) : null}
+        </div>
+        {hasText(card.subtitle) ? <strong>{card.subtitle}</strong> : null}
+        {hasText(card.details) ? <p>{card.details}</p> : null}
+      </div>
+    </article>
+  );
+}
+
+export function DirectoryPreview({
+  content,
+  previewRef,
+  pageNumber,
+  pageCount,
+  showPageNumbers = true,
+}) {
+  const cards = (Array.isArray(content.cards) ? content.cards : [])
+    .filter((card) => hasText(card?.name) || hasText(card?.details))
+    .slice(0, 8);
+  return (
+    <article ref={previewRef} className="studio-directory-document">
+      <DocumentHeader content={content} />
+      <div className="directory-body">
+        <div className={`directory-grid is-count-${cards.length}`}>
+          {cards.map((card, index) => (
+            <DirectoryCard
+              card={card}
+              key={card.id || `${card.name}-${index}`}
+            />
+          ))}
+        </div>
+        <DocumentFooter
+          content={content}
+          pageNumber={pageNumber}
+          pageCount={pageCount}
+          showPageNumbers={showPageNumbers}
+        />
+      </div>
+    </article>
+  );
+}
+
 function renderInlineMarkdown(value) {
   const input = String(value || "");
   const pattern =
@@ -563,6 +713,12 @@ export function DocumentPagePreview({
   };
   if (page.templateId === "document-checklist") {
     return <ChecklistPreview {...props} />;
+  }
+  if (page.templateId === "document-signup-sheet") {
+    return <SignupSheetPreview {...props} />;
+  }
+  if (page.templateId === "document-directory") {
+    return <DirectoryPreview {...props} />;
   }
   if (page.templateId === "document-content-page") {
     return <ContentPagePreview {...props} />;

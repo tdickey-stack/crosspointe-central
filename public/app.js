@@ -5,6 +5,7 @@ var currentCentralData = null;
 var centralEventEditPermission = "none";
 var centralEventAccessInitialized = false;
 var centralRefreshInterval = null;
+var centralEventVisibilityInterval = null;
 var countdownInterval = null;
 var previousCountdownDigits = {};
 
@@ -27,6 +28,7 @@ var sundayNotesToolbarListenersBound = false;
 var GOOGLE_NOTES_SCOPE = "https://www.googleapis.com/auth/drive.file";
 var GOOGLE_NOTES_INIT_TIMEOUT_MS = 10000;
 var CENTRAL_REFRESH_MS = 1200000;
+var CENTRAL_EVENT_VISIBILITY_MS = 15000;
 var CENTRAL_API_URL = "/api/central-data";
 var CENTRAL_HOSTED_WHATS_NEW_URL = "/content/whats-new.json";
 var SERVE_NEED_INTEREST_ENDPOINT = "/api/serve-needs/share-interest";
@@ -345,6 +347,12 @@ function bootCentral_() {
 
     if (!centralRefreshInterval) {
       centralRefreshInterval = window.setInterval(loadCentralData, CENTRAL_REFRESH_MS);
+    }
+    if (!centralEventVisibilityInterval) {
+      centralEventVisibilityInterval = window.setInterval(
+          refreshTimeSensitiveEventVisibility_,
+          CENTRAL_EVENT_VISIBILITY_MS,
+      );
     }
   };
 
@@ -1049,7 +1057,10 @@ function renderFeaturedEventHeroCard_(data, settings) {
   var doorsOpenTime = featuredEvent.doorsOpenTime;
 
   return [
-    "<article class=\"featured-event-card\" aria-labelledby=\"featured-event-title\">",
+    "<article class=\"featured-event-card\" aria-labelledby=\"featured-event-title\"",
+      " data-central-event-starts-at=\"",
+      escapeAttr(featuredEvent.item.starts_at || ""),
+      "\">",
       "<div class=\"featured-event-media\">",
         "<img src=\"", escapeAttr(imageUrl),
           "\" alt=\"\" loading=\"eager\" fetchpriority=\"high\">",
@@ -1075,6 +1086,69 @@ function renderFeaturedEventHeroCard_(data, settings) {
   ].join("");
 }
 
+function isCentralEventUpcoming_(item, now) {
+  var rawStartsAt = String(item && item.starts_at || "").trim();
+  if (!rawStartsAt) return true;
+
+  var startsAt = new Date(rawStartsAt);
+  var currentTime = now instanceof Date ? now : new Date();
+
+  if (isNaN(startsAt.getTime()) || isNaN(currentTime.getTime())) {
+    return true;
+  }
+
+  return startsAt.getTime() > currentTime.getTime();
+}
+
+function getUpcomingCentralEventItems_(items, now) {
+  return (Array.isArray(items) ? items : []).filter(function(item) {
+    return isCentralEventUpcoming_(item, now);
+  });
+}
+
+function refreshTimeSensitiveEventVisibility_() {
+  if (!currentCentralData) return;
+
+  var now = new Date();
+  var todayItems = getUpcomingCentralEventItems_(
+      currentCentralData.today,
+      now,
+  );
+  var todaySection = document.getElementById("today-at-crosspointe");
+
+  if (
+    todaySection &&
+    todaySection.querySelectorAll(".event-card").length !== todayItems.length
+  ) {
+    var nextTodayMarkup = renderToday(currentCentralData.today);
+    if (nextTodayMarkup) {
+      todaySection.outerHTML = nextTodayMarkup;
+    } else {
+      todaySection.remove();
+    }
+  }
+
+  var featuredItem = currentCentralData.featuredEvent || null;
+  if (!featuredItem || isCentralEventUpcoming_(featuredItem, now)) {
+    return;
+  }
+
+  var featuredCard = document.querySelector(".featured-event-card");
+  if (!featuredCard) return;
+
+  if (featuredCard.classList.contains("sunday-featured-event-card")) {
+    featuredCard.remove();
+    return;
+  }
+
+  featuredCard.outerHTML = renderHomepageCountdownCard_(
+      currentCentralData.settings || {},
+  );
+  var hero = document.querySelector(".hero");
+  if (hero) hero.classList.remove("hero-featured-event");
+  startCountdown();
+}
+
 function getFeaturedEventContext_(data, settings) {
   var enabled = normalizeCentralBooleanValue_(
       settings && settings.featured_event_enabled,
@@ -1084,7 +1158,13 @@ function getFeaturedEventContext_(data, settings) {
   var title = String(item && item.title || "").trim();
   var imageUrl = String(item && item.image_url || "").trim();
 
-  if (!enabled || !item || !title || !/^https:\/\//i.test(imageUrl)) {
+  if (
+    !enabled ||
+    !item ||
+    !isCentralEventUpcoming_(item, new Date()) ||
+    !title ||
+    !/^https:\/\//i.test(imageUrl)
+  ) {
     return "";
   }
 
@@ -1107,6 +1187,9 @@ function renderSundayFeaturedEventCard_(data, settings) {
 
   return [
     "<article class=\"featured-event-card sunday-featured-event-card\"",
+      " data-central-event-starts-at=\"",
+      escapeAttr(featuredEvent.item.starts_at || ""),
+      "\"",
       " aria-labelledby=\"sunday-featured-event-title\">",
       "<div class=\"featured-event-media\">",
         "<img src=\"", escapeAttr(featuredEvent.imageUrl),
@@ -1825,14 +1908,15 @@ function renderBanner(banner) {
 }
 
 function renderToday(items) {
-  if (!items || !items.length) return "";
+  var visibleItems = getUpcomingCentralEventItems_(items, new Date());
+  if (!visibleItems.length) return "";
   var calendarIntegrationsEnabled = getCalendarIntegrationsEnabledValue_(
       currentCentralData,
   );
 
   return section("Today at CrossPointe", "Happening Now", renderExpandableGroup({
     id: "today-grid",
-    items: items,
+    items: visibleItems,
     containerClass: "grid two",
     moreLabel: "See More Today",
     lessLabel: "See Less Today",
@@ -1849,7 +1933,7 @@ function renderToday(items) {
         extraClass: "event-card",
       });
     },
-  }));
+  }), "today-at-crosspointe");
 }
 
 function renderSunday(sunday, setlist) {

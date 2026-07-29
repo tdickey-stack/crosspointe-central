@@ -90,6 +90,10 @@ import {
   getPlanningCenterEventSchedule,
 } from "./planning-center/featured-event.js";
 import {
+  filterExpiredCentralEvents,
+  isPlanningCenterEventUpcoming,
+} from "./planning-center/event-visibility.js";
+import {
   CENTRAL_REGISTRATION_SIGNUP_FIELDS,
   getCentralRegistrationSignups,
 } from
@@ -558,14 +562,18 @@ export const centralData = onRequest(
           );
           cachedEntry.data = refreshedData;
           response.set("Cache-Control", "no-store");
-          response.status(200).json(refreshedData);
+          response.status(200).json(
+              filterExpiredCentralEvents(refreshedData),
+          );
           return;
         }
 
         if (cachedEntry && cachedEntry.promise) {
           const pendingPayload = await cachedEntry.promise;
           response.set("Cache-Control", "no-store");
-          response.status(200).json(pendingPayload);
+          response.status(200).json(
+              filterExpiredCentralEvents(pendingPayload),
+          );
           return;
         }
 
@@ -599,7 +607,7 @@ export const centralData = onRequest(
         const payload = await payloadPromise;
 
         response.set("Cache-Control", "no-store");
-        response.status(200).json(payload);
+        response.status(200).json(filterExpiredCentralEvents(payload));
       } catch (error) {
         response.status(500).json({
           error: error && error.message ?
@@ -4258,6 +4266,12 @@ function applyCachedCalendarItemPresentation_(
     title: effectiveDetails.title,
     location: effectiveDetails.location,
     description: effectiveDetails.description,
+    starts_at: !Number.isNaN(startsAt.getTime()) ?
+      startsAt.toISOString() :
+      String(source.starts_at || ""),
+    ends_at: !Number.isNaN(endsAt.getTime()) ?
+      endsAt.toISOString() :
+      String(source.ends_at || ""),
   };
 
   if (!Number.isNaN(startsAt.getTime())) {
@@ -4436,7 +4450,7 @@ async function getCentralFeaturedEvent_(roomRules, eventOverrides = []) {
         eventOverrides,
     );
 
-    if (item) {
+    if (item && isPlanningCenterEventUpcoming(item)) {
       return stripCalendarSourceFields_(
           removePrivateDate_(toUpcomingItem_(item)),
       );
@@ -4559,6 +4573,8 @@ async function buildCentralCalendarItem_(
     title: title,
     date: formatDate_(startsDate, PCO_TIMEZONE),
     time: formatTimeRange_(startsDate, endsAt, PCO_TIMEZONE),
+    starts_at: startsDate.toISOString(),
+    ends_at: hasValidEndDate ? endsDate.toISOString() : "",
     doors_open_time: doorsOpenTime,
     location: location,
     description: description,
@@ -5459,6 +5475,8 @@ function toTodayItem_(item) {
     title: item.title,
     date: item.date,
     time: item.time,
+    starts_at: item.starts_at,
+    ends_at: item.ends_at,
     location: item.location,
     description: item.description,
     recurrence: item.recurrence,
@@ -5500,6 +5518,8 @@ function toUpcomingItem_(item) {
     title: item.title,
     date: item.date,
     time: item.time,
+    starts_at: item.starts_at,
+    ends_at: item.ends_at,
     doors_open_time: item.doors_open_time,
     location: item.location,
     description: item.description,

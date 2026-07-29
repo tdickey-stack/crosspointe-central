@@ -371,6 +371,7 @@ function normalizePreviewPublishSection_(value) {
     section === "nextSteps" ||
     section === "serveNeeds" ||
     section === "resources" ||
+    section === "events" ||
     section === "roomRules" ||
     section === "quickLinks" ||
     section === "statusBanner"

@@ -36,7 +36,7 @@ test("Print Mode falls back to the shared calendar cache", async () => {
     upcoming: [],
   };
   const firestore = createFirestore_({
-    "centralCache/planningCenter/calendar/v1-21-room-hash": {
+    "centralCache/planningCenter/calendar/v3-21": {
       value: calendarValue,
       fetchedAtMs: 789,
     },
@@ -53,11 +53,49 @@ test("Print Mode falls back to the shared calendar cache", async () => {
   assert.deepEqual(result.data.featuredEvent, {id: "featured-1"});
   assert.deepEqual(paths, [
     "centralCache/planningCenter/bulletin/v1-room-hash",
-    "centralCache/planningCenter/calendar/v1-21-room-hash",
+    "centralCache/planningCenter/calendar/v3-21",
   ]);
 });
 
-function createService_(firestore) {
+test("Print Mode applies presentation after reading the source cache", async () => {
+  const paths = [];
+  const sourceValue = {
+    today: [{id: "event-1", title: "Planning Center Title"}],
+    upcoming: [],
+  };
+  const firestore = createFirestore_({
+    "centralCache/planningCenter/calendar/v3-21": {
+      value: sourceValue,
+      fetchedAtMs: 900,
+    },
+  }, paths);
+  const roomRules = [{id: "rule-1"}];
+  const calls = [];
+  const service = createService_(firestore, {
+    applyCalendarPresentation: (events, currentRules, overrides) => {
+      calls.push({events, currentRules, overrides});
+      return {
+        today: [{id: "event-1", title: "Central Title"}],
+        upcoming: [],
+      };
+    },
+  });
+
+  const result = await service.getCached(roomRules, {});
+
+  assert.equal(result.data.events.today[0].title, "Central Title");
+  assert.deepEqual(calls, [{
+    events: sourceValue,
+    currentRules: roomRules,
+    overrides: undefined,
+  }]);
+  assert.deepEqual(paths, [
+    "centralCache/planningCenter/bulletin/v1-room-hash",
+    "centralCache/planningCenter/calendar/v3-21",
+  ]);
+});
+
+function createService_(firestore, overrides = {}) {
   return createPrintModePlanningCenterService({
     firestore,
     getCentralCalendarEvents: async () => ({
@@ -75,6 +113,7 @@ function createService_(firestore) {
     timezone: "America/Chicago",
     cacheRefreshLeaseMs: 45000,
     cacheWaitMs: 50000,
+    ...overrides,
   });
 }
 

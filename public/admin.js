@@ -157,6 +157,15 @@
       status: "Preview workflow",
     },
     {
+      id: "events",
+      label: "Events",
+      route: "/admin/events",
+      pageAccessKey: "events",
+      summary: "Review Planning Center events and override their displayed name, room, or description.",
+      collectionPath: "centralContent/events/items",
+      status: "Planning Center overlay",
+    },
+    {
       id: "hub",
       label: "Homepage",
       route: "/admin/hub",
@@ -327,6 +336,7 @@
     {type: "page", id: "overview"},
     {type: "group", id: "hub"},
     {type: "page", id: "sunday"},
+    {type: "page", id: "events"},
     {type: "page", id: "bulletin"},
     {type: "page", id: "studio"},
     {type: "group", id: "settings"},
@@ -627,6 +637,7 @@
       description: "Everyday pages and publishing tools.",
       keys: [
         "hub",
+        "events",
         "bulletin",
         "thisSunday",
         "quickLinks",
@@ -819,6 +830,11 @@
     resourcesEditingId: "",
     resourcesError: "",
     resourcesMessage: "",
+    eventsLoaded: false,
+    eventsLoading: false,
+    eventsItems: [],
+    eventsError: "",
+    eventsMessage: "",
     campaignsLoaded: false,
     campaignsLoading: false,
     campaignsSaving: false,
@@ -1365,6 +1381,11 @@
         resetChangeRequestsState_();
         resetQuickLinksState_();
         resetResourcesState_();
+        adminState.eventsLoaded = false;
+        adminState.eventsLoading = false;
+        adminState.eventsItems = [];
+        adminState.eventsError = "";
+        adminState.eventsMessage = "";
         resetCampaignsState_();
         resetServeNeedsState_();
         resetNextStepsState_();
@@ -1512,6 +1533,17 @@
     var button = event.target.closest("[data-admin-action]");
     if (button) {
       var action = button.getAttribute("data-admin-action");
+      if (action === "edit-event-details") {
+        openAdminEventEditor_(
+            button.getAttribute("data-admin-event-id") || "",
+        );
+        return;
+      }
+
+      if (action === "refresh-events-page") {
+        loadEvents_(true);
+        return;
+      }
       var resetDirtyScope = ADMIN_RESET_ACTION_DIRTY_SCOPES[action] || "";
       var editDirtyScope = ADMIN_EDIT_ACTION_DIRTY_SCOPES[action] || "";
 
@@ -5890,6 +5922,10 @@
       return renderBulletinPagePanel_(currentPage);
     }
 
+    if (currentPage.id === "events") {
+      return renderEventsPagePanel_(currentPage);
+    }
+
     if (currentPage.id === "quick-links") {
       return renderQuickLinksPagePanel_(currentPage);
     }
@@ -6213,6 +6249,10 @@
 
     if (page.id === "bulletin") {
       return "A guided Sunday print workflow with a live preview.";
+    }
+
+    if (page.id === "events") {
+      return "Planning Center events with controlled display overrides.";
     }
 
     if (page.id === "studio") {
@@ -6540,6 +6580,117 @@
       ].join("") : "",
       "</article>",
     ].join("");
+  }
+
+  function renderEventsPagePanel_(currentPage) {
+    var permission = getPageAccessLevel_("events");
+    var canEdit = canChangeContentWithPermission_(permission);
+    var items = adminState.eventsItems || [];
+
+    return [
+      "<section class=\"central-admin-panel\">",
+      "<div class=\"central-admin-panel-header\"><div>",
+      "<h3>", escapeHtml_(currentPage.label), "</h3>",
+      "<p>Planning Center owns every event schedule. Central overrides only the displayed name, room, and description.</p>",
+      "</div>",
+      renderStatusPill_(getPermissionLabel_(permission),
+          getPermissionToneClass_(permission)),
+      "</div><div class=\"central-admin-page-body\">",
+      "<div class=\"central-admin-item\"><div class=\"central-admin-item-header\">",
+      "<div><strong>Upcoming Planning Center Events</strong><p class=\"central-admin-note\">Date, time, recurrence, and event availability cannot be edited here.</p></div>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-events-page\"",
+      adminState.eventsLoading ? " disabled" : "", ">",
+      adminState.eventsLoading ? "Refreshing..." : "Refresh Events",
+      "</button></div>",
+      adminState.eventsMessage ? renderAdminNote_(adminState.eventsMessage) : "",
+      adminState.eventsError ?
+        "<p class=\"central-admin-note\">" +
+          escapeHtml_(adminState.eventsError) + "</p>" : "",
+      adminState.eventsLoading && !adminState.eventsLoaded ?
+        renderAdminNote_("Loading Planning Center events...") :
+        items.length ?
+          "<div class=\"central-admin-bulletin-events-grid\">" +
+          items.map(function(item) {
+            var overrideCount = Array.isArray(item.overridden_fields) ?
+              item.overridden_fields.length : 0;
+            return [
+              "<article class=\"central-admin-bulletin-event-editor\">",
+              "<div class=\"central-admin-bulletin-event-top\"><div class=\"central-admin-bulletin-event-schedule\">",
+              "<span class=\"central-admin-bulletin-event-date\">",
+              escapeHtml_(item.date || "Date unavailable"), "</span>",
+              "<strong>", escapeHtml_(item.time || "Time unavailable"),
+              "</strong><small>", escapeHtml_(item.location || "No room listed"),
+              "</small></div>",
+              overrideCount ?
+                renderStatusPill_(
+                    String(overrideCount) + " override" +
+                    (overrideCount === 1 ? "" : "s"),
+                    "is-live",
+                ) :
+                renderStatusPill_("Planning Center", "is-safe"),
+              "</div><div class=\"central-admin-bulletin-event-copy\"><h4>",
+              escapeHtml_(item.title || "Untitled Event"), "</h4>",
+              item.description ?
+                "<p>" + escapeHtml_(item.description) + "</p>" :
+                "<p class=\"is-empty\">No description from Planning Center.</p>",
+              "</div>",
+              canEdit ?
+                "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-event-edit\" data-admin-action=\"edit-event-details\" data-admin-event-id=\"" +
+                escapeAttr_(item.id) + "\">Edit Display Details</button>" :
+                "",
+              "</article>",
+            ].join("");
+          }).join("") + "</div>" :
+          renderAdminNote_("No Central events are available in the current window."),
+      "</div></div></section>",
+    ].join("");
+  }
+
+  function loadEventsIfNeeded_() {
+    if (adminState.eventsLoaded || adminState.eventsLoading) return;
+    loadEvents_(false);
+  }
+
+  function loadEvents_(forceRefresh) {
+    adminState.eventsLoading = true;
+    adminState.eventsError = "";
+    adminState.eventsMessage = forceRefresh ?
+      "Refreshing the event list..." : "";
+    if (forceRefresh) resetCurrentCentralDataCache_();
+    renderAdmin_();
+
+    fetchCurrentCentralDataForHub_().then(function(data) {
+      var seen = {};
+      adminState.eventsItems = ([])
+          .concat(Array.isArray(data.today) ? data.today : [])
+          .concat(Array.isArray(data.events) ? data.events : [])
+          .filter(function(item) {
+            var id = String(item && item.id || "");
+            if (!id || seen[id]) return false;
+            seen[id] = true;
+            return true;
+          });
+      adminState.eventsLoading = false;
+      adminState.eventsLoaded = true;
+      adminState.eventsMessage = forceRefresh ?
+        "Events refreshed from Central." : "";
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.eventsLoading = false;
+      adminState.eventsError = error && error.message ?
+        error.message : "Unable to load events.";
+      renderAdmin_();
+    });
+  }
+
+  function openAdminEventEditor_(eventId) {
+    var item = (adminState.eventsItems || []).find(function(eventItem) {
+      return String(eventItem.id || "") === String(eventId || "");
+    });
+    if (!item || !window.CentralEventEditor) return;
+    window.CentralEventEditor.open(item, {
+      permission: getPageAccessLevel_("events"),
+    });
   }
 
   function renderBulletinPagePanel_(currentPage) {
@@ -14923,6 +15074,11 @@
       return;
     }
 
+    if (adminState.currentPageId === "events") {
+      loadEventsIfNeeded_();
+      return;
+    }
+
     if (adminState.currentPageId === "quick-links") {
       loadQuickLinksIfNeeded_();
       return;
@@ -23069,6 +23225,7 @@
       {key: "campaigns", label: "Campaigns"},
       {key: "nextSteps", label: "Next Steps"},
       {key: "serveNeeds", label: "Serve Needs"},
+      {key: "events", label: "Events"},
       {key: "roomRules", label: "Room Rules"},
       {key: "changeRequests", label: "Change Requests"},
       {key: "users", label: "Admin Users"},

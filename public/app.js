@@ -2,6 +2,8 @@ var CENTRAL_IS_ADMIN_ROUTE = window.CENTRAL_BOOT_MODE === "admin" ||
   /^\/admin(?:\/|$)/.test(window.location.pathname);
 
 var currentCentralData = null;
+var centralEventEditPermission = "none";
+var centralEventAccessInitialized = false;
 var centralRefreshInterval = null;
 var countdownInterval = null;
 var previousCountdownDigits = {};
@@ -28,6 +30,7 @@ var CENTRAL_REFRESH_MS = 1200000;
 var CENTRAL_API_URL = "/api/central-data";
 var CENTRAL_HOSTED_WHATS_NEW_URL = "/content/whats-new.json";
 var SERVE_NEED_INTEREST_ENDPOINT = "/api/serve-needs/share-interest";
+var EVENT_EDITOR_ACCESS_ENDPOINT = "/api/admin/events/access";
 var CENTRAL_CACHE_KEY = "central-data-cache-v4";
 var CENTRAL_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 var EXPANDABLE_FLOW_DURATION_MS = 1000;
@@ -346,6 +349,7 @@ function bootCentral_() {
   };
 
   bindResponsiveListeners_();
+  initializeCentralEventEditing_();
   applyResponsiveMode();
   showCentralLoader_();
   setLoadingMessage(
@@ -354,6 +358,76 @@ function bootCentral_() {
       14,
   );
   loadHostedWhatsNewConfig_().then(continueBoot, continueBoot);
+}
+
+function initializeCentralEventEditing_() {
+  if (centralEventAccessInitialized) return;
+  centralEventAccessInitialized = true;
+  var ready = window.CENTRAL_FIREBASE_AUTH_READY || Promise.resolve();
+  ready.then(function() {
+    if (!window.firebase || !window.firebase.auth) return null;
+    return new Promise(function(resolve) {
+      var auth = window.firebase.auth();
+      var unsubscribe = auth.onAuthStateChanged(function(user) {
+        unsubscribe();
+        resolve(user || null);
+      });
+      window.setTimeout(function() {
+        resolve(auth.currentUser || null);
+      }, 2200);
+    });
+  }).then(function(user) {
+    if (!user) return null;
+    return user.getIdToken().then(function(idToken) {
+      return fetch(EVENT_EDITOR_ACCESS_ENDPOINT, {
+        headers: {
+          Authorization: "Bearer " + idToken,
+          Accept: "application/json",
+        },
+      });
+    });
+  }).then(function(response) {
+    if (!response || !response.ok) return null;
+    return response.json();
+  }).then(function(access) {
+    if (!access || access.canEdit !== true) return;
+    centralEventEditPermission = String(access.permission || "none");
+    if (currentCentralData) renderCentral(currentCentralData);
+  }).catch(function() {
+  });
+}
+
+function getCentralEventById_(eventId) {
+  var data = currentCentralData || {};
+  var items = (data.today || []).concat(data.events || []);
+  if (data.featuredEvent) items.push(data.featuredEvent);
+  return items.find(function(item) {
+    return String(item && item.id || "") === String(eventId || "");
+  }) || null;
+}
+
+function openCentralEventEditor(eventId) {
+  var item = getCentralEventById_(eventId);
+  if (!item || !window.CentralEventEditor) return;
+  window.CentralEventEditor.open(item, {
+    permission: centralEventEditPermission,
+  });
+}
+
+function renderEventEditButton_(item) {
+  if (
+    centralEventEditPermission === "none" ||
+    !item ||
+    !item.id
+  ) {
+    return "";
+  }
+  return [
+    "<button type=\"button\" class=\"event-card-edit\"",
+    " aria-label=\"Edit ", escapeAttr(item.title || "event"), "\"",
+    " onclick=\"openCentralEventEditor('",
+    escapeJsString(String(item.id)), "')\">Edit</button>",
+  ].join("");
 }
 
 function bindResponsiveListeners_() {
@@ -991,6 +1065,7 @@ function renderFeaturedEventHeroCard_(data, settings) {
             "<p class=\"featured-event-schedule\">" +
               escapeHtml(schedule) + "</p>" : "",
         "</div>",
+        renderEventEditButton_(featuredEvent.item),
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " onclick=\"openEventDetailsModal('",
           escapeJsString(eventKey),
@@ -1050,6 +1125,7 @@ function renderSundayFeaturedEventCard_(data, settings) {
             "<p class=\"featured-event-schedule\">" +
               escapeHtml(featuredEvent.schedule) + "</p>" : "",
         "</div>",
+        renderEventEditButton_(featuredEvent.item),
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " aria-label=\"View featured event: ",
           escapeAttr(featuredEvent.title), "\"",
@@ -1763,6 +1839,7 @@ function renderToday(items) {
     renderItem: function(item) {
       return card({
         title: item.title,
+        preHeadingHtml: renderEventEditButton_(item),
         meta: [item.time, item.location].filter(Boolean).join(" • "),
         description: "",
         buttonHtml: renderEventDetailsButton_(item),
@@ -2979,6 +3056,7 @@ function renderEvents(items) {
     renderItem: function(item) {
       return card({
         title: item.title,
+        preHeadingHtml: renderEventEditButton_(item),
         meta: [item.date, item.time, item.location].filter(Boolean).join(" • "),
         description: "",
         buttonHtml: renderEventDetailsButton_(item),

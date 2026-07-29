@@ -4996,6 +4996,11 @@
       return;
     }
 
+    if (!adminState.user) {
+      appEl.innerHTML = renderAdminAccessGate_();
+      return;
+    }
+
     var currentPage = getAdminPageById_(adminState.currentPageId) ||
       getAdminPageById_("overview");
     var visiblePages = getVisibleAdminPages_();
@@ -5043,6 +5048,61 @@
     syncAdminQuickLinkReveal_();
     syncAdminUserEditorModal_();
     maybeLoadCurrentPageData_();
+  }
+
+  function renderAdminAccessGate_() {
+    var isLoading = adminState.authLoading;
+    var hasError = Boolean(adminState.errorMessage);
+    var hasInvite = hasAdminInviteQueryParams_();
+    var kicker = isLoading ?
+      "CONNECTING" :
+      hasError ?
+        "ADMIN NEEDS ATTENTION" :
+        hasInvite ?
+          "INVITATION READY" :
+          "ADMIN DASHBOARD";
+    var heading = isLoading ?
+      "Preparing Central Admin" :
+      hasError ?
+        "Central Admin could not start" :
+        hasInvite ?
+          "Your admin invitation is waiting" :
+          "Welcome to Central Admin";
+    var message = hasError ?
+      adminState.errorMessage :
+      adminState.infoMessage ||
+        "Sign in with your CrossPointe Google account to manage Central.";
+
+    return [
+      "<main class=\"central-admin-access-shell\">",
+      "<section class=\"central-admin-access-card\" aria-live=\"polite\">",
+      "<a class=\"central-admin-access-brand\" href=\"/admin\" aria-label=\"Central Admin home\">",
+      "<img src=\"/favicon.svg\" alt=\"\">",
+      "<span><strong>Central</strong><b>Admin</b></span>",
+      "</a>",
+      "<div class=\"central-admin-access-art\" aria-hidden=\"true\">",
+      "<span></span><span></span><span></span>",
+      "</div>",
+      "<span class=\"central-admin-access-kicker\">",
+      escapeHtml_(kicker),
+      "</span>",
+      "<h1>", escapeHtml_(heading), "</h1>",
+      "<p", hasError ? " role=\"alert\"" : "", ">",
+      escapeHtml_(message),
+      "</p>",
+      "<div class=\"central-admin-access-actions\">",
+      !isLoading && adminState.authReady ? [
+        "<button type=\"button\" class=\"central-admin-access-button is-primary\" data-admin-action=\"sign-in\">",
+        "Sign In with Google",
+        "</button>",
+      ].join("") : "",
+      "<a class=\"central-admin-access-button is-secondary\" href=\"/\">",
+      "Return to Central",
+      "</a>",
+      "</div>",
+      "</section>",
+      "</main>",
+    ].join("");
   }
 
   function syncAdminPageChrome_(currentPage) {

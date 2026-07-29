@@ -1,5 +1,7 @@
 import {getSharedCachedValue} from
   "../planning-center/shared-cache.js";
+import {buildCalendarSourceCacheId} from
+  "../calendar-source-cache.js";
 
 const PRINT_MODE_PCO_CACHE_COLLECTION_PATH =
   "centralCache/planningCenter/bulletin";
@@ -16,6 +18,10 @@ export function createPrintModePlanningCenterService(options) {
       options.createEventOverridesHash :
       () => "none";
   const isValidCalendarEventsValue = options.isValidCalendarEventsValue;
+  const applyCalendarPresentation =
+    typeof options.applyCalendarPresentation === "function" ?
+      options.applyCalendarPresentation :
+      (events) => events;
   const dateKey = options.dateKey;
   const timezone = options.timezone;
   const cacheRefreshLeaseMs = options.cacheRefreshLeaseMs;
@@ -54,20 +60,7 @@ export function createPrintModePlanningCenterService(options) {
       parsedLookaheadDays > 0 ?
       Math.min(90, Math.max(1, Math.floor(parsedLookaheadDays))) :
       14;
-    const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
-    const normalizedEventOverrides = Array.isArray(eventOverrides) ?
-      eventOverrides : [];
-    const roomRulesHash =
-      createRoomRulesComparisonHash(normalizedRoomRules);
-    const eventOverridesHash = createEventOverridesHash(
-        normalizedEventOverrides,
-    );
-    const cacheId = [
-      normalizedEventOverrides.length ? "v2" : "v1",
-      normalizedLookaheadDays,
-      roomRulesHash.slice(0, 32),
-      normalizedEventOverrides.length ? eventOverridesHash.slice(0, 32) : "",
-    ].filter(Boolean).join("-");
+    const cacheId = buildCalendarSourceCacheId(normalizedLookaheadDays);
     const snapshot = await firestore.doc(
         "centralCache/planningCenter/calendar/" + cacheId,
     ).get();
@@ -78,7 +71,11 @@ export function createPrintModePlanningCenterService(options) {
     }
 
     return {
-      events: entry.value,
+      events: applyCalendarPresentation(
+          entry.value,
+          roomRules,
+          eventOverrides,
+      ),
       fetchedAtMs: Number(entry.fetchedAtMs) || 0,
     };
   }

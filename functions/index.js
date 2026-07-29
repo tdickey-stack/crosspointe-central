@@ -43,6 +43,7 @@ import {onRequest} from "firebase-functions/v2/https";
 import {defineSecret} from "firebase-functions/params";
 
 import {mergePreviewSingletonPayload} from "./preview-publish.js";
+import {buildCalendarSourceCacheId} from "./calendar-source-cache.js";
 import {
   applyEventOverrides,
   buildEventOverrideId,
@@ -1484,6 +1485,7 @@ const printModePlanningCenter = createPrintModePlanningCenterService({
   createRoomRulesComparisonHash: createRoomRulesComparisonHash_,
   createEventOverridesHash: createEventOverridesHash,
   isValidCalendarEventsValue: isValidCalendarEventsValue_,
+  applyCalendarPresentation: applyCachedCalendarPresentation_,
   dateKey: dateKey_,
   timezone: PCO_TIMEZONE,
   cacheRefreshLeaseMs: PCO_CACHE_REFRESH_LEASE_MS,
@@ -4015,19 +4017,9 @@ async function getCentralCalendarEvents_(
       lookaheadDays,
   );
   const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
-  const roomRulesHash = createRoomRulesComparisonHash_(normalizedRoomRules);
   const normalizedEventOverrides = normalizeEventOverrides(eventOverrides);
-  const hasEventOverrides = normalizedEventOverrides.length > 0;
-  const eventOverridesHash = createEventOverridesHash(
-      normalizedEventOverrides,
-  );
   const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
-  const cacheId = [
-    hasEventOverrides ? "v2" : "v1",
-    normalizedLookaheadDays,
-    roomRulesHash.slice(0, 32),
-    hasEventOverrides ? eventOverridesHash.slice(0, 32) : "",
-  ].filter(Boolean).join("-");
+  const cacheId = buildCalendarSourceCacheId(normalizedLookaheadDays);
   const docRef = firestore.doc(
       "centralCache/planningCenter/calendar/" + cacheId,
   );
@@ -4040,23 +4032,18 @@ async function getCentralCalendarEvents_(
     validateValue: isValidCalendarEventsValue_,
     isEntryCurrent: (entry) => {
       return entry.dateKey === todayKey &&
-        Number(entry.lookaheadDays) === normalizedLookaheadDays &&
-        entry.roomRulesHash === roomRulesHash &&
-        (!hasEventOverrides ||
-          entry.eventOverridesHash === eventOverridesHash);
+        Number(entry.lookaheadDays) === normalizedLookaheadDays;
     },
     metadata: {
-      cacheType: "planning-center-calendar",
+      cacheType: "planning-center-calendar-source",
       dateKey: todayKey,
       lookaheadDays: normalizedLookaheadDays,
-      roomRulesHash,
-      eventOverridesHash,
     },
     forceRefresh: options.forceRefresh === true,
     loadFresh: () => fetchCentralCalendarEvents_(
-        normalizedRoomRules,
+        [],
         normalizedLookaheadDays,
-        normalizedEventOverrides,
+        [],
     ),
     onError: (phase, error) => {
       console.warn(
@@ -4066,7 +4053,11 @@ async function getCentralCalendarEvents_(
     },
   });
 
-  return cachedResult.value;
+  return applyCachedCalendarPresentation_(
+      cachedResult.value,
+      normalizedRoomRules,
+      normalizedEventOverrides,
+  );
 }
 
 function normalizeCalendarLookaheadDays_(lookaheadDays) {
@@ -4181,6 +4172,135 @@ async function fetchCentralCalendarEvents_(
     today: today.map(removePrivateDate_),
     upcoming: upcoming.map(removePrivateDate_),
   };
+}
+
+/**
+ * Applies current presentation settings to cached Planning Center source data.
+ * @param {Object} events Cached source events.
+ * @param {Array<Object>} roomRules Current room-name rules.
+ * @param {Array<Object>} eventOverrides Current event overrides.
+ * @return {Object} Public today and upcoming events.
+ */
+function applyCachedCalendarPresentation_(
+    events,
+    roomRules,
+    eventOverrides,
+) {
+  return {
+    today: (Array.isArray(events && events.today) ? events.today : [])
+        .map((item) => applyCachedCalendarItemPresentation_(
+            item,
+            roomRules,
+            eventOverrides,
+        )),
+    upcoming: (Array.isArray(events && events.upcoming) ?
+      events.upcoming :
+      [])
+        .map((item) => applyCachedCalendarItemPresentation_(
+            item,
+            roomRules,
+            eventOverrides,
+        )),
+  };
+}
+
+/**
+ * Applies current room and event presentation values to one cached item.
+ * @param {Object} item Cached source event.
+ * @param {Array<Object>} roomRules Current room-name rules.
+ * @param {Array<Object>} eventOverrides Current event overrides.
+ * @return {Object} Public event item.
+ */
+function applyCachedCalendarItemPresentation_(
+    item,
+    roomRules,
+    eventOverrides,
+) {
+  const source = item && typeof item === "object" ? item : {};
+  const rawRooms = Array.isArray(source._planningCenterRooms) ?
+    source._planningCenterRooms.filter(Boolean) :
+    [];
+  const rawLocation = String(
+      source._planningCenterRawLocation || "",
+  ).trim();
+  const planningCenterLocation = rawRooms.length ?
+    rawRooms.join(", ") :
+    cleanLocation_(rawLocation);
+  const resolvedRooms = applyRoomRules_(rawRooms, roomRules);
+  const resolvedLocation = resolvedRooms.length ?
+    resolvedRooms.join(", ") :
+    cleanLocation_(rawLocation);
+  const effectiveDetails = applyEventOverrides({
+    title: source.planning_center_title || source.title,
+    location: resolvedLocation,
+    description:
+      source.planning_center_description || source.description,
+  }, eventOverrides, {
+    planning_center_event_id: source.planning_center_event_id,
+    planning_center_instance_id:
+      source.planning_center_instance_id || source.id,
+  });
+  const startsAt = new Date(source._planningCenterStartsAt || "");
+  const endsAt = new Date(source._planningCenterEndsAt || "");
+  const calendarDescription = [
+    effectiveDetails.description,
+    source.recurrence_details,
+  ].filter(Boolean).join("\n\n");
+  const namedDoorsOpenTime = String(
+      source._planningCenterNamedDoorsOpenTime || "",
+  ).trim();
+  const nextItem = {
+    ...source,
+    planning_center_location: planningCenterLocation,
+    overridden_fields: effectiveDetails.overridden_fields,
+    override_scope: effectiveDetails.override_scope,
+    override_id: effectiveDetails.override_id,
+    title: effectiveDetails.title,
+    location: effectiveDetails.location,
+    description: effectiveDetails.description,
+  };
+
+  if (!Number.isNaN(startsAt.getTime())) {
+    nextItem.calendar_url = buildGoogleCalendarUrl_({
+      title: effectiveDetails.title,
+      startsAt,
+      endsAt,
+      location: effectiveDetails.location,
+      description: calendarDescription,
+      url: source.church_center_url,
+    });
+    nextItem.calendar_file_url = buildCalendarFileUrl_({
+      title: effectiveDetails.title,
+      startsAt,
+      endsAt,
+      location: effectiveDetails.location,
+      description: calendarDescription,
+      url: source.church_center_url,
+    });
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, "doors_open_time")) {
+    nextItem.doors_open_time = namedDoorsOpenTime ||
+      findDoorsOpenTimeInText(effectiveDetails.description);
+  }
+
+  return stripCalendarSourceFields_(nextItem);
+}
+
+/**
+ * Removes source-cache-only fields before returning an event publicly.
+ * @param {Object} item Event item.
+ * @return {Object} Public event item.
+ */
+function stripCalendarSourceFields_(item) {
+  const publicItem = {...item};
+  delete publicItem._planningCenterRooms;
+  delete publicItem._planningCenterRawLocation;
+  delete publicItem._planningCenterStartsAt;
+  delete publicItem._planningCenterEndsAt;
+  delete publicItem._planningCenterNamedDoorsOpenTime;
+  delete publicItem._dateObj;
+  return publicItem;
 }
 
 /**
@@ -4316,7 +4436,11 @@ async function getCentralFeaturedEvent_(roomRules, eventOverrides = []) {
         eventOverrides,
     );
 
-    if (item) return removePrivateDate_(toUpcomingItem_(item));
+    if (item) {
+      return stripCalendarSourceFields_(
+          removePrivateDate_(toUpcomingItem_(item)),
+      );
+    }
   }
 
   return null;
@@ -4361,11 +4485,8 @@ async function buildCentralCalendarItem_(
   const planningCenterTitle = String(
       attrs.name || "Untitled Event",
   ).trim();
-  const [rooms, eventSchedule] = await Promise.all([
-    getEventInstanceRooms_(
-        instance.id,
-        Array.isArray(roomRules) ? roomRules : [],
-    ),
+  const [rawRooms, eventSchedule] = await Promise.all([
+    getEventInstanceRawRooms_(instance.id),
     featured ?
       getEventInstanceSchedule_(instance.id, planningCenterTitle) :
       {},
@@ -4377,8 +4498,14 @@ async function buildCentralCalendarItem_(
   const hasValidEndDate = !Number.isNaN(endsDate.getTime());
   const rawLocation = String(attrs.location || "").trim();
   const locationDetails = splitPlanningCenterLocation_(rawLocation);
-  const planningCenterLocation = rooms.length ?
-    rooms.join(", ") : cleanLocation_(rawLocation);
+  const planningCenterLocation = rawRooms.length ?
+    rawRooms.join(", ") : cleanLocation_(rawLocation);
+  const resolvedRooms = applyRoomRules_(
+      rawRooms,
+      Array.isArray(roomRules) ? roomRules : [],
+  );
+  const resolvedLocation = resolvedRooms.length ?
+    resolvedRooms.join(", ") : cleanLocation_(rawLocation);
   const eventReference = instance.relationships &&
     instance.relationships.event &&
     instance.relationships.event.data;
@@ -4387,7 +4514,7 @@ async function buildCentralCalendarItem_(
   ).trim();
   const effectiveDetails = applyEventOverrides({
     title: planningCenterTitle,
-    location: planningCenterLocation,
+    location: resolvedLocation,
     description: planningCenterDescription,
   }, eventOverrides, {
     planning_center_event_id: planningCenterEventId,
@@ -4465,6 +4592,11 @@ async function buildCentralCalendarItem_(
     end_date: hasValidEndDate ? formatDate_(endsDate, PCO_TIMEZONE) : "",
     sort: 50,
     source: "Planning Center",
+    _planningCenterRooms: rawRooms,
+    _planningCenterRawLocation: rawLocation,
+    _planningCenterStartsAt: startsDate.toISOString(),
+    _planningCenterEndsAt: hasValidEndDate ? endsDate.toISOString() : "",
+    _planningCenterNamedDoorsOpenTime: namedDoorsOpenTime,
     _dateObj: startsDate,
   };
 }
@@ -4806,7 +4938,25 @@ function buildCalendarFilename_(title) {
   return basename + ".ics";
 }
 
+/**
+ * Resolves one event instance's rooms through the current display rules.
+ * @param {string} instanceId Planning Center event-instance ID.
+ * @param {Array<Object>} roomRules Current room-name rules.
+ * @return {Promise<Array<string>>} Display room names.
+ */
 async function getEventInstanceRooms_(instanceId, roomRules) {
+  return applyRoomRules_(
+      await getEventInstanceRawRooms_(instanceId),
+      Array.isArray(roomRules) ? roomRules : [],
+  );
+}
+
+/**
+ * Loads one event instance's raw Planning Center room names.
+ * @param {string} instanceId Planning Center event-instance ID.
+ * @return {Promise<Array<string>>} Raw room names.
+ */
+async function getEventInstanceRawRooms_(instanceId) {
   const normalizedInstanceId = String(instanceId || "").trim();
   if (!normalizedInstanceId) return [];
 
@@ -4841,10 +4991,7 @@ async function getEventInstanceRooms_(instanceId, roomRules) {
     },
   });
 
-  return applyRoomRules_(
-      cachedResult.value,
-      Array.isArray(roomRules) ? roomRules : [],
-  );
+  return cachedResult.value;
 }
 
 async function fetchEventInstanceRooms_(instanceId) {
@@ -5327,6 +5474,12 @@ function toTodayItem_(item) {
     image_url: item.image_url,
     sort: item.sort,
     source: item.source,
+    _planningCenterRooms: item._planningCenterRooms,
+    _planningCenterRawLocation: item._planningCenterRawLocation,
+    _planningCenterStartsAt: item._planningCenterStartsAt,
+    _planningCenterEndsAt: item._planningCenterEndsAt,
+    _planningCenterNamedDoorsOpenTime:
+      item._planningCenterNamedDoorsOpenTime,
     _dateObj: item._dateObj,
   };
 }
@@ -5364,6 +5517,12 @@ function toUpcomingItem_(item) {
     end_date: item.end_date,
     sort: item.sort,
     source: item.source,
+    _planningCenterRooms: item._planningCenterRooms,
+    _planningCenterRawLocation: item._planningCenterRawLocation,
+    _planningCenterStartsAt: item._planningCenterStartsAt,
+    _planningCenterEndsAt: item._planningCenterEndsAt,
+    _planningCenterNamedDoorsOpenTime:
+      item._planningCenterNamedDoorsOpenTime,
     _dateObj: item._dateObj,
   };
 }

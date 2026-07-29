@@ -346,6 +346,13 @@
         }
       },
       {
+        "source": "/api/admin/events/access",
+        "function": {
+          "functionId": "eventEditorAccess",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/admin/bootstrap-first-user",
         "function": {
           "functionId": "bootstrapFirstAdminUser",

@@ -11,40 +11,63 @@ export function createPrintModePlanningCenterService(options) {
   const getCentralFeaturedEvent = options.getCentralFeaturedEvent;
   const createRoomRulesComparisonHash =
     options.createRoomRulesComparisonHash;
+  const createEventOverridesHash =
+    typeof options.createEventOverridesHash === "function" ?
+      options.createEventOverridesHash :
+      () => "none";
   const isValidCalendarEventsValue = options.isValidCalendarEventsValue;
   const dateKey = options.dateKey;
   const timezone = options.timezone;
   const cacheRefreshLeaseMs = options.cacheRefreshLeaseMs;
   const cacheWaitMs = options.cacheWaitMs;
 
-  function getCacheContext_(roomRules) {
+  function getCacheContext_(roomRules, eventOverrides) {
     const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
+    const normalizedEventOverrides = Array.isArray(eventOverrides) ?
+      eventOverrides : [];
     const roomRulesHash =
       createRoomRulesComparisonHash(normalizedRoomRules);
-    const cacheId = "v1-" + roomRulesHash.slice(0, 40);
+    const eventOverridesHash = createEventOverridesHash(
+        normalizedEventOverrides,
+    );
+    const cacheId = normalizedEventOverrides.length ?
+      "v2-" + roomRulesHash.slice(0, 24) + "-" +
+        eventOverridesHash.slice(0, 24) :
+      "v1-" + roomRulesHash.slice(0, 40);
 
     return {
       roomRulesHash,
+      eventOverridesHash,
       docRef: firestore.doc(
           PRINT_MODE_PCO_CACHE_COLLECTION_PATH + "/" + cacheId,
       ),
     };
   }
 
-  async function getCachedCalendarEvents_(roomRules, lookaheadDays) {
+  async function getCachedCalendarEvents_(
+      roomRules,
+      lookaheadDays,
+      eventOverrides,
+  ) {
     const parsedLookaheadDays = Number(lookaheadDays);
     const normalizedLookaheadDays = Number.isFinite(parsedLookaheadDays) &&
       parsedLookaheadDays > 0 ?
       Math.min(90, Math.max(1, Math.floor(parsedLookaheadDays))) :
       14;
     const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
+    const normalizedEventOverrides = Array.isArray(eventOverrides) ?
+      eventOverrides : [];
     const roomRulesHash =
       createRoomRulesComparisonHash(normalizedRoomRules);
+    const eventOverridesHash = createEventOverridesHash(
+        normalizedEventOverrides,
+    );
     const cacheId = [
-      "v1",
+      normalizedEventOverrides.length ? "v2" : "v1",
       normalizedLookaheadDays,
       roomRulesHash.slice(0, 32),
-    ].join("-");
+      normalizedEventOverrides.length ? eventOverridesHash.slice(0, 32) : "",
+    ].filter(Boolean).join("-");
     const snapshot = await firestore.doc(
         "centralCache/planningCenter/calendar/" + cacheId,
     ).get();
@@ -60,8 +83,8 @@ export function createPrintModePlanningCenterService(options) {
     };
   }
 
-  async function getCached(roomRules, config) {
-    const cacheContext = getCacheContext_(roomRules);
+  async function getCached(roomRules, config, eventOverrides) {
+    const cacheContext = getCacheContext_(roomRules, eventOverrides);
     const snapshot = await cacheContext.docRef.get();
     const entry = snapshot.exists ? snapshot.data() || {} : {};
     if (isValidPrintModePlanningCenterData_(entry.value)) {
@@ -72,7 +95,11 @@ export function createPrintModePlanningCenterService(options) {
       };
     }
 
-    const calendarCache = await getCachedCalendarEvents_(roomRules, 21);
+    const calendarCache = await getCachedCalendarEvents_(
+        roomRules,
+        21,
+        eventOverrides,
+    );
     if (calendarCache) {
       return {
         data: {
@@ -94,8 +121,8 @@ export function createPrintModePlanningCenterService(options) {
     };
   }
 
-  async function refresh(roomRules) {
-    const cacheContext = getCacheContext_(roomRules);
+  async function refresh(roomRules, eventOverrides) {
+    const cacheContext = getCacheContext_(roomRules, eventOverrides);
     const cachedResult = await getSharedCachedValue({
       firestore,
       docRef: cacheContext.docRef,
@@ -107,11 +134,17 @@ export function createPrintModePlanningCenterService(options) {
         cacheType: "planning-center-bulletin",
         dateKey: dateKey(new Date(), timezone),
         roomRulesHash: cacheContext.roomRulesHash,
+        eventOverridesHash: cacheContext.eventOverridesHash,
       },
       loadFresh: async () => {
         const results = await Promise.allSettled([
-          getCentralCalendarEvents(roomRules, 21, {forceRefresh: true}),
-          getCentralFeaturedEvent(roomRules),
+          getCentralCalendarEvents(
+              roomRules,
+              21,
+              {forceRefresh: true},
+              eventOverrides,
+          ),
+          getCentralFeaturedEvent(roomRules, eventOverrides),
         ]);
 
         if (results[0].status === "rejected") {

@@ -43,6 +43,16 @@ import {onRequest} from "firebase-functions/v2/https";
 import {defineSecret} from "firebase-functions/params";
 
 import {mergePreviewSingletonPayload} from "./preview-publish.js";
+import {
+  applyEventOverrides,
+  buildEventOverrideId,
+  createEventOverridesHash,
+  normalizeEventOverrideItem,
+  normalizeEventOverrides,
+  validateEventOverrideItem,
+} from "./event-overrides.js";
+import {resolveEffectiveRoomRulesBaseline} from
+  "./room-rules-baseline.js";
 import {createWayfinderAnswerHandler} from "./wayfinder/answer.js";
 import {
   createWayfinderAlphaAccessHandler,
@@ -161,6 +171,8 @@ const CENTRAL_ROOM_RULES_COLLECTION_PATH =
   "centralContent/roomRules/items";
 const CENTRAL_ROOM_RULES_META_DOC_PATH =
   "centralContent/roomRules/meta/state";
+const CENTRAL_EVENT_OVERRIDES_COLLECTION_PATH =
+  "centralContent/events/items";
 const CENTRAL_SERVE_NEEDS_ROOT_DOC_PATH =
   "centralServeNeeds/root";
 const CENTRAL_SERVE_NEEDS_INTERESTS_COLLECTION_PATH =
@@ -418,6 +430,7 @@ const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "campaigns", label: "Campaigns"},
   {key: "nextSteps", label: "Next Steps"},
   {key: "serveNeeds", label: "Serve Needs"},
+  {key: "events", label: "Events"},
   {key: "roomRules", label: "Room Rules"},
   {key: "changeRequests", label: "Change Requests"},
   {key: "users", label: "Admin Users"},
@@ -592,6 +605,55 @@ export const centralData = onRequest(
             error.message :
             "Unable to load CrossPointe Central.",
         });
+      }
+    },
+);
+
+export const eventEditorAccess = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      if (request.method !== "GET") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      const idToken = getBearerToken_(request.get("Authorization"));
+      if (!idToken) {
+        response.status(401).json({error: "Sign in to Central Admin first."});
+        return;
+      }
+
+      try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const email = normalizeAdminEmail_(decodedToken.email);
+        if (!isAllowedCentralAdminEmail_(email)) {
+          response.status(403).json({error: "Event access denied."});
+          return;
+        }
+        const snapshot = await firestore
+            .doc(getCentralAdminUserDocPath_(decodedToken.uid))
+            .get();
+        if (!snapshot.exists || snapshot.get("active") !== true) {
+          response.status(403).json({error: "Event access denied."});
+          return;
+        }
+        const permission = getManagedAdminSectionPermission_(
+            snapshot.get("pageAccess") || {},
+            "events",
+        );
+        response.status(200).json({
+          ok: true,
+          permission,
+          canView: permission !== "none",
+          canEdit: permission === "propose" ||
+            canPublishPreviewWithPermission_(permission),
+        });
+      } catch (error) {
+        response.status(401).json({error: "Your admin session expired."});
       }
     },
 );
@@ -1420,6 +1482,7 @@ const printModePlanningCenter = createPrintModePlanningCenterService({
   getCentralCalendarEvents: getCentralCalendarEvents_,
   getCentralFeaturedEvent: getCentralFeaturedEvent_,
   createRoomRulesComparisonHash: createRoomRulesComparisonHash_,
+  createEventOverridesHash: createEventOverridesHash,
   isValidCalendarEventsValue: isValidCalendarEventsValue_,
   dateKey: dateKey_,
   timezone: PCO_TIMEZONE,
@@ -1436,6 +1499,7 @@ export const bulletinMode = createPrintModeFunction({
   allowedAdminEmailDomains: CENTRAL_ALLOWED_ADMIN_EMAIL_DOMAINS,
   allowedAdminEmails: CENTRAL_ALLOWED_ADMIN_EMAILS,
   getFirestoreRoomRulesOverride: getFirestoreRoomRulesOverride_,
+  getFirestoreEventOverrides: getFirestoreEventOverrides_,
   getFirestoreCampaignsOverride: getFirestoreCampaignsOverride_,
   getFirestoreServeNeedsOverride: getFirestoreServeNeedsOverride_,
   getDefaultRoomRules: getDefaultCentralRoomRules_,
@@ -2737,6 +2801,7 @@ async function buildCentralDataPayload_(environment) {
     resourcesOverride,
     quickLinksOverride,
     roomRulesOverride,
+    eventOverrides,
     statusBannerOverride,
     whatsNewOverride,
   ] = await Promise.all([
@@ -2749,6 +2814,7 @@ async function buildCentralDataPayload_(environment) {
     getFirestoreResourcesOverride_(),
     getFirestoreQuickLinksOverride_(),
     getFirestoreRoomRulesOverride_(),
+    getFirestoreEventOverrides_(),
     getFirestoreStatusBannerOverride_(),
     getFirestoreWhatsNewOverride_(),
   ]);
@@ -2765,7 +2831,10 @@ async function buildCentralDataPayload_(environment) {
   const roomRules = roomRulesOverride.shouldOverride ?
     roomRulesOverride.items :
     getDefaultCentralRoomRules_();
-  const planningCenterData = await getPlanningCenterDataSafely_(roomRules);
+  const planningCenterData = await getPlanningCenterDataSafely_(
+      roomRules,
+      eventOverrides,
+  );
   const setlist = Array.isArray(planningCenterData.setlist) ?
     planningCenterData.setlist :
     [];
@@ -2815,6 +2884,7 @@ async function buildCentralDataPayload_(environment) {
       [],
     featuredEvent: planningCenterData.featuredEvent || null,
     roomRules: roomRules,
+    eventOverrides: eventOverrides,
     campaigns: campaignsOverride.shouldOverride ?
       campaignsOverride.items :
       [],
@@ -3505,6 +3575,25 @@ async function getFirestoreRoomRulesOverride_() {
   });
 }
 
+/**
+ * Loads active event presentation overrides from Firestore.
+ * @return {Promise<Array<Object>>} Normalized event overrides.
+ */
+async function getFirestoreEventOverrides_() {
+  try {
+    const snapshot = await firestore
+        .collection(CENTRAL_EVENT_OVERRIDES_COLLECTION_PATH)
+        .get();
+    return normalizeEventOverrides(snapshot.docs.map((docSnapshot) => ({
+      id: docSnapshot.id,
+      ...(docSnapshot.data() || {}),
+    })));
+  } catch (error) {
+    console.error("Firestore event overrides failed.", error);
+    return [];
+  }
+}
+
 function toCentralRoomRuleFromFirestoreDoc_(snapshot) {
   const data = snapshot && typeof snapshot.data === "function" ?
     snapshot.data() || {} :
@@ -3769,7 +3858,13 @@ function isCampaignVisible_(item, todayKey) {
   return true;
 }
 
-async function getPlanningCenterDataSafely_(roomRules) {
+/**
+ * Loads the Planning Center-backed sections without failing the whole payload.
+ * @param {Array<Object>} roomRules Published room-name rules.
+ * @param {Array<Object>} eventOverrides Published event presentation overrides.
+ * @return {Promise<Object>} Safe Planning Center data.
+ */
+async function getPlanningCenterDataSafely_(roomRules, eventOverrides = []) {
   if (!hasPlanningCenterCredentials_()) {
     return {
       events: {
@@ -3789,9 +3884,9 @@ async function getPlanningCenterDataSafely_(roomRules) {
     setlistResult,
   ] =
     await Promise.allSettled([
-      getCentralCalendarEvents_(roomRules),
+      getCentralCalendarEvents_(roomRules, undefined, {}, eventOverrides),
       getCentralRegistrationSignups_(),
-      getCentralFeaturedEvent_(roomRules),
+      getCentralFeaturedEvent_(roomRules, eventOverrides),
       getPlanningCenterSetlist_(),
     ]);
 
@@ -3902,18 +3997,37 @@ async function fetchPcoCollectionJson_(url) {
   return combined;
 }
 
-async function getCentralCalendarEvents_(roomRules, lookaheadDays, options = {}) {
+/**
+ * Loads Central calendar events through the shared cache.
+ * @param {Array<Object>} roomRules Published room-name rules.
+ * @param {number=} lookaheadDays Calendar lookahead in days.
+ * @param {Object=} options Cache options.
+ * @param {Array<Object>=} eventOverrides Event presentation overrides.
+ * @return {Promise<Object>} Today and upcoming events.
+ */
+async function getCentralCalendarEvents_(
+    roomRules,
+    lookaheadDays,
+    options = {},
+    eventOverrides = [],
+) {
   const normalizedLookaheadDays = normalizeCalendarLookaheadDays_(
       lookaheadDays,
   );
   const normalizedRoomRules = Array.isArray(roomRules) ? roomRules : [];
   const roomRulesHash = createRoomRulesComparisonHash_(normalizedRoomRules);
+  const normalizedEventOverrides = normalizeEventOverrides(eventOverrides);
+  const hasEventOverrides = normalizedEventOverrides.length > 0;
+  const eventOverridesHash = createEventOverridesHash(
+      normalizedEventOverrides,
+  );
   const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
   const cacheId = [
-    "v1",
+    hasEventOverrides ? "v2" : "v1",
     normalizedLookaheadDays,
     roomRulesHash.slice(0, 32),
-  ].join("-");
+    hasEventOverrides ? eventOverridesHash.slice(0, 32) : "",
+  ].filter(Boolean).join("-");
   const docRef = firestore.doc(
       "centralCache/planningCenter/calendar/" + cacheId,
   );
@@ -3927,18 +4041,22 @@ async function getCentralCalendarEvents_(roomRules, lookaheadDays, options = {})
     isEntryCurrent: (entry) => {
       return entry.dateKey === todayKey &&
         Number(entry.lookaheadDays) === normalizedLookaheadDays &&
-        entry.roomRulesHash === roomRulesHash;
+        entry.roomRulesHash === roomRulesHash &&
+        (!hasEventOverrides ||
+          entry.eventOverridesHash === eventOverridesHash);
     },
     metadata: {
       cacheType: "planning-center-calendar",
       dateKey: todayKey,
       lookaheadDays: normalizedLookaheadDays,
       roomRulesHash,
+      eventOverridesHash,
     },
     forceRefresh: options.forceRefresh === true,
     loadFresh: () => fetchCentralCalendarEvents_(
         normalizedRoomRules,
         normalizedLookaheadDays,
+        normalizedEventOverrides,
     ),
     onError: (phase, error) => {
       console.warn(
@@ -3965,7 +4083,18 @@ function isValidCalendarEventsValue_(value) {
     Array.isArray(value.upcoming);
 }
 
-async function fetchCentralCalendarEvents_(roomRules, lookaheadDays) {
+/**
+ * Fetches and transforms Central calendar events from Planning Center.
+ * @param {Array<Object>} roomRules Published room-name rules.
+ * @param {number} lookaheadDays Calendar lookahead in days.
+ * @param {Array<Object>=} eventOverrides Event presentation overrides.
+ * @return {Promise<Object>} Today and upcoming events.
+ */
+async function fetchCentralCalendarEvents_(
+    roomRules,
+    lookaheadDays,
+    eventOverrides = [],
+) {
   const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
   const twoWeeksFromNow = new Date();
   twoWeeksFromNow.setDate(
@@ -4028,6 +4157,7 @@ async function fetchCentralCalendarEvents_(roomRules, lookaheadDays) {
             eventRef && eventMap[eventRef.id] ? eventMap[eventRef.id] : {},
             roomRules,
             false,
+            eventOverrides,
         );
       }),
   );
@@ -4152,9 +4282,10 @@ async function getCentralRegistrationSignups_() {
  * Retrieves the next Planning Center event carrying both Central tags.
  *
  * @param {Array<Object>} roomRules Published room-name transformation rules.
+ * @param {Array<Object>=} eventOverrides Event presentation overrides.
  * @return {Promise<Object|null>} Sanitized featured event or null.
  */
-async function getCentralFeaturedEvent_(roomRules) {
+async function getCentralFeaturedEvent_(roomRules, eventOverrides = []) {
   const tags = await fetchPcoJson_(
       "https://api.planningcenteronline.com/calendar/v2/tags?per_page=100",
   );
@@ -4182,6 +4313,7 @@ async function getCentralFeaturedEvent_(roomRules) {
         candidate.eventAttributes,
         roomRules,
         true,
+        eventOverrides,
     );
 
     if (item) return removePrivateDate_(toUpcomingItem_(item));
@@ -4197,6 +4329,7 @@ async function getCentralFeaturedEvent_(roomRules) {
  * @param {Object} eventAttrs Parent event attributes.
  * @param {Array<Object>} roomRules Published room-name transformation rules.
  * @param {boolean} featured Whether this is Central's featured event.
+ * @param {Array<Object>=} eventOverrides Event presentation overrides.
  * @return {Promise<Object|null>} Sanitized public event.
  */
 async function buildCentralCalendarItem_(
@@ -4204,6 +4337,7 @@ async function buildCentralCalendarItem_(
     eventAttrs,
     roomRules,
     featured,
+    eventOverrides = [],
 ) {
   const attrs = instance && instance.attributes || {};
   const fallbackStartsAt = attrs.published_starts_at || attrs.starts_at || "";
@@ -4218,19 +4352,23 @@ async function buildCentralCalendarItem_(
     return null;
   }
 
-  const description = htmlToPlainText_(
+  const planningCenterDescription = htmlToPlainText_(
       eventAttrs.description ||
       eventAttrs.summary ||
       attrs.description ||
       "",
   );
-  const title = String(attrs.name || "Untitled Event").trim();
+  const planningCenterTitle = String(
+      attrs.name || "Untitled Event",
+  ).trim();
   const [rooms, eventSchedule] = await Promise.all([
     getEventInstanceRooms_(
         instance.id,
         Array.isArray(roomRules) ? roomRules : [],
     ),
-    featured ? getEventInstanceSchedule_(instance.id, title) : {},
+    featured ?
+      getEventInstanceSchedule_(instance.id, planningCenterTitle) :
+      {},
   ]);
   const startsAt = String(eventSchedule.eventStartsAt || fallbackStartsAt);
   const endsAt = String(eventSchedule.eventEndsAt || fallbackEndsAt);
@@ -4239,8 +4377,25 @@ async function buildCentralCalendarItem_(
   const hasValidEndDate = !Number.isNaN(endsDate.getTime());
   const rawLocation = String(attrs.location || "").trim();
   const locationDetails = splitPlanningCenterLocation_(rawLocation);
-  const location = rooms.length ?
+  const planningCenterLocation = rooms.length ?
     rooms.join(", ") : cleanLocation_(rawLocation);
+  const eventReference = instance.relationships &&
+    instance.relationships.event &&
+    instance.relationships.event.data;
+  const planningCenterEventId = String(
+      eventReference && eventReference.id || "",
+  ).trim();
+  const effectiveDetails = applyEventOverrides({
+    title: planningCenterTitle,
+    location: planningCenterLocation,
+    description: planningCenterDescription,
+  }, eventOverrides, {
+    planning_center_event_id: planningCenterEventId,
+    planning_center_instance_id: String(instance.id || "").trim(),
+  });
+  const title = effectiveDetails.title;
+  const location = effectiveDetails.location;
+  const description = effectiveDetails.description;
   const doorsOpenStartsAt = new Date(eventSchedule.doorsOpenStartsAt || "");
   const namedDoorsOpenTime = !Number.isNaN(doorsOpenStartsAt.getTime()) ?
     formatTime_(doorsOpenStartsAt, PCO_TIMEZONE) : "";
@@ -4264,6 +4419,14 @@ async function buildCentralCalendarItem_(
 
   return {
     id: String(instance.id || "").trim(),
+    planning_center_instance_id: String(instance.id || "").trim(),
+    planning_center_event_id: planningCenterEventId,
+    planning_center_title: planningCenterTitle,
+    planning_center_location: planningCenterLocation,
+    planning_center_description: planningCenterDescription,
+    overridden_fields: effectiveDetails.overridden_fields,
+    override_scope: effectiveDetails.override_scope,
+    override_id: effectiveDetails.override_id,
     active: "TRUE",
     featured: featured ? "TRUE" : "FALSE",
     title: title,
@@ -5137,6 +5300,14 @@ function getLocalMinutes_(date, timezone) {
 function toTodayItem_(item) {
   return {
     id: item.id,
+    planning_center_instance_id: item.planning_center_instance_id,
+    planning_center_event_id: item.planning_center_event_id,
+    planning_center_title: item.planning_center_title,
+    planning_center_location: item.planning_center_location,
+    planning_center_description: item.planning_center_description,
+    overridden_fields: item.overridden_fields,
+    override_scope: item.override_scope,
+    override_id: item.override_id,
     active: "TRUE",
     title: item.title,
     date: item.date,
@@ -5163,6 +5334,14 @@ function toTodayItem_(item) {
 function toUpcomingItem_(item) {
   return {
     id: item.id,
+    planning_center_instance_id: item.planning_center_instance_id,
+    planning_center_event_id: item.planning_center_event_id,
+    planning_center_title: item.planning_center_title,
+    planning_center_location: item.planning_center_location,
+    planning_center_description: item.planning_center_description,
+    overridden_fields: item.overridden_fields,
+    override_scope: item.override_scope,
+    override_id: item.override_id,
     active: "TRUE",
     featured: item.featured,
     title: item.title,
@@ -5581,6 +5760,10 @@ function getPreviewPublishPermission_(pageAccess, section) {
 
   if (section === "resources") {
     return getManagedAdminSectionPermission_(source, "resources", "settings");
+  }
+
+  if (section === "events") {
+    return getManagedAdminSectionPermission_(source, "events");
   }
 
   if (section === "roomRules") {
@@ -6707,6 +6890,37 @@ function normalizePreviewSectionPayload_(section, operation, rawPayload) {
     };
   }
 
+  if (section === "events") {
+    const action = String(rawPayload && rawPayload.action || "upsert")
+        .trim().toLowerCase();
+    if (action === "delete") {
+      const item = normalizeEventOverrideItem(
+          rawPayload && rawPayload.item || {},
+      );
+      if (!item.id) {
+        throw createPreviewPublishError_(
+            "invalid-payload",
+            "Choose an event override to reset.",
+        );
+      }
+      return {action: "delete", item};
+    }
+
+    try {
+      return {
+        action: "upsert",
+        item: validateEventOverrideItem(
+            rawPayload && rawPayload.item || {},
+        ),
+      };
+    } catch (error) {
+      throw createPreviewPublishError_(
+          "invalid-payload",
+          String(error && error.message || "Choose valid event details."),
+      );
+    }
+  }
+
   if (section === "roomRules") {
     return {
       items: normalizeRoomRulesPayloadItems_(rawPayload),
@@ -7142,6 +7356,10 @@ async function publishPreviewSectionPayload_(
     return publishPreviewResourcesPayload_(payload, publisher);
   }
 
+  if (section === "events") {
+    return publishPreviewEventOverridePayload_(payload, publisher);
+  }
+
   if (section === "roomRules") {
     return publishPreviewRoomRulesPayload_(payload, publisher);
   }
@@ -7341,6 +7559,52 @@ async function publishPreviewRoomRulesPayload_(payload, publisher) {
   } : {
     itemCount: 0,
     message: "Room Rules were cleared.",
+  };
+}
+
+/**
+ * Publishes or deletes a single event override without replacing its siblings.
+ * @param {Object} payload Normalized event override action.
+ * @param {Object} publisher Verified publishing admin.
+ * @return {Promise<Object>} Publish result.
+ */
+async function publishPreviewEventOverridePayload_(payload, publisher) {
+  const action = String(payload && payload.action || "upsert").trim();
+  const item = normalizeEventOverrideItem(payload && payload.item || {});
+  const docId = item.id || buildEventOverrideId(item);
+  if (!docId) {
+    throw createPreviewPublishError_(
+        "invalid-payload",
+        "Choose a valid Planning Center event.",
+    );
+  }
+
+  const docRef = firestore
+      .collection(CENTRAL_EVENT_OVERRIDES_COLLECTION_PATH)
+      .doc(docId);
+  if (action === "delete") {
+    await docRef.delete();
+    return {
+      itemCount: 0,
+      message: "Event details reset to Planning Center.",
+    };
+  }
+
+  const snapshot = await docRef.get();
+  await docRef.set(withPreviewPublishMetadata_({
+    active: item.active,
+    scope: item.scope,
+    planning_center_event_id: item.planning_center_event_id,
+    planning_center_instance_id: item.planning_center_instance_id,
+    overridden_fields: item.overridden_fields,
+    title: item.title,
+    location: item.location,
+    description: item.description,
+  }, snapshot.exists ? snapshot.data() || {} : {}, publisher));
+
+  return {
+    itemCount: 1,
+    message: "Event details published.",
   };
 }
 
@@ -7645,6 +7909,10 @@ function getPreviewSectionLabel_(section) {
     return "Resources";
   }
 
+  if (section === "events") {
+    return "Events";
+  }
+
   if (section === "roomRules") {
     return "Room Rules";
   }
@@ -7760,6 +8028,19 @@ function buildChangeRequestSummary_(section, operation, payload) {
       String(count) +
       " " +
       getCountLabel_(count, "resource", "resources");
+  }
+
+  if (section === "events") {
+    const action = String(payload && payload.action || "upsert");
+    const item = payload && payload.item || {};
+    const title = String(
+        item.title ||
+        item.planning_center_instance_id ||
+        "event details",
+    ).trim();
+    return action === "delete" ?
+      "Events: reset " + title + " to Planning Center" :
+      "Events: update " + title;
   }
 
   if (section === "roomRules") {
@@ -10019,10 +10300,13 @@ function createResourcesComparisonHash_(items) {
 }
 
 async function getCurrentRoomRulesBaselineItems_() {
-  return getCurrentListBaselineItems_({
-    collectionPath: CENTRAL_ROOM_RULES_COLLECTION_PATH,
-    normalizeItems: normalizeRoomRulesComparisonItems_,
-  });
+  const roomRulesOverride = await getFirestoreRoomRulesOverride_();
+  const effectiveItems = resolveEffectiveRoomRulesBaseline(
+      roomRulesOverride,
+      getDefaultCentralRoomRules_(),
+  );
+
+  return normalizeRoomRulesComparisonItems_(effectiveItems);
 }
 
 function normalizeRoomRulesComparisonItems_(items) {

@@ -39,6 +39,10 @@ export function createPrintModeHandler(options) {
   const admin = options.admin;
   const firestore = options.firestore;
   const planningCenter = options.planningCenter;
+  const getFirestoreEventOverrides =
+    typeof options.getFirestoreEventOverrides === "function" ?
+      options.getFirestoreEventOverrides :
+      async () => [];
 
   return async (request, response) => {
     if (request.method !== "GET" && request.method !== "POST") {
@@ -75,11 +79,13 @@ export function createPrintModeHandler(options) {
         const [
           snapshot,
           roomRulesOverride,
+          eventOverrides,
           campaignsOverride,
           serveNeedsOverride,
         ] = await Promise.all([
           firestore.doc(PRINT_MODE_SETTINGS_DOC_PATH).get(),
           options.getFirestoreRoomRulesOverride(),
+          getFirestoreEventOverrides(),
           options.getFirestoreCampaignsOverride(),
           options.getFirestoreServeNeedsOverride(),
         ]);
@@ -93,8 +99,8 @@ export function createPrintModeHandler(options) {
             request.query && request.query.refresh,
         );
         const planningCenterResult = refreshPlanningCenter ?
-          await planningCenter.refresh(roomRules) :
-          await planningCenter.getCached(roomRules, config);
+          await planningCenter.refresh(roomRules, eventOverrides) :
+          await planningCenter.getCached(roomRules, config, eventOverrides);
         const planningCenterData = planningCenterResult.data;
         response.set("Cache-Control", "no-store");
         response.status(200).json({

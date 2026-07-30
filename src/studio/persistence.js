@@ -6,6 +6,7 @@ import {
   normalizeEventComposition,
   textToLines,
 } from "./templates.js";
+import {planningCenterEventsFromCentralData} from "./planning-center-events.js";
 
 const PROJECT_COLLECTION = "centralStudioProjects";
 const MEMBERSHIP_COLLECTION = "centralStudioMemberships";
@@ -27,6 +28,20 @@ function zoomValue(value) {
   return Number.isFinite(number)
     ? Math.min(2, Math.max(1, number))
     : 1;
+}
+
+function opacityValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? Math.min(1, Math.max(0, number))
+    : 1;
+}
+
+function rotationValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? Math.min(360, Math.max(0, Math.round(number)))
+    : 0;
 }
 
 function logoScaleValue(value) {
@@ -307,6 +322,8 @@ function eventContentForCloud(content, templateId, projectId) {
     focalX: focalValue(content.focalX, legacyFocal.x),
     focalY: focalValue(content.focalY, legacyFocal.y),
     imageZoom: zoomValue(content.imageZoom),
+    backgroundImageOpacity: opacityValue(content.backgroundImageOpacity),
+    backgroundImageRotation: rotationValue(content.backgroundImageRotation),
     backgroundImageSource: source,
     backgroundImageUrl:
       source === "unsplash" ? stringValue(content.backgroundImageUrl) : "",
@@ -362,13 +379,34 @@ export function projectForCloud(project, ownerUid) {
       },
     };
   }
+  const sourceType =
+    project.sourceType === "planning-center" &&
+    /^\d{1,80}$/u.test(String(project.sourceId || "")) &&
+    /^\d{1,80}$/u.test(String(project.sourceEventId || ""))
+      ? "planning-center"
+      : "manual";
+  const requestedSourceDate = new Date(project.sourceUpdatedAt || "");
+  const sourceUpdatedAt =
+    sourceType === "planning-center" &&
+    !Number.isNaN(requestedSourceDate.getTime())
+      ? requestedSourceDate
+      : null;
   return {
     schemaVersion: 1,
     ownerUid,
     templateId: project.templateId,
     name: String(project.name || "").trim(),
     status: "draft",
-    sourceType: "manual",
+    sourceType,
+    sourceId: sourceType === "planning-center" ? stringValue(project.sourceId) : "",
+    sourceEventId:
+      sourceType === "planning-center" ? stringValue(project.sourceEventId) : "",
+    sourceUrl:
+      sourceType === "planning-center" &&
+      /^https:\/\//iu.test(String(project.sourceUrl || ""))
+        ? stringValue(project.sourceUrl).slice(0, 500)
+        : "",
+    sourceUpdatedAt,
     content: eventContentForCloud(
       project.content || {},
       project.templateId,
@@ -522,6 +560,12 @@ async function hydrateProject(snapshot, storage, shared = false) {
     name: data.name,
     status: data.status,
     sourceType: data.sourceType,
+    sourceId: stringValue(data.sourceId),
+    sourceEventId: stringValue(data.sourceEventId),
+    sourceUrl: stringValue(data.sourceUrl),
+    sourceUpdatedAt:
+      data.sourceUpdatedAt?.toDate?.().toISOString() ||
+      stringValue(data.sourceUpdatedAt),
     createdAt:
       data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
     updatedAt:
@@ -563,6 +607,15 @@ async function localPreviewJson(url, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(data.error || "Central Studio could not complete that request.");
+  }
+  return data;
+}
+
+async function publicJson(url) {
+  const response = await fetch(url, {cache: "no-store"});
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Central could not load Planning Center events.");
   }
   return data;
 }
@@ -644,6 +697,11 @@ export function createStudioPreviewUnsplash() {
       const parameters = new URLSearchParams({url: String(imageUrl || "")});
       return localPreviewImageDataUrl(
         `/api/studio/pco/image?${parameters.toString()}`,
+      );
+    },
+    async loadPlanningCenterEvents() {
+      return planningCenterEventsFromCentralData(
+        await publicJson("/api/central-data"),
       );
     },
   };
@@ -811,6 +869,10 @@ export function createStudioCloud({
         name: payload.name,
         status: payload.status,
         sourceType: payload.sourceType,
+        sourceId: payload.sourceId,
+        sourceEventId: payload.sourceEventId,
+        sourceUrl: payload.sourceUrl,
+        sourceUpdatedAt: payload.sourceUpdatedAt,
         content: payload.content,
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
       });
@@ -1046,6 +1108,11 @@ export function createStudioCloud({
       return authorizedImageDataUrl(
         auth,
         `/api/studio/pco/image?${parameters.toString()}`,
+      );
+    },
+    async loadPlanningCenterEvents() {
+      return planningCenterEventsFromCentralData(
+        await publicJson("/api/central-data"),
       );
     },
     createShare(projectId) {

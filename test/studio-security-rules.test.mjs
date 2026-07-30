@@ -86,6 +86,8 @@ function eventProjectPayload(ownerUid = "owner") {
       focalX: 50,
       focalY: 50,
       imageZoom: 1,
+      backgroundImageOpacity: 1,
+      backgroundImageRotation: 0,
       backgroundImageSource: "",
       backgroundImageUrl: "",
       backgroundImageStoragePath: "",
@@ -702,6 +704,30 @@ test("event projects accept valid sources and reject cross-project upload paths"
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
+  await assertSucceeds(
+    reference.update({
+      "content.backgroundImageOpacity": 0.45,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.backgroundImageOpacity": 1.01,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    reference.update({
+      "content.backgroundImageRotation": 225,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.backgroundImageRotation": 361,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
   await assertFails(
     reference.update({
       "content.overlayBlendMode": "color-burn",
@@ -765,6 +791,50 @@ test("event projects accept valid sources and reject cross-project upload paths"
       "content.heroLogoClearSpace": -1,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
+  );
+});
+
+test("event projects accept light palettes and validated Planning Center sources", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  const payload = eventProjectPayload();
+  payload.templateId = "event-center-stage";
+  payload.content.fontKey = "league-spartan";
+  payload.content.composition = "center-burst";
+  payload.content.palette = "paper-red";
+  payload.sourceType = "planning-center";
+  payload.sourceId = "228960560";
+  payload.sourceEventId = "21812604";
+  payload.sourceUrl =
+    "https://crosspointetv.churchcenter.com/calendar/event/228960560";
+  payload.sourceUpdatedAt =
+    firebase.firestore.FieldValue.serverTimestamp();
+
+  const reference = db.doc("centralStudioProjects/planning-center-event");
+  await assertSucceeds(reference.set(payload));
+  await assertSucceeds(
+    reference.update({
+      sourceType: "manual",
+      sourceId: "",
+      sourceEventId: "",
+      sourceUrl: "",
+      sourceUpdatedAt: null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+});
+
+test("event projects reject malformed Planning Center source identity", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  const payload = eventProjectPayload();
+  payload.sourceType = "planning-center";
+  payload.sourceId = "instance-100";
+  payload.sourceEventId = "10";
+  payload.sourceUrl = "https://example.com/event/100";
+  payload.sourceUpdatedAt =
+    firebase.firestore.FieldValue.serverTimestamp();
+
+  await assertFails(
+    db.doc("centralStudioProjects/malformed-planning-center-event").set(payload),
   );
 });
 

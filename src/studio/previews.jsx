@@ -1,7 +1,8 @@
 import React, {useEffect, useState} from "react";
-import {focalMediaStyle} from "./focal.js";
+import {focalMediaStyle, normalizeImageOpacity} from "./focal.js";
 import {
   getBrandColor,
+  getEventPalette,
   getEventFont,
   getTemplateById,
   isDocumentProject,
@@ -1015,12 +1016,19 @@ export function EventPreview({
   const isFlat = composition === "flat";
   const isColorOverlay = composition === "color-overlay";
   const brandColor = getBrandColor(content.flatColor);
+  const eventPalette = getEventPalette(content.palette);
   const overlayColor = getBrandColor(content.overlayColor || "red");
-  const usesDarkCopy = isFlat && !content.backgroundImage && brandColor.ink === "dark";
+  const imageOpacity = normalizeImageOpacity(content.backgroundImageOpacity);
+  const underlyingUsesDarkCopy =
+    (isFlat && brandColor.ink === "dark") ||
+    (!isFlat && !isColorOverlay && eventPalette.ink === "dark");
+  const usesDarkCopy =
+    underlyingUsesDarkCopy &&
+    (!content.backgroundImage || imageOpacity <= 0.45);
   const usesLogoHero = content.heroMode === "logo";
   let backgroundStyle;
 
-  if (isFlat && !content.backgroundImage) {
+  if (isFlat) {
     backgroundStyle = {background: brandColor.hex};
   }
 

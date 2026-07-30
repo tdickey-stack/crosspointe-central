@@ -2,6 +2,16 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // ===============================================================
+    // Studio event project source model
+    // ===============================================================
+    // centralStudioProjects/{projectId} schemaVersion 1 event projects
+    // retain their strict creative-content schema. sourceType is required.
+    // Legacy manual projects may omit sourceId, sourceEventId, sourceUrl, and
+    // sourceUpdatedAt. New manual projects store empty strings plus null.
+    // Planning Center projects require numeric instance/event IDs, an optional
+    // public HTTPS URL, and a timestamp for the last explicit import/refresh.
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -467,7 +477,7 @@ service cloud.firestore {
           "eyebrow", "title", "subtitle", "date", "time", "location", "cta",
           "format", "composition", "palette", "flatColor", "overlayColor",
           "overlayBlendMode", "imagePosition", "focalX", "focalY",
-          "imageZoom",
+          "imageZoom", "backgroundImageOpacity", "backgroundImageRotation",
           "backgroundImageSource", "backgroundImageUrl",
           "backgroundImageStoragePath", "unsplashPhotoId",
           "unsplashPhotographerName", "unsplashPhotographerUrl",
@@ -476,17 +486,20 @@ service cloud.firestore {
           "heroLogoScale", "heroLogoClearSpace",
           "fontKey", "textAlignment", "textShadow"
         ]) &&
-        content.keys().size() == 34 &&
-        validStudioString(content.eyebrow, 30) &&
-        validStudioString(content.title, 52) &&
+        content.keys().size() == 36 &&
+        content.eyebrow.matches("^.{0,30}$") &&
+        content.title.matches("^.{0,52}$") &&
         validStudioString(content.subtitle, 110) &&
-        validStudioString(content.date, 28) &&
-        validStudioString(content.time, 24) &&
-        validStudioString(content.location, 34) &&
-        validStudioString(content.cta, 44) &&
+        content.date.matches("^.{0,28}$") &&
+        content.time.matches("^.{0,24}$") &&
+        content.location.matches("^.{0,34}$") &&
+        content.cta.matches("^.{0,44}$") &&
         content.format.matches("^(square|portrait|screen)$") &&
         validEventComposition(templateId, content.composition) &&
-        content.palette.matches("^(charcoal-red|warm-light|blue-charcoal)$") &&
+        content.palette.matches(
+          "^(charcoal-red|warm-light|blue-charcoal|paper-red|sky-mint|" +
+          "blush-burgundy)$"
+        ) &&
         content.flatColor.matches(
           "^(red|cyan|charcoal|white|sky|purple|mint|burgundy|blush)$"
         ) &&
@@ -506,6 +519,12 @@ service cloud.firestore {
         content.imageZoom is number &&
         content.imageZoom >= 1 &&
         content.imageZoom <= 2 &&
+        content.backgroundImageOpacity is number &&
+        content.backgroundImageOpacity >= 0 &&
+        content.backgroundImageOpacity <= 1 &&
+        content.backgroundImageRotation is number &&
+        content.backgroundImageRotation >= 0 &&
+        content.backgroundImageRotation <= 360 &&
         content.backgroundImageSource.matches("^(|upload|unsplash)$") &&
         validStudioString(content.backgroundImageUrl, 1600) &&
         validStudioString(content.backgroundImageStoragePath, 240) &&
@@ -596,7 +615,8 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           "schemaVersion", "ownerUid", "templateId", "name", "status",
-          "sourceType", "content", "createdAt", "updatedAt"
+          "sourceType", "sourceId", "sourceEventId", "sourceUrl",
+          "sourceUpdatedAt", "content", "createdAt", "updatedAt"
         ]) &&
         data.schemaVersion == 1 &&
         validStudioString(data.ownerUid, 128) &&
@@ -606,9 +626,18 @@ service cloud.firestore {
           "event-timeless-center|event-editorial-invitation|" +
           "event-scripted-welcome)$"
         ) &&
-        validStudioString(data.name, 80) && data.name.size() > 0 &&
+        data.name.matches("^.{1,80}$") &&
         data.status == "draft" &&
-        data.sourceType == "manual" &&
+        (
+          data.sourceType == "manual" || (
+            data.templateId != "policy-document" &&
+            data.sourceType == "planning-center" &&
+            data.sourceId.matches("^[0-9]{1,80}$") &&
+            data.sourceEventId.matches("^[0-9]{1,80}$") &&
+            data.sourceUrl.matches("^(|https://.{0,492})$") &&
+            data.sourceUpdatedAt is timestamp
+          )
+        ) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp &&
         (
@@ -795,7 +824,8 @@ service cloud.firestore {
           (
             resource.data.schemaVersion == request.resource.data.schemaVersion &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              "name", "status", "sourceType", "content", "pageOrder",
+              "name", "status", "sourceType", "sourceId", "sourceEventId",
+              "sourceUrl", "sourceUpdatedAt", "content", "pageOrder",
               "documentSettings", "updatedAt"
             ])
           ) ||

@@ -479,10 +479,21 @@ Central Studio keeps creative content separate from account identity:
   records.
 - `centralStudioShares/{sha256Token}` stores a 30-day, server-only share grant.
   The raw token appears only in the share URL and is never stored.
+- `centralStudioLogoLibrary/{logoId}` stores reusable event-logo metadata
+  (`name`, immutable Storage path/content type/creator, active or archived
+  status, and timestamps). All active Studio users may read the library.
+  Uploading or managing library entries requires the explicit
+  `pageAccess.studio: "admin"` permission.
 - `studio-projects/{projectId}/{assetId}` in Firebase Storage contains uploaded
-  JPG, PNG, or WebP backgrounds smaller than 8 MiB.
+  JPG, PNG, or WebP backgrounds and one-off project logos. Backgrounds remain
+  limited to 8 MiB; `logo-*` assets are limited to 4 MiB by Storage rules.
+- `studio-library/logos/{logoId}/source.{jpg|png|webp}` contains immutable
+  reusable logo files smaller than 4 MiB. All active Studio users may read
+  them. Exact Studio admins may create them, while browser overwrites and
+  deletion of referenced assets are denied.
 
 Owned projects are queried by `ownerUid`. Shared projects are discovered by a
 membership query on `memberUid`, followed by exact project document reads.
-Unsplash images remain hosted by Unsplash and store attribution fields with
-the project.
+Logo Library metadata is loaded as one bounded collection and sorted by name in
+the client. Unsplash images remain hosted by Unsplash and store attribution
+fields with the project.

@@ -6,7 +6,12 @@ import {
   exportEventPng,
   openDocumentSystemPrint,
 } from "./export.js";
-import {normalizeFocalValue, normalizeImageZoom} from "./focal.js";
+import {
+  normalizeFocalValue,
+  normalizeImageOpacity,
+  normalizeImageRotation,
+  normalizeImageZoom,
+} from "./focal.js";
 import {
   createStudioCloud,
   createStudioPreviewUnsplash,
@@ -17,8 +22,13 @@ import {
   StudioPreview,
 } from "./previews.jsx";
 import {
+  planningCenterEventContentChanges,
+  planningCenterEventSearchText,
+} from "./planning-center-events.js";
+import {
   BRAND_COLOR_OPTIONS,
   DOCUMENT_PAGE_TEMPLATES,
+  EVENT_PALETTE_OPTIONS,
   STUDIO_STORAGE_KEY,
   TEMPLATE_CATALOG,
   createDocumentPage,
@@ -810,6 +820,16 @@ function ImageFocalPointEditor({content, updateContent}) {
   const focalX = clampFocalPoint(Number(content.focalX ?? 50));
   const focalY = clampFocalPoint(Number(content.focalY ?? 50));
   const imageZoom = normalizeImageZoom(content.imageZoom);
+  const imageOpacity = normalizeImageOpacity(content.backgroundImageOpacity);
+  const imageRotation = normalizeImageRotation(
+    content.backgroundImageRotation,
+  );
+
+  const rotateImage = (degrees) => {
+    updateContent({
+      backgroundImageRotation: (imageRotation + degrees + 360) % 360,
+    });
+  };
 
   const setFromPointer = (event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -909,7 +929,7 @@ function ImageFocalPointEditor({content, updateContent}) {
         <span>Horizontal {Math.round(focalX)}%</span>
         <span>Vertical {Math.round(focalY)}%</span>
       </div>
-      <label className="studio-image-zoom">
+      <label className="studio-image-range">
         <span>
           Image zoom <strong>{Math.round(imageZoom * 100)}%</strong>
         </span>
@@ -926,6 +946,70 @@ function ImageFocalPointEditor({content, updateContent}) {
           }
         />
       </label>
+      <label className="studio-image-range">
+        <span>
+          Image opacity <strong>{Math.round(imageOpacity * 100)}%</strong>
+        </span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={imageOpacity}
+          onChange={(event) =>
+            updateContent({
+              backgroundImageOpacity: normalizeImageOpacity(
+                event.target.value,
+              ),
+            })
+          }
+        />
+        <small>
+          Lower the image opacity to reveal the template palette underneath.
+        </small>
+      </label>
+      <label className="studio-image-range">
+        <span>
+          Image rotation <strong>{imageRotation}°</strong>
+        </span>
+        <input
+          type="range"
+          min="0"
+          max="360"
+          step="1"
+          value={imageRotation}
+          onChange={(event) =>
+            updateContent({
+              backgroundImageRotation: normalizeImageRotation(
+                event.target.value,
+              ),
+            })
+          }
+        />
+      </label>
+      <div className="studio-image-rotation-actions">
+        <button
+          type="button"
+          onClick={() => rotateImage(-90)}
+          aria-label="Rotate background 90 degrees counterclockwise"
+        >
+          ↶ 90°
+        </button>
+        <button
+          type="button"
+          onClick={() => updateContent({backgroundImageRotation: 0})}
+          disabled={imageRotation === 0 || imageRotation === 360}
+        >
+          Reset rotation
+        </button>
+        <button
+          type="button"
+          onClick={() => rotateImage(90)}
+          aria-label="Rotate background 90 degrees clockwise"
+        >
+          90° ↷
+        </button>
+      </div>
       <p className="studio-focal-note">
         Focal movement only appears where the cropped image has room to move.
         Increase zoom when an axis feels locked.
@@ -1145,9 +1229,11 @@ function EventQuickToolbar({
                 updateContent({palette: event.target.value})
               }
             >
-              <option value="charcoal-red">Charcoal + Red</option>
-              <option value="warm-light">Warm Editorial</option>
-              <option value="blue-charcoal">Blue + Charcoal</option>
+              {EVENT_PALETTE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
         ) : null}
@@ -1555,7 +1641,6 @@ function UnsplashSearch({
   unsplash,
   content,
   updateContent,
-  onBackgroundSelected = () => {},
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -1611,8 +1696,8 @@ function UnsplashSearch({
         focalX: 50,
         focalY: 50,
         imageZoom: 1,
+        backgroundImageRotation: 0,
       });
-      onBackgroundSelected();
     } catch (error) {
       setState({status: "error", message: error.message});
     }
@@ -1727,7 +1812,6 @@ function EventBackgroundControls({
   cloud,
   unsplash,
   project,
-  onBackgroundSelected = () => {},
 }) {
   const fileInputRef = useRef(null);
   const [uploadState, setUploadState] = useState({status: "", message: ""});
@@ -1753,6 +1837,7 @@ function EventBackgroundControls({
         focalX: 50,
         focalY: 50,
         imageZoom: 1,
+        backgroundImageRotation: 0,
       });
     };
     reader.readAsDataURL(file);
@@ -1823,6 +1908,8 @@ function EventBackgroundControls({
                 unsplashPhotographerName: "",
                 unsplashPhotographerUrl: "",
                 unsplashPhotoUrl: "",
+                backgroundImageOpacity: 1,
+                backgroundImageRotation: 0,
               })
             }
           >
@@ -1862,7 +1949,6 @@ function EventBackgroundControls({
         unsplash={unsplash}
         content={content}
         updateContent={updateContent}
-        onBackgroundSelected={onBackgroundSelected}
       />
     </div>
   );
@@ -2185,11 +2271,7 @@ function EventLayoutStep({content, updateContent, templateId}) {
             label="Palette"
             value={content.palette}
             onChange={(value) => updateContent({palette: value})}
-            options={[
-              {value: "charcoal-red", label: "Charcoal + CrossPointe Red"},
-              {value: "warm-light", label: "Warm Editorial Light"},
-              {value: "blue-charcoal", label: "Blue + Charcoal"},
-            ]}
+            options={EVENT_PALETTE_OPTIONS}
           />
         ) : null}
         {selectedComposition === "flat" && !content.backgroundImage ? (
@@ -4222,7 +4304,126 @@ function EventToolSideSheet({eyebrow, title, label, onClose, children}) {
   );
 }
 
-function EventProjectBriefSheet({project, updateProject, onClose}) {
+function EventProjectBriefSheet({
+  project,
+  updateProject,
+  services,
+  onClose,
+}) {
+  const isPlanningCenterLinked = project.sourceType === "planning-center";
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [eventState, setEventState] = useState({
+    status: "idle",
+    events: [],
+    message: "",
+  });
+
+  const matchingEvents = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return eventState.events;
+    return eventState.events.filter((event) =>
+      planningCenterEventSearchText(event).includes(normalizedQuery),
+    );
+  }, [eventState.events, query]);
+
+  const loadEvents = async () => {
+    if (!services?.loadPlanningCenterEvents) {
+      setEventState({
+        status: "error",
+        events: [],
+        message: "Planning Center events are unavailable in this Studio session.",
+      });
+      return [];
+    }
+    setEventState((current) => ({
+      ...current,
+      status: "loading",
+      message: "Loading current Central events from Planning Center…",
+    }));
+    try {
+      const events = await services.loadPlanningCenterEvents();
+      setEventState({
+        status: "ready",
+        events,
+        message: events.length
+          ? `${events.length} current event${events.length === 1 ? "" : "s"} available.`
+          : "No current Central-tagged Planning Center events were found.",
+      });
+      return events;
+    } catch (error) {
+      setEventState({
+        status: "error",
+        events: [],
+        message:
+          error.message ||
+          "Studio could not load Planning Center events right now.",
+      });
+      return [];
+    }
+  };
+
+  const openPlanningCenterPicker = async () => {
+    setPickerOpen(true);
+    if (eventState.status === "idle") await loadEvents();
+  };
+
+  const applyPlanningCenterEvent = (event) => {
+    const importedAt = new Date().toISOString();
+    updateProject({
+      name: project.name.startsWith("Untitled ")
+        ? event.title.slice(0, 80)
+        : project.name,
+      sourceType: "planning-center",
+      sourceId: event.id,
+      sourceEventId: event.eventId,
+      sourceUrl: event.publicUrl,
+      sourceUpdatedAt: importedAt,
+      content: {
+        ...project.content,
+        ...planningCenterEventContentChanges(event, project.content),
+      },
+    });
+    setPickerOpen(false);
+    setQuery("");
+  };
+
+  const refreshLinkedEvent = async () => {
+    const events = await loadEvents();
+    const linkedEvent = events.find((event) => event.id === project.sourceId);
+    if (!linkedEvent) {
+      setEventState((current) => ({
+        ...current,
+        status: "error",
+        message:
+          "The linked occurrence is no longer in Central’s current Planning Center event feed.",
+      }));
+      return;
+    }
+    applyPlanningCenterEvent(linkedEvent);
+  };
+
+  const useManualSource = () => {
+    updateProject({
+      sourceType: "manual",
+      sourceId: "",
+      sourceEventId: "",
+      sourceUrl: "",
+      sourceUpdatedAt: "",
+    });
+    setPickerOpen(false);
+    setQuery("");
+  };
+
+  const sourceRefreshLabel = project.sourceUpdatedAt
+    ? new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(project.sourceUpdatedAt))
+    : "";
+
   return (
     <aside
       className="studio-event-side-sheet"
@@ -4239,34 +4440,150 @@ function EventProjectBriefSheet({project, updateProject, onClose}) {
       </div>
       <div className="studio-event-sheet-content">
         <p className="studio-event-sheet-intro">
-          Studio is using manually entered event information. Central and
-          Planning Center source linking will appear here when that connector
-          is ready.
+          Choose a current Central event to import its Planning Center facts.
+          Refreshing replaces event copy, while the template, palette, format,
+          font, imagery, and composition stay under Studio’s control.
         </p>
         <div className="studio-source-options">
-          <button className="studio-source-option is-selected" type="button">
+          <button
+            className={[
+              "studio-source-option",
+              !isPlanningCenterLinked ? "is-selected" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            type="button"
+            onClick={useManualSource}
+          >
             <span className="studio-source-radio" aria-hidden="true" />
             <span>
               <strong>Manual event details</strong>
               <small>
-                Edit the visible copy directly on the canvas and use the
-                background tool for imagery.
+                Keep the current copy editable without an authoritative source
+                link.
               </small>
             </span>
-            <StatusPill tone="ready">AVAILABLE</StatusPill>
+            {!isPlanningCenterLinked ? (
+              <StatusPill tone="ready">SELECTED</StatusPill>
+            ) : null}
           </button>
-          <button className="studio-source-option" type="button" disabled>
+          <button
+            className={[
+              "studio-source-option",
+              isPlanningCenterLinked ? "is-selected" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            type="button"
+            onClick={openPlanningCenterPicker}
+          >
             <span className="studio-source-radio" aria-hidden="true" />
             <span>
               <strong>Central / Planning Center event</strong>
               <small>
-                Re-read authoritative event facts and preserve the source
-                identity.
+                Import and refresh approved public event facts from Central’s
+                Planning Center feed.
               </small>
             </span>
-            <StatusPill>NEXT MILESTONE</StatusPill>
+            <StatusPill tone={isPlanningCenterLinked ? "ready" : "draft"}>
+              {isPlanningCenterLinked ? "LINKED" : "CHOOSE EVENT"}
+            </StatusPill>
           </button>
         </div>
+
+        {isPlanningCenterLinked ? (
+          <div className="studio-pco-linked-event">
+            <div>
+              <span>LINKED EVENT</span>
+              <strong>{project.content.title}</strong>
+              <small>
+                {[project.content.date, project.content.time]
+                  .filter(Boolean)
+                  .join(" · ")}
+                {sourceRefreshLabel ? ` · Refreshed ${sourceRefreshLabel}` : ""}
+              </small>
+            </div>
+            <div>
+              <button
+                className="studio-button is-secondary"
+                type="button"
+                disabled={eventState.status === "loading"}
+                onClick={refreshLinkedEvent}
+              >
+                {eventState.status === "loading"
+                  ? "Refreshing…"
+                  : "Refresh facts"}
+              </button>
+              <button
+                className="studio-button is-secondary"
+                type="button"
+                onClick={openPlanningCenterPicker}
+              >
+                Change event
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {pickerOpen ? (
+          <div className="studio-pco-event-picker">
+            <div className="studio-pco-event-picker-heading">
+              <div>
+                <span>PLANNING CENTER EVENTS</span>
+                <strong>Choose an occurrence</strong>
+              </div>
+              <button
+                type="button"
+                aria-label="Close Planning Center event picker"
+                onClick={() => setPickerOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <label className="studio-pco-event-search">
+              <span>Search events</span>
+              <input
+                value={query}
+                type="search"
+                placeholder="Title, date, or location"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            {eventState.message ? (
+              <p
+                className={`studio-pco-event-status is-${eventState.status}`}
+                role={eventState.status === "error" ? "alert" : "status"}
+              >
+                {eventState.message}
+              </p>
+            ) : null}
+            <div className="studio-pco-event-results">
+              {matchingEvents.map((event) => (
+                <button
+                  key={event.id}
+                  className={
+                    project.sourceId === event.id ? "is-selected" : ""
+                  }
+                  type="button"
+                  onClick={() => applyPlanningCenterEvent(event)}
+                >
+                  <span>
+                    <strong>{event.title}</strong>
+                    <small>
+                      {[event.date, event.time].filter(Boolean).join(" · ")}
+                    </small>
+                    {event.location ? <small>{event.location}</small> : null}
+                  </span>
+                  <b>{project.sourceId === event.id ? "CURRENT" : "USE"}</b>
+                </button>
+              ))}
+              {eventState.status === "ready" && !matchingEvents.length ? (
+                <p>No events match that search.</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         <InputField
           label="Project name"
           value={project.name}
@@ -4282,7 +4599,11 @@ function EventProjectBriefSheet({project, updateProject, onClose}) {
           </div>
           <div>
             <span>Source</span>
-            <strong>Manual foundation</strong>
+            <strong>
+              {isPlanningCenterLinked
+                ? "Planning Center · linked occurrence"
+                : "Manual foundation"}
+            </strong>
           </div>
         </div>
       </div>
@@ -4672,7 +4993,6 @@ function EventStudioEditor({
                 cloud={cloud}
                 unsplash={unsplash}
                 project={project}
-                onBackgroundSelected={() => setActivePanel("")}
               />
             </EventToolSideSheet>
           ) : null}
@@ -4680,6 +5000,7 @@ function EventStudioEditor({
             <EventProjectBriefSheet
               project={project}
               updateProject={updateProject}
+              services={cloud || unsplash}
               onClose={() => setSideSheet("")}
             />
           ) : null}

@@ -14,6 +14,39 @@ export const BRAND_COLOR_OPTIONS = [
   {value: "blush", label: "Blush", hex: "#FAC8C3", ink: "dark"},
 ];
 
+export const EVENT_PALETTE_OPTIONS = [
+  {
+    value: "charcoal-red",
+    label: "Charcoal + CrossPointe Red",
+    ink: "light",
+  },
+  {
+    value: "blue-charcoal",
+    label: "Blue + Charcoal",
+    ink: "light",
+  },
+  {
+    value: "warm-light",
+    label: "Warm Editorial Light",
+    ink: "dark",
+  },
+  {
+    value: "paper-red",
+    label: "Paper + CrossPointe Red",
+    ink: "dark",
+  },
+  {
+    value: "sky-mint",
+    label: "Sky + Mint Light",
+    ink: "dark",
+  },
+  {
+    value: "blush-burgundy",
+    label: "Blush + Burgundy Light",
+    ink: "dark",
+  },
+];
+
 const EVENT_FONT_LIBRARY = {
   montserrat: {value: "montserrat", label: "Montserrat", family: "Montserrat"},
   "league-spartan": {
@@ -624,6 +657,8 @@ const eventContent = {
   focalX: 50,
   focalY: 50,
   imageZoom: 1,
+  backgroundImageOpacity: 1,
+  backgroundImageRotation: 0,
   backgroundImage: "",
   backgroundImageSource: "",
   backgroundImageUrl: "",
@@ -732,6 +767,25 @@ export function migrateLegacyStudioProject(project) {
       composition: normalizedComposition,
       focalX: hasFocalPoint ? project.content.focalX : legacyX,
       focalY: hasFocalPoint ? project.content.focalY : 50,
+      backgroundImageOpacity: Number.isFinite(
+        Number(project.content.backgroundImageOpacity),
+      )
+        ? Math.min(
+            1,
+            Math.max(0, Number(project.content.backgroundImageOpacity)),
+          )
+        : 1,
+      backgroundImageRotation: Number.isFinite(
+        Number(project.content.backgroundImageRotation),
+      )
+        ? Math.min(
+            360,
+            Math.max(
+              0,
+              Math.round(Number(project.content.backgroundImageRotation)),
+            ),
+          )
+        : 0,
       heroMode: project.content.heroMode === "logo" ? "logo" : "text",
       heroLogo: String(project.content.heroLogo || ""),
       heroLogoSource: ["upload", "library"].includes(
@@ -787,6 +841,10 @@ export function createStudioProject(templateId) {
     name: `Untitled ${template.name}`,
     status: "draft",
     sourceType: "manual",
+    sourceId: "",
+    sourceEventId: "",
+    sourceUrl: "",
+    sourceUpdatedAt: "",
     createdAt,
     updatedAt: createdAt,
     content: {
@@ -888,6 +946,13 @@ export function getBrandColor(value) {
   return (
     BRAND_COLOR_OPTIONS.find((option) => option.value === value) ||
     BRAND_COLOR_OPTIONS.find((option) => option.value === "charcoal")
+  );
+}
+
+export function getEventPalette(value) {
+  return (
+    EVENT_PALETTE_OPTIONS.find((option) => option.value === value) ||
+    EVENT_PALETTE_OPTIONS[0]
   );
 }
 

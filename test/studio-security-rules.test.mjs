@@ -12,6 +12,9 @@ import "firebase/compat/firestore";
 import "firebase/compat/storage";
 import test from "node:test";
 
+import {projectForCloud} from "../src/studio/persistence.js";
+import {createStudioProject} from "../src/studio/templates.js";
+
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..");
 const projectId = "crosspointe-central-studio-rules";
@@ -345,6 +348,35 @@ test("owner can create, read, update, and delete a strictly valid project", asyn
     }),
   );
   await assertSucceeds(reference.delete());
+});
+
+test("legacy browser assets are sanitized into a rules-valid cloud project", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  const project = {
+    ...createStudioProject("event-signal-stack"),
+    id: "legacy-browser-project",
+    name: "Legacy Browser Project",
+  };
+  project.content = {
+    ...project.content,
+    backgroundImage: "data:image/png;base64,legacy",
+    backgroundImageSource: "upload",
+    backgroundImageStoragePath: "",
+    heroMode: "logo",
+    heroLogo: "data:image/png;base64,legacy-logo",
+    heroLogoSource: "upload",
+    heroLogoStoragePath: "",
+    heroLogoName: "Legacy logo",
+  };
+  const payload = projectForCloud(project, "owner");
+
+  await assertSucceeds(
+    db.doc("centralStudioProjects/legacy-browser-project").set({
+      ...payload,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
 });
 
 test("project IDs reject characters that could alter storage path matching", async () => {

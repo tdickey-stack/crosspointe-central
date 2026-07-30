@@ -52,6 +52,36 @@ function legacyFocalPoint(content) {
   return positions[content.imagePosition] || positions.center;
 }
 
+function isScopedProjectAssetPath(path, projectId) {
+  const cleanPath = stringValue(path);
+  const prefix = `studio-projects/${stringValue(projectId)}/`;
+  if (!cleanPath.startsWith(prefix)) return false;
+  const assetName = cleanPath.slice(prefix.length);
+  return assetName.length > 0 && !assetName.includes("/");
+}
+
+function isValidUnsplashReference(content) {
+  return (
+    stringValue(content.backgroundImageUrl).startsWith("https://") &&
+    stringValue(content.unsplashPhotoId).length > 0 &&
+    stringValue(content.unsplashPhotographerName).length > 0 &&
+    stringValue(content.unsplashPhotographerUrl).startsWith("https://") &&
+    stringValue(content.unsplashPhotoUrl).startsWith("https://")
+  );
+}
+
+function isValidLibraryLogoReference(content) {
+  const logoId = stringValue(content.heroLogoLibraryId);
+  const path = stringValue(content.heroLogoStoragePath);
+  return (
+    /^[A-Za-z0-9_-]{1,80}$/.test(logoId) &&
+    new RegExp(
+      `^studio-library/logos/${logoId}/source[.](jpg|png|webp)$`,
+    ).test(path) &&
+    stringValue(content.heroLogoName).length > 0
+  );
+}
+
 function onePagerContentForCloud(content) {
   return {
     eyebrow: stringValue(content.eyebrow),
@@ -227,10 +257,34 @@ function documentPageForCloud(page) {
   };
 }
 
-function eventContentForCloud(content, templateId) {
-  const source = ["upload", "unsplash"].includes(content.backgroundImageSource)
+function eventContentForCloud(content, templateId, projectId) {
+  const requestedBackgroundSource = ["upload", "unsplash"].includes(
+    content.backgroundImageSource,
+  )
     ? content.backgroundImageSource
     : "";
+  const source =
+    requestedBackgroundSource === "upload" &&
+    isScopedProjectAssetPath(content.backgroundImageStoragePath, projectId)
+      ? "upload"
+      : requestedBackgroundSource === "unsplash" &&
+          isValidUnsplashReference(content)
+        ? "unsplash"
+        : "";
+  const requestedHeroSource = ["upload", "library"].includes(
+    content.heroLogoSource,
+  )
+    ? content.heroLogoSource
+    : "";
+  const heroSource =
+    requestedHeroSource === "upload" &&
+    isScopedProjectAssetPath(content.heroLogoStoragePath, projectId) &&
+    stringValue(content.heroLogoName).length > 0
+      ? "upload"
+      : requestedHeroSource === "library" &&
+          isValidLibraryLogoReference(content)
+        ? "library"
+        : "";
   const legacyFocal = legacyFocalPoint(content);
   return {
     eyebrow: stringValue(content.eyebrow),
@@ -272,20 +326,17 @@ function eventContentForCloud(content, templateId) {
         : "",
     unsplashPhotoUrl:
       source === "unsplash" ? stringValue(content.unsplashPhotoUrl) : "",
-    heroMode: content.heroMode === "logo" ? "logo" : "text",
-    heroLogoSource: ["upload", "library"].includes(content.heroLogoSource)
-      ? content.heroLogoSource
-      : "",
+    heroMode:
+      content.heroMode === "logo" && heroSource ? "logo" : "text",
+    heroLogoSource: heroSource,
     heroLogoLibraryId:
-      content.heroLogoSource === "library"
+      heroSource === "library"
         ? stringValue(content.heroLogoLibraryId)
         : "",
-    heroLogoStoragePath: ["upload", "library"].includes(
-      content.heroLogoSource,
-    )
+    heroLogoStoragePath: heroSource
       ? stringValue(content.heroLogoStoragePath)
       : "",
-    heroLogoName: ["upload", "library"].includes(content.heroLogoSource)
+    heroLogoName: heroSource
       ? stringValue(content.heroLogoName)
       : "",
     heroLogoScale: logoScaleValue(content.heroLogoScale),
@@ -318,7 +369,11 @@ export function projectForCloud(project, ownerUid) {
     name: String(project.name || "").trim(),
     status: "draft",
     sourceType: "manual",
-    content: eventContentForCloud(project.content || {}, project.templateId),
+    content: eventContentForCloud(
+      project.content || {},
+      project.templateId,
+      project.id,
+    ),
   };
 }
 

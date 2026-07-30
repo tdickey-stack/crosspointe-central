@@ -4832,29 +4832,68 @@ function StudioApp() {
         const cloudIds = new Set(cloudProjects.map((project) => project.id));
         const browserProjects = loadProjects();
         const projectsToMigrate = browserProjects.filter(
-          (project) => !cloudIds.has(project.id),
+          (project) =>
+            !cloudIds.has(project.id) || project.cloudBacked === false,
         );
+        const failedMigrationIds = new Set();
         if (projectsToMigrate.length) {
           setCloudMessage(
             `Moving ${projectsToMigrate.length} browser project${
               projectsToMigrate.length === 1 ? "" : "s"
             } into your account…`,
           );
-          await Promise.all(
+          const migrationResults = await Promise.allSettled(
             projectsToMigrate.map((project) => cloud.saveProject(project)),
           );
+          migrationResults.forEach((result, index) => {
+            if (result.status === "rejected") {
+              failedMigrationIds.add(projectsToMigrate[index].id);
+            }
+          });
           cloudProjects = await cloud.loadProjects();
         }
         if (!active) return;
-        setProjects(cloudProjects);
-        persistProjects(cloudProjects);
+        const refreshedCloudIds = new Set(
+          cloudProjects.map((project) => project.id),
+        );
+        const browserOnlyProjects = projectsToMigrate
+          .filter(
+            (project) =>
+              failedMigrationIds.has(project.id) ||
+              !refreshedCloudIds.has(project.id),
+          )
+          .map((project) => ({...project, cloudBacked: false}));
+        const browserOnlyIds = new Set(
+          browserOnlyProjects.map((project) => project.id),
+        );
+        const availableProjects = [
+          ...cloudProjects.filter(
+            (project) => !browserOnlyIds.has(project.id),
+          ),
+          ...browserOnlyProjects,
+        ];
+        const migrationFailureCount = browserOnlyProjects.length;
+        setProjects(availableProjects);
+        persistProjects(availableProjects);
         if (acceptedProjectId) setCurrentProjectId(acceptedProjectId);
-        setCloudMessage("");
-        setSaveState("Saved to Central");
+        if (migrationFailureCount) {
+          setCloudMessage(
+            `${migrationFailureCount} older browser project${
+              migrationFailureCount === 1 ? "" : "s"
+            } could not be moved into Central yet. ${
+              migrationFailureCount === 1 ? "It is" : "They are"
+            } still saved in this browser.`,
+          );
+          setSaveState("Browser project needs attention");
+        } else {
+          setCloudMessage("");
+          setSaveState("Saved to Central");
+        }
       } catch (error) {
         if (!active) return;
         setCloudMessage(
-          `${error.message} Browser saving remains available on this device.`,
+          "Studio could not load cloud projects right now. " +
+            "Your browser projects are still available on this device.",
         );
       }
     }

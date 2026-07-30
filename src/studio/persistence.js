@@ -9,6 +9,7 @@ import {
 
 const PROJECT_COLLECTION = "centralStudioProjects";
 const MEMBERSHIP_COLLECTION = "centralStudioMemberships";
+const LOGO_LIBRARY_COLLECTION = "centralStudioLogoLibrary";
 
 function stringValue(value) {
   return typeof value === "string" ? value : "";
@@ -26,6 +27,20 @@ function zoomValue(value) {
   return Number.isFinite(number)
     ? Math.min(2, Math.max(1, number))
     : 1;
+}
+
+function logoScaleValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? Math.min(2, Math.max(0.5, number))
+    : 1;
+}
+
+function logoClearSpaceValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? Math.min(12, Math.max(0, number))
+    : 4;
 }
 
 function legacyFocalPoint(content) {
@@ -257,6 +272,24 @@ function eventContentForCloud(content, templateId) {
         : "",
     unsplashPhotoUrl:
       source === "unsplash" ? stringValue(content.unsplashPhotoUrl) : "",
+    heroMode: content.heroMode === "logo" ? "logo" : "text",
+    heroLogoSource: ["upload", "library"].includes(content.heroLogoSource)
+      ? content.heroLogoSource
+      : "",
+    heroLogoLibraryId:
+      content.heroLogoSource === "library"
+        ? stringValue(content.heroLogoLibraryId)
+        : "",
+    heroLogoStoragePath: ["upload", "library"].includes(
+      content.heroLogoSource,
+    )
+      ? stringValue(content.heroLogoStoragePath)
+      : "",
+    heroLogoName: ["upload", "library"].includes(content.heroLogoSource)
+      ? stringValue(content.heroLogoName)
+      : "",
+    heroLogoScale: logoScaleValue(content.heroLogoScale),
+    heroLogoClearSpace: logoClearSpaceValue(content.heroLogoClearSpace),
     fontKey: stringValue(content.fontKey || "montserrat"),
     textAlignment: stringValue(content.textAlignment || "left"),
     textShadow: Boolean(content.textShadow),
@@ -379,6 +412,7 @@ async function hydrateProject(snapshot, storage, shared = false) {
 
   const cloudContent = data.content || {};
   let backgroundImage = stringValue(cloudContent.backgroundImageUrl);
+  let heroLogo = "";
   if (
     data.templateId !== "policy-document" &&
     cloudContent.backgroundImageSource === "upload" &&
@@ -390,6 +424,19 @@ async function hydrateProject(snapshot, storage, shared = false) {
         .getDownloadURL();
     } catch (error) {
       backgroundImage = "";
+    }
+  }
+  if (
+    data.templateId !== "policy-document" &&
+    ["upload", "library"].includes(cloudContent.heroLogoSource) &&
+    cloudContent.heroLogoStoragePath
+  ) {
+    try {
+      heroLogo = await storage
+        .ref(cloudContent.heroLogoStoragePath)
+        .getDownloadURL();
+    } catch (error) {
+      heroLogo = "";
     }
   }
   const content =
@@ -404,6 +451,7 @@ async function hydrateProject(snapshot, storage, shared = false) {
       : {
           ...cloudContent,
           backgroundImage,
+          heroLogo,
           focalX: focalValue(
             cloudContent.focalX,
             legacyFocalPoint(cloudContent).x,
@@ -504,9 +552,10 @@ async function authorizedImageDataUrl(auth, url) {
 
 export function createStudioPreviewUnsplash() {
   return {
-    searchUnsplash(query, orientation) {
+    searchUnsplash(query, orientation, page = 1) {
       const parameters = new URLSearchParams({q: query});
       if (orientation) parameters.set("orientation", orientation);
+      parameters.set("page", String(page));
       return localPreviewJson(
         `/api/studio/unsplash/search?${parameters.toString()}`,
       );
@@ -755,6 +804,114 @@ export function createStudioCloud({
     };
   }
 
+  async function uploadHeroLogo(project, file) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      throw new Error("Use a JPG, PNG, or WebP logo.");
+    }
+    if (file.size >= 4 * 1024 * 1024) {
+      throw new Error("Logo files must be smaller than 4 MB.");
+    }
+    const extension =
+      file.type === "image/png"
+        ? "png"
+        : file.type === "image/webp"
+          ? "webp"
+          : "jpg";
+    const assetId =
+      globalThis.crypto?.randomUUID?.() ||
+      `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await saveProject(project);
+    const path = `studio-projects/${project.id}/logo-${assetId}.${extension}`;
+    const reference = storage.ref(path);
+    await reference.put(file, {
+      contentType: file.type,
+      cacheControl: "private,max-age=3600",
+    });
+    return {
+      heroMode: "logo",
+      heroLogo: await reference.getDownloadURL(),
+      heroLogoSource: "upload",
+      heroLogoLibraryId: "",
+      heroLogoStoragePath: path,
+      heroLogoName: stringValue(file.name).slice(0, 80) || "Uploaded logo",
+    };
+  }
+
+  async function loadLogoLibrary() {
+    const snapshot = await firestore.collection(LOGO_LIBRARY_COLLECTION).get();
+    const logos = await Promise.all(
+      snapshot.docs.map(async (document) => {
+        const data = document.data();
+        let imageUrl = "";
+        try {
+          imageUrl = await storage.ref(data.storagePath).getDownloadURL();
+        } catch (error) {
+          imageUrl = "";
+        }
+        return {
+          id: document.id,
+          name: stringValue(data.name),
+          storagePath: stringValue(data.storagePath),
+          contentType: stringValue(data.contentType),
+          status: stringValue(data.status),
+          imageUrl,
+        };
+      }),
+    );
+    return logos
+      .filter((logo) => logo.status === "active" && logo.imageUrl)
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async function uploadLogoToLibrary(name, file) {
+    const cleanName = stringValue(name).trim().slice(0, 80);
+    if (!cleanName) throw new Error("Enter a name for this library logo.");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      throw new Error("Use a JPG, PNG, or WebP logo.");
+    }
+    if (file.size >= 4 * 1024 * 1024) {
+      throw new Error("Logo files must be smaller than 4 MB.");
+    }
+    const extension =
+      file.type === "image/png"
+        ? "png"
+        : file.type === "image/webp"
+          ? "webp"
+          : "jpg";
+    const assetId =
+      globalThis.crypto?.randomUUID?.() ||
+      `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const path = `studio-library/logos/${assetId}/source.${extension}`;
+    const reference = storage.ref(path);
+    await reference.put(file, {
+      contentType: file.type,
+      cacheControl: "public,max-age=3600",
+    });
+    try {
+      await firestore.doc(`${LOGO_LIBRARY_COLLECTION}/${assetId}`).set({
+        schemaVersion: 1,
+        name: cleanName,
+        storagePath: path,
+        contentType: file.type,
+        status: "active",
+        createdByUid: user.uid,
+        createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      await reference.delete().catch(() => {});
+      throw error;
+    }
+    return {
+      id: assetId,
+      name: cleanName,
+      storagePath: path,
+      contentType: file.type,
+      status: "active",
+      imageUrl: await reference.getDownloadURL(),
+    };
+  }
+
   async function uploadDirectoryImage(project, pageId, cardId, file) {
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       throw new Error("Use a JPG, PNG, or WebP image.");
@@ -790,10 +947,14 @@ export function createStudioCloud({
     loadProjects,
     saveProject,
     uploadBackground,
+    uploadHeroLogo,
     uploadDirectoryImage,
-    searchUnsplash(query, orientation) {
+    loadLogoLibrary,
+    uploadLogoToLibrary,
+    searchUnsplash(query, orientation, page = 1) {
       const parameters = new URLSearchParams({q: query});
       if (orientation) parameters.set("orientation", orientation);
+      parameters.set("page", String(page));
       return authorizedJson(
         auth,
         `/api/studio/unsplash/search?${parameters.toString()}`,

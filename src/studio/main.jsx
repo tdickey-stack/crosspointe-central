@@ -48,6 +48,7 @@ const EVENT_BLEND_OPTIONS = [
   {value: "overlay", label: "Overlay"},
   {value: "soft-light", label: "Soft Light"},
 ];
+const EVENT_PANEL_TRANSITION_MS = 720;
 
 function getStudioPermission(userData) {
   const pageAccess =
@@ -951,9 +952,6 @@ function EventQuickToolbar({
   onSelectField,
   activePanel,
   onPanelChange,
-  cloud,
-  unsplash,
-  project,
 }) {
   const alignment = content.textAlignment || "left";
   const fontOptions = getEventFontOptions(templateId);
@@ -1015,31 +1013,6 @@ function EventQuickToolbar({
         </div>
       ) : null}
 
-      {activePanel === "background" ? (
-        <div className="studio-event-context-tray is-background">
-          <div className="studio-context-heading">
-            <div>
-              <span>BACKGROUND</span>
-              <strong>Image, focal point, and stock photography</strong>
-            </div>
-            <button
-              type="button"
-              aria-label="Close background controls"
-              onClick={() => onPanelChange("")}
-            >
-              ×
-            </button>
-          </div>
-          <EventBackgroundControls
-            content={content}
-            updateContent={updateContent}
-            cloud={cloud}
-            unsplash={unsplash}
-            project={project}
-          />
-        </div>
-      ) : null}
-
       <div className="studio-event-toolbar" aria-label="Event design controls">
         <div className="studio-toolbar-selection">
           <span>{selectedTextOption ? "TEXT" : "CANVAS"}</span>
@@ -1047,6 +1020,23 @@ function EventQuickToolbar({
             {selectedTextOption?.label || "Template controls"}
           </strong>
         </div>
+
+        <button
+          className={[
+            "studio-toolbar-tool",
+            activePanel === "hero" ? "is-active" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          type="button"
+          aria-expanded={activePanel === "hero"}
+          onClick={() =>
+            onPanelChange(activePanel === "hero" ? "" : "hero")
+          }
+        >
+          <span aria-hidden="true">◇</span>
+          Hero
+        </button>
 
         <button
           className={[
@@ -1234,13 +1224,346 @@ function EventQuickToolbar({
   );
 }
 
-function UnsplashSearch({unsplash, content, updateContent}) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
+function EventHeroControls({
+  content,
+  updateContent,
+  cloud,
+  project,
+  canManageLogoLibrary,
+}) {
+  const projectLogoInputRef = useRef(null);
+  const libraryLogoInputRef = useRef(null);
+  const [library, setLibrary] = useState([]);
+  const [libraryName, setLibraryName] = useState("");
   const [state, setState] = useState({status: "", message: ""});
 
-  const search = async (event) => {
-    event.preventDefault();
+  const refreshLibrary = async () => {
+    if (!cloud?.loadLogoLibrary) {
+      setLibrary([]);
+      return;
+    }
+    setState({status: "working", message: "Loading the Logo Library…"});
+    try {
+      const logos = await cloud.loadLogoLibrary();
+      setLibrary(logos);
+      setState({
+        status: "success",
+        message: logos.length
+          ? `${logos.length} logo${logos.length === 1 ? "" : "s"} available.`
+          : "The Logo Library is ready for its first upload.",
+      });
+    } catch (error) {
+      setState({status: "error", message: error.message});
+    }
+  };
+
+  useEffect(() => {
+    refreshLibrary();
+  }, [cloud]);
+
+  const previewFile = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Studio could not preview that logo."));
+      reader.readAsDataURL(file);
+    });
+
+  const validateLogoFile = (file) => {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      throw new Error("Use a JPG, PNG, or WebP logo.");
+    }
+    if (file.size >= 4 * 1024 * 1024) {
+      throw new Error("Logo files must be smaller than 4 MB.");
+    }
+  };
+
+  const uploadProjectLogo = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      validateLogoFile(file);
+      const preview = await previewFile(file);
+      updateContent({
+        heroMode: "logo",
+        heroLogo: preview,
+        heroLogoSource: "",
+        heroLogoLibraryId: "",
+        heroLogoStoragePath: "",
+        heroLogoName: file.name.slice(0, 80),
+      });
+      if (!cloud?.uploadHeroLogo) {
+        setState({
+          status: "success",
+          message: "Logo loaded in this browser preview.",
+        });
+        return;
+      }
+      setState({status: "working", message: "Uploading project logo…"});
+      const changes = await cloud.uploadHeroLogo(project, file);
+      updateContent(changes);
+      setState({status: "success", message: "Project logo saved to Studio."});
+    } catch (error) {
+      setState({status: "error", message: error.message});
+    }
+  };
+
+  const uploadLibraryLogo = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !cloud?.uploadLogoToLibrary) return;
+    try {
+      validateLogoFile(file);
+      const inferredName = file.name
+        .replace(/\.(jpe?g|png|webp)$/iu, "")
+        .replace(/[-_]+/gu, " ")
+        .trim();
+      const name = libraryName.trim() || inferredName;
+      setState({status: "working", message: "Adding logo to the library…"});
+      const logo = await cloud.uploadLogoToLibrary(name, file);
+      setLibrary((current) =>
+        [...current, logo].sort((left, right) =>
+          left.name.localeCompare(right.name),
+        ),
+      );
+      setLibraryName("");
+      updateContent({
+        heroMode: "logo",
+        heroLogo: logo.imageUrl,
+        heroLogoSource: "library",
+        heroLogoLibraryId: logo.id,
+        heroLogoStoragePath: logo.storagePath,
+        heroLogoName: logo.name,
+      });
+      setState({
+        status: "success",
+        message: `${logo.name} was added to the Logo Library and selected.`,
+      });
+    } catch (error) {
+      setState({status: "error", message: error.message});
+    }
+  };
+
+  const selectLibraryLogo = (logoId) => {
+    const logo = library.find((item) => item.id === logoId);
+    if (!logo) return;
+    updateContent({
+      heroMode: "logo",
+      heroLogo: logo.imageUrl,
+      heroLogoSource: "library",
+      heroLogoLibraryId: logo.id,
+      heroLogoStoragePath: logo.storagePath,
+      heroLogoName: logo.name,
+    });
+    setState({
+      status: "success",
+      message: `${logo.name} selected from the Logo Library.`,
+    });
+  };
+
+  const logoScale = Math.min(
+    2,
+    Math.max(0.5, Number(content.heroLogoScale) || 1),
+  );
+  const logoClearSpace = Math.min(
+    12,
+    Math.max(0, Number(content.heroLogoClearSpace) || 0),
+  );
+
+  return (
+    <div className="studio-hero-controls">
+      <div className="studio-hero-mode" role="group" aria-label="Hero type">
+        <button
+          className={content.heroMode !== "logo" ? "is-active" : ""}
+          type="button"
+          aria-pressed={content.heroMode !== "logo"}
+          onClick={() => updateContent({heroMode: "text"})}
+        >
+          <strong>Text Hero</strong>
+          <span>Use the template’s display typography.</span>
+        </button>
+        <button
+          className={content.heroMode === "logo" ? "is-active" : ""}
+          type="button"
+          aria-pressed={content.heroMode === "logo"}
+          onClick={() => updateContent({heroMode: "logo"})}
+        >
+          <strong>Logo Hero</strong>
+          <span>Replace the event title with a prepared logo.</span>
+        </button>
+      </div>
+
+      {content.heroMode === "logo" ? (
+        <>
+          <div className="studio-logo-source-grid">
+            <label className="studio-field">
+              <span>Logo Library</span>
+              <select
+                value={
+                  content.heroLogoSource === "library"
+                    ? content.heroLogoLibraryId
+                    : ""
+                }
+                disabled={!cloud || state.status === "working"}
+                onChange={(event) => selectLibraryLogo(event.target.value)}
+              >
+                <option value="">
+                  {library.length ? "Choose a shared logo…" : "No shared logos yet"}
+                </option>
+                {library.map((logo) => (
+                  <option key={logo.id} value={logo.id}>
+                    {logo.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="studio-logo-upload-option">
+              <span>One-off logo</span>
+              <input
+                ref={projectLogoInputRef}
+                className="studio-file-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={uploadProjectLogo}
+              />
+              <button
+                className="studio-button is-secondary"
+                type="button"
+                onClick={() => projectLogoInputRef.current?.click()}
+              >
+                Upload for this project
+              </button>
+            </div>
+          </div>
+
+          {content.heroLogo ? (
+            <div className="studio-selected-logo">
+              <div>
+                <img
+                  src={content.heroLogo}
+                  alt={content.heroLogoName || "Selected event logo"}
+                />
+              </div>
+              <span>
+                <strong>{content.heroLogoName || "Selected logo"}</strong>
+                <small>
+                  {content.heroLogoSource === "library"
+                    ? "Logo Library"
+                    : content.heroLogoSource === "upload"
+                      ? "Saved with this project"
+                      : "Browser preview"}
+                </small>
+              </span>
+            </div>
+          ) : null}
+
+          <div className="studio-logo-adjustments">
+            <label>
+              <span>
+                Logo size <strong>{Math.round(logoScale * 100)}%</strong>
+              </span>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.05"
+                value={logoScale}
+                onChange={(event) =>
+                  updateContent({heroLogoScale: Number(event.target.value)})
+                }
+              />
+            </label>
+            <label>
+              <span>
+                Clear space <strong>{Math.round(logoClearSpace)}</strong>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="12"
+                step="1"
+                value={logoClearSpace}
+                onChange={(event) =>
+                  updateContent({
+                    heroLogoClearSpace: Number(event.target.value),
+                  })
+                }
+              />
+            </label>
+          </div>
+          <p className="studio-logo-sizing-note">
+            Transparent file margins are ignored. Use Clear space to control
+            the intentional gap around the visible logo.
+          </p>
+
+          {canManageLogoLibrary ? (
+            <div className="studio-logo-library-admin">
+              <div>
+                <span className="studio-kicker">STUDIO ADMIN</span>
+                <strong>Add a reusable logo</strong>
+                <p>
+                  Upload once so every Studio user can select it in future
+                  Event Graphics.
+                </p>
+              </div>
+              <label>
+                <span>Library name</span>
+                <input
+                  type="text"
+                  maxLength="80"
+                  value={libraryName}
+                  placeholder="Bids for Kids"
+                  onChange={(event) => setLibraryName(event.target.value)}
+                />
+              </label>
+              <input
+                ref={libraryLogoInputRef}
+                className="studio-file-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={uploadLibraryLogo}
+              />
+              <button
+                className="studio-button is-secondary"
+                type="button"
+                disabled={!cloud || state.status === "working"}
+                onClick={() => libraryLogoInputRef.current?.click()}
+              >
+                Add to Logo Library
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className="studio-hero-text-note">
+          The title remains editable directly on the canvas. Switching back to
+          Logo Hero restores the last selected logo.
+        </p>
+      )}
+
+      {state.message ? (
+        <p className={`studio-export-status is-${state.status}`}>
+          {state.message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function UnsplashSearch({
+  unsplash,
+  content,
+  updateContent,
+  onBackgroundSelected = () => {},
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [state, setState] = useState({status: "", message: ""});
+
+  const searchPage = async (nextPage) => {
     if (!unsplash || query.trim().length < 2) return;
     setState({status: "working", message: "Searching Unsplash…"});
     try {
@@ -1250,17 +1573,33 @@ function UnsplashSearch({unsplash, content, updateContent}) {
           : content.format === "square"
             ? "squarish"
             : "landscape";
-      const data = await unsplash.searchUnsplash(query.trim(), orientation);
+      const data = await unsplash.searchUnsplash(
+        query.trim(),
+        orientation,
+        nextPage,
+      );
       setResults(data.results || []);
+      setPage(nextPage);
+      setTotalPages(Number(data.totalPages || 0));
+      const firstResult = (nextPage - 1) * 18 + 1;
+      const lastResult =
+        firstResult + Math.max((data.results?.length || 1) - 1, 0);
       setState({
         status: "success",
         message: data.results?.length
-          ? `${data.results.length} photos found.`
+          ? `Showing photos ${firstResult}–${lastResult} of ${Number(
+              data.total || data.results.length,
+            )}.`
           : "No photos matched that search.",
       });
     } catch (error) {
       setState({status: "error", message: error.message});
     }
+  };
+
+  const search = (event) => {
+    event.preventDefault();
+    searchPage(1);
   };
 
   const selectPhoto = async (photo) => {
@@ -1273,10 +1612,7 @@ function UnsplashSearch({unsplash, content, updateContent}) {
         focalY: 50,
         imageZoom: 1,
       });
-      setState({
-        status: "success",
-        message: `Photo by ${photo.photographerName} added.`,
-      });
+      onBackgroundSelected();
     } catch (error) {
       setState({status: "error", message: error.message});
     }
@@ -1302,6 +1638,7 @@ function UnsplashSearch({unsplash, content, updateContent}) {
         />
         <button
           className="studio-button is-secondary"
+          type="submit"
           disabled={
             !unsplash ||
             query.trim().length < 2 ||
@@ -1323,34 +1660,62 @@ function UnsplashSearch({unsplash, content, updateContent}) {
         </p>
       ) : null}
       {results.length ? (
-        <div className="studio-unsplash-results">
-          {results.map((photo) => (
-            <div key={photo.id}>
-              <button type="button" onClick={() => selectPhoto(photo)}>
-                <img src={photo.thumbnailUrl} alt={photo.alt || ""} />
-                <span className="studio-visually-hidden">Use this photo</span>
+        <>
+          <div className="studio-unsplash-results">
+            {results.map((photo) => (
+              <div key={photo.id}>
+                <button type="button" onClick={() => selectPhoto(photo)}>
+                  <img src={photo.thumbnailUrl} alt={photo.alt || ""} />
+                  <span className="studio-visually-hidden">Use this photo</span>
+                </button>
+                <span>
+                  Photo by{" "}
+                  <a
+                    href={photo.photographerUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {photo.photographerName}
+                  </a>
+                  {" "}on{" "}
+                  <a
+                    href={photo.photoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Unsplash
+                  </a>
+                </span>
+              </div>
+            ))}
+          </div>
+          {totalPages > 1 ? (
+            <nav
+              className="studio-unsplash-pagination"
+              aria-label="Unsplash search result pages"
+            >
+              <button
+                className="studio-button is-secondary"
+                type="button"
+                disabled={page <= 1 || state.status === "working"}
+                onClick={() => searchPage(page - 1)}
+              >
+                Previous
               </button>
               <span>
-                Photo by{" "}
-                <a
-                  href={photo.photographerUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {photo.photographerName}
-                </a>
-                {" "}on{" "}
-                <a
-                  href={photo.photoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Unsplash
-                </a>
+                Page {page} of {totalPages}
               </span>
-            </div>
-          ))}
-        </div>
+              <button
+                className="studio-button is-secondary"
+                type="button"
+                disabled={page >= totalPages || state.status === "working"}
+                onClick={() => searchPage(page + 1)}
+              >
+                Next
+              </button>
+            </nav>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
@@ -1362,6 +1727,7 @@ function EventBackgroundControls({
   cloud,
   unsplash,
   project,
+  onBackgroundSelected = () => {},
 }) {
   const fileInputRef = useRef(null);
   const [uploadState, setUploadState] = useState({status: "", message: ""});
@@ -1496,6 +1862,7 @@ function EventBackgroundControls({
         unsplash={unsplash}
         content={content}
         updateContent={updateContent}
+        onBackgroundSelected={onBackgroundSelected}
       />
     </div>
   );
@@ -3835,6 +4202,26 @@ function DocumentEditor({
   );
 }
 
+function EventToolSideSheet({eyebrow, title, label, onClose, children}) {
+  return (
+    <aside
+      className="studio-event-side-sheet studio-event-tool-sheet"
+      aria-label={label}
+    >
+      <div className="studio-event-sheet-header">
+        <div>
+          <span>{eyebrow}</span>
+          <h2>{title}</h2>
+        </div>
+        <button type="button" onClick={onClose} aria-label={`Close ${label}`}>
+          ×
+        </button>
+      </div>
+      <div className="studio-event-sheet-content">{children}</div>
+    </aside>
+  );
+}
+
 function EventProjectBriefSheet({project, updateProject, onClose}) {
   return (
     <aside
@@ -3996,6 +4383,7 @@ function EventStudioEditor({
   cloud,
   unsplash,
   saveState,
+  canManageLogoLibrary,
 }) {
   const [selectedField, setSelectedField] = useState("");
   const [activePanel, setActivePanel] = useState("");
@@ -4003,8 +4391,14 @@ function EventStudioEditor({
   const [sideSheet, setSideSheet] = useState(
     project.name.startsWith("Untitled ") ? "brief" : "",
   );
+  const [renderedWorkspacePanel, setRenderedWorkspacePanel] = useState(
+    project.name.startsWith("Untitled ") ? "brief" : "",
+  );
+  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [exportState, setExportState] = useState({status: "", message: ""});
   const previewElementRef = useRef(null);
+  const workspacePanelFrameRef = useRef(null);
+  const workspacePanelTimerRef = useRef(null);
   const warnings = getProjectWarnings(project);
   const template = getTemplateById(project.templateId);
   const formatLabel =
@@ -4013,6 +4407,7 @@ function EventStudioEditor({
       : project.content.format === "portrait"
         ? "4:5"
         : "1:1";
+  const requestedWorkspacePanel = activePanel || sideSheet;
 
   const updateProject = (changes) => {
     onChange({...project, ...changes, updatedAt: new Date().toISOString()});
@@ -4033,6 +4428,28 @@ function EventStudioEditor({
     setMenuOpen(false);
     setSideSheet(project.name.startsWith("Untitled ") ? "brief" : "");
   }, [project.id]);
+
+  useEffect(() => {
+    window.cancelAnimationFrame(workspacePanelFrameRef.current);
+    window.clearTimeout(workspacePanelTimerRef.current);
+
+    if (requestedWorkspacePanel) {
+      setRenderedWorkspacePanel(requestedWorkspacePanel);
+      workspacePanelFrameRef.current = window.requestAnimationFrame(() => {
+        setWorkspacePanelOpen(true);
+      });
+    } else {
+      setWorkspacePanelOpen(false);
+      workspacePanelTimerRef.current = window.setTimeout(() => {
+        setRenderedWorkspacePanel("");
+      }, EVENT_PANEL_TRANSITION_MS);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(workspacePanelFrameRef.current);
+      window.clearTimeout(workspacePanelTimerRef.current);
+    };
+  }, [requestedWorkspacePanel]);
 
   useEffect(() => {
     const closeTransientUi = (event) => {
@@ -4210,45 +4627,113 @@ function EventStudioEditor({
         </div>
       </header>
 
-      <section
-        className="studio-event-canvas-region"
-        onPointerDownCapture={() => setMenuOpen(false)}
+      <div
+        className={[
+          "studio-event-workspace",
+          workspacePanelOpen ? "has-side-sheet" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
-        <div className="studio-event-canvas-meta">
-          <span>LIVE CANVAS</span>
-          <strong>{formatLabel}</strong>
-          <p>Click any text to edit it. Template positions remain fixed.</p>
-        </div>
         <div
-          className={`studio-event-canvas-stage is-${project.content.format || "square"}`}
-          data-studio-print-preview
+          className={[
+            "studio-event-panel-slot",
+            workspacePanelOpen ? "is-open" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
-          <EventPreview
-            content={project.content}
-            previewRef={previewElementRef}
-            templateId={project.templateId}
-            editorMode={exportState.status !== "working"}
-            selectedField={selectedField}
-            onSelectField={(field) => {
-              setSelectedField(field);
-              if (field) setActivePanel("");
-            }}
-            onEditField={(field, value) =>
-              updateContent({[field]: value})
-            }
-          />
+          {renderedWorkspacePanel === "hero" ? (
+            <EventToolSideSheet
+              eyebrow="HERO"
+              title="Text or event logo"
+              label="hero controls"
+              onClose={() => setActivePanel("")}
+            >
+              <EventHeroControls
+                content={project.content}
+                updateContent={updateContent}
+                cloud={cloud}
+                project={project}
+                canManageLogoLibrary={canManageLogoLibrary}
+              />
+            </EventToolSideSheet>
+          ) : null}
+          {renderedWorkspacePanel === "background" ? (
+            <EventToolSideSheet
+              eyebrow="BACKGROUND"
+              title="Image and focal point"
+              label="background controls"
+              onClose={() => setActivePanel("")}
+            >
+              <EventBackgroundControls
+                content={project.content}
+                updateContent={updateContent}
+                cloud={cloud}
+                unsplash={unsplash}
+                project={project}
+                onBackgroundSelected={() => setActivePanel("")}
+              />
+            </EventToolSideSheet>
+          ) : null}
+          {renderedWorkspacePanel === "brief" ? (
+            <EventProjectBriefSheet
+              project={project}
+              updateProject={updateProject}
+              onClose={() => setSideSheet("")}
+            />
+          ) : null}
+          {renderedWorkspacePanel === "review" ? (
+            <EventReviewSheet
+              project={project}
+              warnings={warnings}
+              exportState={exportState}
+              onClose={() => setSideSheet("")}
+              onExport={runExport}
+            />
+          ) : null}
         </div>
-        {exportState.message && exportState.status !== "working" ? (
-          <button
-            className={`studio-event-export-toast is-${exportState.status}`}
-            type="button"
-            onClick={() => setExportState({status: "", message: ""})}
+
+        <section
+          className="studio-event-canvas-region"
+          onPointerDownCapture={() => setMenuOpen(false)}
+        >
+          <div className="studio-event-canvas-meta">
+            <span>LIVE CANVAS</span>
+            <strong>{formatLabel}</strong>
+            <p>Click any text to edit it. Template positions remain fixed.</p>
+          </div>
+          <div
+            className={`studio-event-canvas-stage is-${project.content.format || "square"}`}
+            data-studio-print-preview
           >
-            <span>{exportState.message}</span>
-            <i aria-hidden="true">×</i>
-          </button>
-        ) : null}
-      </section>
+            <EventPreview
+              content={project.content}
+              previewRef={previewElementRef}
+              templateId={project.templateId}
+              editorMode={exportState.status !== "working"}
+              selectedField={selectedField}
+              onSelectField={(field) => {
+                setSelectedField(field);
+                if (field) setActivePanel("");
+              }}
+              onEditField={(field, value) =>
+                updateContent({[field]: value})
+              }
+            />
+          </div>
+          {exportState.message && exportState.status !== "working" ? (
+            <button
+              className={`studio-event-export-toast is-${exportState.status}`}
+              type="button"
+              onClick={() => setExportState({status: "", message: ""})}
+            >
+              <span>{exportState.message}</span>
+              <i aria-hidden="true">×</i>
+            </button>
+          ) : null}
+        </section>
+      </div>
 
       <EventQuickToolbar
         content={project.content}
@@ -4259,29 +4744,12 @@ function EventStudioEditor({
         activePanel={activePanel}
         onPanelChange={(panel) => {
           setActivePanel(panel);
-          if (panel) setSelectedField("");
+          if (panel) {
+            setSelectedField("");
+            setSideSheet("");
+          }
         }}
-        cloud={cloud}
-        unsplash={unsplash}
-        project={project}
       />
-
-      {sideSheet === "brief" ? (
-        <EventProjectBriefSheet
-          project={project}
-          updateProject={updateProject}
-          onClose={() => setSideSheet("")}
-        />
-      ) : null}
-      {sideSheet === "review" ? (
-        <EventReviewSheet
-          project={project}
-          warnings={warnings}
-          exportState={exportState}
-          onClose={() => setSideSheet("")}
-          onExport={runExport}
-        />
-      ) : null}
     </main>
   );
 }
@@ -4527,6 +4995,11 @@ function StudioApp() {
           cloud={cloud}
           unsplash={unsplash}
           saveState={saveState}
+          canManageLogoLibrary={
+            String(authState.userData?.pageAccess?.studio || "")
+              .trim()
+              .toLowerCase() === "admin"
+          }
         />
       ) : (
         <StudioHome

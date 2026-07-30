@@ -14,6 +14,36 @@ service firebase.storage {
       return /databases/(default)/documents/centralStudioMemberships/$(request.auth.uid + "_" + projectId);
     }
 
+    function studioUserPath() {
+      return /databases/(default)/documents/centralAdmin/root/users/$(request.auth.uid);
+    }
+
+    function logoMetadataPath(logoId) {
+      return /databases/(default)/documents/centralStudioLogoLibrary/$(logoId);
+    }
+
+    function studioPermission() {
+      return firestore.get(studioUserPath()).data.pageAccess.studio != null ?
+        firestore.get(studioUserPath()).data.pageAccess.studio :
+        firestore.get(studioUserPath()).data.pageAccess.settings;
+    }
+
+    function canUseStudio() {
+      return isSignedIn() &&
+        firestore.exists(studioUserPath()) &&
+        firestore.get(studioUserPath()).data.active == true &&
+        studioPermission() in [
+          "view", "propose", "edit", "approve", "admin"
+        ];
+    }
+
+    function canManageStudioLogoLibrary() {
+      return isSignedIn() &&
+        firestore.exists(studioUserPath()) &&
+        firestore.get(studioUserPath()).data.active == true &&
+        firestore.get(studioUserPath()).data.pageAccess.studio == "admin";
+    }
+
     function canUseStudioProject(projectId) {
       return isSignedIn() &&
         (
@@ -35,9 +65,32 @@ service firebase.storage {
     match /studio-projects/{projectId}/{assetId} {
       allow read: if canUseStudioProject(projectId);
       allow create, update: if canUseStudioProject(projectId) &&
-        request.resource.size < 8 * 1024 * 1024 &&
+        (
+          (
+            assetId.matches("^logo-.*$") &&
+            request.resource.size < 4 * 1024 * 1024
+          ) ||
+          (
+            !assetId.matches("^logo-.*$") &&
+            request.resource.size < 8 * 1024 * 1024
+          )
+        ) &&
         request.resource.contentType.matches("image/(jpeg|png|webp)");
       allow delete: if canUseStudioProject(projectId);
+    }
+
+    match /studio-library/logos/{logoId}/{fileName} {
+      allow read: if canUseStudio();
+      allow create: if canManageStudioLogoLibrary() &&
+        resource == null &&
+        !firestore.exists(logoMetadataPath(logoId)) &&
+        logoId.matches("^[A-Za-z0-9_-]{1,80}$") &&
+        fileName.matches("^source[.](jpg|png|webp)$") &&
+        request.resource.size < 4 * 1024 * 1024 &&
+        request.resource.contentType.matches("image/(jpeg|png|webp)");
+      allow update: if false;
+      allow delete: if canManageStudioLogoLibrary() &&
+        !firestore.exists(logoMetadataPath(logoId));
     }
 
     match /{allPaths=**} {

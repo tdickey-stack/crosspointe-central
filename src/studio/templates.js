@@ -632,6 +632,14 @@ const eventContent = {
   unsplashPhotographerName: "",
   unsplashPhotographerUrl: "",
   unsplashPhotoUrl: "",
+  heroMode: "text",
+  heroLogo: "",
+  heroLogoSource: "",
+  heroLogoLibraryId: "",
+  heroLogoStoragePath: "",
+  heroLogoName: "",
+  heroLogoScale: 1,
+  heroLogoClearSpace: 4,
   textAlignment: "left",
   textShadow: false,
 };
@@ -724,6 +732,27 @@ export function migrateLegacyStudioProject(project) {
       composition: normalizedComposition,
       focalX: hasFocalPoint ? project.content.focalX : legacyX,
       focalY: hasFocalPoint ? project.content.focalY : 50,
+      heroMode: project.content.heroMode === "logo" ? "logo" : "text",
+      heroLogo: String(project.content.heroLogo || ""),
+      heroLogoSource: ["upload", "library"].includes(
+        project.content.heroLogoSource,
+      )
+        ? project.content.heroLogoSource
+        : "",
+      heroLogoLibraryId: String(project.content.heroLogoLibraryId || ""),
+      heroLogoStoragePath: String(project.content.heroLogoStoragePath || ""),
+      heroLogoName: String(project.content.heroLogoName || ""),
+      heroLogoScale: Number.isFinite(Number(project.content.heroLogoScale))
+        ? Math.min(2, Math.max(0.5, Number(project.content.heroLogoScale)))
+        : 1,
+      heroLogoClearSpace: Number.isFinite(
+        Number(project.content.heroLogoClearSpace),
+      )
+        ? Math.min(
+            12,
+            Math.max(0, Number(project.content.heroLogoClearSpace)),
+          )
+        : 4,
     },
   };
 }
@@ -925,11 +954,23 @@ export function getProjectWarnings(project) {
   }
 
   const content = project.content || {};
-  if (!String(content.title || "").trim()) {
+  if (
+    content.heroMode !== "logo" &&
+    !String(content.title || "").trim()
+  ) {
     warnings.push("The title is required.");
   }
-  if (String(content.title || "").length > 44) {
+  if (
+    content.heroMode !== "logo" &&
+    String(content.title || "").length > 44
+  ) {
     warnings.push("The event title may be too long for every format.");
+  }
+  if (
+    content.heroMode === "logo" &&
+    !String(content.heroLogo || content.heroLogoStoragePath || "").trim()
+  ) {
+    warnings.push("Choose or upload a hero logo.");
   }
   if (!String(content.date || "").trim()) {
     warnings.push("Add an event date.");

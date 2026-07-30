@@ -90,10 +90,33 @@ function eventProjectPayload(ownerUid = "owner") {
       unsplashPhotographerName: "",
       unsplashPhotographerUrl: "",
       unsplashPhotoUrl: "",
+      heroMode: "text",
+      heroLogoSource: "",
+      heroLogoLibraryId: "",
+      heroLogoStoragePath: "",
+      heroLogoName: "",
+      heroLogoScale: 1,
+      heroLogoClearSpace: 4,
       fontKey: "montserrat",
       textAlignment: "left",
       textShadow: false,
     },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function logoLibraryPayload(
+  logoId = "logo-a",
+  createdByUid = "studio-admin",
+) {
+  return {
+    schemaVersion: 1,
+    name: "Bids for Kids",
+    storagePath: `studio-library/logos/${logoId}/source.png`,
+    contentType: "image/png",
+    status: "active",
+    createdByUid,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
@@ -301,6 +324,8 @@ test.beforeEach(async () => {
     seedUser("member"),
     seedUser("other"),
     seedUser("viewer", "view"),
+    seedUser("studio-admin", "admin"),
+    seedUser("approver", "approve"),
   ]);
 });
 
@@ -657,6 +682,120 @@ test("event projects accept valid sources and reject cross-project upload paths"
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
+  await assertSucceeds(
+    reference.update({
+      "content.heroMode": "logo",
+      "content.heroLogoSource": "upload",
+      "content.heroLogoStoragePath":
+        "studio-projects/event-a/logo-event.png",
+      "content.heroLogoName": "Event logo",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.heroLogoStoragePath":
+        "studio-projects/someone-elses-project/logo-event.png",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    reference.update({
+      "content.heroLogoSource": "library",
+      "content.heroLogoLibraryId": "bids-for-kids",
+      "content.heroLogoStoragePath":
+        "studio-library/logos/bids-for-kids/source.webp",
+      "content.heroLogoName": "Bids for Kids",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.heroLogoStoragePath":
+        "studio-library/logos/another-logo/source.webp",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    reference.update({
+      "content.heroLogoScale": 2,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.heroLogoScale": 2.01,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.heroLogoClearSpace": -1,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+});
+
+test("Logo Library is readable by Studio users and writable only by explicit Studio admins", async () => {
+  const adminDb = environment
+    .authenticatedContext("studio-admin")
+    .firestore();
+  const editorDb = environment.authenticatedContext("owner").firestore();
+  const approverDb = environment.authenticatedContext("approver").firestore();
+  const reference = adminDb.doc("centralStudioLogoLibrary/logo-a");
+
+  await assertSucceeds(reference.set(logoLibraryPayload()));
+  await assertSucceeds(editorDb.doc("centralStudioLogoLibrary/logo-a").get());
+  await assertSucceeds(
+    editorDb.collection("centralStudioLogoLibrary").get(),
+  );
+  await assertFails(
+    editorDb
+      .doc("centralStudioLogoLibrary/editor-logo")
+      .set(logoLibraryPayload("editor-logo", "owner")),
+  );
+  await assertFails(
+    approverDb
+      .doc("centralStudioLogoLibrary/approver-logo")
+      .set(logoLibraryPayload("approver-logo", "approver")),
+  );
+  await assertFails(
+    adminDb
+      .doc("centralStudioLogoLibrary/spoofed-logo")
+      .set(logoLibraryPayload("spoofed-logo", "owner")),
+  );
+  await assertFails(
+    adminDb.doc("centralStudioLogoLibrary/wrong-path").set({
+      ...logoLibraryPayload("wrong-path"),
+      storagePath: "studio-library/logos/another-logo/source.png",
+    }),
+  );
+  await assertFails(
+    adminDb.doc("centralStudioLogoLibrary/extra-field").set({
+      ...logoLibraryPayload("extra-field"),
+      public: true,
+    }),
+  );
+  await assertSucceeds(
+    reference.update({
+      name: "Bids for Kids Updated",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      storagePath: "studio-library/logos/logo-a/source.webp",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(reference.delete());
+  await assertFails(
+    environment
+      .unauthenticatedContext()
+      .firestore()
+      .doc("centralStudioLogoLibrary/logo-a")
+      .get(),
+  );
 });
 
 test("project creation rejects impersonation, unknown fields, and view-only users", async () => {
@@ -834,7 +973,7 @@ test("membership queries return only the signed-in member's records", async () =
   );
 });
 
-test("Storage accepts only authorized project images under 8 MiB", async () => {
+test("Storage enforces project image access and tighter logo limits", async () => {
   await environment.withSecurityRulesDisabled(async (context) => {
     await context
       .firestore()
@@ -866,4 +1005,69 @@ test("Storage accepts only authorized project images under 8 MiB", async () => {
         contentType: "image/png",
       }),
   );
+  const fiveMiB = new Uint8Array(5 * 1024 * 1024);
+  await assertSucceeds(
+    ownerStorage
+      .ref("studio-projects/project-a/background-large.png")
+      .put(fiveMiB, {contentType: "image/png"}),
+  );
+  await assertFails(
+    ownerStorage
+      .ref("studio-projects/project-a/logo-too-large.png")
+      .put(fiveMiB, {contentType: "image/png"}),
+  );
+});
+
+test("Logo Library Storage is readable by Studio users and immutable after metadata exists", async () => {
+  const adminContext = environment.authenticatedContext("studio-admin");
+  const editorContext = environment.authenticatedContext("owner");
+  const adminStorage = adminContext.storage();
+  const editorStorage = editorContext.storage();
+  const logoReference = adminStorage.ref(
+    "studio-library/logos/logo-a/source.png",
+  );
+
+  await assertSucceeds(
+    logoReference.put(new Uint8Array([137, 80, 78, 71]), {
+      contentType: "image/png",
+    }),
+  );
+  await assertSucceeds(
+    editorStorage.ref("studio-library/logos/logo-a/source.png").getDownloadURL(),
+  );
+  await assertFails(
+    editorStorage
+      .ref("studio-library/logos/editor-logo/source.png")
+      .put(new Uint8Array([137, 80, 78, 71]), {
+        contentType: "image/png",
+      }),
+  );
+  await assertFails(
+    adminStorage
+      .ref("studio-library/logos/bad-file/source.svg")
+      .putString("<svg></svg>", "raw", {contentType: "image/svg+xml"}),
+  );
+
+  await assertSucceeds(
+    adminContext
+      .firestore()
+      .doc("centralStudioLogoLibrary/logo-a")
+      .set(logoLibraryPayload()),
+  );
+  await assertFails(
+    logoReference.put(new Uint8Array([137, 80, 78, 71]), {
+      contentType: "image/png",
+    }),
+  );
+  await assertFails(logoReference.delete());
+
+  const orphanReference = adminStorage.ref(
+    "studio-library/logos/orphan-logo/source.webp",
+  );
+  await assertSucceeds(
+    orphanReference.put(new Uint8Array([82, 73, 70, 70]), {
+      contentType: "image/webp",
+    }),
+  );
+  await assertSucceeds(orphanReference.delete());
 });

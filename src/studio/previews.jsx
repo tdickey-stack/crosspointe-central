@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useEffect, useState} from "react";
 import {focalMediaStyle} from "./focal.js";
 import {
   getBrandColor,
@@ -32,6 +32,154 @@ const CHECKLIST_DENSITY_CLASSES = [
   "is-density-tight",
   "is-density-maximum",
 ];
+const trimmedLogoSourceCache = new Map();
+
+function transparentPixelBounds(pixelData, width, height) {
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (pixelData[(y * width + x) * 4 + 3] <= 8) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+
+  if (right < left || bottom < top) return null;
+  return {
+    x: left,
+    y: top,
+    width: right - left + 1,
+    height: bottom - top + 1,
+  };
+}
+
+function loadLogoImage(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    if (/^https?:/iu.test(source)) image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Studio could not inspect that logo."));
+    image.src = source;
+  });
+}
+
+async function trimTransparentLogoSource(source) {
+  if (!source) return "";
+  if (trimmedLogoSourceCache.has(source)) {
+    return trimmedLogoSourceCache.get(source);
+  }
+
+  const cropPromise = (async () => {
+    try {
+      const image = await loadLogoImage(source);
+      const scanScale = Math.min(
+        1,
+        2048 / Math.max(image.naturalWidth, image.naturalHeight),
+      );
+      const scanWidth = Math.max(1, Math.round(image.naturalWidth * scanScale));
+      const scanHeight = Math.max(1, Math.round(image.naturalHeight * scanScale));
+      const scanCanvas = document.createElement("canvas");
+      scanCanvas.width = scanWidth;
+      scanCanvas.height = scanHeight;
+      const scanContext = scanCanvas.getContext("2d", {
+        alpha: true,
+        willReadFrequently: true,
+      });
+      if (!scanContext) return source;
+      scanContext.drawImage(image, 0, 0, scanWidth, scanHeight);
+      const pixels = scanContext.getImageData(0, 0, scanWidth, scanHeight);
+      const bounds = transparentPixelBounds(
+        pixels.data,
+        scanWidth,
+        scanHeight,
+      );
+      if (!bounds) return source;
+
+      const fillsCanvas =
+        bounds.x <= 1 &&
+        bounds.y <= 1 &&
+        bounds.x + bounds.width >= scanWidth - 1 &&
+        bounds.y + bounds.height >= scanHeight - 1;
+      if (fillsCanvas) return source;
+
+      const padding = Math.max(
+        2,
+        Math.round(Math.max(bounds.width, bounds.height) * 0.015),
+      );
+      const paddedLeft = Math.max(0, bounds.x - padding);
+      const paddedTop = Math.max(0, bounds.y - padding);
+      const paddedRight = Math.min(
+        scanWidth,
+        bounds.x + bounds.width + padding,
+      );
+      const paddedBottom = Math.min(
+        scanHeight,
+        bounds.y + bounds.height + padding,
+      );
+      const sourceX = Math.floor(paddedLeft / scanScale);
+      const sourceY = Math.floor(paddedTop / scanScale);
+      const sourceWidth = Math.min(
+        image.naturalWidth - sourceX,
+        Math.ceil((paddedRight - paddedLeft) / scanScale),
+      );
+      const sourceHeight = Math.min(
+        image.naturalHeight - sourceY,
+        Math.ceil((paddedBottom - paddedTop) / scanScale),
+      );
+      const outputCanvas = document.createElement("canvas");
+      outputCanvas.width = sourceWidth;
+      outputCanvas.height = sourceHeight;
+      const outputContext = outputCanvas.getContext("2d", {alpha: true});
+      if (!outputContext) return source;
+      outputContext.drawImage(
+        image,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        sourceWidth,
+        sourceHeight,
+      );
+      return outputCanvas.toDataURL("image/png");
+    } catch (error) {
+      return source;
+    }
+  })();
+
+  trimmedLogoSourceCache.set(source, cropPromise);
+  return cropPromise;
+}
+
+function EventHeroLogo({source, name}) {
+  const [renderedSource, setRenderedSource] = useState(source);
+
+  useEffect(() => {
+    let isCurrent = true;
+    setRenderedSource(source);
+    trimTransparentLogoSource(source).then((trimmedSource) => {
+      if (isCurrent) setRenderedSource(trimmedSource || source);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [source]);
+
+  return (
+    <img
+      className="event-hero-logo"
+      src={renderedSource}
+      alt={name || "Event logo"}
+    />
+  );
+}
 
 function checklistContentOverflows(section, list) {
   if (!section || !list) return false;
@@ -869,6 +1017,7 @@ export function EventPreview({
   const brandColor = getBrandColor(content.flatColor);
   const overlayColor = getBrandColor(content.overlayColor || "red");
   const usesDarkCopy = isFlat && !content.backgroundImage && brandColor.ink === "dark";
+  const usesLogoHero = content.heroMode === "logo";
   let backgroundStyle;
 
   if (isFlat && !content.backgroundImage) {
@@ -888,6 +1037,7 @@ export function EventPreview({
         `is-text-${content.textAlignment || "left"}`,
         content.backgroundImage ? "has-background-image" : "",
         content.textShadow ? "has-text-shadow" : "",
+        usesLogoHero ? "has-logo-hero" : "",
         usesDarkCopy ? "has-dark-copy" : "",
         editorMode ? "is-editor-canvas" : "",
       ]
@@ -897,6 +1047,14 @@ export function EventPreview({
       style={{
         ...backgroundStyle,
         "--event-display-font": `"${displayFont.family}"`,
+        "--event-logo-scale": Math.min(
+          2,
+          Math.max(0.5, Number(content.heroLogoScale) || 1),
+        ),
+        "--event-logo-clear-space": Math.min(
+          12,
+          Math.max(0, Number(content.heroLogoClearSpace) || 0),
+        ),
       }}
     >
       {content.backgroundImage ? (
@@ -923,7 +1081,8 @@ export function EventPreview({
         />
       ) : null}
       <EventGraphicDecoration composition={composition} />
-      <div className="event-graphic-copy">
+      <div className="event-graphic-layout">
+        <div className="event-graphic-copy">
         <EditableEventText
           as="span"
           className="event-eyebrow"
@@ -935,16 +1094,31 @@ export function EventPreview({
         >
           {content.eyebrow}
         </EditableEventText>
-        <EditableEventText
-          as="h2"
-          editorMode={editorMode}
-          field="title"
-          onEditField={onEditField}
-          onSelectField={onSelectField}
-          selectedField={selectedField}
-        >
-          {content.title}
-        </EditableEventText>
+        {usesLogoHero ? (
+          <div className="event-hero-logo-wrap">
+            {content.heroLogo ? (
+              <EventHeroLogo
+                source={content.heroLogo}
+                name={content.heroLogoName}
+              />
+            ) : (
+              <span className="event-hero-logo-placeholder">
+                Choose a hero logo
+              </span>
+            )}
+          </div>
+        ) : (
+          <EditableEventText
+            as="h2"
+            editorMode={editorMode}
+            field="title"
+            onEditField={onEditField}
+            onSelectField={onSelectField}
+            selectedField={selectedField}
+          >
+            {content.title}
+          </EditableEventText>
+        )}
         <EditableEventText
           as="p"
           editorMode={editorMode}
@@ -955,8 +1129,8 @@ export function EventPreview({
         >
           {content.subtitle}
         </EditableEventText>
-      </div>
-      <div className="event-graphic-details">
+        </div>
+        <div className="event-graphic-details">
         <EditableEventText
           as="strong"
           editorMode={editorMode}
@@ -992,20 +1166,21 @@ export function EventPreview({
             {content.location}
           </EditableEventText>
         </span>
+        </div>
+        <footer className="event-graphic-footer">
+          <BrandMark inverse={!usesDarkCopy} />
+          <EditableEventText
+            as="span"
+            editorMode={editorMode}
+            field="cta"
+            onEditField={onEditField}
+            onSelectField={onSelectField}
+            selectedField={selectedField}
+          >
+            {content.cta}
+          </EditableEventText>
+        </footer>
       </div>
-      <footer className="event-graphic-footer">
-        <BrandMark inverse={!usesDarkCopy} />
-        <EditableEventText
-          as="span"
-          editorMode={editorMode}
-          field="cta"
-          onEditField={onEditField}
-          onSelectField={onSelectField}
-          selectedField={selectedField}
-        >
-          {content.cta}
-        </EditableEventText>
-      </footer>
     </article>
   );
 }

@@ -43,6 +43,9 @@ jobs:
       - name: Build Central Studio
         run: pnpm run build:studio
 
+      - name: Test Studio client persistence
+        run: pnpm run test:studio-client
+
       - name: Verify Hosting JavaScript syntax
         run: node --check public/app.js && node --check public/admin.js && node --check scripts/build-studio.mjs
 

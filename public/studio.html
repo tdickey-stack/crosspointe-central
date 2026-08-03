@@ -12,10 +12,27 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=Bodoni+Moda:wght@400;500;600;700;800;900&amp;family=EB+Garamond:wght@400;500;600;700;800&amp;family=Forum&amp;family=Google+Sans+Flex:wght@400;500;600;700;800;900&amp;family=League+Gothic&amp;family=League+Spartan:wght@400;500;600;700;800;900&amp;family=Montserrat:wght@400;500;600;700;800;900&amp;family=Niconne&amp;family=Science+Gothic:wght@400;500;600;700;800;900&amp;family=Unbounded:wght@400;500;600;700;800;900&amp;display=swap"
-    >
+    <style id="studio-web-fonts"></style>
+    <script>
+      (function() {
+        var fontCssUrl =
+          "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bodoni+Moda:wght@400;500;600;700;800;900&family=EB+Garamond:wght@400;500;600;700;800&family=Forum&family=Google+Sans+Flex:wght@400;500;600;700;800;900&family=League+Gothic&family=League+Spartan:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&family=Niconne&family=Science+Gothic:wght@400;500;600;700;800;900&family=Unbounded:wght@400;500;600;700;800;900&display=swap";
+        window.CENTRAL_STUDIO_FONT_CSS_ERROR = null;
+        window.CENTRAL_STUDIO_FONT_CSS_READY = fetch(fontCssUrl)
+            .then(function(response) {
+              if (!response.ok) {
+                throw new Error("Studio fonts could not be loaded.");
+              }
+              return response.text();
+            })
+            .then(function(fontCss) {
+              document.getElementById("studio-web-fonts").textContent = fontCss;
+            })
+            .catch(function(error) {
+              window.CENTRAL_STUDIO_FONT_CSS_ERROR = error;
+            });
+      }());
+    </script>
     <link rel="stylesheet" href="/studio.css">
     <script>
       (function() {

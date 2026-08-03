@@ -18,6 +18,14 @@ function safeFilename(value, fallback) {
 }
 
 async function waitForFonts() {
+  if (window.CENTRAL_STUDIO_FONT_CSS_READY) {
+    await window.CENTRAL_STUDIO_FONT_CSS_READY;
+    if (window.CENTRAL_STUDIO_FONT_CSS_ERROR) {
+      throw new Error(
+        "Studio could not load the approved fonts. Check your connection and try again.",
+      );
+    }
+  }
   if (document.fonts && document.fonts.ready) {
     await document.fonts.ready;
   }
@@ -325,6 +333,7 @@ export async function openDocumentSystemPrint(
     throw error;
   });
   try {
+    await waitForFonts();
     const printDocument = printWindow.document;
     printDocument.open();
     printDocument.write(
@@ -369,6 +378,15 @@ export async function openDocumentSystemPrint(
       }
     `;
     printDocument.head.appendChild(style);
+
+    const studioFontCss = document.getElementById(
+      "studio-web-fonts",
+    )?.textContent;
+    if (studioFontCss) {
+      const fontStyle = printDocument.createElement("style");
+      fontStyle.textContent = studioFontCss;
+      printDocument.head.appendChild(fontStyle);
+    }
 
     const stylesheetUrls = Array.from(
       document.querySelectorAll('link[rel="stylesheet"]'),

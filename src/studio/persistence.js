@@ -1,6 +1,8 @@
 import {
   DOCUMENT_PROJECT_TEMPLATE_ID,
+  isEventTemplateId,
   isDocumentProject,
+  isSocialTemplateId,
   linesToText,
   migrateLegacyStudioProject,
   normalizeEventComposition,
@@ -14,6 +16,11 @@ const LOGO_LIBRARY_COLLECTION = "centralStudioLogoLibrary";
 
 function stringValue(value) {
   return typeof value === "string" ? value : "";
+}
+
+function enumValue(value, allowed, fallback) {
+  const normalized = stringValue(value);
+  return allowed.includes(normalized) ? normalized : fallback;
 }
 
 function focalValue(value, fallback = 50) {
@@ -273,6 +280,7 @@ function documentPageForCloud(page) {
 }
 
 function eventContentForCloud(content, templateId, projectId) {
+  const isSocial = isSocialTemplateId(templateId);
   const requestedBackgroundSource = ["upload", "unsplash"].includes(
     content.backgroundImageSource,
   )
@@ -286,7 +294,7 @@ function eventContentForCloud(content, templateId, projectId) {
           isValidUnsplashReference(content)
         ? "unsplash"
         : "";
-  const requestedHeroSource = ["upload", "library"].includes(
+  const requestedHeroSource = !isSocial && ["upload", "library"].includes(
     content.heroLogoSource,
   )
     ? content.heroLogoSource
@@ -305,11 +313,15 @@ function eventContentForCloud(content, templateId, projectId) {
     eyebrow: stringValue(content.eyebrow),
     title: stringValue(content.title),
     subtitle: stringValue(content.subtitle),
-    date: stringValue(content.date),
-    time: stringValue(content.time),
-    location: stringValue(content.location),
+    date: isSocial ? "" : stringValue(content.date),
+    time: isSocial ? "" : stringValue(content.time),
+    location: isSocial ? "" : stringValue(content.location),
     cta: stringValue(content.cta),
-    format: stringValue(content.format || "square"),
+    format: isSocial
+      ? content.format === "portrait"
+        ? "portrait"
+        : "square"
+      : stringValue(content.format || "square"),
     composition: normalizeEventComposition(
       templateId,
       stringValue(content.composition || "editorial"),
@@ -344,7 +356,7 @@ function eventContentForCloud(content, templateId, projectId) {
     unsplashPhotoUrl:
       source === "unsplash" ? stringValue(content.unsplashPhotoUrl) : "",
     heroMode:
-      content.heroMode === "logo" && heroSource ? "logo" : "text",
+      !isSocial && content.heroMode === "logo" && heroSource ? "logo" : "text",
     heroLogoSource: heroSource,
     heroLogoLibraryId:
       heroSource === "library"
@@ -359,6 +371,21 @@ function eventContentForCloud(content, templateId, projectId) {
     heroLogoScale: logoScaleValue(content.heroLogoScale),
     heroLogoClearSpace: logoClearSpaceValue(content.heroLogoClearSpace),
     fontKey: stringValue(content.fontKey || "montserrat"),
+    fontWeight: enumValue(
+      content.fontWeight,
+      ["template", "thin", "light", "medium", "bold", "black"],
+      "template",
+    ),
+    brandMark: enumValue(
+      content.brandMark,
+      ["central", "heart", "full"],
+      "central",
+    ),
+    brandColor: enumValue(
+      content.brandColor,
+      ["auto", "white", "charcoal", "red"],
+      "auto",
+    ),
     textAlignment: stringValue(content.textAlignment || "left"),
     textShadow: Boolean(content.textShadow),
   };
@@ -380,6 +407,7 @@ export function projectForCloud(project, ownerUid) {
     };
   }
   const sourceType =
+    isEventTemplateId(project.templateId) &&
     project.sourceType === "planning-center" &&
     /^\d{1,80}$/u.test(String(project.sourceId || "")) &&
     /^\d{1,80}$/u.test(String(project.sourceEventId || ""))

@@ -2,9 +2,9 @@ import {toCanvas} from "html-to-image";
 import {jsPDF} from "jspdf";
 
 const EVENT_EXPORT_SIZES = {
-  square: {width: 2160, height: 2160, label: "1x1"},
-  portrait: {width: 2160, height: 2700, label: "4x5"},
-  screen: {width: 3840, height: 2160, label: "16x9"},
+  square: {width: 1080, height: 1080, label: "1x1"},
+  portrait: {width: 1080, height: 1350, label: "4x5"},
+  screen: {width: 1920, height: 1080, label: "16x9"},
 };
 
 function safeFilename(value, fallback) {
@@ -77,6 +77,16 @@ async function waitForStableLayout(elements, maxFrames = 8) {
   }
 }
 
+async function waitForPreparedBrandMarks(element, maxFrames = 120) {
+  for (let frame = 0; frame < maxFrames; frame += 1) {
+    if (!element.querySelector("[data-studio-brand-pending]")) return;
+    await nextLayoutFrame();
+  }
+  throw new Error(
+    "The selected CrossPointe logo is still preparing. Please try the export again.",
+  );
+}
+
 function loadImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -135,6 +145,7 @@ async function renderExactPng(element, width, height) {
   }
 
   await waitForFonts();
+  await waitForPreparedBrandMarks(element);
   const bounds = element.getBoundingClientRect();
   if (!bounds.width || !bounds.height) {
     throw new Error("The Studio preview has no measurable export size.");

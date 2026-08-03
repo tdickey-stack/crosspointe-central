@@ -47,6 +47,28 @@ export const EVENT_PALETTE_OPTIONS = [
   },
 ];
 
+export const GRAPHIC_BRAND_MARK_OPTIONS = [
+  {value: "central", label: "CrossPointe Central"},
+  {value: "heart", label: "CrossPointe Heart"},
+  {value: "full", label: "CrossPointe Full Logo"},
+];
+
+export const GRAPHIC_BRAND_COLOR_OPTIONS = [
+  {value: "auto", label: "Auto Contrast"},
+  {value: "white", label: "White"},
+  {value: "charcoal", label: "Dark Grey"},
+  {value: "red", label: "CrossPointe Red"},
+];
+
+export const GRAPHIC_FONT_WEIGHT_OPTIONS = [
+  {value: "template", label: "Template Default", weight: null},
+  {value: "thin", label: "Thin", weight: 100},
+  {value: "light", label: "Light", weight: 300},
+  {value: "medium", label: "Medium", weight: 500},
+  {value: "bold", label: "Bold", weight: 700},
+  {value: "black", label: "Black / Extra Bold", weight: 900},
+];
+
 const EVENT_FONT_LIBRARY = {
   montserrat: {value: "montserrat", label: "Montserrat", family: "Montserrat"},
   "league-spartan": {
@@ -164,6 +186,52 @@ const eventTemplate = ({
   defaults,
 });
 
+const socialTemplate = ({
+  id,
+  name,
+  shortName,
+  description,
+  variant,
+  fonts,
+  compositions,
+  defaultFont,
+  previewCopy,
+  defaults = {},
+  accent = "red",
+}) => ({
+  id,
+  name,
+  shortName,
+  description,
+  formats: ["1:1", "4:5"],
+  status: "Ready",
+  accent,
+  kind: "social",
+  variant,
+  fonts: fonts.map((font) => EVENT_FONT_LIBRARY[font]),
+  compositions: compositions.map(
+    (composition) => EVENT_COMPOSITION_LIBRARY[composition],
+  ),
+  defaultFont,
+  previewCopy,
+  defaults: {
+    eyebrow: previewCopy.eyebrow || "",
+    title: previewCopy.title || "",
+    subtitle: previewCopy.subtitle || "",
+    date: "",
+    time: "",
+    location: "",
+    cta: previewCopy.footer || "",
+    heroMode: "text",
+    heroLogo: "",
+    heroLogoSource: "",
+    heroLogoLibraryId: "",
+    heroLogoStoragePath: "",
+    heroLogoName: "",
+    ...defaults,
+  },
+});
+
 export const DOCUMENT_PAGE_TEMPLATES = [
   documentTemplate({
     id: "document-one-pager",
@@ -209,6 +277,90 @@ export const DOCUMENT_PAGE_TEMPLATES = [
 
 export const TEMPLATE_CATALOG = [
   ...DOCUMENT_PAGE_TEMPLATES,
+  socialTemplate({
+    id: "social-scripture",
+    name: "Scripture Focus",
+    shortName: "Scripture",
+    description:
+      "A spacious scripture post with a clear reference, restrained decoration, and fixed CrossPointe branding.",
+    variant: "social-scripture",
+    fonts: ["eb-garamond", "bodoni-moda", "montserrat"],
+    compositions: [
+      "serif-lines",
+      "serif-medallion",
+      "color-overlay",
+      "flat",
+    ],
+    defaultFont: "eb-garamond",
+    previewCopy: {
+      eyebrow: "SCRIPTURE",
+      title: "Be still, and know that I am God.",
+      subtitle: "PSALM 46:10",
+      footer: "",
+    },
+    defaults: {
+      composition: "serif-lines",
+      palette: "warm-light",
+      textAlignment: "left",
+    },
+    accent: "purple",
+  }),
+  socialTemplate({
+    id: "social-quote",
+    name: "Quote Card",
+    shortName: "Quote",
+    description:
+      "A simple quote-led composition with room for an attribution and quiet CrossPointe presence.",
+    variant: "social-quote",
+    fonts: ["bodoni-moda", "forum", "montserrat"],
+    compositions: [
+      "editorial-frame",
+      "editorial-flow",
+      "color-overlay",
+      "flat",
+    ],
+    defaultFont: "bodoni-moda",
+    previewCopy: {
+      eyebrow: "A CROSSPOINTE VALUE",
+      title: "People matter to God, so people matter to us.",
+      subtitle: "WHO WE ARE",
+      footer: "",
+    },
+    defaults: {
+      composition: "editorial-frame",
+      palette: "blush-burgundy",
+      textAlignment: "center",
+    },
+    accent: "red",
+  }),
+  socialTemplate({
+    id: "social-statement",
+    name: "Simple Statement",
+    shortName: "Statement",
+    description:
+      "A bold, minimal post for reminders, campaign phrases, and short ministry messages.",
+    variant: "social-statement",
+    fonts: ["league-spartan", "google-sans", "montserrat"],
+    compositions: [
+      "center-burst",
+      "center-frame",
+      "color-overlay",
+      "flat",
+    ],
+    defaultFont: "league-spartan",
+    previewCopy: {
+      eyebrow: "A SIMPLE REMINDER",
+      title: "YOU ARE NOT ALONE.",
+      subtitle: "There is a place for you here.",
+      footer: "",
+    },
+    defaults: {
+      composition: "center-frame",
+      palette: "paper-red",
+      textAlignment: "center",
+    },
+    accent: "mint",
+  }),
   eventTemplate({
     id: "event-signal-stack",
     name: "Signal Stack",
@@ -417,6 +569,16 @@ export function isEventTemplateId(templateId) {
       (template) => template.id === templateId && template.kind === "event",
     )
   );
+}
+
+export function isSocialTemplateId(templateId) {
+  return TEMPLATE_CATALOG.some(
+    (template) => template.id === templateId && template.kind === "social",
+  );
+}
+
+export function isGraphicTemplateId(templateId) {
+  return isEventTemplateId(templateId) || isSocialTemplateId(templateId);
 }
 
 export function isDocumentProject(project) {
@@ -653,6 +815,9 @@ const eventContent = {
   overlayColor: "red",
   overlayBlendMode: "multiply",
   fontKey: "montserrat",
+  fontWeight: "template",
+  brandMark: "central",
+  brandColor: "auto",
   imagePosition: "center",
   focalX: 50,
   focalY: 50,
@@ -745,13 +910,14 @@ export function migrateLegacyStudioProject(project) {
       pages: pages.length ? pages : [createDocumentPage("document-one-pager")],
     };
   }
-  if (!isEventTemplateId(project.templateId) || !project.content) {
+  if (!isGraphicTemplateId(project.templateId) || !project.content) {
     return project;
   }
   const normalizedComposition = normalizeEventComposition(
     project.templateId,
     project.content.composition,
   );
+  const isSocial = isSocialTemplateId(project.templateId);
   const hasFocalPoint =
     Number.isFinite(Number(project.content.focalX)) &&
     Number.isFinite(Number(project.content.focalY));
@@ -765,6 +931,14 @@ export function migrateLegacyStudioProject(project) {
     content: {
       ...project.content,
       composition: normalizedComposition,
+      date: isSocial ? "" : String(project.content.date || ""),
+      time: isSocial ? "" : String(project.content.time || ""),
+      location: isSocial ? "" : String(project.content.location || ""),
+      format: isSocial
+        ? project.content.format === "portrait"
+          ? "portrait"
+          : "square"
+        : project.content.format || "square",
       focalX: hasFocalPoint ? project.content.focalX : legacyX,
       focalY: hasFocalPoint ? project.content.focalY : 50,
       backgroundImageOpacity: Number.isFinite(
@@ -786,16 +960,38 @@ export function migrateLegacyStudioProject(project) {
             ),
           )
         : 0,
-      heroMode: project.content.heroMode === "logo" ? "logo" : "text",
-      heroLogo: String(project.content.heroLogo || ""),
-      heroLogoSource: ["upload", "library"].includes(
+      fontWeight: GRAPHIC_FONT_WEIGHT_OPTIONS.some(
+        (option) => option.value === project.content.fontWeight,
+      )
+        ? project.content.fontWeight
+        : "template",
+      brandMark: GRAPHIC_BRAND_MARK_OPTIONS.some(
+        (option) => option.value === project.content.brandMark,
+      )
+        ? project.content.brandMark
+        : "central",
+      brandColor: GRAPHIC_BRAND_COLOR_OPTIONS.some(
+        (option) => option.value === project.content.brandColor,
+      )
+        ? project.content.brandColor
+        : "auto",
+      heroMode:
+        !isSocial && project.content.heroMode === "logo" ? "logo" : "text",
+      heroLogo: isSocial ? "" : String(project.content.heroLogo || ""),
+      heroLogoSource: !isSocial && ["upload", "library"].includes(
         project.content.heroLogoSource,
       )
         ? project.content.heroLogoSource
         : "",
-      heroLogoLibraryId: String(project.content.heroLogoLibraryId || ""),
-      heroLogoStoragePath: String(project.content.heroLogoStoragePath || ""),
-      heroLogoName: String(project.content.heroLogoName || ""),
+      heroLogoLibraryId: isSocial
+        ? ""
+        : String(project.content.heroLogoLibraryId || ""),
+      heroLogoStoragePath: isSocial
+        ? ""
+        : String(project.content.heroLogoStoragePath || ""),
+      heroLogoName: isSocial
+        ? ""
+        : String(project.content.heroLogoName || ""),
       heroLogoScale: Number.isFinite(Number(project.content.heroLogoScale))
         ? Math.min(2, Math.max(0.5, Number(project.content.heroLogoScale)))
         : 1,
@@ -884,7 +1080,7 @@ export function getTemplateById(templateId) {
 
 export function getEventFontOptions(templateId) {
   const template = getTemplateById(templateId);
-  return template.kind === "event" ? template.fonts : [];
+  return ["event", "social"].includes(template.kind) ? template.fonts : [];
 }
 
 export function getEventFont(templateId, fontKey) {
@@ -898,7 +1094,9 @@ export function getEventFont(templateId, fontKey) {
 
 export function getEventCompositionOptions(templateId) {
   const template = getTemplateById(templateId);
-  return template.kind === "event" ? template.compositions : [];
+  return ["event", "social"].includes(template.kind)
+    ? template.compositions
+    : [];
 }
 
 export function normalizeEventComposition(templateId, composition) {
@@ -1019,6 +1217,7 @@ export function getProjectWarnings(project) {
   }
 
   const content = project.content || {};
+  const isSocial = isSocialTemplateId(project.templateId);
   if (
     content.heroMode !== "logo" &&
     !String(content.title || "").trim()
@@ -1027,9 +1226,13 @@ export function getProjectWarnings(project) {
   }
   if (
     content.heroMode !== "logo" &&
-    String(content.title || "").length > 44
+    String(content.title || "").length > (isSocial ? 180 : 44)
   ) {
-    warnings.push("The event title may be too long for every format.");
+    warnings.push(
+      isSocial
+        ? "The main text may be too long for every format."
+        : "The event title may be too long for every format.",
+    );
   }
   if (
     content.heroMode === "logo" &&
@@ -1037,10 +1240,10 @@ export function getProjectWarnings(project) {
   ) {
     warnings.push("Choose or upload a hero logo.");
   }
-  if (!String(content.date || "").trim()) {
+  if (!isSocial && !String(content.date || "").trim()) {
     warnings.push("Add an event date.");
   }
-  if (!String(content.cta || "").trim()) {
+  if (!isSocial && !String(content.cta || "").trim()) {
     warnings.push("Add a clear next step.");
   }
   if (

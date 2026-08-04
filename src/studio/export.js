@@ -210,7 +210,11 @@ async function prepareDirectoryImages(element, resolvePlanningCenterImage) {
   return () => restorers.reverse().forEach((restore) => restore());
 }
 
-export async function exportEventPng(project, element) {
+export async function exportEventPng(
+  project,
+  element,
+  {filenameBase = ""} = {},
+) {
   const format = project?.content?.format || "square";
   const size = EVENT_EXPORT_SIZES[format] || EVENT_EXPORT_SIZES.square;
   const restoreBackground = await useHighResolutionBackground(
@@ -220,7 +224,9 @@ export async function exportEventPng(project, element) {
   );
   try {
     const png = await renderExactPng(element, size.width, size.height);
-    const filename = `${safeFilename(project?.name, "event-promotion")}-${size.label}.png`;
+    const filename = filenameBase
+      ? `${filenameBase}.png`
+      : `${safeFilename(project?.name, "event-promotion")}-${size.label}.png`;
     downloadDataUrl(png, filename);
     return {filename, width: size.width, height: size.height};
   } finally {
@@ -228,9 +234,15 @@ export async function exportEventPng(project, element) {
   }
 }
 
-export async function exportPolicyPdf(project, element) {
+export async function exportPolicyPdf(
+  project,
+  element,
+  {filenameBase = ""} = {},
+) {
   const png = await renderExactPng(element, 2040, 2640);
-  const filename = `${safeFilename(project?.name, "policy-document")}.pdf`;
+  const filename = filenameBase
+    ? `${filenameBase}.pdf`
+    : `${safeFilename(project?.name, "policy-document")}.pdf`;
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "in",
@@ -250,7 +262,7 @@ export async function exportPolicyPdf(project, element) {
 export async function exportDocumentPdf(
   project,
   elements,
-  {resolvePlanningCenterImage} = {},
+  {resolvePlanningCenterImage, filenameBase = ""} = {},
 ) {
   const pageElements = Array.isArray(elements) ? elements : [];
   if (
@@ -264,7 +276,9 @@ export async function exportDocumentPdf(
 
   await waitForFonts();
   await waitForStableLayout(pageElements);
-  const filename = `${safeFilename(project?.name, "studio-document")}.pdf`;
+  const filename = filenameBase
+    ? `${filenameBase}.pdf`
+    : `${safeFilename(project?.name, "studio-document")}.pdf`;
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "in",

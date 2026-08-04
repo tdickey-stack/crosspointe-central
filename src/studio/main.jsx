@@ -7,6 +7,10 @@ import {
   openDocumentSystemPrint,
 } from "./export.js";
 import {
+  CREATIVE_FILENAME_PREFERENCE_KEY,
+  buildCreativeFilename,
+} from "./creative-filename.js";
+import {
   normalizeFocalValue,
   normalizeImageOpacity,
   normalizeImageRotation,
@@ -66,6 +70,30 @@ const EVENT_BLEND_OPTIONS = [
   {value: "soft-light", label: "Soft Light"},
 ];
 const EVENT_PANEL_TRANSITION_MS = 720;
+
+function loadCreativeFilenamePreference() {
+  try {
+    return window.localStorage.getItem(CREATIVE_FILENAME_PREFERENCE_KEY) === "true";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function useCreativeFilenamePreference() {
+  const [enabled, setEnabled] = useState(loadCreativeFilenamePreference);
+  const updateEnabled = (nextEnabled) => {
+    setEnabled(nextEnabled);
+    try {
+      window.localStorage.setItem(
+        CREATIVE_FILENAME_PREFERENCE_KEY,
+        String(nextEnabled),
+      );
+    } catch (_error) {
+      // Studio can still use the preference for this session when storage is blocked.
+    }
+  };
+  return [enabled, updateEnabled];
+}
 
 function getStudioPermission(userData) {
   const pageAccess =
@@ -4077,6 +4105,191 @@ function AddPageDialog({onAdd, onClose}) {
   );
 }
 
+function getCreativeFilenameDefaults(project) {
+  const template = getTemplateById(project.templateId);
+  const isUntitled = /^Untitled\b/i.test(String(project.name || "").trim());
+  const descriptionTemplate = isDocumentProject(project) && project.pages?.[0]
+    ? getTemplateById(project.pages[0].templateId)
+    : template;
+  const workType = template.kind === "social"
+    ? "SOCIAL"
+    : template.kind === "event"
+      ? "EVENT"
+      : "DOCUMENT";
+  return {
+    workType,
+    description: isUntitled ? descriptionTemplate.name : project.name,
+  };
+}
+
+function CreativeFilenameToggle({checked, onChange, compact = false}) {
+  return (
+    <label
+      className={`studio-creative-filename-toggle${compact ? " is-compact" : ""}`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="studio-creative-filename-switch" aria-hidden="true">
+        <i />
+      </span>
+      <span className="studio-creative-filename-copy">
+        <strong>Creative Team naming</strong>
+        <small>
+          {checked
+            ? "Studio will ask for naming details before export."
+            : "Use the standard project filename."}
+        </small>
+      </span>
+    </label>
+  );
+}
+
+function CreativeFilenameDialog({
+  project,
+  extension,
+  onClose,
+  onConfirm,
+}) {
+  const defaults = getCreativeFilenameDefaults(project);
+  const [contentId, setContentId] = useState("");
+  const [workType, setWorkType] = useState(defaults.workType);
+  const [description, setDescription] = useState(defaults.description);
+  const [version, setVersion] = useState(1);
+  const [error, setError] = useState("");
+  const exportDate = useMemo(() => new Date(), []);
+
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  const preview = useMemo(() => {
+    try {
+      return buildCreativeFilename({
+        contentId: contentId || "CONTENTID",
+        workType: workType || "WORKTYPE",
+        description,
+        version,
+        date: exportDate,
+      });
+    } catch (_error) {
+      return "CONTENTID_WORKTYPE_DESCRIPTION_YYYYMMDD_VXXX";
+    }
+  }, [contentId, description, exportDate, version, workType]);
+
+  const submit = (event) => {
+    event.preventDefault();
+    try {
+      const filename = buildCreativeFilename({
+        contentId,
+        workType,
+        description,
+        version,
+        date: exportDate,
+      });
+      setError("");
+      onConfirm(filename);
+    } catch (nextError) {
+      setError(nextError.message || "Complete the required filename details.");
+    }
+  };
+
+  return (
+    <div
+      className="studio-page-dialog-backdrop studio-creative-filename-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="studio-page-dialog studio-creative-filename-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="studio-creative-filename-title"
+      >
+        <div className="studio-page-dialog-heading">
+          <div>
+            <span className="studio-kicker">CREATIVE TEAM EXPORT</span>
+            <h2 id="studio-creative-filename-title">Name this file</h2>
+            <p>
+              Studio formats the download as
+              CONTENTID_WORKTYPE_DESCRIPTION_YYYYMMDD_VXXX.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close filename dialog">
+            ×
+          </button>
+        </div>
+        <form className="studio-creative-filename-form" onSubmit={submit}>
+          <label className="studio-field">
+            <span>Content ID</span>
+            <input
+              autoFocus
+              required
+              value={contentId}
+              maxLength="48"
+              placeholder="2417"
+              onChange={(event) => setContentId(event.target.value)}
+            />
+          </label>
+          <label className="studio-field">
+            <span>Work Type</span>
+            <input
+              required
+              value={workType}
+              maxLength="48"
+              placeholder="SOCIAL"
+              onChange={(event) => setWorkType(event.target.value)}
+            />
+            <small>Free-form until the official Work Type list is added.</small>
+          </label>
+          <label className="studio-field is-wide">
+            <span>Description <i>OPTIONAL</i></span>
+            <input
+              value={description}
+              maxLength="100"
+              placeholder="EASTER INVITE"
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </label>
+          <label className="studio-field">
+            <span>Version</span>
+            <input
+              type="number"
+              required
+              min="1"
+              max="999"
+              step="1"
+              value={version}
+              onChange={(event) => setVersion(event.target.value)}
+            />
+          </label>
+          <div className="studio-creative-filename-preview">
+            <span>DOWNLOAD NAME</span>
+            <strong>{preview}.{extension}</strong>
+          </div>
+          {error ? <p className="studio-creative-filename-error" role="alert">{error}</p> : null}
+          <div className="studio-creative-filename-actions">
+            <button className="studio-button is-secondary" type="button" onClick={onClose}>
+              Cancel
+            </button>
+            <button className="studio-button is-primary" type="submit">
+              Export {extension.toUpperCase()}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function DocumentEditor({
   project,
   onChange,
@@ -4088,6 +4301,9 @@ function DocumentEditor({
 }) {
   const [activePageId, setActivePageId] = useState(project.pages?.[0]?.id || "");
   const [showPagePicker, setShowPagePicker] = useState(false);
+  const [showFilenameDialog, setShowFilenameDialog] = useState(false);
+  const [creativeFilenameEnabled, setCreativeFilenameEnabled] =
+    useCreativeFilenamePreference();
   const [exportState, setExportState] = useState({status: "", message: ""});
   const exportPageRefs = useRef(new Map());
   const printPagesRef = useRef(null);
@@ -4156,13 +4372,15 @@ function DocumentEditor({
     ];
     updateProject({pages: nextPages});
   };
-  const exportPdf = async () => {
+  const exportPdf = async (filenameBase = "") => {
+    setShowFilenameDialog(false);
     setExportState({status: "working", message: "Preparing every page…"});
     try {
       const elements = pages.map((page) => exportPageRefs.current.get(page.id));
       const result = await exportDocumentPdf(project, elements, {
         resolvePlanningCenterImage: (cloud || unsplash)
           ?.resolvePlanningCenterImage,
+        filenameBase,
       });
       setExportState({
         status: "success",
@@ -4176,6 +4394,13 @@ function DocumentEditor({
         message: error.message || "Studio could not export this document.",
       });
     }
+  };
+  const requestPdfExport = () => {
+    if (creativeFilenameEnabled) {
+      setShowFilenameDialog(true);
+      return;
+    }
+    exportPdf();
   };
   const systemPrint = async () => {
     setExportState({status: "working", message: "Preparing System Print…"});
@@ -4211,7 +4436,7 @@ function DocumentEditor({
             className="studio-button is-primary"
             type="button"
             disabled={warnings.length > 0 || exportState.status === "working"}
-            onClick={exportPdf}
+            onClick={requestPdfExport}
           >
             {exportState.status === "working" ? "Preparing PDF…" : "Export PDF"}
           </button>
@@ -4236,6 +4461,13 @@ function DocumentEditor({
             Finish for Now
           </button>
         </div>
+      </div>
+
+      <div className="studio-document-filename-preference">
+        <CreativeFilenameToggle
+          checked={creativeFilenameEnabled}
+          onChange={setCreativeFilenameEnabled}
+        />
       </div>
 
       {exportState.message ? (
@@ -4430,6 +4662,14 @@ function DocumentEditor({
         <AddPageDialog
           onAdd={addPage}
           onClose={() => setShowPagePicker(false)}
+        />
+      ) : null}
+      {showFilenameDialog ? (
+        <CreativeFilenameDialog
+          project={project}
+          extension="pdf"
+          onClose={() => setShowFilenameDialog(false)}
+          onConfirm={exportPdf}
         />
       ) : null}
     </main>
@@ -4808,6 +5048,8 @@ function EventReviewSheet({
   project,
   warnings,
   exportState,
+  creativeFilenameEnabled,
+  onCreativeFilenameChange,
   onClose,
   onExport,
 }) {
@@ -4867,6 +5109,11 @@ function EventReviewSheet({
             </>
           )}
         </div>
+        <CreativeFilenameToggle
+          checked={creativeFilenameEnabled}
+          onChange={onCreativeFilenameChange}
+          compact
+        />
         <button
           className="studio-button is-primary studio-event-sheet-export"
           type="button"
@@ -4909,6 +5156,9 @@ function EventStudioEditor({
     project.name.startsWith("Untitled ") ? "brief" : "",
   );
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
+  const [showFilenameDialog, setShowFilenameDialog] = useState(false);
+  const [creativeFilenameEnabled, setCreativeFilenameEnabled] =
+    useCreativeFilenamePreference();
   const [exportState, setExportState] = useState({status: "", message: ""});
   const previewElementRef = useRef(null);
   const workspacePanelFrameRef = useRef(null);
@@ -4978,7 +5228,8 @@ function EventStudioEditor({
     return () => window.removeEventListener("keydown", closeTransientUi);
   }, []);
 
-  const runExport = async () => {
+  const runExport = async (filenameBase = "") => {
+    setShowFilenameDialog(false);
     setSelectedField("");
     setActivePanel("");
     setMenuOpen(false);
@@ -4993,7 +5244,9 @@ function EventStudioEditor({
           window.requestAnimationFrame(resolve),
         ),
       );
-      const result = await exportEventPng(project, previewElementRef.current);
+      const result = await exportEventPng(project, previewElementRef.current, {
+        filenameBase,
+      });
       setExportState({
         status: "success",
         message: `${result.filename} was downloaded at ${result.width} × ${result.height}px.`,
@@ -5006,6 +5259,14 @@ function EventStudioEditor({
           "Studio could not export this project. Try removing the background image and exporting again.",
       });
     }
+  };
+  const requestExport = () => {
+    if (creativeFilenameEnabled) {
+      setMenuOpen(false);
+      setShowFilenameDialog(true);
+      return;
+    }
+    runExport();
   };
 
   return (
@@ -5068,7 +5329,7 @@ function EventStudioEditor({
                   type="button"
                   role="menuitem"
                   disabled={warnings.length > 0 || exportState.status === "working"}
-                  onClick={runExport}
+                  onClick={requestExport}
                 >
                   <span aria-hidden="true">↓</span>
                   Export PNG
@@ -5137,7 +5398,7 @@ function EventStudioEditor({
                 ? "Open Review checks to resolve export warnings."
                 : "Export a high-resolution PNG."
             }
-            onClick={runExport}
+            onClick={requestExport}
           >
             {exportState.status === "working" ? "Exporting…" : "Export PNG"}
           </button>
@@ -5213,8 +5474,10 @@ function EventStudioEditor({
               project={project}
               warnings={warnings}
               exportState={exportState}
+              creativeFilenameEnabled={creativeFilenameEnabled}
+              onCreativeFilenameChange={setCreativeFilenameEnabled}
               onClose={() => setSideSheet("")}
-              onExport={runExport}
+              onExport={requestExport}
             />
           ) : null}
         </div>
@@ -5275,6 +5538,14 @@ function EventStudioEditor({
           }
         }}
       />
+      {showFilenameDialog ? (
+        <CreativeFilenameDialog
+          project={project}
+          extension="png"
+          onClose={() => setShowFilenameDialog(false)}
+          onConfirm={runExport}
+        />
+      ) : null}
     </main>
   );
 }

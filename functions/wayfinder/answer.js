@@ -44,10 +44,21 @@ const GROUP_DIRECTORY_LINK_PATTERN = new RegExp(
     ".{0,60}\\b(?:pointe|small)?\\s*groups?\\b",
     "i",
 );
+const SUNDAY_SCHOOL_DIRECTORY_PATTERN = new RegExp(
+    "^(?=.*\\bsunday\\s+school\\b)(?=.*\\b(?:adult|class|classes|" +
+      "option|options|offer|offers|available|have|directory|list)\\b)",
+    "i",
+);
+const DIFFERENCE_FOLLOW_UP_PATTERN = new RegExp(
+    "^(?:what(?:'s|s| is| are) the differences?|(?:the )?differences?)\\b",
+    "i",
+);
 const FOLLOW_UP_QUESTION_PATTERN = new RegExp(
     "^(?:and\\b|also\\b|but\\b|yes\\b|no\\b|what about\\b|how about\\b|" +
     "what if\\b|what other\\b|which\\b|any other\\b|anything else\\b|" +
-    "tell me more\\b|more details?\\b|what time\\b|when\\b|where\\b|" +
+    "tell me more\\b|more details?\\b|" +
+    "what(?:'s|s| is| are) the differences?\\b|" +
+    "(?:the )?differences?\\b|what time\\b|when\\b|where\\b|" +
     "how long\\b|how soon\\b|how do i\\b|how can i\\b|can i\\b|can you\\b|" +
     "could i\\b|" +
     "would i\\b|who\\b|why\\b|" +
@@ -152,6 +163,11 @@ export function createWayfinderAnswerHandler(dependencies) {
           question,
           conversationHistory,
       );
+      const compareRecentContext = conversationHistory.length > 0 &&
+        DIFFERENCE_FOLLOW_UP_PATTERN.test(question);
+      const weeklyScheduleEntryIds = getWeeklyScheduleEntryIds_(
+          retrievalQuestion,
+      );
       const [
         approvedContext,
         activeNotices,
@@ -166,6 +182,9 @@ export function createWayfinderAnswerHandler(dependencies) {
           approvedContext.entries,
           activeKnowledgeOverrides,
       );
+      const weeklyScheduleEntries = weeklyScheduleEntryIds
+          .map((id) => entries.find((entry) => entry.id === id))
+          .filter(Boolean);
       const policy = approvedContext.policy;
 
       if (!policy) {
@@ -194,6 +213,7 @@ export function createWayfinderAnswerHandler(dependencies) {
       );
 
       const featuredEventEntries =
+        !weeklyScheduleEntryIds.length &&
         typeof getFeaturedEventEntries === "function" ?
           await getFeaturedEventEntries(retrievalQuestion) : [];
       const rankedEntries = entries.concat(
@@ -206,13 +226,15 @@ export function createWayfinderAnswerHandler(dependencies) {
           {limit: 5},
       );
       const shouldCheckWebsite = typeof getWebsiteEntries === "function" &&
+        !weeklyScheduleEntryIds.length &&
         (retrieval.confidence === "none" || retrieval.confidence === "low" ||
           WEBSITE_LINK_QUESTION_PATTERN.test(retrievalQuestion));
       const websiteEntries = shouldCheckWebsite ?
         await getWebsiteEntries(retrievalQuestion) : [];
 
-      if (retrieval.confidence === "none" ||
-        retrieval.confidence === "low") {
+      if (!weeklyScheduleEntries.length &&
+        (retrieval.confidence === "none" ||
+          retrieval.confidence === "low")) {
         if (noticeEntries.length) {
           await respondWithApprovedEntries_({
             response,
@@ -257,10 +279,11 @@ export function createWayfinderAnswerHandler(dependencies) {
         return;
       }
 
-      const sourceTypes = getRequiredLiveSourceTypes_(
-          retrievalQuestion,
-          retrieval.results,
-      ).filter((sourceType) => !noticeEntries.some((entry) => {
+      const sourceTypes = (weeklyScheduleEntries.length ? [] :
+        getRequiredLiveSourceTypes_(
+            retrievalQuestion,
+            retrieval.results,
+        )).filter((sourceType) => !noticeEntries.some((entry) => {
         return arrayOfStrings_(entry.overrideTargets).includes(
             sourceType === EVENT_SOURCE_TYPE ?
               "planning_center_events" : "planning_center_groups",
@@ -302,15 +325,17 @@ export function createWayfinderAnswerHandler(dependencies) {
 
       const selectedEntries = deduplicateEntries_([
         ...noticeEntries,
+        ...weeklyScheduleEntries,
         ...liveEntries,
         ...featuredEventEntries,
-        ...selectRetrievedEntries_(
+        ...(weeklyScheduleEntries.length ? [] : selectRetrievedEntries_(
             rankedEntries,
             retrieval.results,
-        ),
+            {forceMultiple: compareRecentContext},
+        )),
         ...websiteEntries,
       ]).slice(0, 5);
-      if (GROUP_DIRECTORY_LINK_PATTERN.test(retrievalQuestion)) {
+      if (asksForGroupDirectory_(retrievalQuestion)) {
         const directoryEntry = entries.find((entry) => {
           return entry.id === "groups-live-directory";
         });
@@ -498,7 +523,7 @@ function buildAnswerSourceCards_(
     }),
   ].join(" ");
   const existingIds = new Set(cards.map((card) => card.id));
-  if (GROUP_DIRECTORY_LINK_PATTERN.test(context)) {
+  if (asksForGroupDirectory_(context)) {
     entries.forEach((entry) => {
       if (existingIds.has(entry.id)) return;
       const links = Array.isArray(entry.approvedLinks) ?
@@ -880,6 +905,46 @@ function buildContextualRetrievalQuestion_(question, history) {
   return recentContext.concat(currentQuestion).join("\n");
 }
 
+function getWeeklyScheduleEntryIds_(question) {
+  const value = String(question || "");
+  const asksAboutTime = /\b(?:time|times|when|start|starts|meet|meets)\b/i
+      .test(value);
+  const hasWeeklyContext = new RegExp(
+      "\\b(?:group|church|services?|meeting|weekly|sundays?|" +
+        "wednesdays?|program|programming)\\b",
+      "i",
+  ).test(value);
+  if (!asksAboutTime || !hasWeeklyContext) return [];
+
+  const asksSunday = /\bsundays?\b/i.test(value);
+  const asksWednesday = /\bwednesdays?\b/i.test(value);
+  const selectDays = (sundayId, wednesdayId) => {
+    if (asksSunday && !asksWednesday) return [sundayId];
+    if (asksWednesday && !asksSunday) return [wednesdayId];
+    return [sundayId, wednesdayId];
+  };
+
+  if (/\b(?:kingdom\s+kids|kids?|child|children)\b/i.test(value)) {
+    return selectDays(
+        "families-kingdom-kids-sunday",
+        "families-kingdom-kids-wednesday",
+    );
+  }
+  if (/\b(?:csm|students?|teens?|teenagers?|youth)\b/i.test(value)) {
+    return selectDays(
+        "families-student-sunday",
+        "families-student-wednesday",
+    );
+  }
+  return [];
+}
+
+function asksForGroupDirectory_(question) {
+  const value = String(question || "");
+  return GROUP_DIRECTORY_LINK_PATTERN.test(value) ||
+    SUNDAY_SCHOOL_DIRECTORY_PATTERN.test(value);
+}
+
 function isStandaloneFollowUpQuestion_(question) {
   const value = String(question || "").trim();
   if (/^who\b/i.test(value) &&
@@ -948,12 +1013,13 @@ function enforceRequestRateLimit_(keyValue, limit) {
   current.count += 1;
 }
 
-function selectRetrievedEntries_(entries, results) {
+function selectRetrievedEntries_(entries, results, options = {}) {
   const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
   const rankedResults = Array.isArray(results) ? results : [];
   const first = rankedResults[0];
   const second = rankedResults[1];
-  const hasDecisiveMatch = first && Number(first.score) >= 24 &&
+  const hasDecisiveMatch = options.forceMultiple !== true && first &&
+    Number(first.score) >= 24 &&
     (!second || Number(first.score) - Number(second.score) >= 5);
   return rankedResults
       .slice(0, hasDecisiveMatch ? 1 : 5)
@@ -988,7 +1054,7 @@ function getRequiredLiveSourceTypes_(question, results) {
   if (hasLiveEventEntry && asksForCurrentDetails) {
     sourceTypes.add(EVENT_SOURCE_TYPE);
   }
-  const asksForGroupDirectoryLink = GROUP_DIRECTORY_LINK_PATTERN.test(
+  const asksForGroupDirectoryLink = asksForGroupDirectory_(
       String(question || ""),
   );
   if (!asksForGroupDirectoryLink &&

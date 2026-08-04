@@ -5,8 +5,9 @@ service cloud.firestore {
     // ===============================================================
     // Studio event project source model
     // ===============================================================
-    // centralStudioProjects/{projectId} schemaVersion 1 event projects
-    // retain their strict creative-content schema. sourceType is required.
+    // centralStudioProjects/{projectId} schemaVersion 1 event and social
+    // projects retain their strict creative-content schema. sourceType is
+    // required.
     // Legacy manual projects may omit sourceId, sourceEventId, sourceUrl, and
     // sourceUpdatedAt. New manual projects store empty strings plus null.
     // Planning Center projects require numeric instance/event IDs, an optional
@@ -449,6 +450,20 @@ service cloud.firestore {
         settings.showPageNumbers is bool;
     }
 
+    function isEventTemplateId(templateId) {
+      return templateId.matches(
+        "^(event-promotion|event-signal-stack|event-rally-poster|" +
+        "event-future-block|event-center-stage|event-timeless-center|" +
+        "event-editorial-invitation|event-scripted-welcome)$"
+      );
+    }
+
+    function isSocialTemplateId(templateId) {
+      return templateId.matches(
+        "^(social-scripture|social-quote|social-statement)$"
+      );
+    }
+
     function validEventComposition(templateId, composition) {
       return (templateId + ":" + composition).matches(
         "^(" +
@@ -466,14 +481,65 @@ service cloud.firestore {
         "(editorial-flow|editorial-frame|editorial-column|" +
         "color-overlay|flat)|" +
         "event-scripted-welcome:" +
-        "(welcome-halo|welcome-arch|welcome-ribbons|color-overlay|flat)" +
+        "(welcome-halo|welcome-arch|welcome-ribbons|color-overlay|flat)|" +
+        "social-scripture:" +
+        "(serif-lines|serif-medallion|color-overlay|flat)|" +
+        "social-quote:" +
+        "(editorial-frame|editorial-flow|color-overlay|flat)|" +
+        "social-statement:" +
+        "(center-burst|center-frame|color-overlay|flat)" +
         ")$"
+      );
+    }
+
+    function validGraphicKindFields(content, projectId, templateId) {
+      return isSocialTemplateId(templateId) ? (
+        validStudioString(content.title, 220) &&
+        content.date == "" &&
+        content.time == "" &&
+        content.location == "" &&
+        content.format.matches("^(square|portrait)$") &&
+        validEventComposition(templateId, content.composition) &&
+        content.heroMode == "text" &&
+        content.heroLogoSource == "" &&
+        content.heroLogoLibraryId == "" &&
+        content.heroLogoStoragePath == "" &&
+        content.heroLogoName == ""
+      ) : (
+        content.title.matches("^.{0,52}$") &&
+        content.format.matches("^(square|portrait|screen)$") &&
+        validEventComposition(templateId, content.composition) &&
+        (
+          (
+            content.heroLogoSource == "" &&
+            content.heroLogoLibraryId == "" &&
+            content.heroLogoStoragePath == "" &&
+            content.heroLogoName == ""
+          ) ||
+          (
+            content.heroLogoSource == "upload" &&
+            content.heroLogoLibraryId == "" &&
+            content.heroLogoStoragePath.matches(
+              "^studio-projects/" + projectId + "/[^/]+$"
+            ) &&
+            content.heroLogoName.size() > 0
+          ) ||
+          (
+            content.heroLogoSource == "library" &&
+            validStudioLogoId(content.heroLogoLibraryId) &&
+            content.heroLogoStoragePath.matches(
+              "^studio-library/logos/" + content.heroLogoLibraryId +
+              "/source[.](jpg|png|webp)$"
+            ) &&
+            content.heroLogoName.size() > 0
+          )
+        )
       );
     }
 
     function validEventContent(content, projectId, templateId) {
       return content is map &&
-        content.keys().hasAll([
+        content.keys().hasOnly([
           "eyebrow", "title", "subtitle", "date", "time", "location", "cta",
           "format", "composition", "palette", "flatColor", "overlayColor",
           "overlayBlendMode", "imagePosition", "focalX", "focalY",
@@ -484,18 +550,16 @@ service cloud.firestore {
           "unsplashPhotoUrl", "heroMode", "heroLogoSource",
           "heroLogoLibraryId", "heroLogoStoragePath", "heroLogoName",
           "heroLogoScale", "heroLogoClearSpace",
-          "fontKey", "textAlignment", "textShadow"
+          "fontKey", "fontWeight", "brandMark", "brandColor",
+          "textAlignment", "textShadow"
         ]) &&
-        content.keys().size() == 36 &&
         content.eyebrow.matches("^.{0,30}$") &&
-        content.title.matches("^.{0,52}$") &&
         validStudioString(content.subtitle, 110) &&
         content.date.matches("^.{0,28}$") &&
         content.time.matches("^.{0,24}$") &&
         content.location.matches("^.{0,34}$") &&
         content.cta.matches("^.{0,44}$") &&
-        content.format.matches("^(square|portrait|screen)$") &&
-        validEventComposition(templateId, content.composition) &&
+        validGraphicKindFields(content, projectId, templateId) &&
         content.palette.matches(
           "^(charcoal-red|warm-light|blue-charcoal|paper-red|sky-mint|" +
           "blush-burgundy)$"
@@ -510,19 +574,14 @@ service cloud.firestore {
           "^(multiply|screen|overlay|soft-light)$"
         ) &&
         content.imagePosition.matches("^(left center|center|right center)$") &&
-        content.focalX is number &&
         content.focalX >= 0 &&
         content.focalX <= 100 &&
-        content.focalY is number &&
         content.focalY >= 0 &&
         content.focalY <= 100 &&
-        content.imageZoom is number &&
         content.imageZoom >= 1 &&
         content.imageZoom <= 2 &&
-        content.backgroundImageOpacity is number &&
         content.backgroundImageOpacity >= 0 &&
         content.backgroundImageOpacity <= 1 &&
-        content.backgroundImageRotation is number &&
         content.backgroundImageRotation >= 0 &&
         content.backgroundImageRotation <= 360 &&
         content.backgroundImageSource.matches("^(|upload|unsplash)$") &&
@@ -537,10 +596,8 @@ service cloud.firestore {
         validStudioString(content.heroLogoLibraryId, 80) &&
         validStudioString(content.heroLogoStoragePath, 240) &&
         validStudioString(content.heroLogoName, 80) &&
-        content.heroLogoScale is number &&
         content.heroLogoScale >= 0.5 &&
         content.heroLogoScale <= 2 &&
-        content.heroLogoClearSpace is number &&
         content.heroLogoClearSpace >= 0 &&
         content.heroLogoClearSpace <= 12 &&
         content.fontKey.matches(
@@ -548,6 +605,11 @@ service cloud.firestore {
           "league-gothic|science-gothic|unbounded|bodoni-moda|forum|" +
           "niconne|eb-garamond)$"
         ) &&
+        content.fontWeight.matches(
+          "^(template|thin|light|medium|bold|black)$"
+        ) &&
+        content.brandMark.matches("^(central|heart|full)$") &&
+        content.brandColor.matches("^(auto|white|charcoal|red)$") &&
         (
           (
             content.backgroundImageSource == "" &&
@@ -579,31 +641,6 @@ service cloud.firestore {
             content.unsplashPhotoUrl.matches("^https://.*")
           )
         ) &&
-        (
-          (
-            content.heroLogoSource == "" &&
-            content.heroLogoLibraryId == "" &&
-            content.heroLogoStoragePath == "" &&
-            content.heroLogoName == ""
-          ) ||
-          (
-            content.heroLogoSource == "upload" &&
-            content.heroLogoLibraryId == "" &&
-            content.heroLogoStoragePath.matches(
-              "^studio-projects/" + projectId + "/[^/]+$"
-            ) &&
-            content.heroLogoName.size() > 0
-          ) ||
-          (
-            content.heroLogoSource == "library" &&
-            validStudioLogoId(content.heroLogoLibraryId) &&
-            content.heroLogoStoragePath.matches(
-              "^studio-library/logos/" + content.heroLogoLibraryId +
-              "/source[.](jpg|png|webp)$"
-            ) &&
-            content.heroLogoName.size() > 0
-          )
-        ) &&
         content.textAlignment.matches("^(left|center|right)$") &&
         content.textShadow is bool;
     }
@@ -624,13 +661,14 @@ service cloud.firestore {
           "^(policy-document|event-promotion|event-signal-stack|" +
           "event-rally-poster|event-future-block|event-center-stage|" +
           "event-timeless-center|event-editorial-invitation|" +
-          "event-scripted-welcome)$"
+          "event-scripted-welcome|social-scripture|social-quote|" +
+          "social-statement)$"
         ) &&
         data.name.matches("^.{1,80}$") &&
         data.status == "draft" &&
         (
           data.sourceType == "manual" || (
-            data.templateId != "policy-document" &&
+            isEventTemplateId(data.templateId) &&
             data.sourceType == "planning-center" &&
             data.sourceId.matches("^[0-9]{1,80}$") &&
             data.sourceEventId.matches("^[0-9]{1,80}$") &&

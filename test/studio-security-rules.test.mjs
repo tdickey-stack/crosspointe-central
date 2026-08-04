@@ -103,12 +103,39 @@ function eventProjectPayload(ownerUid = "owner") {
       heroLogoScale: 1,
       heroLogoClearSpace: 4,
       fontKey: "montserrat",
+      fontWeight: "template",
+      brandMark: "central",
+      brandColor: "auto",
       textAlignment: "left",
       textShadow: false,
     },
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
+}
+
+function socialProjectPayload(
+  templateId = "social-scripture",
+  ownerUid = "owner",
+) {
+  const payload = eventProjectPayload(ownerUid);
+  const templateConfig = {
+    "social-scripture": {composition: "serif-lines", fontKey: "eb-garamond"},
+    "social-quote": {composition: "editorial-frame", fontKey: "bodoni-moda"},
+    "social-statement": {composition: "center-frame", fontKey: "league-spartan"},
+  }[templateId];
+  payload.templateId = templateId;
+  payload.name = "Social Post";
+  payload.content.eyebrow = "SCRIPTURE";
+  payload.content.title = "Be still, and know that I am God.";
+  payload.content.subtitle = "PSALM 46:10";
+  payload.content.date = "";
+  payload.content.time = "";
+  payload.content.location = "";
+  payload.content.cta = "";
+  payload.content.composition = templateConfig.composition;
+  payload.content.fontKey = templateConfig.fontKey;
+  return payload;
 }
 
 function logoLibraryPayload(
@@ -694,6 +721,12 @@ test("event projects accept valid sources and reject cross-project upload paths"
   );
   await assertFails(
     reference.update({
+      "content.focalX": "50",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
       "content.focalY": -1,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
@@ -737,6 +770,26 @@ test("event projects accept valid sources and reject cross-project upload paths"
   await assertFails(
     reference.update({
       "content.fontKey": "comic-sans",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    reference.update({
+      "content.fontWeight": "black",
+      "content.brandMark": "heart",
+      "content.brandColor": "red",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.fontWeight": "ultra",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.brandMark": "unapproved",
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -791,6 +844,81 @@ test("event projects accept valid sources and reject cross-project upload paths"
       "content.heroLogoClearSpace": -1,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
+  );
+});
+
+test("Social Posts accept their strict layouts and reject event-only state", async () => {
+  const db = environment.authenticatedContext("owner").firestore();
+  const scriptureReference = db.doc(
+    "centralStudioProjects/social-scripture",
+  );
+
+  await assertSucceeds(scriptureReference.set(socialProjectPayload()));
+  await assertSucceeds(
+    db.doc("centralStudioProjects/social-quote").set(
+      socialProjectPayload("social-quote"),
+    ),
+  );
+  await assertSucceeds(
+    db.doc("centralStudioProjects/social-statement").set(
+      socialProjectPayload("social-statement"),
+    ),
+  );
+  await assertSucceeds(
+    scriptureReference.update({
+      "content.title": "A".repeat(220),
+      "content.format": "portrait",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    scriptureReference.update({
+      "content.title": "A".repeat(221),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    scriptureReference.update({
+      "content.format": "screen",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    scriptureReference.update({
+      "content.date": "SEPTEMBER 18",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    scriptureReference.update({
+      "content.heroMode": "logo",
+      "content.heroLogoSource": "upload",
+      "content.heroLogoStoragePath":
+        "studio-projects/social-scripture/logo.png",
+      "content.heroLogoName": "Event logo",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+
+  const mismatchedComposition = socialProjectPayload("social-quote");
+  mismatchedComposition.content.composition = "center-frame";
+  await assertFails(
+    db.doc("centralStudioProjects/social-mismatched").set(
+      mismatchedComposition,
+    ),
+  );
+
+  const planningCenterSource = socialProjectPayload("social-statement");
+  planningCenterSource.sourceType = "planning-center";
+  planningCenterSource.sourceId = "100";
+  planningCenterSource.sourceEventId = "10";
+  planningCenterSource.sourceUrl = "https://example.com/event/100";
+  planningCenterSource.sourceUpdatedAt =
+    firebase.firestore.FieldValue.serverTimestamp();
+  await assertFails(
+    db.doc("centralStudioProjects/social-planning-center").set(
+      planningCenterSource,
+    ),
   );
 });
 

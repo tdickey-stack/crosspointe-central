@@ -196,6 +196,123 @@ test("a follow-up retrieves live details from recent context", async () => {
   assert.match(response.body.answer, /6:00 PM/);
 });
 
+for (const wording of ["what's the difference", "whats the difference"]) {
+  test(wording + " keeps recent Sunday service context", async () => {
+    const history = [{
+      role: "user",
+      content: "What times are the Sunday services?",
+    }, {
+      role: "assistant",
+      content: "Sunday services begin at 9:00 AM and 10:30 AM.",
+    }];
+    let selectedIds = [];
+    const response = await runHandler_(
+        wording,
+        async (context) => {
+          selectedIds = context.entries.map((entry) => entry.id);
+          return {
+            answer: "The sermon and structure are the same. The 9:00 AM " +
+              "service uses Southern Gospel-style music, while 10:30 AM " +
+              "uses modern praise and worship music.",
+            sourceEntryIds: ["visiting-service-music-styles"],
+            shouldContactChurch: false,
+            followUpQuestion: "",
+          };
+        },
+        undefined,
+        undefined,
+        undefined,
+        history,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.ok(selectedIds.includes("visiting-service-music-styles"));
+    assert.match(response.body.answer, /Southern Gospel/i);
+  });
+}
+
+test("ambiguous kids service times include Sunday and Wednesday schedules",
+    async () => {
+      let selectedIds = [];
+      const response = await runHandler_(
+          "what time do kids start their services",
+          async (context) => {
+            selectedIds = context.entries.map((entry) => entry.id);
+            return {
+              answer: "Kingdom Kids meets Sundays at 9:00 and 10:30 AM, " +
+                "and Wednesdays from 6:30 to 8:00 PM.",
+              sourceEntryIds: context.entries.slice(0, 2)
+                  .map((entry) => entry.id),
+              shouldContactChurch: false,
+              followUpQuestion: "",
+            };
+          },
+      );
+
+      assert.equal(response.statusCode, 200);
+      assert.ok(selectedIds.includes("families-kingdom-kids-sunday"));
+      assert.ok(selectedIds.includes("families-kingdom-kids-wednesday"));
+      assert.equal(selectedIds.includes("families-children-in-main-service"),
+          false);
+    });
+
+test("ambiguous teen group time includes Sunday and Wednesday schedules",
+    async () => {
+      let selectedIds = [];
+      const response = await runHandler_(
+          "What time is the teen group church",
+          async (context) => {
+            selectedIds = context.entries.map((entry) => entry.id);
+            return {
+              answer: "Students have Sunday School at 9:00 AM. On " +
+                "Wednesdays, doors open around 6:00 PM and programming " +
+                "begins around 6:30 PM.",
+              sourceEntryIds: context.entries.slice(0, 2)
+                  .map((entry) => entry.id),
+              shouldContactChurch: false,
+              followUpQuestion: "",
+            };
+          },
+      );
+
+      assert.equal(response.statusCode, 200);
+      assert.ok(selectedIds.includes("families-student-sunday"));
+      assert.ok(selectedIds.includes("families-student-wednesday"));
+      assert.equal(selectedIds.some((id) => id.startsWith("live-event-")),
+          false);
+    });
+
+for (const scheduleCase of [{
+  question: "What time does the teen group meet on Sunday?",
+  includedId: "families-student-sunday",
+  excludedId: "families-student-wednesday",
+}, {
+  question: "When does Kingdom Kids meet Wednesday?",
+  includedId: "families-kingdom-kids-wednesday",
+  excludedId: "families-kingdom-kids-sunday",
+}]) {
+  test("weekly schedule retrieval respects the requested day: " +
+      scheduleCase.question, async () => {
+    let selectedIds = [];
+    const response = await runHandler_(
+        scheduleCase.question,
+        async (context) => {
+          selectedIds = context.entries.map((entry) => entry.id);
+          return {
+            answer: "Here is the requested weekly schedule.",
+            sourceEntryIds: [scheduleCase.includedId],
+            shouldContactChurch: false,
+            followUpQuestion: "",
+          };
+        },
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.ok(selectedIds.includes(scheduleCase.includedId));
+    assert.equal(selectedIds.includes(scheduleCase.excludedId), false);
+  });
+}
+
 test("a child baptism follow-up keeps the baptism context", async () => {
   const history = [{
     role: "user",
@@ -918,6 +1035,46 @@ test("public livestream answer keeps the Church Online link", async () => {
   assert.equal(response.body.links.length, 1);
   assert.match(response.body.links[0].url, /church-online/);
 });
+
+test("Sunday School options include the directory and Campus Groups guidance",
+    async () => {
+      const response = createResponse_();
+      let directoryEntry = null;
+      const handler = createWayfinderAnswerHandler({
+        firestore: createFirestore_(),
+        requireAdminAuth: false,
+        publicResponse: true,
+        generateAnswer: async (context) => {
+          directoryEntry = context.entries.find((entry) => {
+            return entry.id === "groups-live-directory";
+          }) || null;
+          return {
+            answer: "Use the Pointe Group Directory and select Campus " +
+              "Groups under All Types to see current Sunday School options.",
+            sourceEntryIds: [directoryEntry ? directoryEntry.id :
+              context.entries[0].id],
+            shouldContactChurch: false,
+            followUpQuestion: "",
+          };
+        },
+      });
+
+      await handler({
+        method: "POST",
+        headers: {"x-wayfinder-session": "public-sunday-school-directory"},
+        ip: "127.0.0.51",
+        body: {question: "what sunday school classes do you habe"},
+      }, response);
+
+      assert.equal(response.statusCode, 200);
+      assert.ok(directoryEntry);
+      assert.ok(directoryEntry.requiredActions.some((action) => {
+        return /Campus Groups/.test(action);
+      }));
+      assert.equal(response.body.links.length, 1);
+      assert.match(response.body.links[0].url, /crosspointe\.tv\/small-groups/);
+      assert.match(response.body.answer, /Campus Groups/);
+    });
 
 test("public prayer submission answer keeps the approved form", async () => {
   const response = createResponse_();

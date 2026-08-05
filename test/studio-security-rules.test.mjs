@@ -673,6 +673,21 @@ test("event projects accept valid sources and reject cross-project upload paths"
       welcomeRibbonsPayload,
     ),
   );
+  const smallGroupPayload = eventProjectPayload();
+  smallGroupPayload.templateId = "document-small-group-leader";
+  smallGroupPayload.name = "Small Group Leader";
+  smallGroupPayload.content.format = "screen";
+  smallGroupPayload.content.composition = "groups-gradient";
+  smallGroupPayload.content.heroMode = "text";
+  await assertSucceeds(
+    db.doc("centralStudioProjects/small-group-leader").set(smallGroupPayload),
+  );
+  smallGroupPayload.content.format = "square";
+  await assertFails(
+    db.doc("centralStudioProjects/small-group-leader-square").set(
+      smallGroupPayload,
+    ),
+  );
   const removedOrbitPayload = eventProjectPayload();
   removedOrbitPayload.templateId = "event-scripted-welcome";
   removedOrbitPayload.content.fontKey = "niconne";

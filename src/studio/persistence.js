@@ -281,6 +281,7 @@ function documentPageForCloud(page) {
 
 function eventContentForCloud(content, templateId, projectId) {
   const isSocial = isSocialTemplateId(templateId);
+  const supportsHero = isEventTemplateId(templateId);
   const requestedBackgroundSource = ["upload", "unsplash"].includes(
     content.backgroundImageSource,
   )
@@ -294,7 +295,7 @@ function eventContentForCloud(content, templateId, projectId) {
           isValidUnsplashReference(content)
         ? "unsplash"
         : "";
-  const requestedHeroSource = !isSocial && ["upload", "library"].includes(
+  const requestedHeroSource = supportsHero && ["upload", "library"].includes(
     content.heroLogoSource,
   )
     ? content.heroLogoSource
@@ -356,7 +357,7 @@ function eventContentForCloud(content, templateId, projectId) {
     unsplashPhotoUrl:
       source === "unsplash" ? stringValue(content.unsplashPhotoUrl) : "",
     heroMode:
-      !isSocial && content.heroMode === "logo" && heroSource ? "logo" : "text",
+      supportsHero && content.heroMode === "logo" && heroSource ? "logo" : "text",
     heroLogoSource: heroSource,
     heroLogoLibraryId:
       heroSource === "library"

@@ -23,8 +23,32 @@ import {
   getEventFontOptions,
   getEventPalette,
   getProjectWarnings,
+  isGraphicTemplateId,
   isSocialTemplateId,
 } from "../src/studio/templates.js";
+
+test("Small Group Leader is a 16:9 document graphic with background support", () => {
+  const template = TEMPLATE_CATALOG.find(
+    (item) => item.id === "document-small-group-leader",
+  );
+  const project = createStudioProject(template.id);
+
+  assert.equal(template.kind, "document");
+  assert.equal(template.editorKind, "graphic");
+  assert.deepEqual(template.formats, ["16:9"]);
+  assert.equal(isGraphicTemplateId(template.id), true);
+  assert.equal(project.projectKind, "graphic");
+  assert.equal(project.content.format, "screen");
+  assert.equal(project.content.composition, "groups-gradient");
+  assert.equal(project.content.brandMark, "central");
+  assert.deepEqual(getProjectWarnings(project), []);
+
+  const payload = projectForCloud(project, "studio-admin");
+  assert.equal(payload.templateId, template.id);
+  assert.equal(payload.sourceType, "manual");
+  assert.equal(payload.content.format, "screen");
+  assert.equal(payload.content.heroMode, "text");
+});
 
 function eventProject() {
   return {

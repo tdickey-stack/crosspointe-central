@@ -1136,6 +1136,16 @@ const SOCIAL_TEXT_FIELD_OPTIONS = {
   cta: {label: "Footer text", maximum: 44},
 };
 
+const SMALL_GROUP_TEXT_FIELD_OPTIONS = {
+  eyebrow: {label: "Ministry label", maximum: 30},
+  title: {label: "Group name", maximum: 52},
+  subtitle: {label: "Leader names", maximum: 110, multiline: true},
+  date: {label: "Meeting day", maximum: 28},
+  time: {label: "Meeting time", maximum: 24},
+  location: {label: "Meeting location", maximum: 34},
+  cta: {label: "Directory prompt", maximum: 44},
+};
+
 function EventQuickToolbar({
   content,
   updateContent,
@@ -1146,6 +1156,8 @@ function EventQuickToolbar({
   onPanelChange,
 }) {
   const isSocial = isSocialTemplateId(templateId);
+  const template = getTemplateById(templateId);
+  const isSmallGroupLeader = template.variant === "small-group-leader";
   const alignment = content.textAlignment || "left";
   const fontOptions = getEventFontOptions(templateId);
   const compositionOptions = getEventCompositionOptions(templateId);
@@ -1153,9 +1165,11 @@ function EventQuickToolbar({
     templateId,
     content.composition,
   );
-  const textFieldOptions = isSocial
-    ? SOCIAL_TEXT_FIELD_OPTIONS
-    : EVENT_TEXT_FIELD_OPTIONS;
+  const textFieldOptions = isSmallGroupLeader
+    ? SMALL_GROUP_TEXT_FIELD_OPTIONS
+    : isSocial
+      ? SOCIAL_TEXT_FIELD_OPTIONS
+      : EVENT_TEXT_FIELD_OPTIONS;
   const selectedTextOption = textFieldOptions[selectedField];
   return (
     <div className="studio-event-toolbar-shell">
@@ -1211,7 +1225,13 @@ function EventQuickToolbar({
 
       <div
         className="studio-event-toolbar"
-        aria-label={isSocial ? "Social post design controls" : "Event design controls"}
+        aria-label={
+          isSocial
+            ? "Social post design controls"
+            : isSmallGroupLeader
+              ? "Small Group leader design controls"
+              : "Event design controls"
+        }
       >
         <div className="studio-toolbar-selection">
           <span>{selectedTextOption ? "TEXT" : "CANVAS"}</span>
@@ -1220,7 +1240,7 @@ function EventQuickToolbar({
           </strong>
         </div>
 
-        {!isSocial ? (
+        {!isSocial && !isSmallGroupLeader ? (
           <button
             className={[
               "studio-toolbar-tool",
@@ -1256,42 +1276,46 @@ function EventQuickToolbar({
           Background
         </button>
 
-        <div className="studio-toolbar-divider" aria-hidden="true" />
+        {!isSmallGroupLeader ? (
+          <div className="studio-toolbar-divider" aria-hidden="true" />
+        ) : null}
 
-        <div className="studio-toolbar-group is-alignment">
-          <span>Alignment · entire design</span>
-          {[
-            {value: "left", label: "Left", glyph: "≡"},
-            {value: "center", label: "Center", glyph: "≡"},
-            {value: "right", label: "Right", glyph: "≡"},
-          ].map((option) => (
+        {!isSmallGroupLeader ? (
+          <div className="studio-toolbar-group is-alignment">
+            <span>Alignment · entire design</span>
+            {[
+              {value: "left", label: "Left", glyph: "≡"},
+              {value: "center", label: "Center", glyph: "≡"},
+              {value: "right", label: "Right", glyph: "≡"},
+            ].map((option) => (
+              <button
+                key={option.value}
+                className={[
+                  alignment === option.value ? "is-active" : "",
+                  `is-${option.value}`,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                type="button"
+                aria-label={`Align all template text ${option.value}`}
+                aria-pressed={alignment === option.value}
+                onClick={() => updateContent({textAlignment: option.value})}
+              >
+                {option.glyph}
+              </button>
+            ))}
             <button
-              key={option.value}
-              className={[
-                alignment === option.value ? "is-active" : "",
-                `is-${option.value}`,
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              className={content.textShadow ? "is-active" : ""}
               type="button"
-              aria-label={`Align all template text ${option.value}`}
-              aria-pressed={alignment === option.value}
-              onClick={() => updateContent({textAlignment: option.value})}
+              aria-label="Toggle text drop shadow"
+              aria-pressed={Boolean(content.textShadow)}
+              title="Text drop shadow"
+              onClick={() => updateContent({textShadow: !content.textShadow})}
             >
-              {option.glyph}
+              S
             </button>
-          ))}
-          <button
-            className={content.textShadow ? "is-active" : ""}
-            type="button"
-            aria-label="Toggle text drop shadow"
-            aria-pressed={Boolean(content.textShadow)}
-            title="Text drop shadow"
-            onClick={() => updateContent({textShadow: !content.textShadow})}
-          >
-            S
-          </button>
-        </div>
+          </div>
+        ) : null}
 
         <label>
           <span>Brand mark</span>
@@ -1322,7 +1346,13 @@ function EventQuickToolbar({
         </label>
 
         <label>
-          <span>{isSocial ? "Message font" : "Title font"}</span>
+          <span>
+            {isSocial
+              ? "Message font"
+              : isSmallGroupLeader
+                ? "Group font"
+                : "Title font"}
+          </span>
           <select
             value={content.fontKey || fontOptions[0]?.value || "montserrat"}
             onChange={(event) => updateContent({fontKey: event.target.value})}
@@ -1349,35 +1379,46 @@ function EventQuickToolbar({
           </select>
         </label>
 
-        <label>
-          <span>Ratio</span>
-          <select
-            value={content.format || "square"}
-            onChange={(event) => updateContent({format: event.target.value})}
-          >
-            {(isSocial ? SOCIAL_FORMAT_OPTIONS : EVENT_FORMAT_OPTIONS).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isSmallGroupLeader ? (
+          <div className="studio-toolbar-fixed-value">
+            <span>Ratio</span>
+            <strong>16:9</strong>
+          </div>
+        ) : (
+          <label>
+            <span>Ratio</span>
+            <select
+              value={content.format || "square"}
+              onChange={(event) => updateContent({format: event.target.value})}
+            >
+              {(isSocial ? SOCIAL_FORMAT_OPTIONS : EVENT_FORMAT_OPTIONS).map(
+                (option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+        )}
 
-        <label>
-          <span>Composition</span>
-          <select
-            value={selectedComposition}
-            onChange={(event) =>
-              updateContent({composition: event.target.value})
-            }
-          >
-            {compositionOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!isSmallGroupLeader ? (
+          <label>
+            <span>Composition</span>
+            <select
+              value={selectedComposition}
+              onChange={(event) =>
+                updateContent({composition: event.target.value})
+              }
+            >
+              {compositionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         {!["flat", "color-overlay"].includes(selectedComposition) ? (
           <label>
@@ -4737,6 +4778,47 @@ function SocialProjectBriefSheet({project, updateProject, onClose}) {
   );
 }
 
+function GraphicDocumentBriefSheet({project, updateProject, onClose}) {
+  return (
+    <aside className="studio-event-side-sheet" aria-label="Project brief">
+      <div className="studio-event-sheet-header">
+        <div>
+          <span>PROJECT BRIEF</span>
+          <h2>Introduce the group</h2>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close project brief">
+          ×
+        </button>
+      </div>
+      <div className="studio-event-sheet-content">
+        <p className="studio-event-sheet-intro">
+          This 16:9 Directory graphic keeps the CrossPointe logo at bottom left
+          and the group name, leaders, and meeting details at top right. Use the
+          built-in Pointe Groups background or add a leader photo.
+        </p>
+        <InputField
+          label="Project name"
+          value={project.name}
+          maxLength={80}
+          wide
+          onChange={(name) => updateProject({name})}
+          hint="This identifies the project in Studio and does not appear on the graphic."
+        />
+        <div className="studio-event-brief-summary">
+          <div>
+            <span>Template</span>
+            <strong>{getTemplateById(project.templateId).name}</strong>
+          </div>
+          <div>
+            <span>Output</span>
+            <strong>16:9 Small Group Directory</strong>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function EventProjectBriefSheet({
   project,
   updateProject,
@@ -5166,6 +5248,7 @@ function EventStudioEditor({
   const warnings = getProjectWarnings(project);
   const template = getTemplateById(project.templateId);
   const isSocial = template.kind === "social";
+  const isGraphicDocument = template.editorKind === "graphic";
   const formatLabel =
     project.content.format === "screen"
       ? "16:9"
@@ -5421,7 +5504,7 @@ function EventStudioEditor({
             .filter(Boolean)
             .join(" ")}
         >
-          {renderedWorkspacePanel === "hero" && !isSocial ? (
+          {renderedWorkspacePanel === "hero" && !isSocial && !isGraphicDocument ? (
             <EventToolSideSheet
               eyebrow="HERO"
               title="Text or event logo"
@@ -5454,7 +5537,13 @@ function EventStudioEditor({
             </EventToolSideSheet>
           ) : null}
           {renderedWorkspacePanel === "brief" ? (
-            isSocial ? (
+            isGraphicDocument ? (
+              <GraphicDocumentBriefSheet
+                project={project}
+                updateProject={updateProject}
+                onClose={() => setSideSheet("")}
+              />
+            ) : isSocial ? (
               <SocialProjectBriefSheet
                 project={project}
                 updateProject={updateProject}

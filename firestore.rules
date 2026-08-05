@@ -482,6 +482,7 @@ service cloud.firestore {
         "color-overlay|flat)|" +
         "event-scripted-welcome:" +
         "(welcome-halo|welcome-arch|welcome-ribbons|color-overlay|flat)|" +
+        "document-small-group-leader:groups-gradient|" +
         "social-scripture:" +
         "(serif-lines|serif-medallion|color-overlay|flat)|" +
         "social-quote:" +
@@ -493,7 +494,16 @@ service cloud.firestore {
     }
 
     function validGraphicKindFields(content, projectId, templateId) {
-      return isSocialTemplateId(templateId) ? (
+      return templateId == "document-small-group-leader" ? (
+        content.title.matches("^.{0,52}$") &&
+        content.format == "screen" &&
+        validEventComposition(templateId, content.composition) &&
+        content.heroMode == "text" &&
+        content.heroLogoSource == "" &&
+        content.heroLogoLibraryId == "" &&
+        content.heroLogoStoragePath == "" &&
+        content.heroLogoName == ""
+      ) : isSocialTemplateId(templateId) ? (
         validStudioString(content.title, 220) &&
         content.date == "" &&
         content.time == "" &&
@@ -662,7 +672,7 @@ service cloud.firestore {
           "event-rally-poster|event-future-block|event-center-stage|" +
           "event-timeless-center|event-editorial-invitation|" +
           "event-scripted-welcome|social-scripture|social-quote|" +
-          "social-statement)$"
+          "social-statement|document-small-group-leader)$"
         ) &&
         data.name.matches("^.{1,80}$") &&
         data.status == "draft" &&

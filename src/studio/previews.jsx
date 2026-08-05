@@ -1159,6 +1159,104 @@ function SocialPostContent({
   );
 }
 
+const SMALL_GROUP_EDITABLE_FIELDS = {
+  eyebrow: {label: "Ministry label", maximum: 30},
+  title: {label: "Group name", maximum: 52},
+  subtitle: {label: "Leader names", maximum: 110},
+  date: {label: "Meeting day", maximum: 28},
+  time: {label: "Meeting time", maximum: 24},
+  location: {label: "Meeting location", maximum: 34},
+  cta: {label: "Directory prompt", maximum: 44},
+};
+
+function PointeGroupsMark() {
+  return (
+    <div className="pointe-groups-default-mark" aria-label="Pointe Groups">
+      <span className="pointe-groups-mark-symbol" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="pointe-groups-mark-copy">
+        <b>POINTE</b>
+        <strong>GROUPS</strong>
+      </span>
+    </div>
+  );
+}
+
+function SmallGroupLeaderContent({
+  content,
+  editorMode,
+  selectedField,
+  onSelectField,
+  onEditField,
+  usesDarkCopy,
+}) {
+  const editableProps = {
+    editorMode,
+    onEditField,
+    onSelectField,
+    selectedField,
+    fieldOptions: SMALL_GROUP_EDITABLE_FIELDS,
+  };
+  return (
+    <div className="small-group-leader-layout">
+      {!content.backgroundImage ? <PointeGroupsMark /> : null}
+      <div className="small-group-leader-info">
+        <EditableEventText
+          as="span"
+          className="small-group-leader-eyebrow"
+          field="eyebrow"
+          {...editableProps}
+        >
+          {content.eyebrow}
+        </EditableEventText>
+        <EditableEventText
+          as="h2"
+          className="small-group-leader-title"
+          field="title"
+          {...editableProps}
+        >
+          {content.title}
+        </EditableEventText>
+        <EditableEventText
+          as="p"
+          className="small-group-leader-names"
+          field="subtitle"
+          {...editableProps}
+        >
+          {content.subtitle}
+        </EditableEventText>
+        <div className="small-group-leader-meeting">
+          <EditableEventText as="strong" field="date" {...editableProps}>
+            {content.date}
+          </EditableEventText>
+          <span>
+            <EditableEventText as="b" field="time" {...editableProps}>
+              {content.time}
+            </EditableEventText>
+            {content.time && content.location ? <i aria-hidden="true">·</i> : null}
+            <EditableEventText as="b" field="location" {...editableProps}>
+              {content.location}
+            </EditableEventText>
+          </span>
+        </div>
+      </div>
+      <footer className="small-group-leader-footer">
+        <BrandMark
+          type={content.brandMark}
+          color={content.brandColor}
+          usesDarkCopy={usesDarkCopy}
+        />
+        <EditableEventText as="span" field="cta" {...editableProps}>
+          {content.cta}
+        </EditableEventText>
+      </footer>
+    </div>
+  );
+}
+
 export function EventPreview({
   content,
   previewRef,
@@ -1170,6 +1268,7 @@ export function EventPreview({
 }) {
   const template = getTemplateById(templateId);
   const isSocial = template.kind === "social";
+  const isSmallGroupLeader = template.variant === "small-group-leader";
   const displayFont = getEventFont(templateId, content.fontKey);
   const composition = normalizeEventComposition(
     templateId,
@@ -1256,8 +1355,19 @@ export function EventPreview({
           aria-hidden="true"
         />
       ) : null}
-      <EventGraphicDecoration composition={composition} />
-      {isSocial ? (
+      {!isSmallGroupLeader ? (
+        <EventGraphicDecoration composition={composition} />
+      ) : null}
+      {isSmallGroupLeader ? (
+        <SmallGroupLeaderContent
+          content={content}
+          editorMode={editorMode}
+          selectedField={selectedField}
+          onSelectField={onSelectField}
+          onEditField={onEditField}
+          usesDarkCopy={usesDarkCopy}
+        />
+      ) : isSocial ? (
         <SocialPostContent
           content={content}
           editorMode={editorMode}

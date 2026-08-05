@@ -134,6 +134,10 @@ const EVENT_COMPOSITION_LIBRARY = {
   "serif-lines": {value: "serif-lines", label: "Editorial Lines"},
   "color-overlay": {value: "color-overlay", label: "Color Overlay"},
   flat: {value: "flat", label: "Flat / No Overlay"},
+  "groups-gradient": {
+    value: "groups-gradient",
+    label: "Pointe Groups Gradient",
+  },
 };
 
 const documentTemplate = ({
@@ -232,6 +236,38 @@ const socialTemplate = ({
   },
 });
 
+const graphicDocumentTemplate = ({
+  id,
+  name,
+  shortName,
+  description,
+  variant,
+  fonts,
+  compositions,
+  defaultFont,
+  previewCopy,
+  defaults = {},
+  accent = "mint",
+}) => ({
+  id,
+  name,
+  shortName,
+  description,
+  formats: ["16:9"],
+  status: "Ready",
+  accent,
+  kind: "document",
+  editorKind: "graphic",
+  variant,
+  fonts: fonts.map((font) => EVENT_FONT_LIBRARY[font]),
+  compositions: compositions.map(
+    (composition) => EVENT_COMPOSITION_LIBRARY[composition],
+  ),
+  defaultFont,
+  previewCopy,
+  defaults,
+});
+
 export const DOCUMENT_PAGE_TEMPLATES = [
   documentTemplate({
     id: "document-one-pager",
@@ -277,6 +313,41 @@ export const DOCUMENT_PAGE_TEMPLATES = [
 
 export const TEMPLATE_CATALOG = [
   ...DOCUMENT_PAGE_TEMPLATES,
+  graphicDocumentTemplate({
+    id: "document-small-group-leader",
+    name: "Small Group Leader",
+    shortName: "Group Leader",
+    description:
+      "A 16:9 Small Group Directory graphic with fixed leader details, Pointe Groups artwork, and an optional leader photo background.",
+    variant: "small-group-leader",
+    fonts: ["montserrat", "league-spartan", "google-sans"],
+    compositions: ["groups-gradient"],
+    defaultFont: "montserrat",
+    previewCopy: {
+      eyebrow: "POINTE GROUPS",
+      title: "Ladies Sunday School",
+      subtitle: "Led by Terri & Debbie",
+      date: "SUNDAYS",
+      time: "10:30 AM–12:00 PM",
+      location: "ROOM 203",
+      footer: "FIND YOUR GROUP IN CENTRAL",
+    },
+    defaults: {
+      eyebrow: "POINTE GROUPS",
+      title: "Ladies Sunday School",
+      subtitle: "Led by Terri & Debbie",
+      date: "SUNDAYS",
+      time: "10:30 AM–12:00 PM",
+      location: "ROOM 203",
+      cta: "FIND YOUR GROUP IN CENTRAL",
+      format: "screen",
+      composition: "groups-gradient",
+      palette: "sky-mint",
+      textAlignment: "right",
+      brandMark: "central",
+      brandColor: "white",
+    },
+  }),
   socialTemplate({
     id: "social-scripture",
     name: "Scripture Focus",
@@ -578,7 +649,14 @@ export function isSocialTemplateId(templateId) {
 }
 
 export function isGraphicTemplateId(templateId) {
-  return isEventTemplateId(templateId) || isSocialTemplateId(templateId);
+  return (
+    isEventTemplateId(templateId) ||
+    isSocialTemplateId(templateId) ||
+    TEMPLATE_CATALOG.some(
+      (template) =>
+        template.id === templateId && template.editorKind === "graphic",
+    )
+  );
 }
 
 export function isDocumentProject(project) {
@@ -1014,7 +1092,7 @@ export function createStudioProject(templateId) {
   const createdAt = new Date().toISOString();
   const id = createId("studio");
 
-  if (template.kind === "document") {
+  if (template.kind === "document" && template.editorKind !== "graphic") {
     return {
       id,
       schemaVersion: 2,
@@ -1033,6 +1111,7 @@ export function createStudioProject(templateId) {
   return {
     id,
     schemaVersion: 1,
+    projectKind: template.editorKind === "graphic" ? "graphic" : undefined,
     templateId: template.id,
     name: `Untitled ${template.name}`,
     status: "draft",
@@ -1080,7 +1159,10 @@ export function getTemplateById(templateId) {
 
 export function getEventFontOptions(templateId) {
   const template = getTemplateById(templateId);
-  return ["event", "social"].includes(template.kind) ? template.fonts : [];
+  return ["event", "social"].includes(template.kind) ||
+    template.editorKind === "graphic"
+    ? template.fonts
+    : [];
 }
 
 export function getEventFont(templateId, fontKey) {
@@ -1094,7 +1176,8 @@ export function getEventFont(templateId, fontKey) {
 
 export function getEventCompositionOptions(templateId) {
   const template = getTemplateById(templateId);
-  return ["event", "social"].includes(template.kind)
+  return ["event", "social"].includes(template.kind) ||
+    template.editorKind === "graphic"
     ? template.compositions
     : [];
 }
@@ -1218,6 +1301,8 @@ export function getProjectWarnings(project) {
 
   const content = project.content || {};
   const isSocial = isSocialTemplateId(project.templateId);
+  const isSmallGroupLeader =
+    getTemplateById(project.templateId).variant === "small-group-leader";
   if (
     content.heroMode !== "logo" &&
     !String(content.title || "").trim()
@@ -1231,7 +1316,9 @@ export function getProjectWarnings(project) {
     warnings.push(
       isSocial
         ? "The main text may be too long for every format."
-        : "The event title may be too long for every format.",
+        : isSmallGroupLeader
+          ? "The group name may be too long for the leader card."
+          : "The event title may be too long for every format.",
     );
   }
   if (
@@ -1241,7 +1328,9 @@ export function getProjectWarnings(project) {
     warnings.push("Choose or upload a hero logo.");
   }
   if (!isSocial && !String(content.date || "").trim()) {
-    warnings.push("Add an event date.");
+    warnings.push(
+      isSmallGroupLeader ? "Add the group meeting day." : "Add an event date.",
+    );
   }
   if (!isSocial && !String(content.cta || "").trim()) {
     warnings.push("Add a clear next step.");

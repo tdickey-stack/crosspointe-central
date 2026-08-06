@@ -41,6 +41,7 @@ test("Small Group Leader is a 16:9 document graphic with background support", ()
   assert.equal(project.content.format, "screen");
   assert.equal(project.content.composition, "groups-gradient");
   assert.equal(project.content.brandMark, "central");
+  assert.equal(project.content.cta, "FIND YOUR PLACE");
   assert.deepEqual(getProjectWarnings(project), []);
 
   const payload = projectForCloud(project, "studio-admin");

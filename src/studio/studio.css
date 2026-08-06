@@ -6325,15 +6325,21 @@ a {
 }
 
 .small-group-leader-footer > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   max-width: 34%;
   padding: 0.8cqw 1.25cqw;
   border: 0.1cqw solid rgba(255, 255, 255, 0.3);
   border-radius: 999px;
   background: rgba(39, 39, 42, 0.64);
+  box-sizing: border-box;
   font-size: 0.82cqw;
   font-weight: 760;
   letter-spacing: 0.08em;
-  text-align: right;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .pointe-groups-default-mark {

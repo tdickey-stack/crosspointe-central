@@ -330,7 +330,7 @@ export const TEMPLATE_CATALOG = [
       date: "SUNDAYS",
       time: "10:30 AM–12:00 PM",
       location: "ROOM 203",
-      footer: "FIND YOUR GROUP IN CENTRAL",
+      footer: "FIND YOUR PLACE",
     },
     defaults: {
       eyebrow: "POINTE GROUPS",
@@ -339,7 +339,7 @@ export const TEMPLATE_CATALOG = [
       date: "SUNDAYS",
       time: "10:30 AM–12:00 PM",
       location: "ROOM 203",
-      cta: "FIND YOUR GROUP IN CENTRAL",
+      cta: "FIND YOUR PLACE",
       format: "screen",
       composition: "groups-gradient",
       palette: "sky-mint",

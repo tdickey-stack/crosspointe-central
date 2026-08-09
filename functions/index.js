@@ -108,6 +108,10 @@ import {
 } from "./event-overrides.js";
 import {resolveEffectiveRoomRulesBaseline} from
   "./room-rules-baseline.js";
+import {
+  buildThisSundayDateStorageFields,
+  resolveThisSundayDate,
+} from "./this-sunday.js";
 import {createWayfinderAnswerHandler} from "./wayfinder/answer.js";
 import {
   createWayfinderAlphaAccessHandler,
@@ -2982,14 +2986,18 @@ async function refreshCentralSundayModeData_(cachedData, environment) {
   const sundaySettings = sundaySettingsOverride.shouldOverride ?
     sundaySettingsOverride.settings :
     (cachedData.sundaySettings || {});
+  const sunday = resolveThisSundayDate(cachedData.sunday || {}, {
+    timezone: (cachedData.settings || {}).timezone || PCO_TIMEZONE,
+  });
 
   return {
     ...cachedData,
     environment: environment,
     sundaySettings: sundaySettings,
+    sunday: sunday,
     sundayMode: getSundayModeData_(
         cachedData.settings || {},
-        cachedData.sunday || {},
+        sunday,
         Array.isArray(cachedData.setlist) ? cachedData.setlist : [],
         sundaySettings,
         environment,
@@ -3387,21 +3395,18 @@ function toCentralThisSundayFromFirestoreDoc_(snapshot) {
   const data = snapshot && typeof snapshot.data === "function" ?
     snapshot.data() || {} :
     {};
-  const dateIso = normalizeThisSundayDateValue_(data.date_iso || data.date);
-  const dateDisplay = dateIso ?
-    formatThisSundayDisplayDate_(dateIso) :
-    trimFirestoreStringValue_(data.date);
 
-  return {
+  return resolveThisSundayDate({
     source: "Firestore",
-    date: dateDisplay,
-    date_iso: dateIso,
+    date_override_enabled: data.date_override_enabled === true,
+    date: data.date,
+    date_iso: data.date_iso,
     series: trimFirestoreStringValue_(data.series),
     sermon_title: trimFirestoreStringValue_(data.sermon_title),
     speaker: trimFirestoreStringValue_(data.speaker),
     scripture: trimFirestoreStringValue_(data.scripture),
     note: trimFirestoreStringValue_(data.note || data.notes),
-  };
+  }, {timezone: PCO_TIMEZONE});
 }
 
 function copyTrimmedStringFieldIfPresent_(target, source, key) {
@@ -6815,10 +6820,10 @@ function normalizePreviewSectionPayload_(section, operation, rawPayload) {
   if (section === "thisSunday") {
     const payload = buildPublishedThisSundayPayload_(rawPayload || {});
 
-    if (!payload.date_iso && !payload.date) {
+    if (payload.date_override_enabled && !payload.date_iso) {
       throw createPreviewPublishError_(
           "invalid-payload",
-          "Choose the Sunday date before publishing.",
+          "Choose the Sunday override date before publishing.",
       );
     }
 
@@ -11121,15 +11126,10 @@ function buildPublishedRoomRulePayload_(sourceData) {
 }
 
 function buildPublishedThisSundayPayload_(sourceData) {
-  const dateIso = normalizeThisSundayDateValue_(
-      sourceData.date_iso || sourceData.date,
-  );
+  const dateFields = buildThisSundayDateStorageFields(sourceData);
 
   return {
-    date: dateIso ?
-      formatThisSundayDisplayDate_(dateIso) :
-      trimFirestoreStringValue_(sourceData.date),
-    date_iso: dateIso,
+    ...dateFields,
     series: trimFirestoreStringValue_(sourceData.series),
     sermon_title: trimFirestoreStringValue_(sourceData.sermon_title),
     speaker: trimFirestoreStringValue_(sourceData.speaker),
@@ -11234,57 +11234,6 @@ function normalizeRoomRuleBehavior_(value) {
   }
 
   return "replace";
-}
-
-function normalizeThisSundayDateValue_(value) {
-  const text = trimFirestoreStringValue_(value);
-  const quickMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-
-  if (!text) {
-    return "";
-  }
-
-  if (quickMatch) {
-    return quickMatch[1] + "-" + quickMatch[2] + "-" + quickMatch[3];
-  }
-
-  const parsed = new Date(text);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  return [
-    parsed.getFullYear(),
-    "-",
-    String(parsed.getMonth() + 1).padStart(2, "0"),
-    "-",
-    String(parsed.getDate()).padStart(2, "0"),
-  ].join("");
-}
-
-function formatThisSundayDisplayDate_(value) {
-  const normalizedValue = normalizeThisSundayDateValue_(value);
-
-  if (!normalizedValue) {
-    return trimFirestoreStringValue_(value);
-  }
-
-  const parts = normalizedValue.split("-").map((part) => Number(part));
-  const parsedDate = new Date(Date.UTC(
-      parts[0],
-      parts[1] - 1,
-      parts[2],
-      12,
-      0,
-      0,
-  ));
-
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "UTC",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(parsedDate);
 }
 
 function serializeAdminTimestampForJson_(value) {

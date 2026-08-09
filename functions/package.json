@@ -14,6 +14,7 @@
     "test:studio": "node --test studio/*.test.js",
     "test:print-mode": "node --test print-mode/*.test.js",
     "test:events": "node --test calendar-source-cache.test.js event-overrides.test.js event-visibility.test.js room-rules-baseline.test.js",
+    "test:sunday": "node --test this-sunday.test.js",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",

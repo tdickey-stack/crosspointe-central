@@ -54,8 +54,9 @@
   function mountWayfinderChat_() {
     chatRoot = document.createElement("div");
     chatRoot.className = "wayfinder-chat-root";
+    chatRoot.setAttribute("data-analytics-section", "wayfinder");
     chatRoot.innerHTML = [
-      "<button type=\"button\" class=\"wayfinder-chat-launcher\" aria-label=\"Open Wayfinder\" aria-expanded=\"false\">",
+      "<button type=\"button\" class=\"wayfinder-chat-launcher\" data-analytics-event=\"wayfinder_action\" data-analytics-action=\"open\" aria-label=\"Open Wayfinder\" aria-expanded=\"false\">",
       "<img src=\"/loader-icon.svg\" alt=\"\">",
       "<span class=\"wayfinder-chat-launcher-label\">Ask Wayfinder</span>",
       "</button>",
@@ -64,7 +65,7 @@
       "<div class=\"wayfinder-chat-identity\"><img src=\"/loader-icon.svg\" alt=\"\"><div>",
       "<strong>Wayfinder</strong><span>CrossPointe’s AI assistant</span>",
       "</div></div>",
-      "<button type=\"button\" class=\"wayfinder-chat-close\" aria-label=\"Close Wayfinder\">&times;</button>",
+      "<button type=\"button\" class=\"wayfinder-chat-close\" data-analytics-event=\"wayfinder_action\" data-analytics-action=\"close\" aria-label=\"Close Wayfinder\">&times;</button>",
       "</header>",
       "<div class=\"wayfinder-chat-admin-bar\" hidden>",
       "<span>Admin Update Mode</span>",
@@ -76,12 +77,15 @@
       "<form class=\"wayfinder-chat-composer\">",
       "<label class=\"sr-only\" for=\"wayfinder-chat-input\">Message Wayfinder</label>",
       "<textarea id=\"wayfinder-chat-input\" rows=\"1\" maxlength=\"500\" placeholder=\"Ask Wayfinder a question…\"></textarea>",
-      "<button type=\"submit\" class=\"wayfinder-chat-send\" aria-label=\"Send message\"><span aria-hidden=\"true\">↑</span></button>",
+      "<button type=\"submit\" class=\"wayfinder-chat-send\" data-analytics-event=\"wayfinder_action\" data-analytics-action=\"submit_question\" aria-label=\"Send message\"><span aria-hidden=\"true\">↑</span></button>",
       "</form>",
       "<p class=\"wayfinder-chat-disclaimer\">Wayfinder uses approved public CrossPointe information. Don’t share sensitive personal information.</p>",
       "</section>",
     ].join("");
     document.body.appendChild(chatRoot);
+    if (window.centralAnalyticsService) {
+      window.centralAnalyticsService.observeSections(chatRoot);
+    }
 
     chatPanel = chatRoot.querySelector(".wayfinder-chat-panel");
     chatLauncher = chatRoot.querySelector(".wayfinder-chat-launcher");
@@ -161,6 +165,7 @@
     chatInput.value = "";
     resizeWayfinderInput_();
     setWayfinderBusy_(true);
+    trackWayfinderAnalytics_("question_submitted");
 
     var normalized = question.toLowerCase();
     var task;
@@ -195,10 +200,12 @@
           addTextMessage_("assistant", followUpQuestion, "follow-up");
         }
         rememberConversationTurn_(question, answer, followUpQuestion);
+        trackWayfinderAnalytics_("answer_received", "success");
       });
     }
 
     task.catch(function(error) {
+      trackWayfinderAnalytics_("answer_received", "failure");
       addTextMessage_(
           "assistant",
           error && error.message ? error.message :
@@ -435,11 +442,24 @@
       feedback.rating = rating;
       feedback.message = String(result.message || "Thanks for the feedback!");
       renderWayfinderMessages_();
+      trackWayfinderAnalytics_("feedback_submitted", "success");
     }).catch(function(error) {
       feedback.status = "error";
       feedback.error = error && error.message ? error.message :
         "That feedback could not be saved.";
       renderWayfinderMessages_();
+      trackWayfinderAnalytics_("feedback_submitted", "failure");
+    });
+  }
+
+  function trackWayfinderAnalytics_(action, result) {
+    if (!window.centralAnalyticsService ||
+      typeof window.centralAnalyticsService.track !== "function") return;
+
+    window.centralAnalyticsService.track("wayfinder_action", {
+      section_id: "wayfinder",
+      interaction_action: action,
+      result: result || "",
     });
   }
 
@@ -632,10 +652,10 @@
       "<div class=\"wayfinder-chat-feedback\">",
       "<span>Was this helpful?</span>",
       "<div class=\"wayfinder-chat-feedback-buttons\">",
-      "<button type=\"button\" data-wayfinder-feedback-rating=\"helpful\" data-message-id=\"",
+      "<button type=\"button\" data-wayfinder-feedback-rating=\"helpful\" data-analytics-event=\"wayfinder_action\" data-analytics-action=\"feedback_helpful\" data-message-id=\"",
       escapeAttr_(message.id), "\"", pending ? " disabled" : "",
       ">👍 Yes</button>",
-      "<button type=\"button\" data-wayfinder-feedback-rating=\"needs_work\" data-message-id=\"",
+      "<button type=\"button\" data-wayfinder-feedback-rating=\"needs_work\" data-analytics-event=\"wayfinder_action\" data-analytics-action=\"feedback_needs_work\" data-message-id=\"",
       escapeAttr_(message.id), "\"", pending ? " disabled" : "",
       ">👎 Needs work</button>",
       "</div>",
@@ -661,7 +681,7 @@
       "</select></label>",
       "<label>Optional note<textarea maxlength=\"500\" rows=\"2\" placeholder=\"Tell us what would have been better\"",
       pending ? " disabled" : "", "></textarea></label>",
-      "<button type=\"button\" data-wayfinder-feedback-submit data-message-id=\"",
+      "<button type=\"button\" data-wayfinder-feedback-submit data-analytics-event=\"wayfinder_action\" data-analytics-action=\"submit_feedback\" data-message-id=\"",
       escapeAttr_(message.id), "\"", pending ? " disabled" : "",
       ">", pending ? "Saving..." : "Send feedback", "</button>",
       "</div>",
@@ -692,13 +712,13 @@
     return [
       "<div class=\"wayfinder-chat-action-links\">",
       safeActions.map(function(action) {
-        return "<button type=\"button\" data-wayfinder-event-action=\"true\"" +
+        return "<button type=\"button\" data-wayfinder-event-action=\"true\" data-analytics-event=\"wayfinder_action\" data-analytics-action=\"open_event_details\"" +
           " data-message-id=\"" + escapeAttr_(messageId) +
           "\" data-action-index=\"" + escapeAttr_(String(action.index)) +
           "\">" + escapeHtml_(action.label) + "</button>";
       }).join(""),
       safeLinks.map(function(link) {
-        return "<a href=\"" + escapeAttr_(link.url) +
+        return "<a data-analytics-event=\"wayfinder_action\" data-analytics-action=\"open_answer_link\" href=\"" + escapeAttr_(link.url) +
           "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
           escapeHtml_(link.label) + "</a>";
       }).join(""),

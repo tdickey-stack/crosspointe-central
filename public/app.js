@@ -11,6 +11,7 @@ var previousCountdownDigits = {};
 
 var sundayNotesStorageKey = "";
 var sundayNotesSeed = {};
+var sundayNotesAnalyticsStarted = false;
 
 var googleNotesTokenClient = null;
 var googleNotesAccessToken = "";
@@ -980,6 +981,7 @@ function renderCentral(data) {
     initSundayScripture(data);
     syncSundayNotesSaveButton_(data);
     maybeShowWhatsNew_(data);
+    syncCentralAnalyticsAfterRender_("sunday_mode");
     finalizeCentralLoader_();
     return;
   }
@@ -993,7 +995,7 @@ function renderCentral(data) {
 
   document.getElementById("app").innerHTML = [
     "<div class=\"central\">",
-      "<header class=\"hero", featuredEventCard ? " hero-featured-event" : "", "\">",
+      "<header class=\"hero", featuredEventCard ? " hero-featured-event" : "", "\" data-analytics-section=\"hero\">",
         "<div class=\"wrap\">",
           "<div class=\"hero-topbar\">",
             "<div class=\"eyebrow\">",
@@ -1029,7 +1031,31 @@ function renderCentral(data) {
   syncCentralThemeToggleUi_(getResolvedCentralTheme_());
   startCountdown();
   maybeShowWhatsNew_(data);
+  syncCentralAnalyticsAfterRender_("homepage");
   finalizeCentralLoader_();
+}
+
+function trackCentralAnalytics_(eventName, parameters) {
+  if (!window.centralAnalyticsService ||
+    typeof window.centralAnalyticsService.track !== "function") return;
+
+  window.centralAnalyticsService.track(eventName, parameters || {});
+}
+
+function syncCentralAnalyticsAfterRender_(pageMode) {
+  if (!window.centralAnalyticsService) return;
+
+  window.centralAnalyticsService.setPageMode(pageMode);
+  observeCentralAnalyticsSections_(document.getElementById("app"));
+}
+
+function observeCentralAnalyticsSections_(rootElement) {
+  if (!rootElement || !window.centralAnalyticsService ||
+    typeof window.centralAnalyticsService.observeSections !== "function") {
+    return;
+  }
+
+  window.centralAnalyticsService.observeSections(rootElement);
 }
 
 function renderHomepageCountdownCard_(settings) {
@@ -1355,7 +1381,7 @@ function renderSundayModeModuleById_(moduleId, data, quickLinks, services, servi
 
   if (moduleId === "sermonWorship") {
     return [
-      "<section class=\"section\">",
+      "<section class=\"section\" data-analytics-section=\"sermon_worship\">",
         "<div class=\"section-head\">",
           "<div>",
             "<div class=\"section-kicker\">This Morning</div>",
@@ -1386,7 +1412,7 @@ function renderSundayModeModuleById_(moduleId, data, quickLinks, services, servi
     }
 
     return [
-      "<section class=\"section\">",
+      "<section class=\"section\" data-analytics-section=\"watch_live\">",
         "<div class=\"section-head\">",
           "<div>",
             "<div class=\"section-kicker\">Join Online</div>",
@@ -1400,7 +1426,7 @@ function renderSundayModeModuleById_(moduleId, data, quickLinks, services, servi
 
   if (moduleId === "scriptureNotes") {
     return [
-      "<section class=\"section sunday-study-section\" id=\"notes\">",
+      "<section class=\"section sunday-study-section\" id=\"notes\" data-analytics-section=\"scripture_notes\">",
         "<div class=\"section-head\">",
           "<div>",
             "<div class=\"section-kicker\">One-Tap Study</div>",
@@ -1528,6 +1554,7 @@ function showWhatsNewModal_(config) {
   var modal = document.createElement("div");
   modal.id = "central-whats-new-modal";
   modal.className = "whats-new-modal";
+  modal.setAttribute("data-analytics-section", "whats_new");
   modal.innerHTML = [
     "<div class=\"whats-new-backdrop\" data-whats-new-close=\"true\"></div>",
     "<div class=\"whats-new-card\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"whats-new-title\">",
@@ -1558,6 +1585,7 @@ function showWhatsNewModal_(config) {
   document.addEventListener("keydown", whatsNewEscapeHandler);
   document.body.classList.add("modal-open");
   document.body.appendChild(modal);
+  observeCentralAnalyticsSections_(modal);
 }
 
 function closeWhatsNewModal_() {
@@ -1791,7 +1819,7 @@ function renderSundayPage(data) {
 
   return [
     "<div class=\"central sunday-experience\">",
-      "<header class=\"sunday-hero\">",
+      "<header class=\"sunday-hero\" data-analytics-section=\"sunday_hero\">",
         "<div class=\"wrap\">",
           "<div class=\"sunday-badge-row\">",
             "<span class=\"eyebrow\">",
@@ -1853,7 +1881,7 @@ function renderSundayPage(data) {
 
 function renderPublicFooter_() {
   return [
-    "<footer class=\"public-footer\">",
+    "<footer class=\"public-footer\" data-analytics-section=\"footer\">",
       "<div class=\"wrap public-footer-wrap\">",
         "<nav class=\"public-footer-links\" aria-label=\"Footer links\">",
           "<a href=\"/about\">About Central</a>",
@@ -1874,7 +1902,7 @@ function renderSundayQuickActions(items) {
   if (!links.length) return "";
 
   return [
-    "<section class=\"section\">",
+    "<section class=\"section\" data-analytics-section=\"quick_actions\">",
       "<div class=\"section-head\">",
         "<div>",
           "<div class=\"section-kicker\">Quick Actions</div>",
@@ -1899,7 +1927,7 @@ function renderBanner(banner) {
   if (!banner) return "";
 
   return [
-    "<section class=\"banner\">",
+    "<section class=\"banner\" data-analytics-section=\"status_banner\">",
       "<h2>", escapeHtml(banner.title), "</h2>",
       "<p>", escapeHtml(banner.message), "</p>",
       button(banner.button_text, banner.button_url, "btn-primary"),
@@ -1970,7 +1998,7 @@ function renderSundayLivestream(sundaySettings) {
             "<p>" + escapeHtml(sundaySettings.sunday_livestream_note) + "</p>" :
             "",
         "</div>",
-        "<button type=\"button\" class=\"sunday-stream-mini-toggle\" aria-controls=\"sunday-stream-player\" aria-pressed=\"false\" onclick=\"toggleSundayStreamMiniPlayer()\">",
+        "<button type=\"button\" class=\"sunday-stream-mini-toggle\" aria-controls=\"sunday-stream-player\" aria-pressed=\"false\" data-analytics-event=\"livestream_action\" data-analytics-action=\"toggle_mini_player\" onclick=\"toggleSundayStreamMiniPlayer()\">",
           "<span class=\"sunday-stream-mini-icon\" aria-hidden=\"true\"></span>",
           "<span data-sunday-stream-toggle-label>Keep Watching</span>",
         "</button>",
@@ -1981,12 +2009,12 @@ function renderSundayLivestream(sundaySettings) {
           "<div class=\"sunday-stream-frame\">",
             "<iframe allow=\"autoplay; fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
             "<div class=\"sunday-stream-gesture-surface\" role=\"group\" tabindex=\"0\" aria-label=\"Mini player. Tap to return to the live section, drag to move, or pinch to resize.\" title=\"Tap to return. Drag to move. Pinch to resize.\" onpointerdown=\"beginSundayStreamMiniPlayerGesture(event)\" onkeydown=\"handleSundayStreamMiniPlayerMoveKeydown(event)\">",
-              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-playback\" data-sunday-stream-playback data-playback-state=\"connecting\" aria-label=\"Connecting to livestream controls\" title=\"Connecting to livestream controls\" onclick=\"toggleSundayStreamPlayback(event)\" disabled>",
+              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-playback\" data-sunday-stream-playback data-playback-state=\"connecting\" data-analytics-event=\"livestream_action\" data-analytics-action=\"toggle_playback\" aria-label=\"Connecting to livestream controls\" title=\"Connecting to livestream controls\" onclick=\"toggleSundayStreamPlayback(event)\" disabled>",
                 "<span class=\"sunday-stream-playback-icon sunday-stream-playback-play\" aria-hidden=\"true\"></span>",
                 "<span class=\"sunday-stream-playback-icon sunday-stream-playback-pause\" aria-hidden=\"true\"><span></span><span></span></span>",
                 "<span class=\"sunday-stream-playback-connecting\" aria-hidden=\"true\">&middot;&middot;&middot;</span>",
               "</button>",
-              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-close\" aria-label=\"Close mini player and stop the stream\" title=\"Close and stop\" onclick=\"closeSundayStreamMiniPlayer()\">&times;</button>",
+              "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-close\" data-analytics-event=\"livestream_action\" data-analytics-action=\"close_mini_player\" aria-label=\"Close mini player and stop the stream\" title=\"Close and stop\" onclick=\"closeSundayStreamMiniPlayer()\">&times;</button>",
             "</div>",
           "</div>",
           "<button type=\"button\" class=\"sunday-stream-resize-handle\" aria-label=\"Drag to resize mini player\" title=\"Drag left or right to resize\" onpointerdown=\"beginSundayStreamMiniPlayerResize(event)\" onkeydown=\"handleSundayStreamMiniPlayerResizeKeydown(event)\"><span aria-hidden=\"true\"></span></button>",
@@ -3267,6 +3295,9 @@ function registerEventDetailsItem_(item) {
   var key = "event-detail:" + String(++eventDetailKeyCounter);
 
   eventDetailItemsByKey[key] = {
+    itemId: String(
+        item.id || item.event_id || item.registration_id || item.title || "",
+    ).trim(),
     title: String(item.title || "CrossPointe Event").trim(),
     date: String(item.date || "").trim(),
     time: String(item.time || "").trim(),
@@ -3332,6 +3363,12 @@ function openEventDetailsModal(eventKey) {
 
   modal.id = "central-event-details-modal";
   modal.className = "event-details-modal";
+  modal.setAttribute(
+      "data-analytics-section",
+      item.isRegistrationEvent ? "registrations" : "events",
+  );
+  modal.setAttribute("data-analytics-content-label", item.title);
+  modal.setAttribute("data-analytics-content-id", item.itemId || item.title);
   modal.innerHTML = [
     "<div class=\"event-details-backdrop\" data-event-details-close=\"true\"></div>",
     "<article class=\"event-details-card\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"event-details-title\">",
@@ -3434,6 +3471,12 @@ function openEventDetailsModal(eventKey) {
                   item.registrationButtonText,
                   item.registrationUrl,
                   "btn-primary",
+                  {
+                    event: "registration_click",
+                    action: "registration_outbound",
+                    contentId: item.itemId || item.title,
+                    contentLabel: item.title,
+                  },
               ),
               "<span>Opens Church Center in a new tab</span>",
             "</div>",
@@ -3469,6 +3512,14 @@ function openEventDetailsModal(eventKey) {
   document.addEventListener("keydown", eventDetailsEscapeHandler);
   document.body.classList.add("modal-open");
   document.body.appendChild(modal);
+  observeCentralAnalyticsSections_(modal);
+
+  trackCentralAnalytics_("central_ui_action", {
+    section_id: item.isRegistrationEvent ? "registrations" : "events",
+    interaction_action: "event_details_open",
+    item_id: item.itemId || item.title,
+    item_name: item.title,
+  });
 
   var closeButton = modal.querySelector(".event-details-close");
   if (closeButton) closeButton.focus();
@@ -3605,7 +3656,7 @@ function renderServeNeeds(items) {
     renderItem: function(item) {
       return renderServeNeedCard_(item);
     },
-  }));
+  }), "serve-needs");
 }
 
 function renderServeNeedCard_(item) {
@@ -3755,6 +3806,12 @@ function openServeNeedInterestModal(serveNeedKey) {
   var modal = document.createElement("div");
   modal.id = "central-serve-interest-modal";
   modal.className = "serve-interest-modal";
+  modal.setAttribute("data-analytics-section", "serve_needs");
+  modal.setAttribute("data-analytics-content-label", serveNeed.need);
+  modal.setAttribute(
+      "data-analytics-content-id",
+      serveNeed.id || serveNeed.need,
+  );
   modal.innerHTML = [
     "<div class=\"serve-interest-backdrop\" data-serve-interest-close=\"true\"></div>",
     "<div class=\"serve-interest-card\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"serve-interest-title\">",
@@ -3789,6 +3846,7 @@ function openServeNeedInterestModal(serveNeedKey) {
   document.addEventListener("keydown", serveNeedInterestEscapeHandler);
   document.body.classList.add("modal-open");
   document.body.appendChild(modal);
+  observeCentralAnalyticsSections_(modal);
 }
 
 function renderServeNeedInterestForm_(serveNeed) {
@@ -3917,6 +3975,15 @@ function submitServeNeedInterest_(formEl, serveNeed) {
             contactMethodLabel +
             " to talk more about your volunteer interest.";
 
+        trackCentralAnalytics_("generate_lead", {
+          section_id: "serve_needs",
+          interaction_action: "serve_interest_submitted",
+          lead_source: "central_serve_needs",
+          item_id: serveNeed.id || serveNeed.need,
+          item_name: serveNeed.need,
+          result: "success",
+        });
+
         if (!contentEl) {
           return;
         }
@@ -3998,7 +4065,7 @@ function renderQuickLinks(items) {
   if (!links.length) return "";
 
   return [
-    "<section class=\"section\">",
+    "<section class=\"section\" data-analytics-section=\"quick_links\">",
       "<div class=\"section-head\">",
         "<div>",
           "<div class=\"section-kicker\">Fast Access</div>",
@@ -4226,8 +4293,16 @@ function transitionExpandableDrawer_(drawer, endHeight, onDone) {
 }
 
 function section(title, kicker, content, id) {
+  var analyticsSectionId = String(id || title || "section")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "section";
+
   return [
-    "<section class=\"section\" ", (id ? "id=\"" + escapeAttr(id) + "\"" : ""), ">",
+    "<section class=\"section\" data-analytics-section=\"",
+      escapeAttr(analyticsSectionId), "\" ",
+      (id ? "id=\"" + escapeAttr(id) + "\"" : ""), ">",
       "<div class=\"section-head\">",
         "<div>",
           "<div class=\"section-kicker\">", escapeHtml(kicker), "</div>",
@@ -4379,14 +4454,31 @@ function closeCalendarMenus_(exceptMenuId) {
       });
 }
 
-function button(text, url, className) {
+function button(text, url, className, analytics) {
   if (!text || !url) return "";
 
   var cleanUrl = String(url).trim();
   var extraClass = className || "";
 
-  return "<a class=\"btn " + extraClass + "\" " + buildLinkAttrs_(cleanUrl) + ">" +
+  return "<a class=\"btn " + extraClass + "\" " + buildLinkAttrs_(cleanUrl) +
+    analyticsAttrs_(analytics) + ">" +
     escapeHtml(text) + "</a>";
+}
+
+function analyticsAttrs_(analytics) {
+  var config = analytics && typeof analytics === "object" ? analytics : null;
+  if (!config) return "";
+
+  return [
+    config.event ? " data-analytics-event=\"" +
+      escapeAttr(config.event) + "\"" : "",
+    config.action ? " data-analytics-action=\"" +
+      escapeAttr(config.action) + "\"" : "",
+    config.contentId ? " data-analytics-content-id=\"" +
+      escapeAttr(config.contentId) + "\"" : "",
+    config.contentLabel ? " data-analytics-content-label=\"" +
+      escapeAttr(config.contentLabel) + "\"" : "",
+  ].join("");
 }
 
 function buildLinkAttrs_(url) {
@@ -4571,6 +4663,7 @@ function initSundayNotes(data) {
 
   sundayNotesStorageKey = getSundayNotesStorageKey(data.sunday || {});
   sundayNotesSeed = data.sunday || {};
+  sundayNotesAnalyticsStarted = false;
 
   var savedNotes = localStorage.getItem(sundayNotesStorageKey);
   setSundayNotesEditorContent_(input, savedNotes || buildSundayNotesTemplate());
@@ -4582,6 +4675,16 @@ function initSundayNotes(data) {
 
   input.addEventListener("input", function() {
     persistSundayNotesInput_(input);
+
+    if (!sundayNotesAnalyticsStarted &&
+      getSundayNotesPlainText_(input).trim()) {
+      sundayNotesAnalyticsStarted = true;
+      trackCentralAnalytics_("notes_action", {
+        section_id: "scripture_notes",
+        interaction_action: "notes_started",
+        result: "success",
+      });
+    }
   });
 
   input.addEventListener("paste", function(event) {
@@ -4978,6 +5081,11 @@ async function copySundayNotes() {
   }
 
   setSundayNotesStatus("Copied to clipboard");
+  trackCentralAnalytics_("notes_action", {
+    section_id: "scripture_notes",
+    interaction_action: "notes_copied",
+    result: "success",
+  });
 }
 
 function selectSundayNotesEditorContents_(input) {
@@ -5000,6 +5108,12 @@ function clearSundayNotes() {
   input.innerHTML = "";
   localStorage.removeItem(sundayNotesStorageKey);
   setSundayNotesStatus("Notes cleared");
+  sundayNotesAnalyticsStarted = false;
+  trackCentralAnalytics_("notes_action", {
+    section_id: "scripture_notes",
+    interaction_action: "notes_cleared",
+    result: "success",
+  });
 }
 
 function setSundayNotesStatus(message, persist) {
@@ -5866,12 +5980,22 @@ async function saveSundayNotesToMyGoogleDocs() {
 
     setSundayNotesSaveButtonState("Save to My Google Docs", false);
     setSundayNotesStatus("Saved to your Google Drive.", true);
+    trackCentralAnalytics_("notes_action", {
+      section_id: "scripture_notes",
+      interaction_action: "google_docs_save",
+      result: "success",
+    });
   } catch (error) {
     setSundayNotesSaveButtonState("Save to My Google Docs", false);
     setSundayNotesStatus(
         error && error.message ? error.message : "Could not save notes to Google Docs.",
         true,
     );
+    trackCentralAnalytics_("notes_action", {
+      section_id: "scripture_notes",
+      interaction_action: "google_docs_save",
+      result: "failure",
+    });
   }
 }
 

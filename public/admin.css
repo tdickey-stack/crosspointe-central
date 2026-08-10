@@ -1664,6 +1664,7 @@
 
 [data-app-route="admin"] .central-admin-overview-card {
   gap: 14px;
+  grid-template-rows: auto 1fr auto;
 }
 
 [data-app-route="admin"] .central-admin-overview-card-top {
@@ -1676,8 +1677,12 @@
 }
 
 [data-app-route="admin"] .central-admin-overview-card .central-admin-link-button {
+  display: inline-flex;
+  align-items: center;
   width: 100%;
+  min-height: 42px;
   justify-content: center;
+  text-align: center;
 }
 
 [data-app-route="admin"] .central-admin-details {

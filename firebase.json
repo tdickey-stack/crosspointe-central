@@ -509,6 +509,13 @@
         }
       },
       {
+        "source": "/api/campaigns/share-interest",
+        "function": {
+          "functionId": "shareCampaignInterest",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/serve-needs/share-interest",
         "function": {
           "functionId": "shareServeNeedInterest",

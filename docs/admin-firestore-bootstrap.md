@@ -89,6 +89,7 @@ Suggested campaign document shape:
   "title": "Back to School Drive",
   "description": "Help stock classrooms and support local families.",
   "button_text": "View Details",
+  "action_type": "link",
   "button_url": "https://crosspointe.tv",
   "ongoing": false,
   "start_date": "2026-08-01",
@@ -103,10 +104,21 @@ Behavior:
 - Editing in the admin UI builds a local working list first.
 - Ongoing campaigns ignore start and end dates and stay visible until removed.
 - Scheduled campaigns use both a start date and an end date.
+- `action_type: "link"` opens `button_url`, preserving existing campaign behavior.
+- `action_type: "contact"` uses `contact_email` instead of `button_url` and opens a public contact form.
 - Publishing replaces the preview campaigns collection with the current working list.
 - Submitting for approval stores the proposed list as a change request for admins.
 - The public app only shows campaigns whose schedule is currently active.
 - If the published collection is empty, the Campaigns section stays hidden in Central until you add items again.
+
+Campaign contact submissions are stored privately at:
+
+- `centralCampaigns/root/interests/{submissionId}`
+
+The public Campaigns payload includes the action type but does not expose the
+configured contact email. The Function looks up that address server-side,
+sends the notification from Central, and sets the submitter as `Reply-To` so
+the campaign contact can reply normally.
 
 ### Next Steps editor
 

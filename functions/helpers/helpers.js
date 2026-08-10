@@ -563,6 +563,10 @@ function areCampaignsComparisonItemsEqual_(currentItem, proposedItem) {
       String(proposedItem && proposedItem.button_text || "") &&
     String(currentItem && currentItem.button_url || "") ===
       String(proposedItem && proposedItem.button_url || "") &&
+    String(currentItem && currentItem.action_type || "link") ===
+      String(proposedItem && proposedItem.action_type || "link") &&
+    String(currentItem && currentItem.contact_email || "") ===
+      String(proposedItem && proposedItem.contact_email || "") &&
     Boolean(currentItem && currentItem.ongoing) ===
       Boolean(proposedItem && proposedItem.ongoing) &&
     String(currentItem && currentItem.start_date || "") ===

@@ -4300,7 +4300,8 @@
       }
       adminState.campaignsError = "";
       adminState.campaignsMessage = "";
-      if (campaignFieldName === "ongoing") {
+      if (campaignFieldName === "ongoing" ||
+        campaignFieldName === "action_type") {
         renderAdmin_();
       }
       return;
@@ -12772,6 +12773,7 @@
   function renderCampaignsEditorForm_() {
     var canEdit = canEditCampaigns_();
     var draft = adminState.campaignsDraft || createEmptyCampaignDraft_();
+    var actionType = normalizeCampaignActionType_(draft);
     var saveDisabled = !canEdit ||
       adminState.campaignsSaving ||
       adminState.campaignsPublishing;
@@ -12833,17 +12835,42 @@
         "</textarea>",
         "</label>",
         "<label class=\"central-admin-field\">",
+        "<span>Button Action</span>",
+        "<select data-admin-field=\"campaign.action_type\">",
+        "<option value=\"link\"",
+        actionType === "link" ? " selected" : "",
+        ">Link</option>",
+        "<option value=\"contact\"",
+        actionType === "contact" ? " selected" : "",
+        ">Contact Form</option>",
+        "</select>",
+        "</label>",
+        "<label class=\"central-admin-field\">",
         "<span>Button Text</span>",
         "<input type=\"text\" data-admin-field=\"campaign.button_text\" maxlength=\"40\" placeholder=\"Learn More\" value=\"",
         escapeAttr_(draft.button_text || ""),
         "\">",
         "</label>",
-        "<label class=\"central-admin-field\">",
-        "<span>Button URL</span>",
-        "<input type=\"url\" data-admin-field=\"campaign.button_url\" placeholder=\"https://crosspointe.tv\" value=\"",
-        escapeAttr_(draft.button_url || ""),
-        "\">",
-        "</label>",
+        actionType === "contact" ? [
+          "<label class=\"central-admin-field\">",
+          "<span>Contact Email</span>",
+          "<input type=\"email\" data-admin-field=\"campaign.contact_email\" maxlength=\"254\" placeholder=\"person@crosspointe.tv\" value=\"",
+          escapeAttr_(draft.contact_email || ""),
+          "\">",
+          "</label>",
+          "<div class=\"central-admin-field central-admin-field-wide\">",
+          renderAdminNote_(
+              "Central emails this person when the form is submitted. The email's Reply-To address is the person who filled out the form.",
+          ),
+          "</div>",
+        ].join("") : [
+          "<label class=\"central-admin-field\">",
+          "<span>Button URL</span>",
+          "<input type=\"url\" data-admin-field=\"campaign.button_url\" placeholder=\"https://crosspointe.tv\" value=\"",
+          escapeAttr_(draft.button_url || ""),
+          "\">",
+          "</label>",
+        ].join(""),
         "<label class=\"central-admin-checkbox\">",
         "<input type=\"checkbox\" data-admin-field=\"campaign.ongoing\"",
         draft.ongoing ? " checked" : "",
@@ -12969,6 +12996,11 @@
             "\" target=\"_blank\" rel=\"noopener\">" +
             escapeHtml_(item.button_text || item.button_url) +
             "</a>" :
+            "",
+          normalizeCampaignActionType_(item) === "contact" ?
+            "<p class=\"central-admin-footer-note\">Contact form: " +
+            escapeHtml_(item.contact_email || "Email not set") +
+            "</p>" :
             "",
           "<div class=\"central-admin-page-meta\">",
           renderInlineMeta_("Schedule", getCampaignScheduleLabel_(item)),
@@ -20147,6 +20179,8 @@
       description: "",
       button_text: "",
       button_url: "",
+      action_type: "link",
+      contact_email: "",
       ongoing: false,
       start_date: "",
       end_date: "",
@@ -20196,6 +20230,30 @@
       "";
   }
 
+  function normalizeCampaignActionType_(source) {
+    var value = String(source && source.action_type || "")
+        .trim()
+        .toLowerCase();
+
+    if (value === "contact") {
+      return "contact";
+    }
+
+    if (value === "link") {
+      return "link";
+    }
+
+    return source && source.contact_email && !source.button_url ?
+      "contact" :
+      "link";
+  }
+
+  function isValidCampaignContactEmail_(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        String(value || "").trim(),
+    );
+  }
+
   function getNormalizedCampaignOngoingValue_(source) {
     var hasOngoingValue = source &&
       Object.prototype.hasOwnProperty.call(source, "ongoing");
@@ -20213,13 +20271,19 @@
   function normalizeCampaignListItem_(item, index) {
     var source = item || {};
     var ongoing = getNormalizedCampaignOngoingValue_(source);
+    var actionType = normalizeCampaignActionType_(source);
 
     return {
       id: String(source.id || ("campaign-" + String(index + 1))).trim(),
       title: String(source.title || "").trim(),
       description: String(source.description || "").trim(),
       button_text: String(source.button_text || "").trim(),
-      button_url: String(source.button_url || "").trim(),
+      button_url: actionType === "contact" ? "" :
+        String(source.button_url || "").trim(),
+      action_type: actionType,
+      contact_email: actionType === "contact" ?
+        String(source.contact_email || "").trim().toLowerCase() :
+        "",
       ongoing: ongoing,
       start_date: ongoing ? "" : normalizeCampaignDateValue_(source.start_date),
       end_date: ongoing ? "" : normalizeCampaignDateValue_(source.end_date),
@@ -20236,13 +20300,19 @@
       docSnapshot.data() || {} :
       {};
     var ongoing = getNormalizedCampaignOngoingValue_(data);
+    var actionType = normalizeCampaignActionType_(data);
 
     return {
       id: docSnapshot.id,
       title: String(data.title || "").trim(),
       description: String(data.description || "").trim(),
       button_text: String(data.button_text || "").trim(),
-      button_url: String(data.button_url || "").trim(),
+      button_url: actionType === "contact" ? "" :
+        String(data.button_url || "").trim(),
+      action_type: actionType,
+      contact_email: actionType === "contact" ?
+        String(data.contact_email || "").trim().toLowerCase() :
+        "",
       ongoing: ongoing,
       start_date: ongoing ? "" : normalizeCampaignDateValue_(data.start_date),
       end_date: ongoing ? "" : normalizeCampaignDateValue_(data.end_date),
@@ -20255,12 +20325,19 @@
 
   function cloneCampaignsItems_(items) {
     return (Array.isArray(items) ? items : []).map(function(item) {
+      var actionType = normalizeCampaignActionType_(item);
+
       return {
         id: String(item && item.id || "").trim(),
         title: String(item && item.title || "").trim(),
         description: String(item && item.description || "").trim(),
         button_text: String(item && item.button_text || "").trim(),
-        button_url: String(item && item.button_url || "").trim(),
+        button_url: actionType === "contact" ? "" :
+          String(item && item.button_url || "").trim(),
+        action_type: actionType,
+        contact_email: actionType === "contact" ?
+          String(item && item.contact_email || "").trim().toLowerCase() :
+          "",
         ongoing: !!(item && item.ongoing),
         start_date: normalizeCampaignDateValue_(item && item.start_date),
         end_date: normalizeCampaignDateValue_(item && item.end_date),
@@ -20432,6 +20509,8 @@
       description: nextItem.description || "",
       button_text: nextItem.button_text || "",
       button_url: nextItem.button_url || "",
+      action_type: normalizeCampaignActionType_(nextItem),
+      contact_email: nextItem.contact_email || "",
       ongoing: !!nextItem.ongoing,
       start_date: nextItem.start_date || "",
       end_date: nextItem.end_date || "",
@@ -20505,6 +20584,8 @@
     var description = String(draft.description || "").trim();
     var buttonText = String(draft.button_text || "").trim();
     var buttonUrl = String(draft.button_url || "").trim();
+    var actionType = normalizeCampaignActionType_(draft);
+    var contactEmail = String(draft.contact_email || "").trim().toLowerCase();
     var ongoing = !!draft.ongoing;
     var startDate = ongoing ? "" : normalizeCampaignDateValue_(draft.start_date);
     var endDate = ongoing ? "" : normalizeCampaignDateValue_(draft.end_date);
@@ -20516,7 +20597,16 @@
       return;
     }
 
-    if ((buttonText && !buttonUrl) || (!buttonText && buttonUrl)) {
+    if (actionType === "contact" &&
+      (!buttonText || !isValidCampaignContactEmail_(contactEmail))) {
+      adminState.campaignsError =
+        "Contact campaigns need button text and a valid contact email.";
+      renderAdmin_();
+      return;
+    }
+
+    if (actionType === "link" &&
+      ((buttonText && !buttonUrl) || (!buttonText && buttonUrl))) {
       adminState.campaignsError =
         "If you use a button, enter both button text and button URL.";
       renderAdmin_();
@@ -20553,7 +20643,9 @@
       title: title,
       description: description,
       button_text: buttonText,
-      button_url: buttonUrl,
+      button_url: actionType === "contact" ? "" : buttonUrl,
+      action_type: actionType,
+      contact_email: actionType === "contact" ? contactEmail : "",
       ongoing: ongoing,
       start_date: startDate,
       end_date: endDate,

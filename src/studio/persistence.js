@@ -772,18 +772,24 @@ export function createStudioCloud({
     ]);
   }
 
-  async function saveProject(project) {
+  async function saveProject(project, {knownExisting = false} = {}) {
     const reference = firestore.doc(`${PROJECT_COLLECTION}/${project.id}`);
-    const snapshot = await reference.get();
+    // A get for a missing project is intentionally denied by the ownership
+    // rules because there is no resource owner to authorize yet. New browser
+    // projects must therefore go straight to create; cloud-backed projects can
+    // safely read their existing timestamps and subcollections before update.
+    const shouldLoadExisting = knownExisting || project.cloudBacked === true;
+    const snapshot = shouldLoadExisting ? await reference.get() : null;
+    const projectExists = snapshot?.exists === true;
     const payload = projectForCloud(
       project,
-      snapshot.exists ? snapshot.data().ownerUid : user.uid,
+      projectExists ? snapshot.data().ownerUid : user.uid,
     );
 
     if (isDocumentProject(project)) {
       const serverTimestamp =
         window.firebase.firestore.FieldValue.serverTimestamp();
-      const previousData = snapshot.exists ? snapshot.data() : null;
+      const previousData = projectExists ? snapshot.data() : null;
       const previousPageIds =
         previousData?.schemaVersion === 2 &&
         Array.isArray(previousData.pageOrder)
@@ -791,7 +797,7 @@ export function createStudioCloud({
           : [];
       const nextPageIds = new Set(payload.pageOrder);
 
-      if (!snapshot.exists) {
+      if (!projectExists) {
         await reference.set({
           ...payload,
           createdAt: serverTimestamp,
@@ -893,7 +899,7 @@ export function createStudioCloud({
       };
     }
 
-    if (snapshot.exists) {
+    if (projectExists) {
       await reference.update({
         name: payload.name,
         status: payload.status,

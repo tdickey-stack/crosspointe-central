@@ -68,6 +68,15 @@
         ]
       },
       {
+        "source": "/central-analytics.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/styles.css",
         "headers": [
           {

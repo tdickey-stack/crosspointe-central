@@ -82,6 +82,7 @@
         "Where can I see all the groups?",
         "Can you provide a directory of groups?",
         "Is there a place to see every small group?",
+        "What Sunday School classes do you have?",
         "What groups are currently meeting?",
         "When does a particular group meet?",
         "Where is a group located?"
@@ -92,13 +93,16 @@
         "list of groups",
         "see every small group",
         "place to view groups",
+        "Sunday School classes",
+        "Campus Groups filter",
         "current groups",
         "meeting time",
         "location",
         "small-groups"
       ],
       "requiredFacts": [
-        "The public Pointe Group directory is the approved live source for current group names, descriptions, intended audiences, meeting days, meeting times, public locations, and other changing information."
+        "The public Pointe Group directory is the approved live source for current group names, descriptions, intended audiences, meeting days, meeting times, public locations, and other changing information.",
+        "Current Sunday School options are listed in the directory under the Campus Groups type."
       ],
       "approvedLinks": [
         {
@@ -118,6 +122,9 @@
           "current status"
         ]
       },
+      "requiredActions": [
+        "For current Sunday School options, provide the Pointe Group Directory link and tell the person to select Campus Groups under the All Types filter."
+      ],
       "prohibitedClaims": [
         "Do not invent schedules.",
         "Do not use an older newsletter, announcement, or social-media post when current directory information is available."

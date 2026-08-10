@@ -2,9 +2,9 @@ import {toCanvas} from "html-to-image";
 import {jsPDF} from "jspdf";
 
 const EVENT_EXPORT_SIZES = {
-  square: {width: 2160, height: 2160, label: "1x1"},
-  portrait: {width: 2160, height: 2700, label: "4x5"},
-  screen: {width: 3840, height: 2160, label: "16x9"},
+  square: {width: 1080, height: 1080, label: "1x1"},
+  portrait: {width: 1080, height: 1350, label: "4x5"},
+  screen: {width: 1920, height: 1080, label: "16x9"},
 };
 
 function safeFilename(value, fallback) {
@@ -18,6 +18,14 @@ function safeFilename(value, fallback) {
 }
 
 async function waitForFonts() {
+  if (window.CENTRAL_STUDIO_FONT_CSS_READY) {
+    await window.CENTRAL_STUDIO_FONT_CSS_READY;
+    if (window.CENTRAL_STUDIO_FONT_CSS_ERROR) {
+      throw new Error(
+        "Studio could not load the approved fonts. Check your connection and try again.",
+      );
+    }
+  }
   if (document.fonts && document.fonts.ready) {
     await document.fonts.ready;
   }
@@ -67,6 +75,16 @@ async function waitForStableLayout(elements, maxFrames = 8) {
       stableFrames = 0;
     }
   }
+}
+
+async function waitForPreparedBrandMarks(element, maxFrames = 120) {
+  for (let frame = 0; frame < maxFrames; frame += 1) {
+    if (!element.querySelector("[data-studio-brand-pending]")) return;
+    await nextLayoutFrame();
+  }
+  throw new Error(
+    "The selected CrossPointe logo is still preparing. Please try the export again.",
+  );
 }
 
 function loadImage(dataUrl) {
@@ -127,6 +145,7 @@ async function renderExactPng(element, width, height) {
   }
 
   await waitForFonts();
+  await waitForPreparedBrandMarks(element);
   const bounds = element.getBoundingClientRect();
   if (!bounds.width || !bounds.height) {
     throw new Error("The Studio preview has no measurable export size.");
@@ -191,7 +210,11 @@ async function prepareDirectoryImages(element, resolvePlanningCenterImage) {
   return () => restorers.reverse().forEach((restore) => restore());
 }
 
-export async function exportEventPng(project, element) {
+export async function exportEventPng(
+  project,
+  element,
+  {filenameBase = ""} = {},
+) {
   const format = project?.content?.format || "square";
   const size = EVENT_EXPORT_SIZES[format] || EVENT_EXPORT_SIZES.square;
   const restoreBackground = await useHighResolutionBackground(
@@ -201,7 +224,9 @@ export async function exportEventPng(project, element) {
   );
   try {
     const png = await renderExactPng(element, size.width, size.height);
-    const filename = `${safeFilename(project?.name, "event-promotion")}-${size.label}.png`;
+    const filename = filenameBase
+      ? `${filenameBase}.png`
+      : `${safeFilename(project?.name, "event-promotion")}-${size.label}.png`;
     downloadDataUrl(png, filename);
     return {filename, width: size.width, height: size.height};
   } finally {
@@ -209,9 +234,15 @@ export async function exportEventPng(project, element) {
   }
 }
 
-export async function exportPolicyPdf(project, element) {
+export async function exportPolicyPdf(
+  project,
+  element,
+  {filenameBase = ""} = {},
+) {
   const png = await renderExactPng(element, 2040, 2640);
-  const filename = `${safeFilename(project?.name, "policy-document")}.pdf`;
+  const filename = filenameBase
+    ? `${filenameBase}.pdf`
+    : `${safeFilename(project?.name, "policy-document")}.pdf`;
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "in",
@@ -231,7 +262,7 @@ export async function exportPolicyPdf(project, element) {
 export async function exportDocumentPdf(
   project,
   elements,
-  {resolvePlanningCenterImage} = {},
+  {resolvePlanningCenterImage, filenameBase = ""} = {},
 ) {
   const pageElements = Array.isArray(elements) ? elements : [];
   if (
@@ -245,7 +276,9 @@ export async function exportDocumentPdf(
 
   await waitForFonts();
   await waitForStableLayout(pageElements);
-  const filename = `${safeFilename(project?.name, "studio-document")}.pdf`;
+  const filename = filenameBase
+    ? `${filenameBase}.pdf`
+    : `${safeFilename(project?.name, "studio-document")}.pdf`;
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "in",
@@ -325,6 +358,7 @@ export async function openDocumentSystemPrint(
     throw error;
   });
   try {
+    await waitForFonts();
     const printDocument = printWindow.document;
     printDocument.open();
     printDocument.write(
@@ -369,6 +403,15 @@ export async function openDocumentSystemPrint(
       }
     `;
     printDocument.head.appendChild(style);
+
+    const studioFontCss = document.getElementById(
+      "studio-web-fonts",
+    )?.textContent;
+    if (studioFontCss) {
+      const fontStyle = printDocument.createElement("style");
+      fontStyle.textContent = studioFontCss;
+      printDocument.head.appendChild(fontStyle);
+    }
 
     const stylesheetUrls = Array.from(
       document.querySelectorAll('link[rel="stylesheet"]'),

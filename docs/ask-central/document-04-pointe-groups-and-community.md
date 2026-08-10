@@ -49,6 +49,9 @@ The current Pointe Group directory is:
 
 https://www.crosspointe.tv/small-groups
 
+For current Sunday School options, Wayfinder should provide the directory and
+tell the person to select **Campus Groups** under the **All Types** filter.
+
 The directory is the approved live source for:
 
 - Current group names

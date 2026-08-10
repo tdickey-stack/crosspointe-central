@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from "react";
 import {focalMediaStyle, normalizeImageOpacity} from "./focal.js";
 import {
+  GRAPHIC_FONT_WEIGHT_OPTIONS,
   getBrandColor,
   getEventPalette,
   getEventFont,
@@ -10,11 +11,46 @@ import {
   textToLines,
 } from "./templates.js";
 
-function BrandMark({inverse = false}) {
+const BRAND_MARK_COLOR_HEX = {
+  white: "#ffffff",
+  charcoal: "#27272a",
+  red: "#ef3b2d",
+};
+
+function BrandMark({type = "central", color = "auto", usesDarkCopy = false}) {
+  const resolvedColor =
+    color === "auto" ? (usesDarkCopy ? "charcoal" : "white") : color;
+  const colorHex = BRAND_MARK_COLOR_HEX[resolvedColor] || BRAND_MARK_COLOR_HEX.white;
+
+  if (["heart", "full"].includes(type)) {
+    const source =
+      type === "full" && resolvedColor === "white"
+        ? "/studio-assets/crosspointe-full-white.png"
+        : type === "full"
+          ? "/studio-assets/crosspointe-full-grey.png"
+          : "/studio-assets/crosspointe-heart-grey.png";
+    return (
+      <div
+        className={`studio-preview-brand is-official is-${type}`}
+        aria-label={
+          type === "heart" ? "CrossPointe heart logo" : "CrossPointe full logo"
+        }
+      >
+        <PreparedBrandImage source={source} color={colorHex} />
+      </div>
+    );
+  }
+
   return (
-    <div className={`studio-preview-brand${inverse ? " is-inverse" : ""}`}>
+    <div
+      className="studio-preview-brand is-central"
+      style={{color: colorHex}}
+      aria-label="CrossPointe Central"
+    >
       <img src="/favicon.svg" alt="" />
-      <span>CROSSPOINTE</span>
+      <span>
+        CROSSPOINTE <b>CENTRAL</b>
+      </span>
     </div>
   );
 }
@@ -34,6 +70,7 @@ const CHECKLIST_DENSITY_CLASSES = [
   "is-density-maximum",
 ];
 const trimmedLogoSourceCache = new Map();
+const preparedBrandSourceCache = new Map();
 
 function transparentPixelBounds(pixelData, width, height) {
   let left = width;
@@ -157,6 +194,59 @@ async function trimTransparentLogoSource(source) {
 
   trimmedLogoSourceCache.set(source, cropPromise);
   return cropPromise;
+}
+
+async function prepareBrandSource(source, color) {
+  const cacheKey = `${source}|${color}`;
+  if (preparedBrandSourceCache.has(cacheKey)) {
+    return preparedBrandSourceCache.get(cacheKey);
+  }
+  const preparedSource = (async () => {
+    try {
+      const trimmedSource = await trimTransparentLogoSource(source);
+      const image = await loadLogoImage(trimmedSource || source);
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d", {alpha: true});
+      if (!context) return trimmedSource || source;
+      context.drawImage(image, 0, 0);
+      context.globalCompositeOperation = "source-in";
+      context.fillStyle = color;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png");
+    } catch (error) {
+      return source;
+    }
+  })();
+  preparedBrandSourceCache.set(cacheKey, preparedSource);
+  return preparedSource;
+}
+
+function PreparedBrandImage({source, color}) {
+  const [renderedSource, setRenderedSource] = useState("");
+
+  useEffect(() => {
+    let isCurrent = true;
+    setRenderedSource("");
+    prepareBrandSource(source, color).then((preparedSource) => {
+      if (isCurrent) setRenderedSource(preparedSource || source);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [source, color]);
+
+  return renderedSource ? (
+    <img
+      src={renderedSource}
+      alt=""
+      data-studio-brand-ready="true"
+      data-studio-brand-color={color}
+    />
+  ) : (
+    <span className="studio-preview-brand-loading" data-studio-brand-pending="true" />
+  );
 }
 
 function EventHeroLogo({source, name}) {
@@ -934,6 +1024,13 @@ const EVENT_EDITABLE_FIELDS = {
   cta: {label: "Call to action", maximum: 44},
 };
 
+const SOCIAL_EDITABLE_FIELDS = {
+  eyebrow: {label: "Context label", maximum: 30},
+  title: {label: "Main text", maximum: 220, multiline: true},
+  subtitle: {label: "Reference or attribution", maximum: 110},
+  cta: {label: "Footer text", maximum: 44},
+};
+
 function EditableEventText({
   as: Tag,
   children,
@@ -943,12 +1040,13 @@ function EditableEventText({
   onSelectField,
   selectedField,
   className = "",
+  fieldOptions = EVENT_EDITABLE_FIELDS,
 }) {
   if (!editorMode) {
     return <Tag className={className || undefined}>{children}</Tag>;
   }
 
-  const config = EVENT_EDITABLE_FIELDS[field];
+  const config = fieldOptions[field];
   const commitValue = (event) => {
     const rawValue = config.multiline
       ? event.currentTarget.innerText
@@ -998,6 +1096,167 @@ function EditableEventText({
   );
 }
 
+function SocialPostContent({
+  content,
+  editorMode,
+  selectedField,
+  onSelectField,
+  onEditField,
+  usesDarkCopy,
+}) {
+  const editableProps = {
+    editorMode,
+    fieldOptions: SOCIAL_EDITABLE_FIELDS,
+    onEditField,
+    onSelectField,
+    selectedField,
+  };
+  return (
+    <div className="event-graphic-layout social-post-layout">
+      <div className="event-graphic-copy social-post-copy">
+        <EditableEventText
+          as="span"
+          className="event-eyebrow social-post-eyebrow"
+          field="eyebrow"
+          {...editableProps}
+        >
+          {content.eyebrow}
+        </EditableEventText>
+        <EditableEventText
+          as="h2"
+          className="social-post-title"
+          field="title"
+          {...editableProps}
+        >
+          {content.title}
+        </EditableEventText>
+        <EditableEventText
+          as="p"
+          className="social-post-attribution"
+          field="subtitle"
+          {...editableProps}
+        >
+          {content.subtitle}
+        </EditableEventText>
+      </div>
+      <footer className="event-graphic-footer social-post-footer">
+        <BrandMark
+          type={content.brandMark}
+          color={content.brandColor}
+          usesDarkCopy={usesDarkCopy}
+        />
+        {content.cta ? (
+          <EditableEventText
+            as="span"
+            field="cta"
+            {...editableProps}
+          >
+            {content.cta}
+          </EditableEventText>
+        ) : null}
+      </footer>
+    </div>
+  );
+}
+
+const SMALL_GROUP_EDITABLE_FIELDS = {
+  eyebrow: {label: "Ministry label", maximum: 30},
+  title: {label: "Group name", maximum: 52},
+  subtitle: {label: "Leader names", maximum: 110},
+  date: {label: "Meeting day", maximum: 28},
+  time: {label: "Meeting time", maximum: 24},
+  location: {label: "Meeting location", maximum: 34},
+  cta: {label: "Directory prompt", maximum: 44},
+};
+
+function PointeGroupsMark() {
+  return (
+    <div className="pointe-groups-default-mark" aria-label="Pointe Groups">
+      <span className="pointe-groups-mark-symbol" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="pointe-groups-mark-copy">
+        <b>POINTE</b>
+        <strong>GROUPS</strong>
+      </span>
+    </div>
+  );
+}
+
+function SmallGroupLeaderContent({
+  content,
+  editorMode,
+  selectedField,
+  onSelectField,
+  onEditField,
+  usesDarkCopy,
+}) {
+  const editableProps = {
+    editorMode,
+    onEditField,
+    onSelectField,
+    selectedField,
+    fieldOptions: SMALL_GROUP_EDITABLE_FIELDS,
+  };
+  return (
+    <div className="small-group-leader-layout">
+      {!content.backgroundImage ? <PointeGroupsMark /> : null}
+      <div className="small-group-leader-info">
+        <EditableEventText
+          as="span"
+          className="small-group-leader-eyebrow"
+          field="eyebrow"
+          {...editableProps}
+        >
+          {content.eyebrow}
+        </EditableEventText>
+        <EditableEventText
+          as="h2"
+          className="small-group-leader-title"
+          field="title"
+          {...editableProps}
+        >
+          {content.title}
+        </EditableEventText>
+        <EditableEventText
+          as="p"
+          className="small-group-leader-names"
+          field="subtitle"
+          {...editableProps}
+        >
+          {content.subtitle}
+        </EditableEventText>
+        <div className="small-group-leader-meeting">
+          <EditableEventText as="strong" field="date" {...editableProps}>
+            {content.date}
+          </EditableEventText>
+          <span>
+            <EditableEventText as="b" field="time" {...editableProps}>
+              {content.time}
+            </EditableEventText>
+            {content.time && content.location ? <i aria-hidden="true">·</i> : null}
+            <EditableEventText as="b" field="location" {...editableProps}>
+              {content.location}
+            </EditableEventText>
+          </span>
+        </div>
+      </div>
+      <footer className="small-group-leader-footer">
+        <BrandMark
+          type={content.brandMark}
+          color={content.brandColor}
+          usesDarkCopy={usesDarkCopy}
+        />
+        <EditableEventText as="span" field="cta" {...editableProps}>
+          {content.cta}
+        </EditableEventText>
+      </footer>
+    </div>
+  );
+}
+
 export function EventPreview({
   content,
   previewRef,
@@ -1008,6 +1267,8 @@ export function EventPreview({
   onEditField = () => {},
 }) {
   const template = getTemplateById(templateId);
+  const isSocial = template.kind === "social";
+  const isSmallGroupLeader = template.variant === "small-group-leader";
   const displayFont = getEventFont(templateId, content.fontKey);
   const composition = normalizeEventComposition(
     templateId,
@@ -1026,6 +1287,9 @@ export function EventPreview({
     underlyingUsesDarkCopy &&
     (!content.backgroundImage || imageOpacity <= 0.45);
   const usesLogoHero = content.heroMode === "logo";
+  const selectedFontWeight = GRAPHIC_FONT_WEIGHT_OPTIONS.find(
+    (option) => option.value === content.fontWeight,
+  );
   let backgroundStyle;
 
   if (isFlat) {
@@ -1037,11 +1301,13 @@ export function EventPreview({
       ref={previewRef}
       className={[
         "studio-event-graphic",
+        isSocial ? "is-social-post" : "",
         `is-template-${template.variant || "signal-stack"}`,
         `is-${content.format || "square"}`,
         `is-${composition}`,
         `is-${content.palette || "charcoal-red"}`,
         `is-font-${content.fontKey || displayFont.value}`,
+        selectedFontWeight?.weight ? "has-global-font-weight" : "",
         `is-text-${content.textAlignment || "left"}`,
         content.backgroundImage ? "has-background-image" : "",
         content.textShadow ? "has-text-shadow" : "",
@@ -1055,6 +1321,7 @@ export function EventPreview({
       style={{
         ...backgroundStyle,
         "--event-display-font": `"${displayFont.family}"`,
+        "--event-global-font-weight": selectedFontWeight?.weight || undefined,
         "--event-logo-scale": Math.min(
           2,
           Math.max(0.5, Number(content.heroLogoScale) || 1),
@@ -1088,7 +1355,28 @@ export function EventPreview({
           aria-hidden="true"
         />
       ) : null}
-      <EventGraphicDecoration composition={composition} />
+      {!isSmallGroupLeader ? (
+        <EventGraphicDecoration composition={composition} />
+      ) : null}
+      {isSmallGroupLeader ? (
+        <SmallGroupLeaderContent
+          content={content}
+          editorMode={editorMode}
+          selectedField={selectedField}
+          onSelectField={onSelectField}
+          onEditField={onEditField}
+          usesDarkCopy={usesDarkCopy}
+        />
+      ) : isSocial ? (
+        <SocialPostContent
+          content={content}
+          editorMode={editorMode}
+          selectedField={selectedField}
+          onSelectField={onSelectField}
+          onEditField={onEditField}
+          usesDarkCopy={usesDarkCopy}
+        />
+      ) : (
       <div className="event-graphic-layout">
         <div className="event-graphic-copy">
         <EditableEventText
@@ -1176,7 +1464,11 @@ export function EventPreview({
         </span>
         </div>
         <footer className="event-graphic-footer">
-          <BrandMark inverse={!usesDarkCopy} />
+          <BrandMark
+            type={content.brandMark}
+            color={content.brandColor}
+            usesDarkCopy={usesDarkCopy}
+          />
           <EditableEventText
             as="span"
             editorMode={editorMode}
@@ -1189,6 +1481,7 @@ export function EventPreview({
           </EditableEventText>
         </footer>
       </div>
+      )}
     </article>
   );
 }

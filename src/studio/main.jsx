@@ -7,6 +7,10 @@ import {
   openDocumentSystemPrint,
 } from "./export.js";
 import {
+  CREATIVE_FILENAME_PREFERENCE_KEY,
+  buildCreativeFilename,
+} from "./creative-filename.js";
+import {
   normalizeFocalValue,
   normalizeImageOpacity,
   normalizeImageRotation,
@@ -29,6 +33,9 @@ import {
   BRAND_COLOR_OPTIONS,
   DOCUMENT_PAGE_TEMPLATES,
   EVENT_PALETTE_OPTIONS,
+  GRAPHIC_BRAND_COLOR_OPTIONS,
+  GRAPHIC_BRAND_MARK_OPTIONS,
+  GRAPHIC_FONT_WEIGHT_OPTIONS,
   STUDIO_STORAGE_KEY,
   TEMPLATE_CATALOG,
   createDocumentPage,
@@ -38,7 +45,8 @@ import {
   getProjectWarnings,
   getTemplateById,
   isDocumentProject,
-  isEventTemplateId,
+  isGraphicTemplateId,
+  isSocialTemplateId,
   linesToText,
   migrateLegacyStudioProject,
   normalizeEventComposition,
@@ -52,6 +60,9 @@ const EVENT_FORMAT_OPTIONS = [
   {value: "portrait", label: "4:5"},
   {value: "screen", label: "16:9"},
 ];
+const SOCIAL_FORMAT_OPTIONS = EVENT_FORMAT_OPTIONS.filter(
+  (option) => option.value !== "screen",
+);
 const EVENT_BLEND_OPTIONS = [
   {value: "multiply", label: "Multiply"},
   {value: "screen", label: "Screen"},
@@ -59,6 +70,30 @@ const EVENT_BLEND_OPTIONS = [
   {value: "soft-light", label: "Soft Light"},
 ];
 const EVENT_PANEL_TRANSITION_MS = 720;
+
+function loadCreativeFilenamePreference() {
+  try {
+    return window.localStorage.getItem(CREATIVE_FILENAME_PREFERENCE_KEY) === "true";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function useCreativeFilenamePreference() {
+  const [enabled, setEnabled] = useState(loadCreativeFilenamePreference);
+  const updateEnabled = (nextEnabled) => {
+    setEnabled(nextEnabled);
+    try {
+      window.localStorage.setItem(
+        CREATIVE_FILENAME_PREFERENCE_KEY,
+        String(nextEnabled),
+      );
+    } catch (_error) {
+      // Studio can still use the preference for this session when storage is blocked.
+    }
+  };
+  return [enabled, updateEnabled];
+}
 
 function getStudioPermission(userData) {
   const pageAccess =
@@ -266,7 +301,7 @@ function loadProjects() {
 function prepareProjectForStorage(project) {
   const stored = JSON.parse(JSON.stringify(project));
   if (
-    isEventTemplateId(stored.templateId) &&
+    isGraphicTemplateId(stored.templateId) &&
     stored.content &&
     String(stored.content.backgroundImage || "").startsWith("data:")
   ) {
@@ -420,7 +455,7 @@ function TemplateArtwork({templateId}) {
   const template = getTemplateById(templateId);
   const previewProject = useMemo(() => {
     const project = createStudioProject(templateId);
-    if (template.kind !== "event") return project;
+    if (!["event", "social"].includes(template.kind)) return project;
 
     return {
       ...project,
@@ -454,6 +489,55 @@ function TemplateArtwork({templateId}) {
   );
 }
 
+function StudioProjectRow({
+  project,
+  canCreate,
+  onOpen,
+  onDelete,
+  isCollapsedEnd = false,
+}) {
+  const template = getTemplateById(project.templateId);
+  const projectDetail = isDocumentProject(project)
+    ? `${project.pages?.length || 0} page${project.pages?.length === 1 ? "" : "s"}`
+    : template.name;
+
+  return (
+    <div
+      className={`studio-project-row${isCollapsedEnd ? " is-collapsed-end" : ""}`}
+    >
+      <button
+        className="studio-project-open"
+        onClick={() => onOpen(project.id)}
+      >
+        <span className={`studio-project-icon is-${template.accent}`}>
+          {template.shortName.charAt(0)}
+        </span>
+        <span className="studio-project-copy">
+          <strong>{project.name}</strong>
+          <small>
+            {projectDetail} · {project.shared ? "Shared with you · " : ""}
+            Updated {new Date(project.updatedAt).toLocaleDateString()}
+          </small>
+        </span>
+        <StatusPill>{project.status || "draft"}</StatusPill>
+        <span className="studio-project-arrow" aria-hidden="true">
+          →
+        </span>
+      </button>
+      {canCreate ? (
+        <button
+          className="studio-project-delete"
+          onClick={() => onDelete(project.id)}
+          aria-label={`${project.shared ? "Leave" : "Delete"} ${project.name}`}
+          title={project.shared ? "Leave shared project" : "Delete project"}
+        >
+          ×
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function StudioHome({
   projects,
   canCreate,
@@ -463,15 +547,18 @@ function StudioHome({
   cloudEnabled,
 }) {
   const [templateFilter, setTemplateFilter] = useState("all");
+  const [projectsExpanded, setProjectsExpanded] = useState(false);
   const sortedProjects = useMemo(
     () =>
       [...projects].sort(
         (a, b) =>
           new Date(b.updatedAt || 0).getTime() -
           new Date(a.updatedAt || 0).getTime(),
-      ),
+    ),
     [projects],
   );
+  const recentProjects = sortedProjects.slice(0, 3);
+  const additionalProjects = sortedProjects.slice(3);
   const visibleTemplates = useMemo(
     () =>
       TEMPLATE_CATALOG.filter(
@@ -500,6 +587,94 @@ function StudioHome({
         </div>
       </section>
 
+      <section className="studio-home-section studio-recent-projects-section">
+        <div className="studio-section-heading">
+          <div>
+            <span className="studio-kicker">YOUR WORK</span>
+            <h2>Recent projects</h2>
+          </div>
+          <span className="studio-browser-save-note">
+            {cloudEnabled
+              ? "Saved to each user’s Central Studio account"
+              : "Saved in this browser for local preview"}
+          </span>
+        </div>
+
+        {sortedProjects.length ? (
+          <>
+            <div
+              className={`studio-project-list${projectsExpanded ? " is-expanded" : ""}`}
+            >
+              {recentProjects.map((project, index) => (
+                <StudioProjectRow
+                  key={project.id}
+                  project={project}
+                  canCreate={canCreate}
+                  onOpen={onOpen}
+                  onDelete={onDelete}
+                  isCollapsedEnd={
+                    !projectsExpanded &&
+                    additionalProjects.length > 0 &&
+                    index === recentProjects.length - 1
+                  }
+                />
+              ))}
+              {additionalProjects.length ? (
+                <div
+                  id="studio-additional-projects"
+                  className={`studio-project-overflow${
+                    projectsExpanded ? " is-expanded" : ""
+                  }`}
+                  aria-hidden={projectsExpanded ? undefined : "true"}
+                  inert={!projectsExpanded}
+                >
+                  <div className="studio-project-overflow-inner">
+                    {additionalProjects.map((project) => (
+                      <StudioProjectRow
+                        key={project.id}
+                        project={project}
+                        canCreate={canCreate}
+                        onOpen={onOpen}
+                        onDelete={onDelete}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {additionalProjects.length ? (
+              <div className="studio-project-more-wrap">
+                <button
+                  type="button"
+                  className="studio-project-more-button"
+                  aria-expanded={projectsExpanded}
+                  aria-controls="studio-additional-projects"
+                  onClick={() => setProjectsExpanded((expanded) => !expanded)}
+                >
+                  <span>{projectsExpanded ? "Show Less" : "See More"}</span>
+                  <small>
+                    {additionalProjects.length} more project
+                    {additionalProjects.length === 1 ? "" : "s"}
+                  </small>
+                  <i aria-hidden="true">⌄</i>
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="studio-empty-projects">
+            <span>01</span>
+            <div>
+              <h3>Your first project starts below.</h3>
+              <p>
+                Choose a document, event graphic, or social post to open the
+                Studio workspace.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
       <section className="studio-home-section">
         <div className="studio-section-heading">
           <div>
@@ -520,6 +695,7 @@ function StudioHome({
             {value: "all", label: "All Templates"},
             {value: "document", label: "Documents"},
             {value: "event", label: "Event Graphics"},
+            {value: "social", label: "Social Posts"},
           ].map((filter) => (
             <button
               key={filter.value}
@@ -546,7 +722,7 @@ function StudioHome({
                   <StatusPill>{template.formats.join(" · ")}</StatusPill>
                 </div>
                 <p>{template.description}</p>
-                {template.kind === "event" ? (
+                {["event", "social"].includes(template.kind) ? (
                   <div
                     className="studio-template-fonts"
                     aria-label={`${template.name} font choices`}
@@ -572,81 +748,6 @@ function StudioHome({
             </article>
           ))}
         </div>
-      </section>
-
-      <section className="studio-home-section">
-        <div className="studio-section-heading">
-          <div>
-            <span className="studio-kicker">YOUR WORK</span>
-            <h2>Recent projects</h2>
-          </div>
-          <span className="studio-browser-save-note">
-            {cloudEnabled
-              ? "Saved to each user’s Central Studio account"
-              : "Saved in this browser for local preview"}
-          </span>
-        </div>
-
-        {sortedProjects.length ? (
-          <div className="studio-project-list">
-            {sortedProjects.map((project) => {
-              const template = getTemplateById(project.templateId);
-              const projectDetail = isDocumentProject(project)
-                ? `${project.pages?.length || 0} page${
-                    project.pages?.length === 1 ? "" : "s"
-                  }`
-                : template.name;
-              return (
-                <div
-                  className="studio-project-row"
-                  key={project.id}
-                >
-                  <button
-                    className="studio-project-open"
-                    onClick={() => onOpen(project.id)}
-                  >
-                    <span className={`studio-project-icon is-${template.accent}`}>
-                      {template.shortName.charAt(0)}
-                    </span>
-                    <span className="studio-project-copy">
-                      <strong>{project.name}</strong>
-                      <small>
-                        {projectDetail} · {project.shared ? "Shared with you · " : ""}
-                        Updated{" "}
-                        {new Date(project.updatedAt).toLocaleDateString()}
-                      </small>
-                    </span>
-                    <StatusPill>{project.status || "draft"}</StatusPill>
-                    <span className="studio-project-arrow" aria-hidden="true">
-                      →
-                    </span>
-                  </button>
-                  {canCreate ? (
-                    <button
-                      className="studio-project-delete"
-                      onClick={() => onDelete(project.id)}
-                      aria-label={`${project.shared ? "Leave" : "Delete"} ${project.name}`}
-                      title={project.shared ? "Leave shared project" : "Delete project"}
-                    >
-                      ×
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="studio-empty-projects">
-            <span>01</span>
-            <div>
-              <h3>Your first project starts above.</h3>
-              <p>
-                Choose a document or event graphic to open the Studio
-                workspace.
-              </p>
-            </div>
-          </div>
-        )}
       </section>
 
       <aside className="studio-print-mode-note">
@@ -1028,6 +1129,23 @@ const EVENT_TEXT_FIELD_OPTIONS = {
   cta: {label: "Call to action", maximum: 44},
 };
 
+const SOCIAL_TEXT_FIELD_OPTIONS = {
+  eyebrow: {label: "Context label", maximum: 30},
+  title: {label: "Main text", maximum: 220, multiline: true},
+  subtitle: {label: "Reference or attribution", maximum: 110},
+  cta: {label: "Footer text", maximum: 44},
+};
+
+const SMALL_GROUP_TEXT_FIELD_OPTIONS = {
+  eyebrow: {label: "Ministry label", maximum: 30},
+  title: {label: "Group name", maximum: 52},
+  subtitle: {label: "Leader names", maximum: 110, multiline: true},
+  date: {label: "Meeting day", maximum: 28},
+  time: {label: "Meeting time", maximum: 24},
+  location: {label: "Meeting location", maximum: 34},
+  cta: {label: "Directory prompt", maximum: 44},
+};
+
 function EventQuickToolbar({
   content,
   updateContent,
@@ -1037,6 +1155,9 @@ function EventQuickToolbar({
   activePanel,
   onPanelChange,
 }) {
+  const isSocial = isSocialTemplateId(templateId);
+  const template = getTemplateById(templateId);
+  const isSmallGroupLeader = template.variant === "small-group-leader";
   const alignment = content.textAlignment || "left";
   const fontOptions = getEventFontOptions(templateId);
   const compositionOptions = getEventCompositionOptions(templateId);
@@ -1044,7 +1165,12 @@ function EventQuickToolbar({
     templateId,
     content.composition,
   );
-  const selectedTextOption = EVENT_TEXT_FIELD_OPTIONS[selectedField];
+  const textFieldOptions = isSmallGroupLeader
+    ? SMALL_GROUP_TEXT_FIELD_OPTIONS
+    : isSocial
+      ? SOCIAL_TEXT_FIELD_OPTIONS
+      : EVENT_TEXT_FIELD_OPTIONS;
+  const selectedTextOption = textFieldOptions[selectedField];
   return (
     <div className="studio-event-toolbar-shell">
       {selectedTextOption ? (
@@ -1097,7 +1223,16 @@ function EventQuickToolbar({
         </div>
       ) : null}
 
-      <div className="studio-event-toolbar" aria-label="Event design controls">
+      <div
+        className="studio-event-toolbar"
+        aria-label={
+          isSocial
+            ? "Social post design controls"
+            : isSmallGroupLeader
+              ? "Small Group leader design controls"
+              : "Event design controls"
+        }
+      >
         <div className="studio-toolbar-selection">
           <span>{selectedTextOption ? "TEXT" : "CANVAS"}</span>
           <strong>
@@ -1105,22 +1240,24 @@ function EventQuickToolbar({
           </strong>
         </div>
 
-        <button
-          className={[
-            "studio-toolbar-tool",
-            activePanel === "hero" ? "is-active" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          type="button"
-          aria-expanded={activePanel === "hero"}
-          onClick={() =>
-            onPanelChange(activePanel === "hero" ? "" : "hero")
-          }
-        >
-          <span aria-hidden="true">◇</span>
-          Hero
-        </button>
+        {!isSocial && !isSmallGroupLeader ? (
+          <button
+            className={[
+              "studio-toolbar-tool",
+              activePanel === "hero" ? "is-active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            type="button"
+            aria-expanded={activePanel === "hero"}
+            onClick={() =>
+              onPanelChange(activePanel === "hero" ? "" : "hero")
+            }
+          >
+            <span aria-hidden="true">◇</span>
+            Hero
+          </button>
+        ) : null}
 
         <button
           className={[
@@ -1139,45 +1276,83 @@ function EventQuickToolbar({
           Background
         </button>
 
-        <div className="studio-toolbar-divider" aria-hidden="true" />
+        {!isSmallGroupLeader ? (
+          <div className="studio-toolbar-divider" aria-hidden="true" />
+        ) : null}
 
-        <div className="studio-toolbar-group is-alignment">
-          <span>Alignment · entire design</span>
-          {[
-            {value: "left", label: "Left", glyph: "≡"},
-            {value: "center", label: "Center", glyph: "≡"},
-            {value: "right", label: "Right", glyph: "≡"},
-          ].map((option) => (
+        {!isSmallGroupLeader ? (
+          <div className="studio-toolbar-group is-alignment">
+            <span>Alignment · entire design</span>
+            {[
+              {value: "left", label: "Left", glyph: "≡"},
+              {value: "center", label: "Center", glyph: "≡"},
+              {value: "right", label: "Right", glyph: "≡"},
+            ].map((option) => (
+              <button
+                key={option.value}
+                className={[
+                  alignment === option.value ? "is-active" : "",
+                  `is-${option.value}`,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                type="button"
+                aria-label={`Align all template text ${option.value}`}
+                aria-pressed={alignment === option.value}
+                onClick={() => updateContent({textAlignment: option.value})}
+              >
+                {option.glyph}
+              </button>
+            ))}
             <button
-              key={option.value}
-              className={[
-                alignment === option.value ? "is-active" : "",
-                `is-${option.value}`,
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              className={content.textShadow ? "is-active" : ""}
               type="button"
-              aria-label={`Align all template text ${option.value}`}
-              aria-pressed={alignment === option.value}
-              onClick={() => updateContent({textAlignment: option.value})}
+              aria-label="Toggle text drop shadow"
+              aria-pressed={Boolean(content.textShadow)}
+              title="Text drop shadow"
+              onClick={() => updateContent({textShadow: !content.textShadow})}
             >
-              {option.glyph}
+              S
             </button>
-          ))}
-          <button
-            className={content.textShadow ? "is-active" : ""}
-            type="button"
-            aria-label="Toggle text drop shadow"
-            aria-pressed={Boolean(content.textShadow)}
-            title="Text drop shadow"
-            onClick={() => updateContent({textShadow: !content.textShadow})}
-          >
-            S
-          </button>
-        </div>
+          </div>
+        ) : null}
 
         <label>
-          <span>Title font</span>
+          <span>Brand mark</span>
+          <select
+            value={content.brandMark || "central"}
+            onChange={(event) => updateContent({brandMark: event.target.value})}
+          >
+            {GRAPHIC_BRAND_MARK_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Brand color</span>
+          <select
+            value={content.brandColor || "auto"}
+            onChange={(event) => updateContent({brandColor: event.target.value})}
+          >
+            {GRAPHIC_BRAND_COLOR_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>
+            {isSocial
+              ? "Message font"
+              : isSmallGroupLeader
+                ? "Group font"
+                : "Title font"}
+          </span>
           <select
             value={content.fontKey || fontOptions[0]?.value || "montserrat"}
             onChange={(event) => updateContent({fontKey: event.target.value})}
@@ -1191,12 +1366,12 @@ function EventQuickToolbar({
         </label>
 
         <label>
-          <span>Ratio</span>
+          <span>Global weight</span>
           <select
-            value={content.format || "square"}
-            onChange={(event) => updateContent({format: event.target.value})}
+            value={content.fontWeight || "template"}
+            onChange={(event) => updateContent({fontWeight: event.target.value})}
           >
-            {EVENT_FORMAT_OPTIONS.map((option) => (
+            {GRAPHIC_FONT_WEIGHT_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -1204,21 +1379,46 @@ function EventQuickToolbar({
           </select>
         </label>
 
-        <label>
-          <span>Composition</span>
-          <select
-            value={selectedComposition}
-            onChange={(event) =>
-              updateContent({composition: event.target.value})
-            }
-          >
-            {compositionOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isSmallGroupLeader ? (
+          <div className="studio-toolbar-fixed-value">
+            <span>Ratio</span>
+            <strong>16:9</strong>
+          </div>
+        ) : (
+          <label>
+            <span>Ratio</span>
+            <select
+              value={content.format || "square"}
+              onChange={(event) => updateContent({format: event.target.value})}
+            >
+              {(isSocial ? SOCIAL_FORMAT_OPTIONS : EVENT_FORMAT_OPTIONS).map(
+                (option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+        )}
+
+        {!isSmallGroupLeader ? (
+          <label>
+            <span>Composition</span>
+            <select
+              value={selectedComposition}
+              onChange={(event) =>
+                updateContent({composition: event.target.value})
+              }
+            >
+              {compositionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         {!["flat", "color-overlay"].includes(selectedComposition) ? (
           <label>
@@ -2412,6 +2612,27 @@ function EventBrandStep({content, updateContent, templateId}) {
             Montserrat for clarity.
           </small>
         </div>
+        <SelectField
+          label="Global font weight"
+          value={content.fontWeight || "template"}
+          onChange={(fontWeight) => updateContent({fontWeight})}
+          options={GRAPHIC_FONT_WEIGHT_OPTIONS}
+          hint="Applies one weight to every text element in the graphic."
+        />
+        <SelectField
+          label="Brand mark"
+          value={content.brandMark || "central"}
+          onChange={(brandMark) => updateContent({brandMark})}
+          options={GRAPHIC_BRAND_MARK_OPTIONS}
+          hint="Choose Central, the CrossPointe heart, or the full church logo."
+        />
+        <SelectField
+          label="Brand color"
+          value={content.brandColor || "auto"}
+          onChange={(brandColor) => updateContent({brandColor})}
+          options={GRAPHIC_BRAND_COLOR_OPTIONS}
+          hint="Auto Contrast switches between white and dark grey for legibility."
+        />
         <SelectField
           label="Text alignment"
           value={content.textAlignment || "left"}
@@ -3925,6 +4146,191 @@ function AddPageDialog({onAdd, onClose}) {
   );
 }
 
+function getCreativeFilenameDefaults(project) {
+  const template = getTemplateById(project.templateId);
+  const isUntitled = /^Untitled\b/i.test(String(project.name || "").trim());
+  const descriptionTemplate = isDocumentProject(project) && project.pages?.[0]
+    ? getTemplateById(project.pages[0].templateId)
+    : template;
+  const workType = template.kind === "social"
+    ? "SOCIAL"
+    : template.kind === "event"
+      ? "EVENT"
+      : "DOCUMENT";
+  return {
+    workType,
+    description: isUntitled ? descriptionTemplate.name : project.name,
+  };
+}
+
+function CreativeFilenameToggle({checked, onChange, compact = false}) {
+  return (
+    <label
+      className={`studio-creative-filename-toggle${compact ? " is-compact" : ""}`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="studio-creative-filename-switch" aria-hidden="true">
+        <i />
+      </span>
+      <span className="studio-creative-filename-copy">
+        <strong>Creative Team naming</strong>
+        <small>
+          {checked
+            ? "Studio will ask for naming details before export."
+            : "Use the standard project filename."}
+        </small>
+      </span>
+    </label>
+  );
+}
+
+function CreativeFilenameDialog({
+  project,
+  extension,
+  onClose,
+  onConfirm,
+}) {
+  const defaults = getCreativeFilenameDefaults(project);
+  const [contentId, setContentId] = useState("");
+  const [workType, setWorkType] = useState(defaults.workType);
+  const [description, setDescription] = useState(defaults.description);
+  const [version, setVersion] = useState(1);
+  const [error, setError] = useState("");
+  const exportDate = useMemo(() => new Date(), []);
+
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  const preview = useMemo(() => {
+    try {
+      return buildCreativeFilename({
+        contentId: contentId || "CONTENTID",
+        workType: workType || "WORKTYPE",
+        description,
+        version,
+        date: exportDate,
+      });
+    } catch (_error) {
+      return "CONTENTID_WORKTYPE_DESCRIPTION_YYYYMMDD_VXXX";
+    }
+  }, [contentId, description, exportDate, version, workType]);
+
+  const submit = (event) => {
+    event.preventDefault();
+    try {
+      const filename = buildCreativeFilename({
+        contentId,
+        workType,
+        description,
+        version,
+        date: exportDate,
+      });
+      setError("");
+      onConfirm(filename);
+    } catch (nextError) {
+      setError(nextError.message || "Complete the required filename details.");
+    }
+  };
+
+  return (
+    <div
+      className="studio-page-dialog-backdrop studio-creative-filename-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="studio-page-dialog studio-creative-filename-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="studio-creative-filename-title"
+      >
+        <div className="studio-page-dialog-heading">
+          <div>
+            <span className="studio-kicker">CREATIVE TEAM EXPORT</span>
+            <h2 id="studio-creative-filename-title">Name this file</h2>
+            <p>
+              Studio formats the download as
+              CONTENTID_WORKTYPE_DESCRIPTION_YYYYMMDD_VXXX.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close filename dialog">
+            ×
+          </button>
+        </div>
+        <form className="studio-creative-filename-form" onSubmit={submit}>
+          <label className="studio-field">
+            <span>Content ID</span>
+            <input
+              autoFocus
+              required
+              value={contentId}
+              maxLength="48"
+              placeholder="2417"
+              onChange={(event) => setContentId(event.target.value)}
+            />
+          </label>
+          <label className="studio-field">
+            <span>Work Type</span>
+            <input
+              required
+              value={workType}
+              maxLength="48"
+              placeholder="SOCIAL"
+              onChange={(event) => setWorkType(event.target.value)}
+            />
+            <small>Free-form until the official Work Type list is added.</small>
+          </label>
+          <label className="studio-field is-wide">
+            <span>Description <i>OPTIONAL</i></span>
+            <input
+              value={description}
+              maxLength="100"
+              placeholder="EASTER INVITE"
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </label>
+          <label className="studio-field">
+            <span>Version</span>
+            <input
+              type="number"
+              required
+              min="1"
+              max="999"
+              step="1"
+              value={version}
+              onChange={(event) => setVersion(event.target.value)}
+            />
+          </label>
+          <div className="studio-creative-filename-preview">
+            <span>DOWNLOAD NAME</span>
+            <strong>{preview}.{extension}</strong>
+          </div>
+          {error ? <p className="studio-creative-filename-error" role="alert">{error}</p> : null}
+          <div className="studio-creative-filename-actions">
+            <button className="studio-button is-secondary" type="button" onClick={onClose}>
+              Cancel
+            </button>
+            <button className="studio-button is-primary" type="submit">
+              Export {extension.toUpperCase()}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function DocumentEditor({
   project,
   onChange,
@@ -3936,6 +4342,9 @@ function DocumentEditor({
 }) {
   const [activePageId, setActivePageId] = useState(project.pages?.[0]?.id || "");
   const [showPagePicker, setShowPagePicker] = useState(false);
+  const [showFilenameDialog, setShowFilenameDialog] = useState(false);
+  const [creativeFilenameEnabled, setCreativeFilenameEnabled] =
+    useCreativeFilenamePreference();
   const [exportState, setExportState] = useState({status: "", message: ""});
   const exportPageRefs = useRef(new Map());
   const printPagesRef = useRef(null);
@@ -4004,13 +4413,15 @@ function DocumentEditor({
     ];
     updateProject({pages: nextPages});
   };
-  const exportPdf = async () => {
+  const exportPdf = async (filenameBase = "") => {
+    setShowFilenameDialog(false);
     setExportState({status: "working", message: "Preparing every page…"});
     try {
       const elements = pages.map((page) => exportPageRefs.current.get(page.id));
       const result = await exportDocumentPdf(project, elements, {
         resolvePlanningCenterImage: (cloud || unsplash)
           ?.resolvePlanningCenterImage,
+        filenameBase,
       });
       setExportState({
         status: "success",
@@ -4024,6 +4435,13 @@ function DocumentEditor({
         message: error.message || "Studio could not export this document.",
       });
     }
+  };
+  const requestPdfExport = () => {
+    if (creativeFilenameEnabled) {
+      setShowFilenameDialog(true);
+      return;
+    }
+    exportPdf();
   };
   const systemPrint = async () => {
     setExportState({status: "working", message: "Preparing System Print…"});
@@ -4059,7 +4477,7 @@ function DocumentEditor({
             className="studio-button is-primary"
             type="button"
             disabled={warnings.length > 0 || exportState.status === "working"}
-            onClick={exportPdf}
+            onClick={requestPdfExport}
           >
             {exportState.status === "working" ? "Preparing PDF…" : "Export PDF"}
           </button>
@@ -4084,6 +4502,13 @@ function DocumentEditor({
             Finish for Now
           </button>
         </div>
+      </div>
+
+      <div className="studio-document-filename-preference">
+        <CreativeFilenameToggle
+          checked={creativeFilenameEnabled}
+          onChange={setCreativeFilenameEnabled}
+        />
       </div>
 
       {exportState.message ? (
@@ -4280,6 +4705,14 @@ function DocumentEditor({
           onClose={() => setShowPagePicker(false)}
         />
       ) : null}
+      {showFilenameDialog ? (
+        <CreativeFilenameDialog
+          project={project}
+          extension="pdf"
+          onClose={() => setShowFilenameDialog(false)}
+          onConfirm={exportPdf}
+        />
+      ) : null}
     </main>
   );
 }
@@ -4300,6 +4733,88 @@ function EventToolSideSheet({eyebrow, title, label, onClose, children}) {
         </button>
       </div>
       <div className="studio-event-sheet-content">{children}</div>
+    </aside>
+  );
+}
+
+function SocialProjectBriefSheet({project, updateProject, onClose}) {
+  return (
+    <aside className="studio-event-side-sheet" aria-label="Project brief">
+      <div className="studio-event-sheet-header">
+        <div>
+          <span>PROJECT BRIEF</span>
+          <h2>Frame the message</h2>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close project brief">
+          ×
+        </button>
+      </div>
+      <div className="studio-event-sheet-content">
+        <p className="studio-event-sheet-intro">
+          Social Posts keep the message simple: a short scripture, quote, or
+          statement; a controlled composition; and the fixed CrossPointe brand
+          mark. Click the text directly on the canvas to edit it.
+        </p>
+        <InputField
+          label="Project name"
+          value={project.name}
+          maxLength={80}
+          wide
+          onChange={(name) => updateProject({name})}
+          hint="This identifies the project in Studio and does not appear on the post."
+        />
+        <div className="studio-event-brief-summary">
+          <div>
+            <span>Template</span>
+            <strong>{getTemplateById(project.templateId).name}</strong>
+          </div>
+          <div>
+            <span>Source</span>
+            <strong>Manual social copy</strong>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function GraphicDocumentBriefSheet({project, updateProject, onClose}) {
+  return (
+    <aside className="studio-event-side-sheet" aria-label="Project brief">
+      <div className="studio-event-sheet-header">
+        <div>
+          <span>PROJECT BRIEF</span>
+          <h2>Introduce the group</h2>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close project brief">
+          ×
+        </button>
+      </div>
+      <div className="studio-event-sheet-content">
+        <p className="studio-event-sheet-intro">
+          This 16:9 Directory graphic keeps the CrossPointe logo at bottom left
+          and the group name, leaders, and meeting details at top right. Use the
+          built-in Pointe Groups background or add a leader photo.
+        </p>
+        <InputField
+          label="Project name"
+          value={project.name}
+          maxLength={80}
+          wide
+          onChange={(name) => updateProject({name})}
+          hint="This identifies the project in Studio and does not appear on the graphic."
+        />
+        <div className="studio-event-brief-summary">
+          <div>
+            <span>Template</span>
+            <strong>{getTemplateById(project.templateId).name}</strong>
+          </div>
+          <div>
+            <span>Output</span>
+            <strong>16:9 Small Group Directory</strong>
+          </div>
+        </div>
+      </div>
     </aside>
   );
 }
@@ -4615,6 +5130,8 @@ function EventReviewSheet({
   project,
   warnings,
   exportState,
+  creativeFilenameEnabled,
+  onCreativeFilenameChange,
   onClose,
   onExport,
 }) {
@@ -4674,6 +5191,11 @@ function EventReviewSheet({
             </>
           )}
         </div>
+        <CreativeFilenameToggle
+          checked={creativeFilenameEnabled}
+          onChange={onCreativeFilenameChange}
+          compact
+        />
         <button
           className="studio-button is-primary studio-event-sheet-export"
           type="button"
@@ -4716,12 +5238,17 @@ function EventStudioEditor({
     project.name.startsWith("Untitled ") ? "brief" : "",
   );
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
+  const [showFilenameDialog, setShowFilenameDialog] = useState(false);
+  const [creativeFilenameEnabled, setCreativeFilenameEnabled] =
+    useCreativeFilenamePreference();
   const [exportState, setExportState] = useState({status: "", message: ""});
   const previewElementRef = useRef(null);
   const workspacePanelFrameRef = useRef(null);
   const workspacePanelTimerRef = useRef(null);
   const warnings = getProjectWarnings(project);
   const template = getTemplateById(project.templateId);
+  const isSocial = template.kind === "social";
+  const isGraphicDocument = template.editorKind === "graphic";
   const formatLabel =
     project.content.format === "screen"
       ? "16:9"
@@ -4784,7 +5311,8 @@ function EventStudioEditor({
     return () => window.removeEventListener("keydown", closeTransientUi);
   }, []);
 
-  const runExport = async () => {
+  const runExport = async (filenameBase = "") => {
+    setShowFilenameDialog(false);
     setSelectedField("");
     setActivePanel("");
     setMenuOpen(false);
@@ -4799,7 +5327,9 @@ function EventStudioEditor({
           window.requestAnimationFrame(resolve),
         ),
       );
-      const result = await exportEventPng(project, previewElementRef.current);
+      const result = await exportEventPng(project, previewElementRef.current, {
+        filenameBase,
+      });
       setExportState({
         status: "success",
         message: `${result.filename} was downloaded at ${result.width} × ${result.height}px.`,
@@ -4813,9 +5343,19 @@ function EventStudioEditor({
       });
     }
   };
+  const requestExport = () => {
+    if (creativeFilenameEnabled) {
+      setMenuOpen(false);
+      setShowFilenameDialog(true);
+      return;
+    }
+    runExport();
+  };
 
   return (
-    <main className="studio-event-editor">
+    <main
+      className={`studio-event-editor${isSocial ? " is-social-editor" : ""}`}
+    >
       <header className="studio-event-editor-topbar">
         <div className="studio-event-editor-menu-area">
           <div className="studio-event-menu-wrap">
@@ -4872,7 +5412,7 @@ function EventStudioEditor({
                   type="button"
                   role="menuitem"
                   disabled={warnings.length > 0 || exportState.status === "working"}
-                  onClick={runExport}
+                  onClick={requestExport}
                 >
                   <span aria-hidden="true">↓</span>
                   Export PNG
@@ -4941,7 +5481,7 @@ function EventStudioEditor({
                 ? "Open Review checks to resolve export warnings."
                 : "Export a high-resolution PNG."
             }
-            onClick={runExport}
+            onClick={requestExport}
           >
             {exportState.status === "working" ? "Exporting…" : "Export PNG"}
           </button>
@@ -4964,7 +5504,7 @@ function EventStudioEditor({
             .filter(Boolean)
             .join(" ")}
         >
-          {renderedWorkspacePanel === "hero" ? (
+          {renderedWorkspacePanel === "hero" && !isSocial && !isGraphicDocument ? (
             <EventToolSideSheet
               eyebrow="HERO"
               title="Text or event logo"
@@ -4997,20 +5537,36 @@ function EventStudioEditor({
             </EventToolSideSheet>
           ) : null}
           {renderedWorkspacePanel === "brief" ? (
-            <EventProjectBriefSheet
-              project={project}
-              updateProject={updateProject}
-              services={cloud || unsplash}
-              onClose={() => setSideSheet("")}
-            />
+            isGraphicDocument ? (
+              <GraphicDocumentBriefSheet
+                project={project}
+                updateProject={updateProject}
+                onClose={() => setSideSheet("")}
+              />
+            ) : isSocial ? (
+              <SocialProjectBriefSheet
+                project={project}
+                updateProject={updateProject}
+                onClose={() => setSideSheet("")}
+              />
+            ) : (
+              <EventProjectBriefSheet
+                project={project}
+                updateProject={updateProject}
+                services={cloud || unsplash}
+                onClose={() => setSideSheet("")}
+              />
+            )
           ) : null}
           {renderedWorkspacePanel === "review" ? (
             <EventReviewSheet
               project={project}
               warnings={warnings}
               exportState={exportState}
+              creativeFilenameEnabled={creativeFilenameEnabled}
+              onCreativeFilenameChange={setCreativeFilenameEnabled}
               onClose={() => setSideSheet("")}
-              onExport={runExport}
+              onExport={requestExport}
             />
           ) : null}
         </div>
@@ -5071,6 +5627,14 @@ function EventStudioEditor({
           }
         }}
       />
+      {showFilenameDialog ? (
+        <CreativeFilenameDialog
+          project={project}
+          extension="png"
+          onClose={() => setShowFilenameDialog(false)}
+          onConfirm={runExport}
+        />
+      ) : null}
     </main>
   );
 }

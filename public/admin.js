@@ -4265,10 +4265,11 @@
           renderAdmin_();
         }
       } else if (field.indexOf("sunday.") === 0) {
-        updateSundayDraftField_(
-            field.replace("sunday.", ""),
-            nextValue,
-        );
+        var sundayFieldName = field.replace("sunday.", "");
+        updateSundayDraftField_(sundayFieldName, nextValue);
+        if (sundayFieldName === "date_override_enabled") {
+          renderAdmin_();
+        }
       }
       return;
     }
@@ -9127,7 +9128,7 @@
       renderStatusPill_("Published workflow", "is-live"),
       "</div>",
       renderAdminNote_(
-          "Update the sermon details shown on the Sunday page. The date automatically starts with the next Sunday, and optional fields stay hidden when left blank.",
+          "Update the sermon details shown on the Sunday page. The date automatically stays on the current or upcoming Sunday unless you turn on a temporary override.",
       ),
       adminState.sundayLoading ?
         renderAdminNote_("Loading the current Sunday values.") :
@@ -9173,13 +9174,22 @@
         escapeHtml_(adminState.sundayError) +
         "</p>" :
         "",
+      renderAdminCheckboxField_({
+        label: "Override automatic Sunday date",
+        hint: "Turn this on only when the Sunday page needs to show a different date.",
+        field: "sunday.date_override_enabled",
+        checked: draft.date_override_enabled,
+        disabled: !canEdit,
+      }),
       "<div class=\"central-admin-form-grid\">",
       renderAdminInputField_({
-        label: "Sunday Date",
+        label: draft.date_override_enabled ?
+          "Sunday Date Override" :
+          "Automatic Sunday Date",
         field: "sunday.date_iso",
         value: draft.date_iso,
         type: "date",
-        disabled: !canEdit,
+        disabled: !canEdit || !draft.date_override_enabled,
       }),
       renderAdminInputField_({
         label: "Series",
@@ -14542,6 +14552,13 @@
       return {
         label: "Sunday sermon details",
         fields: [
+          {
+            key: "date_override_enabled",
+            label: "Date override",
+            type: "boolean",
+            trueLabel: "Manual date",
+            falseLabel: "Automatic date",
+          },
           {key: "date_iso", label: "Date", type: "date"},
           {key: "series", label: "Series"},
           {key: "sermon_title", label: "Sermon title"},
@@ -16986,6 +17003,7 @@
 
   function createEmptySundayDraft_() {
     return {
+      date_override_enabled: false,
       date_iso: getDefaultSundayDateInputValue_(),
       series: "",
       sermon_title: "",
@@ -17296,12 +17314,19 @@
 
   function normalizeSundayData_(data) {
     var source = data || {};
+    var dateOverrideEnabled = normalizeAdminBooleanValue_(
+        source.date_override_enabled,
+        false,
+    );
     var dateValue = normalizeSundayDateInputValue_(
         source.date_iso || source.date,
     );
 
     return {
-      date_iso: dateValue || getDefaultSundayDateInputValue_(),
+      date_override_enabled: dateOverrideEnabled,
+      date_iso: dateOverrideEnabled && dateValue ?
+        dateValue :
+        getDefaultSundayDateInputValue_(),
       series: String(source.series || "").trim(),
       sermon_title: String(source.sermon_title || "").trim(),
       speaker: String(source.speaker || "").trim(),
@@ -17314,6 +17339,7 @@
     var normalized = normalizeSundayData_(data);
 
     return {
+      date_override_enabled: normalized.date_override_enabled,
       date_iso: normalized.date_iso,
       date: formatSundayDisplayDate_(normalized.date_iso),
       series: normalized.series,
@@ -17977,8 +18003,9 @@
       return;
     }
 
-    if (!payload.date_iso) {
-      adminState.sundayError = "Choose the Sunday date before continuing.";
+    if (payload.date_override_enabled && !payload.date_iso) {
+      adminState.sundayError =
+        "Choose the Sunday override date before continuing.";
       renderAdmin_();
       return;
     }

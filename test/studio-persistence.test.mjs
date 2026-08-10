@@ -14,9 +14,42 @@ import {
 } from "../src/studio/planning-center-events.js";
 import {
   EVENT_PALETTE_OPTIONS,
+  GRAPHIC_BRAND_COLOR_OPTIONS,
+  GRAPHIC_BRAND_MARK_OPTIONS,
+  GRAPHIC_FONT_WEIGHT_OPTIONS,
+  TEMPLATE_CATALOG,
   createStudioProject,
+  getEventCompositionOptions,
+  getEventFontOptions,
   getEventPalette,
+  getProjectWarnings,
+  isGraphicTemplateId,
+  isSocialTemplateId,
 } from "../src/studio/templates.js";
+
+test("Small Group Leader is a 16:9 document graphic with background support", () => {
+  const template = TEMPLATE_CATALOG.find(
+    (item) => item.id === "document-small-group-leader",
+  );
+  const project = createStudioProject(template.id);
+
+  assert.equal(template.kind, "document");
+  assert.equal(template.editorKind, "graphic");
+  assert.deepEqual(template.formats, ["16:9"]);
+  assert.equal(isGraphicTemplateId(template.id), true);
+  assert.equal(project.projectKind, "graphic");
+  assert.equal(project.content.format, "screen");
+  assert.equal(project.content.composition, "groups-gradient");
+  assert.equal(project.content.brandMark, "central");
+  assert.equal(project.content.cta, "FIND YOUR PLACE");
+  assert.deepEqual(getProjectWarnings(project), []);
+
+  const payload = projectForCloud(project, "studio-admin");
+  assert.equal(payload.templateId, template.id);
+  assert.equal(payload.sourceType, "manual");
+  assert.equal(payload.content.format, "screen");
+  assert.equal(payload.content.heroMode, "text");
+});
 
 function eventProject() {
   return {
@@ -25,6 +58,90 @@ function eventProject() {
     name: "Legacy Browser Project",
   };
 }
+
+test("Social Posts expose three focused templates and mobile-first formats", () => {
+  const socialTemplates = TEMPLATE_CATALOG.filter(
+    (template) => template.kind === "social",
+  );
+
+  assert.deepEqual(
+    socialTemplates.map((template) => template.id),
+    ["social-scripture", "social-quote", "social-statement"],
+  );
+  socialTemplates.forEach((template) => {
+    assert.deepEqual(template.formats, ["1:1", "4:5"]);
+    assert.equal(isSocialTemplateId(template.id), true);
+    assert.ok(getEventFontOptions(template.id).length >= 3);
+    assert.ok(getEventCompositionOptions(template.id).length >= 4);
+  });
+});
+
+test("Social Posts use simple copy defaults and sanitize event-only data", () => {
+  const project = createStudioProject("social-scripture");
+
+  assert.equal(project.sourceType, "manual");
+  assert.equal(project.content.date, "");
+  assert.equal(project.content.time, "");
+  assert.equal(project.content.location, "");
+  assert.equal(project.content.heroMode, "text");
+  assert.deepEqual(getProjectWarnings(project), []);
+
+  project.sourceType = "planning-center";
+  project.sourceId = "100";
+  project.sourceEventId = "10";
+  project.content.format = "screen";
+  project.content.date = "SEPTEMBER 18";
+  project.content.heroMode = "logo";
+  project.content.heroLogoSource = "upload";
+  project.content.heroLogoStoragePath =
+    `studio-projects/${project.id}/logo.png`;
+  project.content.heroLogoName = "Event logo";
+
+  const payload = projectForCloud(project, "studio-admin");
+  assert.equal(payload.sourceType, "manual");
+  assert.equal(payload.content.format, "square");
+  assert.equal(payload.content.date, "");
+  assert.equal(payload.content.heroMode, "text");
+  assert.equal(payload.content.heroLogoSource, "");
+  assert.equal(payload.content.heroLogoStoragePath, "");
+  assert.equal(payload.content.heroLogoName, "");
+});
+
+test("graphics expose official brand marks, logo colors, and global font weights", () => {
+  const project = createStudioProject("social-quote");
+
+  assert.deepEqual(
+    GRAPHIC_BRAND_MARK_OPTIONS.map((option) => option.value),
+    ["central", "heart", "full"],
+  );
+  assert.deepEqual(
+    GRAPHIC_BRAND_COLOR_OPTIONS.map((option) => option.value),
+    ["auto", "white", "charcoal", "red"],
+  );
+  assert.deepEqual(
+    GRAPHIC_FONT_WEIGHT_OPTIONS.map((option) => option.value),
+    ["template", "thin", "light", "medium", "bold", "black"],
+  );
+  assert.equal(project.content.brandMark, "central");
+  assert.equal(project.content.brandColor, "auto");
+  assert.equal(project.content.fontWeight, "template");
+
+  project.content.brandMark = "heart";
+  project.content.brandColor = "red";
+  project.content.fontWeight = "black";
+  const payload = projectForCloud(project, "studio-admin");
+  assert.equal(payload.content.brandMark, "heart");
+  assert.equal(payload.content.brandColor, "red");
+  assert.equal(payload.content.fontWeight, "black");
+
+  project.content.brandMark = "unknown";
+  project.content.brandColor = "unknown";
+  project.content.fontWeight = "unknown";
+  const normalized = projectForCloud(project, "studio-admin");
+  assert.equal(normalized.content.brandMark, "central");
+  assert.equal(normalized.content.brandColor, "auto");
+  assert.equal(normalized.content.fontWeight, "template");
+});
 
 test("event palette catalog exposes distinct light options with dark copy", () => {
   const lightPalettes = EVENT_PALETTE_OPTIONS.filter(

@@ -32,6 +32,7 @@ var CENTRAL_REFRESH_MS = 1200000;
 var CENTRAL_EVENT_VISIBILITY_MS = 15000;
 var CENTRAL_API_URL = "/api/central-data";
 var CENTRAL_HOSTED_WHATS_NEW_URL = "/content/whats-new.json";
+var CAMPAIGN_CONTACT_ENDPOINT = "/api/campaigns/share-interest";
 var SERVE_NEED_INTEREST_ENDPOINT = "/api/serve-needs/share-interest";
 var EVENT_EDITOR_ACCESS_ENDPOINT = "/api/admin/events/access";
 var CENTRAL_CACHE_KEY = "central-data-cache-v4";
@@ -70,12 +71,14 @@ var SUNDAY_MODE_MODULE_DEFINITIONS = [
   {id: "resources", label: "Resources", defaultEnabled: false},
 ];
 var whatsNewEscapeHandler = null;
+var campaignContactEscapeHandler = null;
 var serveNeedInterestEscapeHandler = null;
 var eventDetailsEscapeHandler = null;
 var eventDetailsPreviousFocus = null;
 var eventDetailsCloseTimer = 0;
 var eventDetailItemsByKey = {};
 var eventDetailKeyCounter = 0;
+var campaignContactItemsByKey = {};
 var serveNeedInterestItemsByKey = {};
 var serveNeedInterestKeyCounter = 0;
 var youVersionReaderModulePromise = null;
@@ -963,8 +966,11 @@ function renderCentral(data) {
   teardownSundayStreamMiniPlayer_();
   teardownSundayScripture_();
   removeEventDetailsModal_();
+  closeCampaignContactModal_();
+  closeServeNeedInterestModal_();
   eventDetailItemsByKey = {};
   eventDetailKeyCounter = 0;
+  campaignContactItemsByKey = {};
   serveNeedInterestItemsByKey = {};
   serveNeedInterestKeyCounter = 0;
 
@@ -3209,10 +3215,16 @@ function renderRegistrations(items) {
 function renderRegistrationCard_(item, calendarIntegrationsEnabled) {
   var registrationUrl = String(item && item.registration_url || "").trim();
   if (!/^https?:\/\//i.test(registrationUrl)) return "";
+  var dateLabel = String(item && item.date || "").trim();
+  var closeDate = String(item && item.close_date || "").trim();
+
+  if (!dateLabel && closeDate) {
+    dateLabel = "Registration closes on " + closeDate;
+  }
 
   return card({
     title: item.title,
-    meta: [item.date, item.time, item.location].filter(Boolean).join(" • "),
+    meta: [dateLabel, item.time, item.location].filter(Boolean).join(" • "),
     description: "",
     preHeadingHtml: renderRegistrationStatus_(item),
     buttonHtml: renderEventDetailsButton_(item),
@@ -3602,6 +3614,8 @@ function getEventDateBadgeParts_(dateLabel) {
 }
 
 function renderCampaigns(items) {
+  campaignContactItemsByKey = {};
+
   if (!items || !items.length) return "";
 
   return section("Current Campaigns", "Church-Wide Focus", renderExpandableGroup({
@@ -3611,15 +3625,246 @@ function renderCampaigns(items) {
     moreLabel: "See More Campaigns",
     lessLabel: "See Less Campaigns",
     renderItem: function(item) {
-      return card({
-        title: item.title,
-        description: item.description,
-        buttonText: item.button_text,
-        buttonUrl: item.button_url,
-        featured: true,
-      });
+      return renderCampaignCard_(item);
     },
   }), "current-campaigns");
+}
+
+function renderCampaignCard_(item) {
+  var campaignKey = registerCampaignContactItem_(item);
+  var buttonHtml = campaignKey ? [
+    "<button type=\"button\" class=\"btn\" onclick=\"openCampaignContactModal('",
+    escapeJsString(campaignKey),
+    "')\">",
+    escapeHtml(item.button_text || "Get More Info"),
+    "</button>",
+  ].join("") : "";
+
+  return card({
+    title: item.title,
+    description: item.description,
+    buttonText: item.button_text,
+    buttonUrl: item.button_url,
+    buttonHtml: buttonHtml,
+    featured: true,
+  });
+}
+
+function registerCampaignContactItem_(item) {
+  var actionType = String(item && item.action_type || "link")
+      .trim()
+      .toLowerCase();
+  var campaignId = String(item && item.id || "").trim();
+
+  if (actionType !== "contact" || !campaignId) {
+    return "";
+  }
+
+  var key = "campaign-id:" + campaignId;
+  campaignContactItemsByKey[key] = {
+    id: campaignId,
+    title: String(item.title || "Campaign").trim(),
+    description: String(item.description || "").trim(),
+    button_text: String(item.button_text || "Get More Info").trim(),
+  };
+  return key;
+}
+
+function openCampaignContactModal(campaignKey) {
+  var campaign = campaignContactItemsByKey[
+      String(campaignKey || "").trim()
+  ];
+
+  if (!campaign) {
+    window.alert(
+        "That campaign could not be found. Please refresh Central and try again.",
+    );
+    return;
+  }
+
+  closeServeNeedInterestModal_();
+  closeCampaignContactModal_();
+
+  var modal = document.createElement("div");
+  modal.id = "central-campaign-contact-modal";
+  modal.className = "serve-interest-modal";
+  modal.setAttribute("data-analytics-section", "campaigns");
+  modal.setAttribute("data-analytics-content-label", campaign.title);
+  modal.setAttribute("data-analytics-content-id", campaign.id);
+  modal.innerHTML = [
+    "<div class=\"serve-interest-backdrop\" data-campaign-contact-close=\"true\"></div>",
+    "<div class=\"serve-interest-card\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"campaign-contact-title\">",
+      "<button type=\"button\" class=\"serve-interest-close\" aria-label=\"Close campaign contact form\" data-campaign-contact-close=\"true\">&times;</button>",
+      "<div id=\"campaign-contact-content\">",
+        renderCampaignContactForm_(campaign),
+      "</div>",
+    "</div>",
+  ].join("");
+
+  modal.addEventListener("click", function(event) {
+    if (event.target.closest("[data-campaign-contact-close=\"true\"]")) {
+      closeCampaignContactModal_();
+    }
+  });
+
+  var form = modal.querySelector("[data-campaign-contact-form]");
+  if (form) {
+    form.addEventListener("submit", function(event) {
+      event.preventDefault();
+      submitCampaignContact_(form, campaign);
+    });
+  }
+
+  campaignContactEscapeHandler = function(event) {
+    if (event.key === "Escape") {
+      closeCampaignContactModal_();
+    }
+  };
+
+  document.addEventListener("keydown", campaignContactEscapeHandler);
+  document.body.classList.add("modal-open");
+  document.body.appendChild(modal);
+  observeCentralAnalyticsSections_(modal);
+}
+
+function renderCampaignContactForm_(campaign) {
+  return [
+    "<div class=\"serve-interest-kicker\">Campaign</div>",
+    "<h2 class=\"serve-interest-title\" id=\"campaign-contact-title\">",
+    escapeHtml(campaign.title),
+    "</h2>",
+    campaign.description ?
+      "<p class=\"serve-interest-copy\">" +
+      escapeHtml(campaign.description) +
+      "</p>" :
+      "",
+    "<form class=\"serve-interest-form\" data-campaign-contact-form=\"true\">",
+      "<label class=\"serve-interest-field\">",
+        "<span>Name</span>",
+        "<input type=\"text\" name=\"name\" maxlength=\"120\" required>",
+      "</label>",
+      "<label class=\"serve-interest-field\">",
+        "<span>Email</span>",
+        "<input type=\"email\" name=\"email\" maxlength=\"254\" required>",
+      "</label>",
+      "<label class=\"serve-interest-field\">",
+        "<span>Phone</span>",
+        "<input type=\"tel\" name=\"phone\" maxlength=\"40\">",
+      "</label>",
+      "<label class=\"serve-interest-field serve-interest-field-wide\">",
+        "<span>Message</span>",
+        "<textarea name=\"message\" rows=\"4\" maxlength=\"2000\" placeholder=\"What would you like to know?\"></textarea>",
+      "</label>",
+      "<p class=\"serve-interest-error\" data-campaign-contact-error hidden></p>",
+      "<div class=\"serve-interest-actions\">",
+        "<button type=\"submit\" class=\"btn btn-primary\" data-campaign-contact-submit>",
+        escapeHtml(campaign.button_text || "Send message"),
+        "</button>",
+      "</div>",
+    "</form>",
+  ].join("");
+}
+
+function submitCampaignContact_(formEl, campaign) {
+  var submitButton = formEl.querySelector("[data-campaign-contact-submit]");
+  var errorEl = formEl.querySelector("[data-campaign-contact-error]");
+
+  if (errorEl) {
+    errorEl.hidden = true;
+    errorEl.textContent = "";
+  }
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Sending...";
+  }
+
+  fetch(CAMPAIGN_CONTACT_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      campaignId: campaign.id,
+      name: String(formEl.elements.name.value || "").trim(),
+      email: String(formEl.elements.email.value || "").trim(),
+      phone: String(formEl.elements.phone.value || "").trim(),
+      message: String(formEl.elements.message.value || "").trim(),
+    }),
+  })
+      .then(function(response) {
+        return response.text().then(function(text) {
+          var payload = null;
+          try {
+            payload = text ? JSON.parse(text) : null;
+          } catch (error) {
+          }
+
+          if (!response.ok) {
+            throw new Error(
+                payload && payload.error ?
+                  payload.error :
+                  "We could not send your message right now.",
+            );
+          }
+          return payload || {};
+        });
+      })
+      .then(function() {
+        var contentEl = document.getElementById("campaign-contact-content");
+
+        trackCentralAnalytics_("generate_lead", {
+          section_id: "campaigns",
+          interaction_action: "campaign_contact_submitted",
+          lead_source: "central_campaign_contact",
+          item_id: campaign.id,
+          item_name: campaign.title,
+          result: "success",
+        });
+
+        if (contentEl) {
+          contentEl.innerHTML = [
+            "<div class=\"serve-interest-kicker\">Thank You</div>",
+            "<h2 class=\"serve-interest-title\">Message Sent</h2>",
+            "<p class=\"serve-interest-copy\">",
+            escapeHtml(
+                "Your message about " + campaign.title +
+                " was sent. A member of our team will be reaching out to " +
+                "give you more information.",
+            ),
+            "</p>",
+            "<div class=\"serve-interest-actions\">",
+              "<button type=\"button\" class=\"btn btn-primary\" data-campaign-contact-close=\"true\">Close</button>",
+            "</div>",
+          ].join("");
+        }
+      })
+      .catch(function(error) {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = campaign.button_text || "Send message";
+        }
+        if (errorEl) {
+          errorEl.hidden = false;
+          errorEl.textContent = error && error.message ?
+            error.message :
+            "We could not send your message right now.";
+        }
+      });
+}
+
+function closeCampaignContactModal_() {
+  var modal = document.getElementById("central-campaign-contact-modal");
+  if (modal && modal.parentNode) {
+    modal.parentNode.removeChild(modal);
+  }
+
+  if (campaignContactEscapeHandler) {
+    document.removeEventListener("keydown", campaignContactEscapeHandler);
+    campaignContactEscapeHandler = null;
+  }
+
+  document.body.classList.remove("modal-open");
 }
 
 function renderNextSteps(items) {
@@ -3801,6 +4046,7 @@ function openServeNeedInterestModal(serveNeedKey) {
     return;
   }
 
+  closeCampaignContactModal_();
   closeServeNeedInterestModal_();
 
   var modal = document.createElement("div");

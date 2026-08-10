@@ -111,6 +111,12 @@ import {defineSecret} from "firebase-functions/params";
 import {mergePreviewSingletonPayload} from "./preview-publish.js";
 import {buildCalendarSourceCacheId} from "./calendar-source-cache.js";
 import {
+  CAMPAIGN_ACTION_CONTACT,
+  buildCampaignContactEmailText,
+  normalizeCampaignActionType,
+  normalizeCampaignContactSubmission,
+} from "./campaigns/contact.js";
+import {
   applyEventOverrides,
   buildEventOverrideId,
   createEventOverridesHash,
@@ -226,6 +232,9 @@ const CENTRAL_CAMPAIGNS_COLLECTION_PATH =
   "centralContent/campaigns/items";
 const CENTRAL_CAMPAIGNS_META_DOC_PATH =
   "centralContent/campaigns/meta/state";
+const CENTRAL_CAMPAIGNS_ROOT_DOC_PATH = "centralCampaigns/root";
+const CENTRAL_CAMPAIGN_INTERESTS_COLLECTION_PATH =
+  CENTRAL_CAMPAIGNS_ROOT_DOC_PATH + "/interests";
 const CENTRAL_NEXT_STEPS_COLLECTION_PATH =
   "centralContent/nextSteps/items";
 const CENTRAL_NEXT_STEPS_META_DOC_PATH =
@@ -1940,6 +1949,162 @@ export const reviewChangeRequest = onRequest(
     },
 );
 
+export const shareCampaignInterest = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      secrets: GMAIL_SECRETS,
+    },
+    async (request, response) => {
+      if (request.method !== "POST") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      const requestBody = request.body && typeof request.body === "object" ?
+        request.body :
+        {};
+      const campaignId = String(requestBody.campaignId || "").trim();
+      let submission;
+
+      if (!campaignId || campaignId.length > 160) {
+        response.status(400).json({
+          error: "Choose a campaign before submitting your message.",
+          code: "missing-campaign-id",
+        });
+        return;
+      }
+
+      try {
+        submission = normalizeCampaignContactSubmission(requestBody);
+      } catch (error) {
+        response.status(400).json({
+          error: String(
+              error && error.message || "Check the form and try again.",
+          ),
+          code: String(error && error.code || "invalid-payload"),
+        });
+        return;
+      }
+
+      try {
+        const campaignRef = firestore
+            .collection(CENTRAL_CAMPAIGNS_COLLECTION_PATH)
+            .doc(campaignId);
+        const campaignSnapshot = await campaignRef.get();
+
+        if (!campaignSnapshot.exists) {
+          response.status(404).json({
+            error:
+              "That campaign could not be found. Refresh Central and try " +
+              "again.",
+            code: "campaign-missing",
+          });
+          return;
+        }
+
+        const campaignData = campaignSnapshot.data() || {};
+        const actionType = normalizeCampaignActionType(campaignData);
+        const contactEmail = String(
+            campaignData.contact_email || "",
+        ).trim().toLowerCase();
+
+        if (!isTruthyValue_(campaignData.active)) {
+          response.status(409).json({
+            error:
+              "That campaign is no longer active. Refresh Central and try " +
+              "again.",
+            code: "campaign-inactive",
+          });
+          return;
+        }
+
+        const todayKey = dateKey_(new Date(), PCO_TIMEZONE);
+        if (!isCampaignVisible_(campaignData, todayKey)) {
+          response.status(409).json({
+            error:
+              "That campaign is not currently available. Refresh Central " +
+              "and try again.",
+            code: "campaign-not-visible",
+          });
+          return;
+        }
+
+        if (actionType !== CAMPAIGN_ACTION_CONTACT ||
+          !looksLikeEmailAddress_(contactEmail)) {
+          response.status(409).json({
+            error: "That campaign contact form is not available right now.",
+            code: "campaign-contact-unavailable",
+          });
+          return;
+        }
+
+        const interestRef = firestore
+            .collection(CENTRAL_CAMPAIGN_INTERESTS_COLLECTION_PATH)
+            .doc();
+        const interestRecord = {
+          campaignId: campaignId,
+          campaignTitle: String(campaignData.title || "Campaign").trim(),
+          campaignDescription: String(
+              campaignData.description || "",
+          ).trim(),
+          campaignButtonText: String(
+              campaignData.button_text || "",
+          ).trim(),
+          contactEmail: contactEmail,
+          name: submission.name,
+          email: submission.email,
+          phone: submission.phone,
+          message: submission.message,
+          status: "pending",
+          notificationStatus: "pending",
+          notificationAttempts: 0,
+          sourceHost: getCentralRequestHostname_(request),
+          userAgent: String(request.headers["user-agent"] || "").trim(),
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        await interestRef.set(interestRecord);
+
+        try {
+          await queueCampaignInterestNotification_(
+              interestRef.id,
+              interestRecord,
+          );
+        } catch (notificationError) {
+          console.error("Campaign contact email failed.", notificationError);
+          await markCampaignInterestNotificationFailed_(
+              interestRef.id,
+              notificationError,
+          );
+          response.status(502).json({
+            error:
+              "Your message was saved, but we could not email the campaign " +
+              "contact right now. Please try again in a minute.",
+            code: "notification-failed",
+            saved: true,
+          });
+          return;
+        }
+
+        response.set("Cache-Control", "no-store");
+        response.status(200).json({
+          ok: true,
+          message: "Your message was sent successfully.",
+          campaign: String(campaignData.title || "Campaign").trim(),
+          notificationStatus: "sent",
+        });
+      } catch (error) {
+        console.error("Campaign contact submit failed.", error);
+        response.status(500).json({
+          error: "We could not send your message right now. Please try again.",
+          code: "submit-failed",
+        });
+      }
+    },
+);
+
 export const shareServeNeedInterest = onRequest(
     {
       region: "us-central1",
@@ -2276,6 +2441,99 @@ async function queueServeNeedInterestNotification_(interestId, interestData) {
         notificationSentAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, {merge: true});
+}
+
+/**
+ * Sends and records a Campaign contact notification.
+ *
+ * @param {string} interestId Stored submission ID.
+ * @param {Object} interestData Stored submission data.
+ * @return {Promise<void>} Resolves after the delivery state is recorded.
+ */
+async function queueCampaignInterestNotification_(interestId, interestData) {
+  const interest = interestData || {};
+  const to = String(interest.contactEmail || "").trim();
+  const replyTo = String(interest.email || "").trim();
+
+  if (!looksLikeEmailAddress_(to)) {
+    throw new Error("Campaign email notifications need a valid recipient.");
+  }
+
+  if (!looksLikeEmailAddress_(replyTo)) {
+    throw new Error("Campaign email notifications need a valid reply address.");
+  }
+
+  const campaignTitle = String(
+      interest.campaignTitle || "Campaign",
+  ).trim();
+  const submittedAt = new Date().toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: PCO_TIMEZONE,
+  });
+  const sendResult = await sendCentralEmail_({
+    to: to,
+    replyTo: replyTo,
+    subject: "New Campaign Inquiry: " + campaignTitle,
+    text: buildCampaignContactEmailText(interest, submittedAt),
+    html: buildCampaignContactEmailHtml_(interest, submittedAt),
+  });
+
+  await firestore
+      .collection(CENTRAL_CAMPAIGN_INTERESTS_COLLECTION_PATH)
+      .doc(interestId)
+      .set({
+        notificationStatus: "sent",
+        notificationAttempts: 1,
+        notificationProvider: "gmail-api",
+        notificationMessageId: String(sendResult && sendResult.id || "").trim(),
+        notificationSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+}
+
+/**
+ * Builds the branded HTML Campaign contact notification.
+ *
+ * @param {Object} interestData Stored submission data.
+ * @param {string} submittedAt Human-readable submission time.
+ * @return {string} HTML email body.
+ */
+function buildCampaignContactEmailHtml_(interestData, submittedAt) {
+  const interest = interestData || {};
+
+  return buildCentralEmailHtml_({
+    preheader: "A new Campaign contact form was submitted through Central.",
+    title: "New Campaign Inquiry",
+    lead: "Someone requested more information through CrossPointe Central.",
+    sections: [
+      {
+        title: "Campaign",
+        rows: [
+          ["Title", String(interest.campaignTitle || "Campaign").trim()],
+        ],
+      },
+      {
+        title: "Person",
+        rows: [
+          ["Name", String(interest.name || "").trim()],
+          ["Email", String(interest.email || "").trim()],
+          ["Phone", String(interest.phone || "").trim() || "Not provided"],
+        ],
+      },
+      {
+        title: "Message",
+        body: String(interest.message || "").trim() || "No message provided",
+      },
+      {
+        title: "Submitted",
+        rows: [["Time", submittedAt]],
+      },
+    ],
+    footerText:
+      "Reply directly to this email to contact the person who submitted " +
+      "the form.",
+  });
 }
 
 function buildServeNeedInterestEmailText_(interestData, submittedAt) {
@@ -2786,6 +3044,27 @@ function formatCentralEmailDateTime_(value) {
 async function markServeNeedInterestNotificationFailed_(interestId, error) {
   await firestore
       .collection(CENTRAL_SERVE_NEEDS_INTERESTS_COLLECTION_PATH)
+      .doc(interestId)
+      .set({
+        notificationStatus: "failed",
+        notificationAttempts: 1,
+        notificationError: String(
+            error && error.message || "Unknown notification failure.",
+        ).slice(0, 500),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+}
+
+/**
+ * Records a failed Campaign contact notification attempt.
+ *
+ * @param {string} interestId Stored submission ID.
+ * @param {Error} error Notification error.
+ * @return {Promise<void>} Resolves after the failure is recorded.
+ */
+async function markCampaignInterestNotificationFailed_(interestId, error) {
+  await firestore
+      .collection(CENTRAL_CAMPAIGN_INTERESTS_COLLECTION_PATH)
       .doc(interestId)
       .set({
         notificationStatus: "failed",
@@ -3435,6 +3714,7 @@ function toCentralCampaignFromFirestoreDoc_(snapshot) {
     snapshot.data() || {} :
     {};
   const ongoing = getNormalizedCampaignOngoingValue_(data);
+  const actionType = normalizeCampaignActionType(data);
 
   return {
     id: String(snapshot && snapshot.id || "").trim(),
@@ -3442,7 +3722,9 @@ function toCentralCampaignFromFirestoreDoc_(snapshot) {
     title: String(data.title || "").trim(),
     description: String(data.description || "").trim(),
     button_text: String(data.button_text || "").trim(),
-    button_url: String(data.button_url || "").trim(),
+    button_url: actionType === CAMPAIGN_ACTION_CONTACT ? "" :
+      String(data.button_url || "").trim(),
+    action_type: actionType,
     ongoing: ongoing ? "TRUE" : "FALSE",
     start_date: ongoing ? "" : normalizeCampaignDateValue_(data.start_date),
     end_date: ongoing ? "" : normalizeCampaignDateValue_(data.end_date),
@@ -6955,11 +7237,22 @@ function normalizeCampaignsPayloadItems_(rawPayload) {
       );
     }
 
-    validatePreviewButtonPair_(
-        payload.button_text,
-        payload.button_url,
-        "If you use a button, enter both button text and button URL.",
-    );
+    if (payload.action_type === CAMPAIGN_ACTION_CONTACT) {
+      if (!payload.button_text ||
+        !looksLikeEmailAddress_(payload.contact_email)) {
+        throw createPreviewPublishError_(
+            "invalid-payload",
+            "Contact campaigns need button text and a valid contact email " +
+            "address.",
+        );
+      }
+    } else {
+      validatePreviewButtonPair_(
+          payload.button_text,
+          payload.button_url,
+          "If you use a button, enter both button text and button URL.",
+      );
+    }
 
     if (!payload.ongoing && (!payload.start_date || !payload.end_date)) {
       throw createPreviewPublishError_(
@@ -7545,6 +7838,8 @@ async function publishPreviewCampaignsPayload_(payload, publisher) {
       description: item.description,
       button_text: item.button_text,
       button_url: item.button_url,
+      action_type: item.action_type,
+      contact_email: item.contact_email,
       ongoing: item.ongoing,
       start_date: item.start_date,
       end_date: item.end_date,
@@ -8754,13 +9049,19 @@ function normalizeCampaignComparisonItem_(item, index) {
   const source = item || {};
   const hasActiveValue = Object.prototype.hasOwnProperty.call(source, "active");
   const ongoing = getNormalizedCampaignOngoingValue_(source);
+  const actionType = normalizeCampaignActionType(source);
 
   return {
     id: normalizeCampaignPublishDocId_(source.id, index),
     title: trimFirestoreStringValue_(source.title),
     description: trimFirestoreStringValue_(source.description),
     button_text: trimFirestoreStringValue_(source.button_text),
-    button_url: trimFirestoreStringValue_(source.button_url),
+    button_url: actionType === CAMPAIGN_ACTION_CONTACT ? "" :
+      trimFirestoreStringValue_(source.button_url),
+    action_type: actionType,
+    contact_email: actionType === CAMPAIGN_ACTION_CONTACT ?
+      trimFirestoreStringValue_(source.contact_email).toLowerCase() :
+      "",
     ongoing: ongoing,
     start_date: ongoing ? "" : normalizeCampaignDateValue_(source.start_date),
     end_date: ongoing ? "" : normalizeCampaignDateValue_(source.end_date),
@@ -11061,14 +11362,21 @@ function buildPublishedStatusBannerPayload_(sourceData) {
 
 function buildPublishedCampaignPayload_(sourceData) {
   const ongoing = getNormalizedCampaignOngoingValue_(sourceData);
+  const actionType = normalizeCampaignActionType(sourceData);
 
   return {
     title: trimFirestoreStringValue_(sourceData.title),
     description: trimFirestoreStringValue_(sourceData.description),
     button_text: trimFirestoreStringValue_(sourceData.button_text),
-    button_url: trimFirestoreStringValue_(sourceData.button_url),
+    button_url: actionType === CAMPAIGN_ACTION_CONTACT ? "" :
+      trimFirestoreStringValue_(sourceData.button_url),
+    action_type: actionType,
+    contact_email: actionType === CAMPAIGN_ACTION_CONTACT ?
+      trimFirestoreStringValue_(sourceData.contact_email).toLowerCase() :
+      "",
     ongoing: ongoing,
-    start_date: ongoing ? "" : normalizeCampaignDateValue_(sourceData.start_date),
+    start_date: ongoing ? "" :
+      normalizeCampaignDateValue_(sourceData.start_date),
     end_date: ongoing ? "" : normalizeCampaignDateValue_(sourceData.end_date),
     sort: normalizeSortValue_(sourceData.sort, 50),
     active: isTruthyValue_(sourceData.active),

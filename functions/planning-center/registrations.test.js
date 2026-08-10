@@ -204,7 +204,7 @@ test("shows closing-soon and closed states until the event ends", () => {
   assert.deepEqual(eventEnded, []);
 });
 
-test("shows registration events only within the next 30 days", () => {
+test("uses the 30-day window only for dated registration events", () => {
   assert.equal(CENTRAL_REGISTRATION_LOOKAHEAD_DAYS, 30);
 
   const outsideWindow = getCentralRegistrationSignups(buildPayload(), {
@@ -221,20 +221,21 @@ test("shows registration events only within the next 30 days", () => {
   missingDatePayload.included = missingDatePayload.included.filter((item) => {
     return item.type !== "SignupTime";
   });
+  missingDatePayload.data[0].attributes.close_at = "2026-10-28T05:00:00Z";
   const closeDateFallback = getCentralRegistrationSignups(missingDatePayload, {
-    now: "2026-07-17T12:00:00Z",
+    now: "2026-08-10T15:26:15Z",
   });
   assert.equal(closeDateFallback.length, 1);
   assert.equal(closeDateFallback[0].starts_at, "");
-  assert.equal(closeDateFallback[0].close_at, "2026-08-01T12:00:00.000Z");
+  assert.equal(closeDateFallback[0].close_at, "2026-10-28T05:00:00.000Z");
 
   assert.deepEqual(getCentralRegistrationSignups(missingDatePayload, {
-    now: "2026-08-01T12:00:00Z",
+    now: "2026-10-28T05:00:00Z",
   }), []);
 
   missingDatePayload.data[0].attributes.close_at = "";
   assert.deepEqual(getCentralRegistrationSignups(missingDatePayload, {
-    now: "2026-07-17T12:00:00Z",
+    now: "2026-08-10T15:26:15Z",
   }), []);
 });
 

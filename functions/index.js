@@ -4300,8 +4300,7 @@ function stripCalendarSourceFields_(item) {
 async function getCentralRegistrationSignups_() {
   const url =
     "https://api.planningcenteronline.com/registrations/v2/signups" +
-    "?filter=unarchived" +
-    "&include=categories,next_signup_time,selection_types,signup_location" +
+    "?include=categories,next_signup_time,selection_types,signup_location" +
     "&fields[Signup]=" + CENTRAL_REGISTRATION_SIGNUP_FIELDS.join(",") +
     "&fields[Category]=name" +
     "&fields[SelectionType]=at_maximum_capacity,available_capacity," +

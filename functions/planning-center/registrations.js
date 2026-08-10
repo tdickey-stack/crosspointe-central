@@ -130,15 +130,22 @@ function buildCentralRegistrationSignup_(signup, context) {
   const eventStart = new Date(startsAt || "");
   const openDate = new Date(openAt || "");
   const closeDate = new Date(closeAt || "");
+  const hasEventStart = !Number.isNaN(eventStart.getTime());
   const hasOpenDate = !Number.isNaN(openDate.getTime());
   const hasCloseDate = !Number.isNaN(closeDate.getTime());
+  const visibilityDate = hasEventStart ? eventStart :
+    (hasCloseDate ? closeDate : null);
+  const visibilityEnd = eventEnd ||
+    (!hasEventStart && hasCloseDate ? closeDate : null);
 
-  if (Number.isNaN(eventStart.getTime())) return null;
-  if (eventStart.getTime() > context.now.getTime() +
+  if (!visibilityDate) return null;
+  if (visibilityDate.getTime() > context.now.getTime() +
     CENTRAL_REGISTRATION_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000) {
     return null;
   }
-  if (eventEnd && eventEnd.getTime() <= context.now.getTime()) return null;
+  if (visibilityEnd && visibilityEnd.getTime() <= context.now.getTime()) {
+    return null;
+  }
   if (attrs.open === false && hasOpenDate &&
     openDate.getTime() > context.now.getTime()) {
     return null;

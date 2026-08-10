@@ -221,6 +221,18 @@ test("shows registration events only within the next 30 days", () => {
   missingDatePayload.included = missingDatePayload.included.filter((item) => {
     return item.type !== "SignupTime";
   });
+  const closeDateFallback = getCentralRegistrationSignups(missingDatePayload, {
+    now: "2026-07-17T12:00:00Z",
+  });
+  assert.equal(closeDateFallback.length, 1);
+  assert.equal(closeDateFallback[0].starts_at, "");
+  assert.equal(closeDateFallback[0].close_at, "2026-08-01T12:00:00.000Z");
+
+  assert.deepEqual(getCentralRegistrationSignups(missingDatePayload, {
+    now: "2026-08-01T12:00:00Z",
+  }), []);
+
+  missingDatePayload.data[0].attributes.close_at = "";
   assert.deepEqual(getCentralRegistrationSignups(missingDatePayload, {
     now: "2026-07-17T12:00:00Z",
   }), []);

@@ -5728,7 +5728,11 @@ function StudioApp() {
             } into your account…`,
           );
           const migrationResults = await Promise.allSettled(
-            projectsToMigrate.map((project) => cloud.saveProject(project)),
+            projectsToMigrate.map((project) =>
+              cloud.saveProject(project, {
+                knownExisting: cloudIds.has(project.id),
+              }),
+            ),
           );
           migrationResults.forEach((result, index) => {
             if (result.status === "rejected") {

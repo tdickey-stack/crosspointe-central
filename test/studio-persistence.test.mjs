@@ -7,7 +7,10 @@ import {
   normalizeImageOpacity,
   normalizeImageRotation,
 } from "../src/studio/focal.js";
-import {projectForCloud} from "../src/studio/persistence.js";
+import {
+  createStudioCloud,
+  projectForCloud,
+} from "../src/studio/persistence.js";
 import {
   planningCenterEventContentChanges,
   planningCenterEventsFromCentralData,
@@ -58,6 +61,49 @@ function eventProject() {
     name: "Legacy Browser Project",
   };
 }
+
+test("new cloud projects create without reading a missing document first", async () => {
+  const calls = [];
+  const reference = {
+    get: async () => {
+      calls.push("get");
+      throw new Error("A missing project read should not run.");
+    },
+    set: async () => {
+      calls.push("set");
+    },
+  };
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    firebase: {
+      firestore: {
+        FieldValue: {serverTimestamp: () => "server-timestamp"},
+      },
+    },
+  };
+
+  try {
+    const cloud = createStudioCloud({
+      auth: {},
+      firestore: {doc: () => reference},
+      storage: {},
+      user: {uid: "studio-admin"},
+    });
+    const saved = await cloud.saveProject(
+      createStudioProject("event-timeless-center"),
+    );
+
+    assert.deepEqual(calls, ["set"]);
+    assert.equal(saved.cloudBacked, true);
+    assert.equal(saved.ownerUid, "studio-admin");
+  } finally {
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+  }
+});
 
 test("Social Posts expose three focused templates and mobile-first formats", () => {
   const socialTemplates = TEMPLATE_CATALOG.filter(

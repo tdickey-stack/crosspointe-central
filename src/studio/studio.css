@@ -4502,6 +4502,18 @@ a {
   gap: 0.55cqw;
 }
 
+.studio-event-graphic.is-text-left .event-detail-line {
+  justify-content: flex-start;
+}
+
+.studio-event-graphic.is-text-center .event-detail-line {
+  justify-content: center;
+}
+
+.studio-event-graphic.is-text-right .event-detail-line {
+  justify-content: flex-end;
+}
+
 .event-detail-line i {
   font-style: normal;
 }
@@ -6049,6 +6061,30 @@ a {
   text-align: inherit;
 }
 
+.studio-event-graphic.is-template-center-stage.is-text-left
+  .event-graphic-copy h2,
+.studio-event-graphic.is-template-center-stage.is-text-left
+  .event-graphic-copy p,
+.studio-event-graphic.is-template-timeless-center.is-text-left
+  .event-graphic-copy h2,
+.studio-event-graphic.is-template-timeless-center.is-text-left
+  .event-graphic-copy p {
+  margin-right: auto;
+  margin-left: 0;
+}
+
+.studio-event-graphic.is-template-center-stage.is-text-right
+  .event-graphic-copy h2,
+.studio-event-graphic.is-template-center-stage.is-text-right
+  .event-graphic-copy p,
+.studio-event-graphic.is-template-timeless-center.is-text-right
+  .event-graphic-copy h2,
+.studio-event-graphic.is-template-timeless-center.is-text-right
+  .event-graphic-copy p {
+  margin-right: 0;
+  margin-left: auto;
+}
+
 .studio-event-graphic.is-template-center-stage .event-eyebrow {
   border-radius: 0;
   background: rgba(239, 62, 45, 0.88);
@@ -6648,6 +6684,11 @@ a {
   font-weight: var(--event-global-font-weight) !important;
 }
 
+.studio-event-graphic.has-global-font-weight .studio-preview-brand span,
+.studio-event-graphic.has-global-font-weight .studio-preview-brand span b {
+  font-weight: 850 !important;
+}
+
 .studio-event-graphic.is-screen .event-graphic-copy {
   max-width: 57%;
 }
@@ -6675,8 +6716,9 @@ a {
 
 .studio-event-graphic.is-screen.is-template-center-stage .event-graphic-copy,
 .studio-event-graphic.is-screen.is-template-timeless-center .event-graphic-copy {
-  width: 60%;
-  max-width: 60%;
+  top: 42%;
+  width: 70%;
+  max-width: 70%;
 }
 
 .studio-event-graphic.is-screen.is-template-center-stage .event-graphic-footer,
@@ -6746,6 +6788,18 @@ a {
   text-align: right;
 }
 
+.studio-event-graphic.is-screen.is-template-center-stage
+  .event-graphic-details,
+.studio-event-graphic.is-screen.is-template-timeless-center
+  .event-graphic-details {
+  right: auto;
+  left: 15%;
+  width: 70%;
+  max-width: 70%;
+  align-self: auto;
+  transform: none;
+}
+
 .studio-event-graphic.is-screen .event-graphic-details strong {
   font-size: 2.4cqw;
 }
@@ -6763,7 +6817,7 @@ a {
   font-size: 1.05cqw;
 }
 
-.studio-event-graphic.is-screen .studio-preview-brand img {
+.studio-event-graphic.is-screen .studio-preview-brand.is-central img {
   width: 3.2cqw;
   height: 3.2cqw;
 }

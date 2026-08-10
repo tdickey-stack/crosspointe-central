@@ -918,6 +918,106 @@ function getTimeZoneParts_(date, timezone) {
   }, {});
 }
 
+function formatServeNeedPreferredContactMethod_(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+
+  if (normalizedValue === "text") {
+    return "Text";
+  }
+
+  if (normalizedValue === "email") {
+    return "E-Mail";
+  }
+
+  return String(value || "").trim();
+}
+
+function buildCentralMailboxHeader_(displayName, email) {
+  const safeEmail = String(email || "").trim();
+  const safeName = String(displayName || "").trim();
+
+  if (!safeName) {
+    return safeEmail;
+  }
+
+  return "\"" +
+    safeName.replace(/["\\]/g, "\\$&") +
+    "\" <" +
+    safeEmail +
+    ">";
+}
+
+function encodeMimeHeaderValue_(value) {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  return "=?UTF-8?B?" + Buffer.from(text, "utf8").toString("base64") + "?=";
+}
+
+function splitMimeBase64Lines_(value) {
+  const matches = String(value || "").match(/.{1,76}/g);
+  return matches ? matches.join("\r\n") : "";
+}
+
+async function safeReadJsonResponse_(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    return {};
+  }
+}
+
+function escapeCentralEmailHtml_(value) {
+  return String(value || "").replace(/[&<>"']/g, function(character) {
+    return {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#39;",
+    }[character];
+  });
+}
+
+function escapeCentralEmailAttribute_(value) {
+  return escapeCentralEmailHtml_(value);
+}
+
+function getServeNeedInterestNotificationErrorMessage_(error) {
+  return "Your interest was saved, but we could not email the ministry " +
+    "leader right now. Please try again in a minute.";
+}
+
+function getCentralRequestHostname_(request) {
+  const forwardedHost = String(
+      request && request.headers && request.headers["x-forwarded-host"] || "",
+  ).trim().split(",")[0].trim();
+  const directHost = String(
+      request && request.headers && request.headers.host || "",
+  ).trim();
+  const hostname = String(request && request.hostname || "").trim();
+  const rawHost = forwardedHost || directHost || hostname;
+
+  return rawHost.toLowerCase().replace(/:\d+$/, "");
+}
+
+function isLocalCentralHostname_(hostname) {
+  return hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]";
+}
+
+function copyTrimmedStringFieldIfPresent_(target, source, key) {
+  if (!source || !Object.prototype.hasOwnProperty.call(source, key)) {
+    return;
+  }
+
+  target[key] = String(source[key] || "").trim();
+}
+
 export {
   areCampaignsComparisonItemsEqual_,
   areNextStepsComparisonItemsEqual_,
@@ -926,17 +1026,24 @@ export {
   areRoomRulesComparisonItemsEqual_,
   areServeNeedsComparisonItemsEqual_,
 
+  buildCentralMailboxHeader_,
   buildFirstAdminPageAccess_,
 
   canPublishPreviewWithPermission_,
   canSubmitChangeRequestWithPermission_,
   canReviewChangeRequestsWithPermission_,
   collectStringCandidates_,
+  copyTrimmedStringFieldIfPresent_,
   createAdminUserManagementError_,
   createChangeRequestError_,
   createPreviewPublishError_,
 
+  encodeMimeHeaderValue_,
+  escapeCentralEmailAttribute_,
+  escapeCentralEmailHtml_,
+
   formatDate_,
+  formatServeNeedPreferredContactMethod_,
   formatSundayModeTimeValue_,
   formatTime_,
   formatTimeRange_,
@@ -945,6 +1052,7 @@ export {
   getAdminUserManagementStatusCode_,
   getBearerToken_,
   getCampaignConflictLabel_,
+  getCentralRequestHostname_,
   getChangeRequestErrorMessage_,
   getChangeRequestStatusCode_,
   getCountLabel_,
@@ -956,12 +1064,14 @@ export {
   getPreviewSectionLabel_,
   getResourceConflictLabel_,
   getServeNeedConflictLabel_,
+  getServeNeedInterestNotificationErrorMessage_,
   getTimeZoneParts_,
 
   hasManagedAdminPageAccessKey_,
   hasQuickLinksDraftBeenInitialized_,
   htmlToPlainText_,
 
+  isLocalCentralHostname_,
   isTruthyValue_,
 
   looksLikeEmailAddress_,
@@ -997,12 +1107,14 @@ export {
 
   rankStringCandidates_,
 
+  safeReadJsonResponse_,
   sanitizePassageHtml_,
   sortCampaignsComparisonItems_,
   sortNextStepsComparisonItems_,
   sortQuickLinksComparisonItems_,
   sortResourcesComparisonItems_,
   sortServeNeedsComparisonItems_,
+  splitMimeBase64Lines_,
 
   trimEnvString_,
   trimFirestoreStringValue_

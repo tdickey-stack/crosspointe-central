@@ -8,17 +8,24 @@ import {
   areRoomRulesComparisonItemsEqual_,
   areServeNeedsComparisonItemsEqual_,
 
+  buildCentralMailboxHeader_,
   buildFirstAdminPageAccess_,
 
   canPublishPreviewWithPermission_,
   canSubmitChangeRequestWithPermission_,
   canReviewChangeRequestsWithPermission_,
   collectStringCandidates_,
+  copyTrimmedStringFieldIfPresent_,
   createAdminUserManagementError_,
   createChangeRequestError_,
   createPreviewPublishError_,
 
+  encodeMimeHeaderValue_,
+  escapeCentralEmailAttribute_,
+  escapeCentralEmailHtml_,
+
   formatDate_,
+  formatServeNeedPreferredContactMethod_,
   formatSundayModeTimeValue_,
   formatTime_,
   formatTimeRange_,
@@ -27,6 +34,7 @@ import {
   getAdminUserManagementStatusCode_,
   getBearerToken_,
   getCampaignConflictLabel_,
+  getCentralRequestHostname_,
   getChangeRequestErrorMessage_,
   getChangeRequestStatusCode_,
   getCountLabel_,
@@ -38,12 +46,14 @@ import {
   getPreviewSectionLabel_,
   getResourceConflictLabel_,
   getServeNeedConflictLabel_,
+  getServeNeedInterestNotificationErrorMessage_,
   getTimeZoneParts_,
 
   hasManagedAdminPageAccessKey_,
   hasQuickLinksDraftBeenInitialized_,
   htmlToPlainText_,
 
+  isLocalCentralHostname_,
   isTruthyValue_,
 
   looksLikeEmailAddress_,
@@ -79,12 +89,14 @@ import {
 
   rankStringCandidates_,
 
+  safeReadJsonResponse_,
   sanitizePassageHtml_,
   sortCampaignsComparisonItems_,
   sortNextStepsComparisonItems_,
   sortQuickLinksComparisonItems_,
   sortResourcesComparisonItems_,
   sortServeNeedsComparisonItems_,
+  splitMimeBase64Lines_,
 
   trimEnvString_,
   trimFirestoreStringValue_
@@ -2336,20 +2348,6 @@ function buildServeNeedInterestEmailHtml_(interestData, submittedAt) {
   });
 }
 
-function formatServeNeedPreferredContactMethod_(value) {
-  const normalizedValue = String(value || "").trim().toLowerCase();
-
-  if (normalizedValue === "text") {
-    return "Text";
-  }
-
-  if (normalizedValue === "email") {
-    return "E-Mail";
-  }
-
-  return String(value || "").trim();
-}
-
 async function queueCentralAdminInviteNotification_(inviteData) {
   const to = normalizeAdminEmail_(inviteData && inviteData.email);
 
@@ -2567,44 +2565,6 @@ function buildCentralGmailRawMessage_(options) {
       .replace(/=+$/g, "");
 }
 
-function buildCentralMailboxHeader_(displayName, email) {
-  const safeEmail = String(email || "").trim();
-  const safeName = String(displayName || "").trim();
-
-  if (!safeName) {
-    return safeEmail;
-  }
-
-  return "\"" +
-    safeName.replace(/["\\]/g, "\\$&") +
-    "\" <" +
-    safeEmail +
-    ">";
-}
-
-function encodeMimeHeaderValue_(value) {
-  const text = String(value || "").trim();
-
-  if (!text) {
-    return "";
-  }
-
-  return "=?UTF-8?B?" + Buffer.from(text, "utf8").toString("base64") + "?=";
-}
-
-function splitMimeBase64Lines_(value) {
-  const matches = String(value || "").match(/.{1,76}/g);
-  return matches ? matches.join("\r\n") : "";
-}
-
-async function safeReadJsonResponse_(response) {
-  try {
-    return await response.json();
-  } catch (error) {
-    return {};
-  }
-}
-
 function buildCentralAdminInviteEmailText_(inviteData) {
   const invite = inviteData || {};
   const permissionLines = buildAdminInvitePermissionSummary_(invite.pageAccess)
@@ -2819,22 +2779,6 @@ function formatCentralEmailDateTime_(value) {
   });
 }
 
-function escapeCentralEmailHtml_(value) {
-  return String(value || "").replace(/[&<>"']/g, function(character) {
-    return {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      "\"": "&quot;",
-      "'": "&#39;",
-    }[character];
-  });
-}
-
-function escapeCentralEmailAttribute_(value) {
-  return escapeCentralEmailHtml_(value);
-}
-
 async function markServeNeedInterestNotificationFailed_(interestId, error) {
   await firestore
       .collection(CENTRAL_SERVE_NEEDS_INTERESTS_COLLECTION_PATH)
@@ -2847,11 +2791,6 @@ async function markServeNeedInterestNotificationFailed_(interestId, error) {
         ).slice(0, 500),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, {merge: true});
-}
-
-function getServeNeedInterestNotificationErrorMessage_(error) {
-  return "Your interest was saved, but we could not email the ministry " +
-    "leader right now. Please try again in a minute.";
 }
 
 async function buildCentralDataPayload_(environment) {
@@ -3104,19 +3043,6 @@ async function getFirestorePublicMetaGoogleWebClientId_() {
   }
 }
 
-function getCentralRequestHostname_(request) {
-  const forwardedHost = String(
-      request && request.headers && request.headers["x-forwarded-host"] || "",
-  ).trim().split(",")[0].trim();
-  const directHost = String(
-      request && request.headers && request.headers.host || "",
-  ).trim();
-  const hostname = String(request && request.hostname || "").trim();
-  const rawHost = forwardedHost || directHost || hostname;
-
-  return rawHost.toLowerCase().replace(/:\d+$/, "");
-}
-
 /**
  * Resolves the public Central environment from the original request hostname.
  *
@@ -3177,12 +3103,6 @@ function getCentralRequestOrigin_(request) {
   }
 
   return getCentralRequestProtocol_(request) + "://" + host;
-}
-
-function isLocalCentralHostname_(hostname) {
-  return hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "[::1]";
 }
 
 async function getFirestorePublicSettingsOverride_() {
@@ -3402,14 +3322,6 @@ function toCentralThisSundayFromFirestoreDoc_(snapshot) {
     scripture: trimFirestoreStringValue_(data.scripture),
     note: trimFirestoreStringValue_(data.note || data.notes),
   };
-}
-
-function copyTrimmedStringFieldIfPresent_(target, source, key) {
-  if (!source || !Object.prototype.hasOwnProperty.call(source, key)) {
-    return;
-  }
-
-  target[key] = String(source[key] || "").trim();
 }
 
 function copyBooleanFieldIfPresent_(target, source, key) {

@@ -17,17 +17,23 @@ and fragments removed.
 | --- | --- |
 | `central_page_view` | First render of the homepage or Sunday mode |
 | `central_section_view` | A section heading becoming at least 50% visible |
-| `select_content` | A link or button selected inside an instrumented section |
+| `select_content` | Every physical link or button click inside an instrumented section |
 | `central_ui_action` | A Central-specific UI action such as opening event details |
 | `registration_click` | Intent to register by opening the off-site registration page |
 | `calendar_add` | Selection of Google, Apple, or Outlook calendar |
-| `generate_lead` | Successful Serve Interest submission |
+| `generate_lead` | Successful Serve Interest or campaign-contact submission |
 | `notes_action` | Notes started, copied, cleared, or saved to Google Docs |
 | `livestream_action` | Use of Central's livestream or mini-player controls |
 | `wayfinder_action` | Wayfinder open, close, question, answer, link, or feedback outcome |
 
 Registration completion happens in Church Center, so `registration_click`
 measures registration intent rather than a completed registration.
+
+Every physical click emits exactly one `select_content` event. When that click
+also represents a meaningful outcome, Central emits an additional specialized
+event with the same section, content ID, and content label. For example,
+choosing Google Calendar emits both `select_content` and `calendar_add`. Do not
+sum the click event and its outcome event when calculating raw click totals.
 
 ## Parameters
 
@@ -64,6 +70,7 @@ available in standard reports:
 | Central section | `section_id` |
 | Interaction action | `interaction_action` |
 | Content label | `content_label` |
+| Content ID | `content_id` |
 | Calendar provider | `calendar_provider` |
 | Interaction result | `result` |
 | Lead source | `lead_source` |
@@ -74,11 +81,18 @@ created; they do not backfill older data.
 
 Useful explorations include:
 
+- Raw click counts using only `select_content`, grouped by `section_id`,
+  `content_label`, and `interaction_action`.
 - Event count by `section_id` and `interaction_action`.
 - Registration intent by `content_label`.
 - Calendar adds by `calendar_provider`.
 - Wayfinder `question_submitted` versus `answer_received` with `result`.
 - Serve Interest completions from `generate_lead`.
+
+For a clean click-count report, filter **Event name** to exactly
+`select_content`. Use specialized events in separate outcome reports for
+calendar adds, registration intent, successful submissions, notes saves,
+livestream actions, and Wayfinder results.
 
 ## Verification
 

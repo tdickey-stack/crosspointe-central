@@ -201,11 +201,15 @@
       );
     }
 
+    var outcomeEventName = sanitizeAnalyticsEventName_(
+        actionElement.getAttribute("data-analytics-event") ||
+        (calendarProvider ? "calendar_add" : "select_content"),
+    );
+
     return {
-      eventName: sanitizeAnalyticsEventName_(
-          actionElement.getAttribute("data-analytics-event") ||
-          (calendarProvider ? "calendar_add" : "select_content"),
-      ),
+      eventName: "select_content",
+      outcomeEventName: outcomeEventName === "select_content" ?
+        "" : outcomeEventName,
       parameters: parameters,
     };
   }
@@ -350,6 +354,9 @@
       );
       if (!interaction) return;
       track(interaction.eventName, interaction.parameters);
+      if (interaction.outcomeEventName) {
+        track(interaction.outcomeEventName, interaction.parameters);
+      }
     }
 
     documentObject.addEventListener("click", handleDocumentClick_);

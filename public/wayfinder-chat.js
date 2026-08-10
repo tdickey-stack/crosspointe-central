@@ -459,6 +459,9 @@
     window.centralAnalyticsService.track("wayfinder_action", {
       section_id: "wayfinder",
       interaction_action: action,
+      content_type: "wayfinder",
+      content_id: "wayfinder",
+      content_label: "Wayfinder",
       result: result || "",
     });
   }

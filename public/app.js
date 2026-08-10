@@ -1110,6 +1110,11 @@ function renderFeaturedEventHeroCard_(data, settings) {
         "</div>",
         renderEventEditButton_(featuredEvent.item),
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
+          analyticsAttrs_({
+            action: "view_event",
+            contentId: getEventAnalyticsContentId_(featuredEvent.item),
+            contentLabel: title,
+          }),
           " onclick=\"openEventDetailsModal('",
           escapeJsString(eventKey),
           "')\">View Event</button>",
@@ -1244,6 +1249,11 @@ function renderSundayFeaturedEventCard_(data, settings) {
         "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
           " aria-label=\"View featured event: ",
           escapeAttr(featuredEvent.title), "\"",
+          analyticsAttrs_({
+            action: "view_event",
+            contentId: getEventAnalyticsContentId_(featuredEvent.item),
+            contentLabel: featuredEvent.title,
+          }),
           " onclick=\"openEventDetailsModal('",
           escapeJsString(featuredEvent.eventKey),
           "')\">View Event</button>",
@@ -3260,6 +3270,11 @@ function renderEventDetailsButton_(item) {
 
   return [
     "<button type=\"button\" class=\"btn event-details-open\"",
+      analyticsAttrs_({
+        action: "view_event",
+        contentId: getEventAnalyticsContentId_(item),
+        contentLabel: item.title,
+      }),
       " onclick=\"openEventDetailsModal('",
       escapeJsString(eventKey),
       "')\">",
@@ -3307,9 +3322,7 @@ function registerEventDetailsItem_(item) {
   var key = "event-detail:" + String(++eventDetailKeyCounter);
 
   eventDetailItemsByKey[key] = {
-    itemId: String(
-        item.id || item.event_id || item.registration_id || item.title || "",
-    ).trim(),
+    itemId: getEventAnalyticsContentId_(item),
     title: String(item.title || "CrossPointe Event").trim(),
     date: String(item.date || "").trim(),
     time: String(item.time || "").trim(),
@@ -3336,6 +3349,14 @@ function registerEventDetailsItem_(item) {
   };
 
   return key;
+}
+
+function getEventAnalyticsContentId_(item) {
+  return String(
+      item && (
+        item.id || item.event_id || item.registration_id || item.title
+      ) || "",
+  ).trim();
 }
 
 function openEventDetailsModal(eventKey) {
@@ -3529,6 +3550,9 @@ function openEventDetailsModal(eventKey) {
   trackCentralAnalytics_("central_ui_action", {
     section_id: item.isRegistrationEvent ? "registrations" : "events",
     interaction_action: "event_details_open",
+    content_type: item.isRegistrationEvent ? "registrations" : "events",
+    content_id: item.itemId || item.title,
+    content_label: item.title,
     item_id: item.itemId || item.title,
     item_name: item.title,
   });
@@ -3816,6 +3840,9 @@ function submitCampaignContact_(formEl, campaign) {
         trackCentralAnalytics_("generate_lead", {
           section_id: "campaigns",
           interaction_action: "campaign_contact_submitted",
+          content_type: "campaigns",
+          content_id: campaign.id || campaign.title,
+          content_label: campaign.title,
           lead_source: "central_campaign_contact",
           item_id: campaign.id,
           item_name: campaign.title,
@@ -4224,6 +4251,9 @@ function submitServeNeedInterest_(formEl, serveNeed) {
         trackCentralAnalytics_("generate_lead", {
           section_id: "serve_needs",
           interaction_action: "serve_interest_submitted",
+          content_type: "serve_needs",
+          content_id: serveNeed.id || serveNeed.need,
+          content_label: serveNeed.need,
           lead_source: "central_serve_needs",
           item_id: serveNeed.id || serveNeed.need,
           item_name: serveNeed.need,
@@ -4928,6 +4958,9 @@ function initSundayNotes(data) {
       trackCentralAnalytics_("notes_action", {
         section_id: "scripture_notes",
         interaction_action: "notes_started",
+        content_type: "scripture_notes",
+        content_id: "sermon_notes",
+        content_label: "Sermon Notes",
         result: "success",
       });
     }
@@ -5330,6 +5363,9 @@ async function copySundayNotes() {
   trackCentralAnalytics_("notes_action", {
     section_id: "scripture_notes",
     interaction_action: "notes_copied",
+    content_type: "scripture_notes",
+    content_id: "sermon_notes",
+    content_label: "Sermon Notes",
     result: "success",
   });
 }
@@ -5358,6 +5394,9 @@ function clearSundayNotes() {
   trackCentralAnalytics_("notes_action", {
     section_id: "scripture_notes",
     interaction_action: "notes_cleared",
+    content_type: "scripture_notes",
+    content_id: "sermon_notes",
+    content_label: "Sermon Notes",
     result: "success",
   });
 }
@@ -6229,6 +6268,9 @@ async function saveSundayNotesToMyGoogleDocs() {
     trackCentralAnalytics_("notes_action", {
       section_id: "scripture_notes",
       interaction_action: "google_docs_save",
+      content_type: "scripture_notes",
+      content_id: "sermon_notes",
+      content_label: "Sermon Notes",
       result: "success",
     });
   } catch (error) {
@@ -6240,6 +6282,9 @@ async function saveSundayNotesToMyGoogleDocs() {
     trackCentralAnalytics_("notes_action", {
       section_id: "scripture_notes",
       interaction_action: "google_docs_save",
+      content_type: "scripture_notes",
+      content_id: "sermon_notes",
+      content_label: "Sermon Notes",
       result: "failure",
     });
   }

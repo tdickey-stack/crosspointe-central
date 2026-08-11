@@ -86,6 +86,33 @@
         ]
       },
       {
+        "source": "/embeds.@(js|css|html)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/embed.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/embed.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=300"
+          }
+        ]
+      },
+      {
         "source": "/legal.css",
         "headers": [
           {
@@ -277,6 +304,14 @@
         "destination": "/studio.html"
       },
       {
+        "source": "/embeds",
+        "destination": "/embeds.html"
+      },
+      {
+        "source": "/embeds/**",
+        "destination": "/embeds.html"
+      },
+      {
         "source": "/api/studio/unsplash/search",
         "function": {
           "functionId": "studioUnsplashSearch",
@@ -355,6 +390,14 @@
         }
       },
       {
+        "source": "/api/embed/**",
+        "function": {
+          "functionId": "centralEmbedPublic",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/admin/events/access",
         "function": {
           "functionId": "eventEditorAccess",
@@ -379,6 +422,14 @@
         "source": "/api/admin/bulletin-mode",
         "function": {
           "functionId": "bulletinMode",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/embeds",
+        "function": {
+          "functionId": "centralEmbedsAdmin",
+          "region": "us-central1",
           "pinTag": false
         }
       },

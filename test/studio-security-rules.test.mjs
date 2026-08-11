@@ -379,6 +379,44 @@ test("owner can create, read, update, and delete a strictly valid project", asyn
   await assertSucceeds(reference.delete());
 });
 
+test("Central Embed documents remain API-only for every browser client", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("centralEmbeds/embed_abc123def456").set({
+      schemaVersion: 1,
+      name: "Private admin name",
+      published: {items: []},
+    });
+  });
+
+  const anonymous = environment.unauthenticatedContext().firestore();
+  const adminUser = environment
+      .authenticatedContext("studio-admin")
+      .firestore();
+  const anonymousReference = anonymous.doc(
+      "centralEmbeds/embed_abc123def456",
+  );
+  const adminReference = adminUser.doc("centralEmbeds/embed_abc123def456");
+
+  await assertFails(anonymousReference.get());
+  await assertFails(anonymousReference.set({name: "Attack"}));
+  await assertFails(adminReference.get());
+  await assertFails(adminReference.update({name: "Bypass API"}));
+  await assertFails(adminReference.delete());
+});
+
+test("Central Embed image storage remains API-only", async () => {
+  const storage = environment
+      .authenticatedContext("studio-admin")
+      .storage();
+  const reference = storage.ref(
+      "central-embeds/embed_abc123def456/event-images/event-1.png",
+  );
+  await assertFails(reference.put(new Uint8Array([137, 80, 78, 71]), {
+    contentType: "image/png",
+  }));
+  await assertFails(reference.getDownloadURL());
+});
+
 test("legacy browser assets are sanitized into a rules-valid cloud project", async () => {
   const db = environment.authenticatedContext("owner").firestore();
   const project = {

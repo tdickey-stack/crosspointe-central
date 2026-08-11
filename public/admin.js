@@ -184,6 +184,18 @@
       status: "Print workflow",
     },
     {
+      id: "embeds",
+      label: "Central Embeds",
+      navLabel: "Embeds",
+      route: "/embeds",
+      pageAccessKey: "embeds",
+      summary: "Publish selected Central events to persistent embeds for CrossPointe websites.",
+      collectionPath: "centralEmbeds",
+      status: "Publishing workspace",
+      externalRoute: true,
+      externalActionLabel: "Launch Central Embeds",
+    },
+    {
       id: "studio",
       label: "Studio",
       route: "/studio",
@@ -338,6 +350,7 @@
     {type: "page", id: "sunday"},
     {type: "page", id: "events"},
     {type: "page", id: "bulletin"},
+    {type: "page", id: "embeds"},
     {type: "page", id: "studio"},
     {type: "group", id: "settings"},
     {type: "page", id: "integrations"},
@@ -594,6 +607,7 @@
   var FIRST_ADMIN_PAGE_ACCESS = {
     hub: "admin",
     bulletin: "admin",
+    embeds: "admin",
     studio: "admin",
     settings: "admin",
     integrations: "admin",
@@ -639,6 +653,7 @@
         "hub",
         "events",
         "bulletin",
+        "embeds",
         "thisSunday",
         "quickLinks",
         "statusBanner",
@@ -6215,7 +6230,9 @@
     var actionLabel = page.id === "change-requests" &&
       adminState.changeRequestsPendingCount > 0 ?
       "Review Requests" :
-      page.externalRoute ? "Launch Studio" : "Open Page";
+      page.externalRoute ?
+        (page.externalActionLabel || "Launch Workspace") :
+        "Open Page";
 
     return [
       "<article class=\"central-admin-card central-admin-overview-card\">",
@@ -23415,6 +23432,7 @@
 
     if (pageAccessKey === "hub" ||
       pageAccessKey === "bulletin" ||
+      pageAccessKey === "embeds" ||
       pageAccessKey === "studio" ||
       pageAccessKey === "integrations" ||
       pageAccessKey === "resources" ||
@@ -24612,7 +24630,8 @@
     }
 
     if (pageAccessKey === "hub" || pageAccessKey === "integrations" ||
-      pageAccessKey === "bulletin" || pageAccessKey === "studio") {
+      pageAccessKey === "bulletin" || pageAccessKey === "embeds" ||
+      pageAccessKey === "studio") {
       return normalizeAdminPermissionValue_(pageAccess.settings);
     }
 

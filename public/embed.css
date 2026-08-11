@@ -1,0 +1,179 @@
+.central-embed-root,
+.central-embed-root * {
+  box-sizing: border-box;
+}
+
+.central-embed-root {
+  all: initial;
+  color: #252329;
+  display: block;
+  font-family: "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  width: 100%;
+}
+
+.central-embed-root .central-embed-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  margin: 0;
+  padding: 0;
+}
+
+.central-embed-root .central-embed-event {
+  background: #fff;
+  border: 1px solid rgba(42, 38, 47, 0.13);
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(36, 31, 40, 0.08);
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.central-embed-root .central-embed-media {
+  aspect-ratio: 16 / 9;
+  background: #efedf1;
+  display: block;
+  margin: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.central-embed-root .central-embed-media img {
+  display: block;
+  height: 100%;
+  margin: 0;
+  object-fit: cover;
+  width: 100%;
+}
+
+.central-embed-root .central-embed-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 24px;
+}
+
+.central-embed-root .central-embed-time {
+  color: #79506f;
+  display: block;
+  font: 700 0.78rem/1.2 "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.central-embed-root .central-embed-title {
+  color: #242127;
+  font: 700 clamp(1.35rem, 2.5vw, 1.8rem)/1.05 "League Spartan", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.central-embed-root .central-embed-location,
+.central-embed-root .central-embed-description {
+  color: #625e66;
+  font: 400 0.98rem/1.55 "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+  margin: 0;
+}
+
+.central-embed-root .central-embed-location {
+  color: #403b43;
+  font-weight: 600;
+}
+
+.central-embed-root .central-embed-action {
+  align-items: center;
+  align-self: flex-start;
+  background: #272329;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font: 700 0.9rem/1 "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+  justify-content: center;
+  margin: auto 0 0;
+  min-height: 42px;
+  padding: 0 20px;
+  text-decoration: none;
+}
+
+.central-embed-root .central-embed-action:hover,
+.central-embed-root .central-embed-action:focus-visible {
+  background: #76516f;
+  color: #fff;
+  outline: none;
+}
+
+.central-embed-root .central-embed-action:focus-visible {
+  box-shadow: 0 0 0 3px rgba(118, 81, 111, 0.28);
+}
+
+.central-embed-root .central-embed-empty {
+  background: #f7f5f8;
+  border: 1px solid rgba(42, 38, 47, 0.13);
+  border-radius: 16px;
+  color: #625e66;
+  font: 500 1rem/1.5 "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+  margin: 0;
+  padding: 24px;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-grid {
+  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 340px));
+  justify-content: start;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-event {
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(36, 31, 40, 0.07);
+  width: 100%;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-copy {
+  gap: 7px;
+  padding: 18px;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-time {
+  font-size: 0.72rem;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-title {
+  font-size: 1.35rem;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-location {
+  font-size: 0.9rem;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-action {
+  font-size: 0.84rem;
+  min-height: 38px;
+  padding: 0 17px;
+}
+
+@media (max-width: 560px) {
+  .central-embed-root .central-embed-grid {
+    gap: 16px;
+    grid-template-columns: 1fr;
+  }
+
+  .central-embed-root .central-embed-copy {
+    padding: 20px;
+  }
+
+  .central-embed-root.central-embed-layout-compact .central-embed-grid {
+    grid-template-columns: minmax(0, 340px);
+  }
+
+  .central-embed-root.central-embed-layout-compact .central-embed-copy {
+    padding: 18px;
+  }
+}

@@ -180,6 +180,12 @@ import {
 } from "./planning-center/request-control.js";
 import {getSharedCachedValue} from
   "./planning-center/shared-cache.js";
+import {
+  createCentralEmbedPublicFunction,
+  createCentralEmbedsAdminFunction,
+} from "./embeds/function.js";
+import {createCentralEmbedsPlanningCenterService} from
+  "./embeds/planning-center.js";
 import {createPrintModeFunction} from "./print-mode/function.js";
 import {createPrintModePlanningCenterService} from
   "./print-mode/planning-center.js";
@@ -503,6 +509,7 @@ const cachedYouVersionPassages = new Map();
 const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
   {key: "bulletin", label: "Print Mode"},
+  {key: "embeds", label: "Central Embeds"},
   {key: "studio", label: "Studio"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
@@ -1593,6 +1600,32 @@ export const bulletinMode = createPrintModeFunction({
   getFirestoreServeNeedsOverride: getFirestoreServeNeedsOverride_,
   getDefaultRoomRules: getDefaultCentralRoomRules_,
 });
+
+const centralEmbedsOptions = {
+  admin,
+  firestore,
+  planningCenter: createCentralEmbedsPlanningCenterService({
+    firestore,
+    baseService: printModePlanningCenter,
+    getCentralCalendarEvents: getCentralCalendarEvents_,
+    isValidCalendarEventsValue: isValidCalendarEventsValue_,
+    applyCalendarPresentation: applyCachedCalendarPresentation_,
+  }),
+  planningCenterSecrets: PLANNING_CENTER_SECRETS,
+  allowedAdminEmailDomains: CENTRAL_ALLOWED_ADMIN_EMAIL_DOMAINS,
+  allowedAdminEmails: CENTRAL_ALLOWED_ADMIN_EMAILS,
+  getFirestoreRoomRulesOverride: getFirestoreRoomRulesOverride_,
+  getFirestoreEventOverrides: getFirestoreEventOverrides_,
+  getDefaultRoomRules: getDefaultCentralRoomRules_,
+};
+
+export const centralEmbedsAdmin = createCentralEmbedsAdminFunction(
+    centralEmbedsOptions,
+);
+
+export const centralEmbedPublic = createCentralEmbedPublicFunction(
+    centralEmbedsOptions,
+);
 
 export const publishPreviewContent = onRequest(
     {
@@ -6784,6 +6817,7 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
     const value = (
       key === "integrations" ||
       key === "bulletin" ||
+      key === "embeds" ||
       key === "studio"
     ) &&
       !Object.prototype.hasOwnProperty.call(source, key) ?

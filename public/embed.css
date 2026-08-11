@@ -1,3 +1,8 @@
+[data-central-embed] {
+  max-width: 100%;
+  min-width: 0;
+}
+
 .central-embed-root,
 .central-embed-root * {
   box-sizing: border-box;
@@ -5,11 +10,14 @@
 
 .central-embed-root {
   all: initial;
+  --central-embed-ease: cubic-bezier(0.16, 1, 0.3, 1);
   color: #252329;
   display: block;
   font-family: "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
   font-size: 16px;
   line-height: 1.5;
+  max-width: 100%;
+  min-width: 0;
   width: 100%;
 }
 
@@ -19,6 +27,21 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   margin: 0;
   padding: 0;
+}
+
+.central-embed-root .central-embed-grid-viewport {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.central-embed-root.central-embed-layout-standard .central-embed-grid-viewport {
+  transition: height 1000ms var(--central-embed-ease);
+}
+
+.central-embed-root.central-embed-layout-standard.central-embed-is-collapsed .central-embed-grid-viewport {
+  overflow: hidden;
 }
 
 .central-embed-root .central-embed-event {
@@ -124,16 +147,112 @@
   padding: 24px;
 }
 
+.central-embed-root .central-embed-more,
+.central-embed-root .central-embed-scroll-controls {
+  align-items: center;
+  justify-content: center;
+  margin: 20px 0 0;
+}
+
+.central-embed-root .central-embed-more {
+  display: none;
+}
+
+.central-embed-root.central-embed-has-overflow .central-embed-more {
+  display: flex;
+}
+
+.central-embed-root .central-embed-more button,
+.central-embed-root .central-embed-scroll-controls button {
+  align-items: center;
+  appearance: none;
+  background: #272329;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font: 800 0.9rem/1 "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 20px;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.central-embed-root .central-embed-more button:hover,
+.central-embed-root .central-embed-more button:focus-visible,
+.central-embed-root .central-embed-scroll-controls button:hover,
+.central-embed-root .central-embed-scroll-controls button:focus-visible {
+  background: #76516f;
+  outline: none;
+  transform: translateY(-2px);
+}
+
+.central-embed-root .central-embed-more button:focus-visible,
+.central-embed-root .central-embed-scroll-controls button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(118, 81, 111, 0.28);
+}
+
 .central-embed-root.central-embed-layout-compact .central-embed-grid {
+  display: grid;
   gap: 18px;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 340px));
-  justify-content: start;
+  grid-auto-columns: clamp(260px, 28vw, 340px);
+  grid-auto-flow: column;
+  grid-template-columns: none;
+  justify-content: normal;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 0 0 12px;
+  scroll-behavior: smooth;
+  scroll-snap-type: inline mandatory;
+  scrollbar-color: rgba(118, 81, 111, 0.45) transparent;
+  scrollbar-width: thin;
+  touch-action: pan-x;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-grid::-webkit-scrollbar {
+  height: 8px;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-grid::-webkit-scrollbar-thumb {
+  background: rgba(118, 81, 111, 0.45);
+  border-radius: 999px;
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-grid::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .central-embed-root.central-embed-layout-compact .central-embed-event {
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(36, 31, 40, 0.07);
   width: 100%;
+  scroll-snap-align: start;
+}
+
+.central-embed-root .central-embed-scroll-controls {
+  display: none;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.central-embed-root.central-embed-is-enhanced.central-embed-has-horizontal-overflow .central-embed-scroll-controls {
+  display: flex;
+}
+
+.central-embed-root .central-embed-scroll-controls button {
+  font-size: 1.2rem;
+  min-height: 40px;
+  padding: 0;
+  width: 44px;
+}
+
+.central-embed-root .central-embed-scroll-controls button:disabled {
+  background: #ded9df;
+  color: #817b84;
+  cursor: default;
+  transform: none;
 }
 
 .central-embed-root.central-embed-layout-compact .central-embed-copy {
@@ -170,10 +289,21 @@
   }
 
   .central-embed-root.central-embed-layout-compact .central-embed-grid {
-    grid-template-columns: minmax(0, 340px);
+    grid-auto-columns: min(88vw, 340px);
+    grid-template-columns: none;
   }
 
   .central-embed-root.central-embed-layout-compact .central-embed-copy {
     padding: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .central-embed-root.central-embed-layout-standard .central-embed-grid-viewport {
+    transition-duration: 0.01ms;
+  }
+
+  .central-embed-root.central-embed-layout-compact .central-embed-grid {
+    scroll-behavior: auto;
   }
 }

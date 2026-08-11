@@ -49,43 +49,74 @@ test("missing source events are omitted without breaking the embed", () => {
   assert.deepEqual(events, []);
 });
 
-test("a recurring selection expands future Planning Center instances", () => {
+test(
+    "a recurring selection uses only the next Planning Center instance",
+    () => {
+      const events = resolveCentralEmbedEvents({
+        items: [{
+          sourceEventId: "expired-instance",
+          recurrence: {
+            planningCenterEventId: "series-123",
+            title: "Weekly Gathering",
+          },
+          overrides: {title: "Gather With Us"},
+        }],
+      }, {
+        upcoming: [{
+          ...eventGroups.upcoming[0],
+          id: "future-1",
+          planning_center_event_id: "series-123",
+          planning_center_title: "Weekly Gathering",
+          date: "August 20",
+          starts_at: "2026-08-20T23:00:00.000Z",
+        }, {
+          ...eventGroups.upcoming[0],
+          id: "future-2",
+          planning_center_event_id: "series-123",
+          planning_center_title: "Weekly Gathering",
+          date: "August 27",
+          starts_at: "2026-08-27T23:00:00.000Z",
+        }, {
+          ...eventGroups.upcoming[0],
+          id: "different-series",
+          planning_center_event_id: "series-999",
+          planning_center_title: "Weekly Gathering",
+        }],
+      });
+
+      assert.equal(events.length, 1);
+      assert.equal(events[0].date, "August 20");
+      assert.equal(events[0].title, "Gather With Us");
+    },
+);
+
+test("resolved events are chronological instead of editor ordered", () => {
   const events = resolveCentralEmbedEvents({
     items: [{
-      sourceEventId: "expired-instance",
-      recurrence: {
-        planningCenterEventId: "series-123",
-        title: "Weekly Gathering",
-      },
-      overrides: {title: "Gather With Us"},
+      sourceEventId: "later",
+      overrides: {date: "Custom later date"},
+    }, {
+      sourceEventId: "earlier",
+      overrides: {},
     }],
   }, {
     upcoming: [{
       ...eventGroups.upcoming[0],
-      id: "future-1",
-      planning_center_event_id: "series-123",
-      planning_center_title: "Weekly Gathering",
-      date: "August 20",
+      id: "later",
+      title: "Later Event",
+      starts_at: "2026-09-10T23:00:00.000Z",
     }, {
       ...eventGroups.upcoming[0],
-      id: "future-2",
-      planning_center_event_id: "series-123",
-      planning_center_title: "Weekly Gathering",
-      date: "August 27",
-    }, {
-      ...eventGroups.upcoming[0],
-      id: "different-series",
-      planning_center_event_id: "series-999",
-      planning_center_title: "Weekly Gathering",
+      id: "earlier",
+      title: "Earlier Event",
+      starts_at: "2026-08-15T23:00:00.000Z",
     }],
   });
 
-  assert.equal(events.length, 2);
-  assert.deepEqual(events.map((event) => event.date), [
-    "August 20",
-    "August 27",
+  assert.deepEqual(events.map((event) => event.title), [
+    "Earlier Event",
+    "Later Event",
   ]);
-  assert.equal(events[0].title, "Gather With Us");
 });
 
 test("recurring selection falls back to normalized source title", () => {
@@ -135,8 +166,30 @@ test("HTML renderer emits semantic markup and escapes content", () => {
   assert.doesNotMatch(html, /Kids < Night/);
 });
 
+test("standard HTML includes a progressive See More control", () => {
+  const event = {
+    title: "Community Night",
+    date: "August 20",
+    time: "6 PM",
+    startsAt: "2026-08-20T23:00:00.000Z",
+    location: "CrossPointe Church",
+    description: "A public event",
+    imageUrl: "",
+    actionUrl: "https://example.com/event",
+    actionLabel: "Learn More",
+  };
+  const html = renderCentralEmbedHtml(
+      "embed_abc123def456",
+      [event, {...event, title: "Next Event"}],
+      {includeStyles: false, layout: "standard"},
+  );
+
+  assert.match(html, /data-central-embed-toggle/);
+  assert.match(html, /aria-expanded="false">See More/);
+});
+
 test("compact HTML stays bounded to the concise event fields", () => {
-  const html = renderCentralEmbedHtml("embed_abc123def456", [{
+  const event = {
     title: "Community Night",
     date: "August 20",
     time: "6 PM",
@@ -146,7 +199,12 @@ test("compact HTML stays bounded to the concise event fields", () => {
     imageUrl: "https://example.com/event.jpg",
     actionUrl: "https://example.com/event",
     actionLabel: "Learn More",
-  }], {includeStyles: false, layout: "compact"});
+  };
+  const html = renderCentralEmbedHtml(
+      "embed_abc123def456",
+      [event, {...event, title: "Next Community Night"}],
+      {includeStyles: false, layout: "compact"},
+  );
 
   assert.match(html, /central-embed-layout-compact/);
   assert.match(html, /data-central-embed-layout="compact"/);
@@ -154,5 +212,7 @@ test("compact HTML stays bounded to the concise event fields", () => {
   assert.match(html, /August 20 · 6 PM/);
   assert.match(html, /CrossPointe Church/);
   assert.match(html, /Learn More/);
+  assert.match(html, /data-central-embed-scroll="-1"/);
+  assert.match(html, /data-central-embed-scroll="1"/);
   assert.doesNotMatch(html, /long description/);
 });

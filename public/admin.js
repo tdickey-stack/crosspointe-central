@@ -9414,7 +9414,11 @@
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify(draft),
+        body: JSON.stringify({
+          title: draft.title,
+          message: draft.message,
+          link: String(draft.link || "").trim() || window.location.origin + "/",
+        }),
       });
     }).then(parseAdminEndpointResponse_).then(function(result) {
       adminState.pushNotificationSending = false;

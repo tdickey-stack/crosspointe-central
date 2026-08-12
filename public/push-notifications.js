@@ -10,6 +10,7 @@
   var buttonEl = null;
   var statusEl = null;
   var working = false;
+  var initializationError = "";
 
   function isSupported_() {
     return "Notification" in window &&
@@ -78,6 +79,20 @@
 
   function renderButton_() {
     if (!buttonEl || !statusEl) return;
+    if (!isSupported_()) {
+      buttonEl.disabled = true;
+      buttonEl.textContent = "Notifications unavailable";
+      statusEl.textContent = initializationError ||
+        "This browser cannot use Central push notifications.";
+      return;
+    }
+    if (!registration || !messaging) {
+      buttonEl.disabled = true;
+      buttonEl.textContent = "Loading notifications...";
+      statusEl.textContent = initializationError ||
+        "Connecting this browser to Central notifications.";
+      return;
+    }
     var enabled = Notification.permission === "granted" && getStoredEnabled_();
     buttonEl.disabled = working;
     buttonEl.setAttribute("aria-pressed", enabled ? "true" : "false");
@@ -127,7 +142,7 @@
   }
 
   function handleToggle_() {
-    if (working) return;
+    if (working || !registration || !messaging) return;
     var action = getStoredEnabled_() ?
       disableNotifications_() : enableNotifications_();
     action.catch(function(error) {
@@ -169,6 +184,8 @@
     observer.observe(document.body, {childList: true, subtree: true});
   }
 
+  observeFooter_();
+
   Promise.resolve(window.CENTRAL_FIREBASE_AUTH_READY)
       .then(function() {
         if (!isSupported_()) return null;
@@ -180,7 +197,8 @@
       .then(function(serviceWorkerRegistration) {
         if (!serviceWorkerRegistration) return;
         registration = serviceWorkerRegistration;
-        observeFooter_();
+        initializationError = "";
+        renderButton_();
         messaging.onMessage(function(payload) {
           if (Notification.permission !== "granted") return;
           var data = payload && payload.data || {};
@@ -199,6 +217,9 @@
         });
       })
       .catch(function(error) {
+        initializationError = error && error.message ? error.message :
+          "Central could not initialize push notifications.";
+        renderButton_();
         console.warn("Central push notifications are unavailable.", error);
       });
 }());

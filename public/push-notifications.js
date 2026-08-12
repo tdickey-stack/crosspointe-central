@@ -183,12 +183,12 @@
         observeFooter_();
         messaging.onMessage(function(payload) {
           if (Notification.permission !== "granted") return;
-          var notification = payload && payload.notification || {};
-          var link = payload && payload.data && payload.data.link || "/";
+          var data = payload && payload.data || {};
+          var link = data.link || "/";
           var foregroundNotification = new Notification(
-              notification.title || "CrossPointe Central",
+              data.title || "CrossPointe Central",
               {
-                body: notification.body || "",
+                body: data.message || "",
                 icon: "/icons/central-192.png",
               },
           );

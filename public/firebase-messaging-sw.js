@@ -1,5 +1,6 @@
 /* global firebase */
 self.addEventListener("notificationclick", function(event) {
+  event.stopImmediatePropagation();
   event.notification.close();
 
   var notificationData = event.notification.data || {};
@@ -7,7 +8,7 @@ self.addEventListener("notificationclick", function(event) {
   var destination = new URL(link, self.location.origin).href;
 
   event.waitUntil(
-      clients.matchAll({type: "window", includeUncontrolled: true})
+      self.clients.matchAll({type: "window", includeUncontrolled: true})
           .then(function(windowClients) {
             var sameOriginClient = windowClients.find(function(client) {
               return new URL(client.url).origin ===
@@ -18,10 +19,12 @@ self.addEventListener("notificationclick", function(event) {
               return sameOriginClient.navigate(destination)
                   .then(function() {
                     return sameOriginClient.focus();
+                  }).catch(function() {
+                    return self.clients.openWindow(destination);
                   });
             }
 
-            return clients.openWindow(destination);
+            return self.clients.openWindow(destination);
           }),
   );
 });
@@ -32,4 +35,18 @@ importScripts("/__/firebase/init.js");
 
 // This worker exists only for Firebase Cloud Messaging. It intentionally does
 // not handle fetch events or cache Central content.
-firebase.messaging();
+var messaging = firebase.messaging();
+
+messaging.onBackgroundMessage(function(payload) {
+  var data = payload && payload.data || {};
+  return self.registration.showNotification(
+      data.title || "CrossPointe Central",
+      {
+        body: data.message || "",
+        icon: "/icons/central-192.png",
+        badge: "/icons/central-192.png",
+        data: {link: data.link || self.location.origin + "/"},
+        requireInteraction: true,
+      },
+  );
+});

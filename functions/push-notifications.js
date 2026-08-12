@@ -169,20 +169,13 @@ export function createPushSendHandler({
         const batch = subscriptions.slice(index, index + MULTICAST_LIMIT);
         const result = await messaging.sendEachForMulticast({
           tokens: batch.map((subscription) => subscription.token),
-          notification: {
+          data: {
             title: payload.title,
-            body: payload.message,
+            message: payload.message,
+            link: payload.link,
           },
-          data: {link: payload.link},
           webpush: {
             headers: {Urgency: "high"},
-            fcmOptions: {link: payload.link},
-            notification: {
-              icon: "/icons/central-192.png",
-              badge: "/icons/central-192.png",
-              data: {link: payload.link},
-              requireInteraction: true,
-            },
           },
         });
         successCount += Number(result.successCount || 0);

@@ -157,7 +157,10 @@
   }
 
   function mountControl_() {
-    if (buttonEl || !document.body) return;
+    if (!document.body) return;
+    if (buttonEl && buttonEl.isConnected) return;
+    buttonEl = null;
+    statusEl = null;
     var footer = document.querySelector(".public-footer-wrap");
     if (!footer) return;
 
@@ -176,10 +179,8 @@
 
   function observeFooter_() {
     mountControl_();
-    if (buttonEl) return;
     var observer = new MutationObserver(function() {
       mountControl_();
-      if (buttonEl) observer.disconnect();
     });
     observer.observe(document.body, {childList: true, subtree: true});
   }

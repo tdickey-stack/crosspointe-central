@@ -5,12 +5,15 @@
 
   var SUBSCRIPTION_ENDPOINT = "/api/push/subscription";
   var STATE_STORAGE_KEY = "central-push-enabled-v1";
+  var PROMPT_DISMISSED_UNTIL_KEY = "central-push-prompt-dismissed-until-v1";
+  var PROMPT_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
   var messaging = null;
   var registration = null;
   var buttonEl = null;
   var statusEl = null;
   var working = false;
   var initializationError = "";
+  var promptEl = null;
 
   function isSupported_() {
     return "Notification" in window &&
@@ -36,6 +39,32 @@
       }
     } catch (error) {
     }
+  }
+
+  function isPromptDismissed_() {
+    try {
+      return Number(localStorage.getItem(PROMPT_DISMISSED_UNTIL_KEY) || 0) >
+        Date.now();
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function dismissPrompt_() {
+    try {
+      localStorage.setItem(
+          PROMPT_DISMISSED_UNTIL_KEY,
+          String(Date.now() + PROMPT_DISMISS_MS),
+      );
+    } catch (error) {
+    }
+    if (promptEl) promptEl.remove();
+    promptEl = null;
+  }
+
+  function closePrompt_() {
+    if (promptEl) promptEl.remove();
+    promptEl = null;
   }
 
   function postSubscription_(token, enabled) {
@@ -121,6 +150,7 @@
           }
           return postSubscription_(token, true).then(function() {
             setStoredEnabled_(true);
+            closePrompt_();
           });
         });
   }
@@ -185,6 +215,51 @@
     observer.observe(document.body, {childList: true, subtree: true});
   }
 
+  function maybeShowPrompt_() {
+    if (promptEl || !registration || !messaging ||
+      Notification.permission !== "default" || getStoredEnabled_() ||
+      isPromptDismissed_()) {
+      return;
+    }
+
+    promptEl = document.createElement("aside");
+    promptEl.className = "central-push-prompt";
+    promptEl.setAttribute("role", "dialog");
+    promptEl.setAttribute("aria-labelledby", "central-push-prompt-title");
+    promptEl.innerHTML = [
+      "<div class=\"central-push-prompt-icon\" aria-hidden=\"true\">&#128276;</div>",
+      "<div class=\"central-push-prompt-copy\">",
+      "<strong id=\"central-push-prompt-title\">Stay connected</strong>",
+      "<p>Get occasional CrossPointe updates on this device.</p>",
+      "</div><div class=\"central-push-prompt-actions\">",
+      "<button type=\"button\" class=\"central-push-prompt-enable\">Enable notifications</button>",
+      "<button type=\"button\" class=\"central-push-prompt-later\">Not now</button>",
+      "</div>",
+    ].join("");
+    document.body.appendChild(promptEl);
+
+    promptEl.querySelector(".central-push-prompt-later")
+        .addEventListener("click", dismissPrompt_);
+    promptEl.querySelector(".central-push-prompt-enable")
+        .addEventListener("click", function(event) {
+          var enableButton = event.currentTarget;
+          enableButton.disabled = true;
+          enableButton.textContent = "Enabling...";
+          enableNotifications_().then(function() {
+            closePrompt_();
+          }).catch(function(error) {
+            enableButton.disabled = false;
+            enableButton.textContent = "Enable notifications";
+            promptEl.querySelector("p").textContent =
+              error && error.message ? error.message :
+                "Central could not enable notifications.";
+          }).finally(function() {
+            working = false;
+            renderButton_();
+          });
+        });
+  }
+
   observeFooter_();
 
   Promise.resolve(window.CENTRAL_FIREBASE_AUTH_READY)
@@ -200,6 +275,7 @@
         registration = serviceWorkerRegistration;
         initializationError = "";
         renderButton_();
+        window.setTimeout(maybeShowPrompt_, 900);
         messaging.onMessage(function(payload) {
           if (Notification.permission !== "granted") return;
           var data = payload && payload.data || {};

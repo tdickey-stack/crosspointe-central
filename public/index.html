@@ -8,6 +8,10 @@
     >
     <meta name="theme-color" content="#f4f4f5">
     <meta name="application-name" content="CrossPointe Central">
+    <meta
+      name="central-web-push-vapid-key"
+      content="BKNM2bdE5eXC43PHvRvGehiOrnCJ3MIaxLC4i2P0GuPWgw5fFdPtiahoHHyTXuzyypK0_f1SnsozYfkG9fKmoI0"
+    >
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="CrossPointe Central">
@@ -131,7 +135,11 @@
               );
             })
             .then(function() {
-              if (!isAdminRoute) return;
+              if (!isAdminRoute) {
+                return loadFirebaseScript_(
+                    "/__/firebase/11.10.0/firebase-messaging-compat.js",
+                );
+              }
 
               return loadFirebaseScript_(
                   "/__/firebase/11.10.0/firebase-firestore-compat.js",
@@ -162,6 +170,7 @@
     <script defer src="/central-analytics.js"></script>
     <script defer src="/event-editor.js"></script>
     <script defer src="/app.js"></script>
+    <script defer src="/push-notifications.js"></script>
     <script defer src="/wayfinder-chat.js"></script>
   </head>
   <body>

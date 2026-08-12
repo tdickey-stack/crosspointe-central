@@ -68,6 +68,28 @@
         ]
       },
       {
+        "source": "/push-notifications.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/firebase-messaging-sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0, must-revalidate"
+          },
+          {
+            "key": "Service-Worker-Allowed",
+            "value": "/"
+          }
+        ]
+      },
+      {
         "source": "/central-analytics.js",
         "headers": [
           {
@@ -570,6 +592,22 @@
         "source": "/api/serve-needs/share-interest",
         "function": {
           "functionId": "shareServeNeedInterest",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/push/subscription",
+        "function": {
+          "functionId": "centralPushSubscription",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/push/send",
+        "function": {
+          "functionId": "centralPushSend",
+          "region": "us-central1",
           "pinTag": false
         }
       },

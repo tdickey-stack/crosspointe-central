@@ -83,6 +83,7 @@
   var SUBMIT_CHANGE_REQUEST_ENDPOINT = "/api/admin/submit-change-request";
   var REVIEW_CHANGE_REQUEST_ENDPOINT = "/api/admin/review-change-request";
   var LIST_ADMIN_USERS_ENDPOINT = "/api/admin/list-users";
+  var PUSH_NOTIFICATION_SEND_ENDPOINT = "/api/admin/push/send";
   var UPSERT_ADMIN_USER_ENDPOINT = "/api/admin/upsert-user";
   var DELETE_ADMIN_USER_ENDPOINT = "/api/admin/delete-user";
   var CLAIM_ADMIN_INVITE_ENDPOINT = "/api/admin/claim-invite";
@@ -908,6 +909,14 @@
     settingsSundayDraft: createEmptySettingsSundayDraft_(),
     settingsSundayError: "",
     settingsSundayMessage: "",
+    pushNotificationDraft: {
+      title: "",
+      message: "",
+      link: "",
+    },
+    pushNotificationSending: false,
+    pushNotificationError: "",
+    pushNotificationMessage: "",
     wayfinderAlphaEnabled: false,
     wayfinderAlphaLoaded: false,
     wayfinderAlphaLoading: false,
@@ -2019,6 +2028,12 @@
       if (action === "publish-settings-sunday") {
         event.preventDefault();
         publishSettingsSundayToPreview_();
+        return;
+      }
+
+      if (action === "send-push-notification") {
+        event.preventDefault();
+        sendPushNotification_();
         return;
       }
 
@@ -4235,6 +4250,14 @@
       adminState.wayfinderQuestion = String(nextValue || "");
       adminState.wayfinderError = "";
       adminState.wayfinderAnswerError = "";
+      return;
+    }
+
+    if (field.indexOf("push-notification.") === 0) {
+      var pushFieldName = field.replace("push-notification.", "");
+      adminState.pushNotificationDraft[pushFieldName] = String(nextValue || "");
+      adminState.pushNotificationError = "";
+      adminState.pushNotificationMessage = "";
       return;
     }
 
@@ -9309,9 +9332,103 @@
         "<p>Your account does not currently have access to Sunday Mode, Rooms, or Team & Permissions.</p>",
         "</div>",
       ].join(""),
+      renderPushNotificationComposer_(),
       "</div>",
       "</section>",
     ].join("");
+  }
+
+  function renderPushNotificationComposer_() {
+    var canSend = isActiveAdminUserRecord_() &&
+      getPageAccessLevel_("settings") === "admin";
+    var draft = adminState.pushNotificationDraft;
+
+    return [
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\"><strong>Push notification</strong>",
+      renderStatusPill_(canSend ? "Settings Admin" : "Restricted",
+          canSend ? "is-safe" : "is-warn"),
+      "</div>",
+      renderAdminNote_(canSend ?
+        "Send one immediate notification to every device that has notifications turned on." :
+        "Settings Admin access is required to send push notifications."),
+      adminState.pushNotificationMessage ?
+        "<p class=\"central-admin-note\">" +
+          escapeHtml_(adminState.pushNotificationMessage) + "</p>" : "",
+      adminState.pushNotificationError ?
+        "<p class=\"central-admin-note\" role=\"alert\">" +
+          escapeHtml_(adminState.pushNotificationError) + "</p>" : "",
+      canSend ? [
+        "<div class=\"central-admin-form-grid\">",
+        "<label class=\"central-admin-field\"><span>Title</span>",
+        "<input type=\"text\" data-admin-field=\"push-notification.title\" maxlength=\"80\" placeholder=\"Sunday at CrossPointe\" value=\"",
+        escapeAttr_(draft.title), "\"></label>",
+        "<label class=\"central-admin-field central-admin-field-wide\"><span>Message</span>",
+        "<textarea data-admin-field=\"push-notification.message\" maxlength=\"240\" rows=\"4\" placeholder=\"Type the update people should receive.\">",
+        escapeHtml_(draft.message), "</textarea></label>",
+        "<label class=\"central-admin-field central-admin-field-wide\"><span>Link (optional)</span>",
+        "<input type=\"url\" data-admin-field=\"push-notification.link\" maxlength=\"500\" placeholder=\"/#events\" value=\"",
+        escapeAttr_(draft.link), "\"></label>",
+        "</div><div class=\"central-admin-action-row\">",
+        "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"send-push-notification\"",
+        adminState.pushNotificationSending ? " disabled" : "",
+        ">", adminState.pushNotificationSending ?
+          "Sending..." : "Send Notification", "</button></div>",
+      ].join("") : "",
+      "</div>",
+    ].join("");
+  }
+
+  function sendPushNotification_() {
+    if (!adminState.user || getPageAccessLevel_("settings") !== "admin") {
+      adminState.pushNotificationError =
+        "Settings Admin access is required to send push notifications.";
+      renderAdmin_();
+      return;
+    }
+
+    var draft = adminState.pushNotificationDraft;
+    if (!String(draft.title || "").trim() ||
+      !String(draft.message || "").trim()) {
+      adminState.pushNotificationError = "Enter a title and message first.";
+      renderAdmin_();
+      return;
+    }
+
+    if (!window.confirm(
+        "Send this notification now to every subscribed device?",
+    )) {
+      return;
+    }
+
+    adminState.pushNotificationSending = true;
+    adminState.pushNotificationError = "";
+    adminState.pushNotificationMessage = "";
+    renderAdmin_();
+
+    adminState.user.getIdToken().then(function(idToken) {
+      return fetch(PUSH_NOTIFICATION_SEND_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + idToken,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(draft),
+      });
+    }).then(parseAdminEndpointResponse_).then(function(result) {
+      adminState.pushNotificationSending = false;
+      adminState.pushNotificationDraft = {title: "", message: "", link: ""};
+      adminState.pushNotificationMessage =
+        "Sent to " + String(result.successCount || 0) + " of " +
+        String(result.recipientCount || 0) + " subscribed devices.";
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.pushNotificationSending = false;
+      adminState.pushNotificationError = error && error.message ?
+        error.message : "Unable to send the push notification.";
+      renderAdmin_();
+    });
   }
 
   function renderSettingsDestinationCard_(page) {

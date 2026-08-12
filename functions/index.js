@@ -196,6 +196,10 @@ import {
 } from "./wayfinder/notices.js";
 import {createWayfinderPrototypeHandler} from "./wayfinder/prototype.js";
 import {
+  createPushSendHandler,
+  createPushSubscriptionHandler,
+} from "./push-notifications.js";
+import {
   createWayfinderWebsiteIndexHandler,
   getRelevantWayfinderWebsiteEntries,
 } from "./wayfinder/website-index.js";
@@ -204,6 +208,16 @@ setGlobalOptions({maxInstances: 10});
 admin.initializeApp();
 
 const firestore = admin.firestore();
+const pushSubscriptionHandler = createPushSubscriptionHandler({
+  firestore,
+  fieldValue: admin.firestore.FieldValue,
+});
+const pushSendHandler = createPushSendHandler({
+  firestore,
+  fieldValue: admin.firestore.FieldValue,
+  messaging: admin.messaging(),
+  verifySender: verifyPushNotificationSender_,
+});
 const getWayfinderFeaturedEvents = createWayfinderFeaturedEventProvider();
 const getWayfinderFeaturedEventEntries = async (question) => {
   return buildWayfinderFeaturedEventEntries(
@@ -751,6 +765,22 @@ export const eventEditorAccess = onRequest(
         response.status(401).json({error: "Your admin session expired."});
       }
     },
+);
+
+export const centralPushSubscription = onRequest(
+    {
+      region: "us-central1",
+      cors: false,
+    },
+    pushSubscriptionHandler,
+);
+
+export const centralPushSend = onRequest(
+    {
+      region: "us-central1",
+      cors: false,
+    },
+    pushSendHandler,
 );
 
 export const wayfinderPrototypeQuery = onRequest(
@@ -6191,6 +6221,54 @@ function getChangeRequestsPermission_(pageAccess) {
   return normalizePreviewPermissionValue_(
       pageAccess && pageAccess.changeRequests,
   );
+}
+
+/**
+ * Verifies that a request comes from an active Settings Admin.
+ * @param {object} request HTTP request.
+ * @return {Promise<{uid: string, email: string}>} Sender identity.
+ */
+async function verifyPushNotificationSender_(request) {
+  const idToken = getBearerToken_(request.headers.authorization);
+  if (!idToken) {
+    const error = new Error("Sign in before sending a push notification.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  let decodedToken = null;
+  try {
+    decodedToken = await admin.auth().verifyIdToken(idToken);
+  } catch (cause) {
+    const error = new Error("Your admin session expired. Sign in again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const email = normalizeAdminEmail_(decodedToken.email);
+  const userSnapshot = await firestore
+      .doc(getCentralAdminUserDocPath_(decodedToken.uid))
+      .get();
+  const permission = userSnapshot.exists ? getManagedAdminSectionPermission_(
+      userSnapshot.get("pageAccess") || {},
+      "settings",
+  ) : "none";
+
+  if (!isAllowedCentralAdminEmail_(email) ||
+    !userSnapshot.exists ||
+    userSnapshot.get("active") !== true ||
+    permission !== "admin") {
+    const error = new Error(
+        "Settings Admin access is required to send push notifications.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return {
+    uid: String(decodedToken.uid || "").trim(),
+    email,
+  };
 }
 
 async function verifyAdminUserManagerAccess_(decodedToken) {

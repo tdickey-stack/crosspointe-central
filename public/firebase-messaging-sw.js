@@ -3,11 +3,7 @@ self.addEventListener("notificationclick", function(event) {
   event.notification.close();
 
   var notificationData = event.notification.data || {};
-  var fcmMessage = notificationData.FCM_MSG || {};
-  var link = notificationData.link ||
-    (fcmMessage.data && fcmMessage.data.link) ||
-    (fcmMessage.fcmOptions && fcmMessage.fcmOptions.link) ||
-    "/";
+  var link = notificationData.link || "/";
   var destination = new URL(link, self.location.origin).href;
 
   event.waitUntil(

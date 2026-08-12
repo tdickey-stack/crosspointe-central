@@ -175,10 +175,13 @@ export function createPushSendHandler({
           },
           data: {link: payload.link},
           webpush: {
+            headers: {Urgency: "high"},
             fcmOptions: {link: payload.link},
             notification: {
               icon: "/icons/central-192.png",
               badge: "/icons/central-192.png",
+              data: {link: payload.link},
+              requireInteraction: true,
             },
           },
         });

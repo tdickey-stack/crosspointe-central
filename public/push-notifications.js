@@ -5,7 +5,7 @@
 
   var SUBSCRIPTION_ENDPOINT = "/api/push/subscription";
   var STATE_STORAGE_KEY = "central-push-enabled-v1";
-  var PROMPT_DISMISSED_UNTIL_KEY = "central-push-prompt-dismissed-until-v1";
+  var PROMPT_DISMISSED_UNTIL_KEY = "central-push-prompt-dismissed-until-v2";
   var PROMPT_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
   var messaging = null;
   var registration = null;
@@ -13,7 +13,25 @@
   var statusEl = null;
   var working = false;
   var initializationError = "";
+  var initializationSettled = false;
   var promptEl = null;
+
+  function isIosDevice_() {
+    var userAgent = String(navigator.userAgent || "");
+    return /iPad|iPhone|iPod/.test(userAgent) ||
+      (/Macintosh/.test(userAgent) &&
+        Number(navigator.maxTouchPoints || 0) > 1);
+  }
+
+  function isAndroidDevice_() {
+    return /Android/.test(String(navigator.userAgent || ""));
+  }
+
+  function isStandalone_() {
+    return navigator.standalone === true ||
+      (window.matchMedia &&
+        window.matchMedia("(display-mode: standalone)").matches);
+  }
 
   function isSupported_() {
     return "Notification" in window &&
@@ -62,6 +80,13 @@
     promptEl = null;
   }
 
+  function clearPromptDismissal_() {
+    try {
+      localStorage.removeItem(PROMPT_DISMISSED_UNTIL_KEY);
+    } catch (error) {
+    }
+  }
+
   function closePrompt_() {
     if (promptEl) promptEl.remove();
     promptEl = null;
@@ -108,6 +133,20 @@
 
   function renderButton_() {
     if (!buttonEl || !statusEl) return;
+    if (isIosDevice_() && !isStandalone_()) {
+      buttonEl.disabled = true;
+      buttonEl.textContent = "Install for notifications";
+      statusEl.textContent =
+        "On iPhone or iPad, add Central to the Home Screen first.";
+      return;
+    }
+    if (!initializationSettled && !isSupported_()) {
+      buttonEl.disabled = true;
+      buttonEl.textContent = "Loading notifications...";
+      statusEl.textContent =
+        "Connecting this browser to Central notifications.";
+      return;
+    }
     if (!isSupported_()) {
       buttonEl.disabled = true;
       buttonEl.textContent = "Notifications unavailable";
@@ -150,6 +189,7 @@
           }
           return postSubscription_(token, true).then(function() {
             setStoredEnabled_(true);
+            clearPromptDismissal_();
             closePrompt_();
           });
         });
@@ -173,7 +213,9 @@
 
   function handleToggle_() {
     if (working || !registration || !messaging) return;
-    var action = getStoredEnabled_() ?
+    var isEnabled = Notification.permission === "granted" &&
+      getStoredEnabled_();
+    var action = isEnabled ?
       disableNotifications_() : enableNotifications_();
     action.catch(function(error) {
       if (statusEl) {
@@ -215,33 +257,91 @@
     observer.observe(document.body, {childList: true, subtree: true});
   }
 
+  function getPromptMode_() {
+    if (isPromptDismissed_()) return "";
+    if (isIosDevice_() && !isStandalone_()) return "ios-install";
+    if ("Notification" in window && Notification.permission === "denied") {
+      return "blocked";
+    }
+    if (getStoredEnabled_()) return "";
+    if (!initializationSettled) return "";
+    if (!isSupported_() || !registration || !messaging) {
+      return isAndroidDevice_() ? "android-unsupported" : "unsupported";
+    }
+    return "enable";
+  }
+
   function maybeShowPrompt_() {
-    if (promptEl || !registration || !messaging ||
-      Notification.permission !== "default" || getStoredEnabled_() ||
-      isPromptDismissed_()) {
+    var mode = getPromptMode_();
+    if (!mode) {
+      closePrompt_();
       return;
+    }
+    if (promptEl && promptEl.dataset.mode === mode) return;
+    closePrompt_();
+
+    var title = "Stay connected";
+    var message = "Get occasional CrossPointe updates on this device.";
+    var primaryLabel = "Enable notifications";
+    var canEnable = mode === "enable";
+
+    if (mode === "ios-install") {
+      title = "Get notifications on iPhone";
+      message = "Tap Share, choose Add to Home Screen, then open " +
+        "CrossPointe Central from the new icon to enable notifications.";
+      primaryLabel = "Got it";
+    } else if (mode === "blocked") {
+      title = "Notifications are blocked";
+      message = "Allow notifications for Central in this browser's or " +
+        "device's site settings, then return here and try again.";
+      primaryLabel = "Got it";
+    } else if (mode === "android-unsupported") {
+      title = "Open Central in Chrome";
+      message = "This in-app browser cannot receive push notifications. " +
+        "Open this page in Chrome to enable them.";
+      primaryLabel = "Got it";
+    } else if (mode === "unsupported") {
+      title = "Notifications unavailable";
+      message = initializationError ||
+        "This browser cannot receive Central push notifications.";
+      primaryLabel = "Got it";
+    } else if (Notification.permission === "granted") {
+      title = "Turn notifications back on";
+      message = "Reconnect this device to occasional CrossPointe updates.";
     }
 
     promptEl = document.createElement("aside");
     promptEl.className = "central-push-prompt";
+    promptEl.dataset.mode = mode;
     promptEl.setAttribute("role", "dialog");
     promptEl.setAttribute("aria-labelledby", "central-push-prompt-title");
     promptEl.innerHTML = [
-      "<div class=\"central-push-prompt-icon\" aria-hidden=\"true\">&#128276;</div>",
+      "<div class=\"central-push-prompt-icon\" aria-hidden=\"true\">" +
+        "&#128276;</div>",
       "<div class=\"central-push-prompt-copy\">",
-      "<strong id=\"central-push-prompt-title\">Stay connected</strong>",
-      "<p>Get occasional CrossPointe updates on this device.</p>",
+      "<strong id=\"central-push-prompt-title\"></strong>",
+      "<p></p>",
       "</div><div class=\"central-push-prompt-actions\">",
-      "<button type=\"button\" class=\"central-push-prompt-enable\">Enable notifications</button>",
-      "<button type=\"button\" class=\"central-push-prompt-later\">Not now</button>",
+      "<button type=\"button\" class=\"central-push-prompt-enable\"></button>",
+      (canEnable ?
+        "<button type=\"button\" class=\"central-push-prompt-later\">" +
+          "Not now</button>" : ""),
       "</div>",
     ].join("");
+    promptEl.querySelector("strong").textContent = title;
+    promptEl.querySelector("p").textContent = message;
+    promptEl.querySelector(".central-push-prompt-enable").textContent =
+      primaryLabel;
     document.body.appendChild(promptEl);
 
-    promptEl.querySelector(".central-push-prompt-later")
-        .addEventListener("click", dismissPrompt_);
+    var laterButton = promptEl.querySelector(".central-push-prompt-later");
+    if (laterButton) laterButton.addEventListener("click", dismissPrompt_);
     promptEl.querySelector(".central-push-prompt-enable")
         .addEventListener("click", function(event) {
+          if (!canEnable) {
+            dismissPrompt_();
+            return;
+          }
           var enableButton = event.currentTarget;
           enableButton.disabled = true;
           enableButton.textContent = "Enabling...";
@@ -250,7 +350,7 @@
           }).catch(function(error) {
             enableButton.disabled = false;
             enableButton.textContent = "Enable notifications";
-            promptEl.querySelector("p").textContent =
+            if (promptEl) promptEl.querySelector("p").textContent =
               error && error.message ? error.message :
                 "Central could not enable notifications.";
           }).finally(function() {
@@ -260,7 +360,28 @@
         });
   }
 
+  function syncExistingSubscription_() {
+    if (!getStoredEnabled_()) return Promise.resolve();
+    if (Notification.permission !== "granted") {
+      setStoredEnabled_(false);
+      renderButton_();
+      maybeShowPrompt_();
+      return Promise.resolve();
+    }
+
+    return messaging.getToken(getTokenOptions_()).then(function(token) {
+      if (!token) throw new Error("This device needs to reconnect.");
+      return postSubscription_(token, true);
+    }).catch(function(error) {
+      if (statusEl) {
+        statusEl.textContent = error && error.message ? error.message :
+          "Central could not refresh this notification subscription.";
+      }
+    });
+  }
+
   observeFooter_();
+  window.setTimeout(maybeShowPrompt_, 900);
 
   Promise.resolve(window.CENTRAL_FIREBASE_AUTH_READY)
       .then(function() {
@@ -271,32 +392,36 @@
         });
       })
       .then(function(serviceWorkerRegistration) {
-        if (!serviceWorkerRegistration) return;
+        initializationSettled = true;
+        if (!serviceWorkerRegistration) {
+          renderButton_();
+          maybeShowPrompt_();
+          return;
+        }
         registration = serviceWorkerRegistration;
         initializationError = "";
         renderButton_();
-        window.setTimeout(maybeShowPrompt_, 900);
+        maybeShowPrompt_();
+        syncExistingSubscription_();
         messaging.onMessage(function(payload) {
           if (Notification.permission !== "granted") return;
           var data = payload && payload.data || {};
           var link = data.link || "/";
-          var foregroundNotification = new Notification(
-              data.title || "CrossPointe Central",
-              {
-                body: data.message || "",
-                icon: "/icons/central-192.png",
-              },
-          );
-          foregroundNotification.onclick = function() {
-            window.focus();
-            window.location.assign(link);
-          };
+          registration.showNotification(data.title || "CrossPointe Central", {
+            body: data.message || "",
+            icon: "/icons/central-192.png",
+            badge: "/icons/central-192.png",
+            data: {link: link},
+            requireInteraction: true,
+          });
         });
       })
       .catch(function(error) {
+        initializationSettled = true;
         initializationError = error && error.message ? error.message :
           "Central could not initialize push notifications.";
         renderButton_();
+        maybeShowPrompt_();
         console.warn("Central push notifications are unavailable.", error);
       });
 }());

@@ -83,6 +83,9 @@
   var SUBMIT_CHANGE_REQUEST_ENDPOINT = "/api/admin/submit-change-request";
   var REVIEW_CHANGE_REQUEST_ENDPOINT = "/api/admin/review-change-request";
   var LIST_ADMIN_USERS_ENDPOINT = "/api/admin/list-users";
+  var PUSH_NOTIFICATION_SEND_ENDPOINT = "/api/admin/push/send";
+  var PUSH_NOTIFICATION_SCHEDULE_ENDPOINT = "/api/admin/push/schedule";
+  var DEFAULT_PUSH_NOTIFICATION_LINK = "https://central.crosspointe.tv/";
   var UPSERT_ADMIN_USER_ENDPOINT = "/api/admin/upsert-user";
   var DELETE_ADMIN_USER_ENDPOINT = "/api/admin/delete-user";
   var CLAIM_ADMIN_INVITE_ENDPOINT = "/api/admin/claim-invite";
@@ -182,6 +185,18 @@
       summary: "Build and print a guided Sunday insert from current Central content.",
       collectionPath: "centralAdmin/root/public/bulletinMode",
       status: "Print workflow",
+    },
+    {
+      id: "embeds",
+      label: "Central Embeds",
+      navLabel: "Embeds",
+      route: "/embeds",
+      pageAccessKey: "embeds",
+      summary: "Publish selected Central events to persistent embeds for CrossPointe websites.",
+      collectionPath: "centralEmbeds",
+      status: "Publishing workspace",
+      externalRoute: true,
+      externalActionLabel: "Launch Central Embeds",
     },
     {
       id: "studio",
@@ -338,6 +353,7 @@
     {type: "page", id: "sunday"},
     {type: "page", id: "events"},
     {type: "page", id: "bulletin"},
+    {type: "page", id: "embeds"},
     {type: "page", id: "studio"},
     {type: "group", id: "settings"},
     {type: "page", id: "integrations"},
@@ -594,6 +610,7 @@
   var FIRST_ADMIN_PAGE_ACCESS = {
     hub: "admin",
     bulletin: "admin",
+    embeds: "admin",
     studio: "admin",
     settings: "admin",
     integrations: "admin",
@@ -639,6 +656,7 @@
         "hub",
         "events",
         "bulletin",
+        "embeds",
         "thisSunday",
         "quickLinks",
         "statusBanner",
@@ -893,6 +911,15 @@
     settingsSundayDraft: createEmptySettingsSundayDraft_(),
     settingsSundayError: "",
     settingsSundayMessage: "",
+    pushNotificationDraft: createEmptyPushNotificationDraft_(),
+    pushNotificationEditingId: "",
+    pushNotificationSending: false,
+    pushNotificationError: "",
+    pushNotificationMessage: "",
+    pushNotifications: [],
+    pushNotificationsLoaded: false,
+    pushNotificationsLoading: false,
+    pushNotificationsLoadError: "",
     wayfinderAlphaEnabled: false,
     wayfinderAlphaLoaded: false,
     wayfinderAlphaLoading: false,
@@ -2004,6 +2031,43 @@
       if (action === "publish-settings-sunday") {
         event.preventDefault();
         publishSettingsSundayToPreview_();
+        return;
+      }
+
+      if (action === "send-push-notification") {
+        event.preventDefault();
+        sendPushNotification_();
+        return;
+      }
+
+      if (action === "save-push-notification") {
+        event.preventDefault();
+        savePushNotification_();
+        return;
+      }
+
+      if (action === "edit-push-notification") {
+        event.preventDefault();
+        editPushNotification_(button.getAttribute("data-push-id") || "");
+        return;
+      }
+
+      if (action === "cancel-push-notification") {
+        event.preventDefault();
+        cancelPushNotification_(button.getAttribute("data-push-id") || "");
+        return;
+      }
+
+      if (action === "stop-editing-push-notification") {
+        event.preventDefault();
+        resetPushNotificationDraft_();
+        renderAdmin_();
+        return;
+      }
+
+      if (action === "refresh-push-notifications") {
+        event.preventDefault();
+        loadPushNotifications_(true);
         return;
       }
 
@@ -4223,6 +4287,17 @@
       return;
     }
 
+    if (field.indexOf("push-notification.") === 0) {
+      var pushFieldName = field.replace("push-notification.", "");
+      adminState.pushNotificationDraft[pushFieldName] = String(nextValue || "");
+      adminState.pushNotificationError = "";
+      adminState.pushNotificationMessage = "";
+      if (pushFieldName === "delivery") {
+        renderAdmin_();
+      }
+      return;
+    }
+
     markAdminDirtyScope_(getAdminDirtyScopeForField_(field));
 
     if (field.indexOf("bulletin.") === 0) {
@@ -6215,7 +6290,9 @@
     var actionLabel = page.id === "change-requests" &&
       adminState.changeRequestsPendingCount > 0 ?
       "Review Requests" :
-      page.externalRoute ? "Launch Studio" : "Open Page";
+      page.externalRoute ?
+        (page.externalActionLabel || "Launch Workspace") :
+        "Open Page";
 
     return [
       "<article class=\"central-admin-card central-admin-overview-card\">",
@@ -9292,8 +9369,483 @@
         "<p>Your account does not currently have access to Sunday Mode, Rooms, or Team & Permissions.</p>",
         "</div>",
       ].join(""),
+      renderPushNotificationComposer_(),
       "</div>",
       "</section>",
+    ].join("");
+  }
+
+  function renderPushNotificationComposer_() {
+    var canSend = isActiveAdminUserRecord_() &&
+      getPageAccessLevel_("settings") === "admin";
+    var draft = adminState.pushNotificationDraft;
+    var isEditing = !!adminState.pushNotificationEditingId;
+    var isScheduled = isEditing || draft.delivery === "scheduled";
+    var submitLabel = isEditing ? "Update Schedule" :
+      (isScheduled ? "Schedule Notification" : "Send Notification");
+
+    return [
+      "<div class=\"central-admin-item\">",
+      "<div class=\"central-admin-item-header\"><strong>Push notifications</strong>",
+      renderStatusPill_(canSend ? "Settings Admin" : "Restricted",
+          canSend ? "is-safe" : "is-warn"),
+      "</div>",
+      renderAdminNote_(canSend ?
+        "Notify every subscribed device now or schedule a notification for later." :
+        "Settings Admin access is required to send push notifications."),
+      adminState.pushNotificationMessage ?
+        "<p class=\"central-admin-note\">" +
+          escapeHtml_(adminState.pushNotificationMessage) + "</p>" : "",
+      adminState.pushNotificationError ?
+        "<p class=\"central-admin-note\" role=\"alert\">" +
+          escapeHtml_(adminState.pushNotificationError) + "</p>" : "",
+      canSend ? [
+        "<div class=\"central-admin-form-grid\">",
+        "<label class=\"central-admin-field\"><span>Title</span>",
+        "<input type=\"text\" data-admin-field=\"push-notification.title\" maxlength=\"80\" placeholder=\"Sunday at CrossPointe\" value=\"",
+        escapeAttr_(draft.title), "\"></label>",
+        "<label class=\"central-admin-field central-admin-field-wide\"><span>Message</span>",
+        "<textarea data-admin-field=\"push-notification.message\" maxlength=\"240\" rows=\"4\" placeholder=\"Type the update people should receive.\">",
+        escapeHtml_(draft.message), "</textarea></label>",
+        "<label class=\"central-admin-field central-admin-field-wide\"><span>Link (optional)</span>",
+        "<input type=\"url\" data-admin-field=\"push-notification.link\" maxlength=\"500\" placeholder=\"",
+        escapeAttr_(DEFAULT_PUSH_NOTIFICATION_LINK), "\" value=\"",
+        escapeAttr_(draft.link), "\"><small class=\"central-admin-field-hint\">",
+        "Leave blank to open ", escapeHtml_(DEFAULT_PUSH_NOTIFICATION_LINK),
+        ".</small></label>",
+        isEditing ? [
+          "<div class=\"central-admin-field\"><span>Delivery</span>",
+          "<div class=\"central-admin-static-field\">Scheduled</div></div>",
+        ].join("") : [
+          "<label class=\"central-admin-field is-select\"><span>Delivery</span>",
+          "<select data-admin-field=\"push-notification.delivery\">",
+          "<option value=\"now\"", draft.delivery === "now" ? " selected" : "",
+          ">Send now</option><option value=\"scheduled\"",
+          draft.delivery === "scheduled" ? " selected" : "",
+          ">Schedule for later</option></select></label>",
+        ].join(""),
+        isScheduled ? [
+          "<label class=\"central-admin-field\"><span>Send date and time</span>",
+          "<input type=\"datetime-local\" data-admin-field=\"push-notification.scheduledFor\" value=\"",
+          escapeAttr_(draft.scheduledFor), "\"></label>",
+        ].join("") : "",
+        "</div><div class=\"central-admin-action-row\">",
+        "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-push-notification\"",
+        adminState.pushNotificationSending ? " disabled" : "",
+        ">", adminState.pushNotificationSending ?
+          (isScheduled ? "Saving..." : "Sending...") : submitLabel,
+        "</button>",
+        isEditing ?
+          "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"stop-editing-push-notification\">Stop Editing</button>" :
+          "",
+        "</div>",
+      ].join("") : "",
+      renderScheduledPushNotifications_(canSend),
+      "</div>",
+    ].join("");
+  }
+
+  function renderScheduledPushNotifications_(canManage) {
+    var notifications = Array.isArray(adminState.pushNotifications) ?
+      adminState.pushNotifications.filter(function(notification) {
+        return notification && notification.status !== "canceled";
+      }) : [];
+
+    return [
+      "<div class=\"central-admin-push-schedules\">",
+      "<div class=\"central-admin-push-schedules-header\"><div>",
+      "<strong>Scheduled messages</strong>",
+      "<p>Upcoming notifications and recent delivery results.</p></div>",
+      canManage ?
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-push-notifications\">Refresh</button>" :
+        "",
+      "</div>",
+      adminState.pushNotificationsLoading ?
+        renderAdminNote_("Loading scheduled notifications.") : "",
+      adminState.pushNotificationsLoadError ?
+        "<p class=\"central-admin-note\" role=\"alert\">" +
+          escapeHtml_(adminState.pushNotificationsLoadError) + "</p>" : "",
+      !adminState.pushNotificationsLoading &&
+        adminState.pushNotificationsLoaded && !notifications.length ?
+        "<div class=\"central-admin-empty\"><strong>No scheduled notifications yet.</strong><p>Choose Schedule for later above to create one.</p></div>" :
+        "",
+      notifications.length ?
+        "<div class=\"central-admin-list central-admin-push-schedule-list\">" +
+          notifications.map(function(notification) {
+            return renderScheduledPushNotification_(notification, canManage);
+          }).join("") +
+        "</div>" : "",
+      "</div>",
+    ].join("");
+  }
+
+  function renderScheduledPushNotification_(notification, canManage) {
+    var status = String(notification && notification.status || "scheduled");
+    var isEditable = status === "scheduled" && canManage;
+    var statusLabels = {
+      scheduled: "Scheduled",
+      sending: "Sending",
+      sent: "Sent",
+      failed: "Failed",
+      canceled: "Canceled",
+    };
+    var statusTones = {
+      scheduled: "is-live",
+      sending: "is-live",
+      sent: "is-safe",
+      failed: "is-warn",
+      canceled: "is-warn",
+    };
+
+    return [
+      "<article class=\"central-admin-list-item central-admin-push-schedule-item\">",
+      "<div class=\"central-admin-list-main\">",
+      "<div class=\"central-admin-item-meta\">",
+      renderStatusPill_(statusLabels[status] || status,
+          statusTones[status] || "is-warn"),
+      renderInlineMeta_(
+          "Delivery",
+          formatPushNotificationDate_(notification.scheduledFor),
+      ),
+      "</div>",
+      "<strong>", escapeHtml_(notification.title || "Notification"),
+      "</strong><p>", escapeHtml_(notification.message || ""), "</p>",
+      "<a class=\"central-admin-inline-link\" href=\"",
+      escapeAttr_(notification.link || DEFAULT_PUSH_NOTIFICATION_LINK),
+      "\" target=\"_blank\" rel=\"noopener noreferrer\">",
+      escapeHtml_(notification.link || DEFAULT_PUSH_NOTIFICATION_LINK), "</a>",
+      status === "sent" ?
+        "<small>Delivered to " +
+          escapeHtml_(String(notification.successCount || 0)) + " of " +
+          escapeHtml_(String(notification.recipientCount || 0)) +
+          " subscribed devices.</small>" : "",
+      notification.error ?
+        "<small class=\"is-error\">" +
+          escapeHtml_(notification.error) + "</small>" : "",
+      "</div>",
+      isEditable ? [
+        "<div class=\"central-admin-list-actions\">",
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-push-notification\" data-push-id=\"",
+        escapeAttr_(notification.id), "\">Edit</button>",
+        "<button type=\"button\" class=\"central-admin-link-button is-danger\" data-admin-action=\"cancel-push-notification\" data-push-id=\"",
+        escapeAttr_(notification.id), "\">Remove</button></div>",
+      ].join("") : "",
+      "</article>",
+    ].join("");
+  }
+
+  function savePushNotification_() {
+    var draft = adminState.pushNotificationDraft;
+    if (adminState.pushNotificationEditingId ||
+      draft.delivery === "scheduled") {
+      saveScheduledPushNotification_();
+      return;
+    }
+    sendPushNotification_();
+  }
+
+  function sendPushNotification_() {
+    if (!adminState.user || getPageAccessLevel_("settings") !== "admin") {
+      adminState.pushNotificationError =
+        "Settings Admin access is required to send push notifications.";
+      renderAdmin_();
+      return;
+    }
+
+    var draft = adminState.pushNotificationDraft;
+    if (!String(draft.title || "").trim() ||
+      !String(draft.message || "").trim()) {
+      adminState.pushNotificationError = "Enter a title and message first.";
+      renderAdmin_();
+      return;
+    }
+
+    var payload = {
+      title: draft.title,
+      message: draft.message,
+      link: String(draft.link || "").trim(),
+    };
+    openDeleteConfirm_({
+      title: "Send notification now?",
+      message: "Send “" + String(draft.title || "Notification") +
+        "” now to every subscribed device?",
+      confirmLabel: "Send Notification",
+      showSkip: false,
+      onConfirm: function() {
+        submitPushNotification_(payload);
+      },
+    });
+  }
+
+  function submitPushNotification_(payload) {
+    adminState.pushNotificationSending = true;
+    adminState.pushNotificationError = "";
+    adminState.pushNotificationMessage = "";
+    renderAdmin_();
+
+    adminState.user.getIdToken().then(function(idToken) {
+      return fetch(PUSH_NOTIFICATION_SEND_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + idToken,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    }).then(parseAdminEndpointResponse_).then(function(result) {
+      adminState.pushNotificationSending = false;
+      resetPushNotificationDraft_();
+      adminState.pushNotificationMessage =
+        "Sent to " + String(result.successCount || 0) + " of " +
+        String(result.recipientCount || 0) + " subscribed devices.";
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.pushNotificationSending = false;
+      adminState.pushNotificationError = error && error.message ?
+        error.message : "Unable to send the push notification.";
+      renderAdmin_();
+    });
+  }
+
+  function saveScheduledPushNotification_() {
+    if (!adminState.user || getPageAccessLevel_("settings") !== "admin") {
+      adminState.pushNotificationError =
+        "Settings Admin access is required to schedule notifications.";
+      renderAdmin_();
+      return;
+    }
+
+    var draft = adminState.pushNotificationDraft;
+    if (!String(draft.title || "").trim() ||
+      !String(draft.message || "").trim()) {
+      adminState.pushNotificationError = "Enter a title and message first.";
+      renderAdmin_();
+      return;
+    }
+
+    var scheduledDate = new Date(String(draft.scheduledFor || ""));
+    if (!isFinite(scheduledDate.getTime()) ||
+      scheduledDate.getTime() <= Date.now()) {
+      adminState.pushNotificationError =
+        "Choose a future date and time for this notification.";
+      renderAdmin_();
+      return;
+    }
+
+    var editingId = adminState.pushNotificationEditingId;
+    var payload = {
+      action: editingId ? "update" : "create",
+      id: editingId,
+      title: draft.title,
+      message: draft.message,
+      link: String(draft.link || "").trim(),
+      scheduledFor: scheduledDate.toISOString(),
+    };
+    openDeleteConfirm_({
+      title: editingId ?
+        "Update scheduled notification?" :
+        "Schedule notification?",
+      message: (editingId ? "Update “" : "Schedule “") +
+        String(draft.title || "Notification") + "” for " +
+        formatPushNotificationDate_(scheduledDate.toISOString()) + "?",
+      confirmLabel: editingId ?
+        "Update Schedule" :
+        "Schedule Notification",
+      showSkip: false,
+      onConfirm: function() {
+        submitScheduledPushNotification_(payload, editingId);
+      },
+    });
+  }
+
+  function submitScheduledPushNotification_(payload, editingId) {
+    adminState.pushNotificationSending = true;
+    adminState.pushNotificationError = "";
+    adminState.pushNotificationMessage = "";
+    renderAdmin_();
+
+    postPushScheduleAction_(payload).then(function() {
+      adminState.pushNotificationSending = false;
+      resetPushNotificationDraft_();
+      adminState.pushNotificationMessage = editingId ?
+        "Scheduled notification updated." :
+        "Notification scheduled.";
+      return loadPushNotifications_(true);
+    }).catch(function(error) {
+      adminState.pushNotificationSending = false;
+      adminState.pushNotificationError = error && error.message ?
+        error.message : "Unable to schedule the notification.";
+      renderAdmin_();
+    });
+  }
+
+  function editPushNotification_(notificationId) {
+    var notification = adminState.pushNotifications.find(function(item) {
+      return item && item.id === notificationId;
+    });
+    if (!notification || notification.status !== "scheduled") return;
+
+    adminState.pushNotificationEditingId = notification.id;
+    adminState.pushNotificationDraft = {
+      title: String(notification.title || ""),
+      message: String(notification.message || ""),
+      link: notification.link === DEFAULT_PUSH_NOTIFICATION_LINK ? "" :
+        String(notification.link || ""),
+      delivery: "scheduled",
+      scheduledFor: formatPushNotificationLocalInput_(
+          notification.scheduledFor,
+      ),
+    };
+    adminState.pushNotificationError = "";
+    adminState.pushNotificationMessage =
+      "Editing “" + String(notification.title || "Notification") + "”.";
+    renderAdmin_();
+  }
+
+  function cancelPushNotification_(notificationId) {
+    var notification = adminState.pushNotifications.find(function(item) {
+      return item && item.id === notificationId;
+    });
+    if (!notification || notification.status !== "scheduled") return;
+    openDeleteConfirm_({
+      title: "Remove scheduled notification?",
+      message: "Remove “" + String(notification.title || "Notification") +
+        "” from the schedule? It will not be sent.",
+      confirmLabel: "Remove Notification",
+      showSkip: false,
+      onConfirm: function() {
+        removeScheduledPushNotification_(notificationId);
+      },
+    });
+  }
+
+  function removeScheduledPushNotification_(notificationId) {
+    adminState.pushNotificationSending = true;
+    adminState.pushNotificationError = "";
+    renderAdmin_();
+    postPushScheduleAction_({action: "cancel", id: notificationId})
+        .then(function() {
+          adminState.pushNotificationSending = false;
+          if (adminState.pushNotificationEditingId === notificationId) {
+            resetPushNotificationDraft_();
+          }
+          adminState.pushNotifications = adminState.pushNotifications.filter(
+              function(notification) {
+                return notification && notification.id !== notificationId;
+              },
+          );
+          adminState.pushNotificationMessage =
+            "Scheduled notification removed.";
+          return loadPushNotifications_(true);
+        })
+        .catch(function(error) {
+          adminState.pushNotificationSending = false;
+          adminState.pushNotificationError = error && error.message ?
+            error.message : "Unable to remove the notification.";
+          renderAdmin_();
+        });
+  }
+
+  function postPushScheduleAction_(payload) {
+    return adminState.user.getIdToken().then(function(idToken) {
+      return fetch(PUSH_NOTIFICATION_SCHEDULE_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + idToken,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    }).then(parseAdminEndpointResponse_);
+  }
+
+  function loadPushNotificationsIfNeeded_() {
+    if (adminState.currentPageId !== "settings" ||
+      !adminState.user ||
+      getPageAccessLevel_("settings") !== "admin" ||
+      adminState.pushNotificationsLoaded ||
+      adminState.pushNotificationsLoading) {
+      return;
+    }
+    loadPushNotifications_(false);
+  }
+
+  function loadPushNotifications_(force) {
+    if (!adminState.user || getPageAccessLevel_("settings") !== "admin") {
+      return Promise.resolve();
+    }
+    if (adminState.pushNotificationsLoading) return Promise.resolve();
+    if (!force && adminState.pushNotificationsLoaded) return Promise.resolve();
+
+    adminState.pushNotificationsLoading = true;
+    adminState.pushNotificationsLoadError = "";
+    renderAdmin_();
+    return adminState.user.getIdToken().then(function(idToken) {
+      return fetch(PUSH_NOTIFICATION_SCHEDULE_ENDPOINT, {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer " + idToken,
+          Accept: "application/json",
+        },
+      });
+    }).then(parseAdminEndpointResponse_).then(function(result) {
+      adminState.pushNotificationsLoading = false;
+      adminState.pushNotificationsLoaded = true;
+      adminState.pushNotifications = Array.isArray(result.notifications) ?
+        result.notifications.filter(function(notification) {
+          return notification && notification.status !== "canceled";
+        }) : [];
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.pushNotificationsLoading = false;
+      adminState.pushNotificationsLoaded = true;
+      adminState.pushNotificationsLoadError = error && error.message ?
+        error.message : "Unable to load scheduled notifications.";
+      renderAdmin_();
+    });
+  }
+
+  function createEmptyPushNotificationDraft_() {
+    return {
+      title: "",
+      message: "",
+      link: "",
+      delivery: "now",
+      scheduledFor: "",
+    };
+  }
+
+  function resetPushNotificationDraft_() {
+    adminState.pushNotificationDraft = createEmptyPushNotificationDraft_();
+    adminState.pushNotificationEditingId = "";
+    adminState.pushNotificationError = "";
+  }
+
+  function formatPushNotificationDate_(value) {
+    var date = new Date(value || "");
+    if (!isFinite(date.getTime())) return "Date unavailable";
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(date);
+  }
+
+  function formatPushNotificationLocalInput_(value) {
+    var date = new Date(value || "");
+    if (!isFinite(date.getTime())) return "";
+    var pad = function(number) {
+      return String(number).padStart(2, "0");
+    };
+    return [
+      date.getFullYear(), "-", pad(date.getMonth() + 1), "-",
+      pad(date.getDate()), "T", pad(date.getHours()), ":",
+      pad(date.getMinutes()),
     ].join("");
   }
 
@@ -15321,6 +15873,7 @@
   }
 
   function loadSettingsIfNeeded_() {
+    loadPushNotificationsIfNeeded_();
     if (!adminFirestore || !isActiveAdminUserRecord_()) {
       return;
     }
@@ -17122,6 +17675,15 @@
     adminState.settingsSundayDraft = createEmptySettingsSundayDraft_();
     adminState.settingsSundayError = "";
     adminState.settingsSundayMessage = "";
+    adminState.pushNotificationDraft = createEmptyPushNotificationDraft_();
+    adminState.pushNotificationEditingId = "";
+    adminState.pushNotificationSending = false;
+    adminState.pushNotificationError = "";
+    adminState.pushNotificationMessage = "";
+    adminState.pushNotifications = [];
+    adminState.pushNotificationsLoaded = false;
+    adminState.pushNotificationsLoading = false;
+    adminState.pushNotificationsLoadError = "";
     adminState.wayfinderAlphaEnabled = false;
     adminState.wayfinderAlphaLoaded = false;
     adminState.wayfinderAlphaLoading = false;
@@ -23415,6 +23977,7 @@
 
     if (pageAccessKey === "hub" ||
       pageAccessKey === "bulletin" ||
+      pageAccessKey === "embeds" ||
       pageAccessKey === "studio" ||
       pageAccessKey === "integrations" ||
       pageAccessKey === "resources" ||
@@ -24612,7 +25175,8 @@
     }
 
     if (pageAccessKey === "hub" || pageAccessKey === "integrations" ||
-      pageAccessKey === "bulletin" || pageAccessKey === "studio") {
+      pageAccessKey === "bulletin" || pageAccessKey === "embeds" ||
+      pageAccessKey === "studio") {
       return normalizeAdminPermissionValue_(pageAccess.settings);
     }
 

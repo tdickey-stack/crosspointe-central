@@ -68,6 +68,28 @@
         ]
       },
       {
+        "source": "/push-notifications.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/firebase-messaging-sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0, must-revalidate"
+          },
+          {
+            "key": "Service-Worker-Allowed",
+            "value": "/"
+          }
+        ]
+      },
+      {
         "source": "/central-analytics.js",
         "headers": [
           {
@@ -82,6 +104,33 @@
           {
             "key": "Cache-Control",
             "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/embeds.@(js|css|html)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/embed.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/embed.css",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=300"
           }
         ]
       },
@@ -277,6 +326,14 @@
         "destination": "/studio.html"
       },
       {
+        "source": "/embeds",
+        "destination": "/embeds.html"
+      },
+      {
+        "source": "/embeds/**",
+        "destination": "/embeds.html"
+      },
+      {
         "source": "/api/studio/unsplash/search",
         "function": {
           "functionId": "studioUnsplashSearch",
@@ -355,6 +412,14 @@
         }
       },
       {
+        "source": "/api/embed/**",
+        "function": {
+          "functionId": "centralEmbedPublic",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/admin/events/access",
         "function": {
           "functionId": "eventEditorAccess",
@@ -379,6 +444,14 @@
         "source": "/api/admin/bulletin-mode",
         "function": {
           "functionId": "bulletinMode",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/embeds",
+        "function": {
+          "functionId": "centralEmbedsAdmin",
+          "region": "us-central1",
           "pinTag": false
         }
       },
@@ -519,6 +592,30 @@
         "source": "/api/serve-needs/share-interest",
         "function": {
           "functionId": "shareServeNeedInterest",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/push/subscription",
+        "function": {
+          "functionId": "centralPushSubscription",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/push/send",
+        "function": {
+          "functionId": "centralPushSend",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/push/schedule",
+        "function": {
+          "functionId": "centralPushSchedule",
+          "region": "us-central1",
           "pinTag": false
         }
       },

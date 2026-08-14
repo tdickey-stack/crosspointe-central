@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#19191c">
+    <meta
+      name="description"
+      content="Central Embeds - publish selected CrossPointe events to external websites."
+    >
+    <title>Central Embeds</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500;600;700&family=League+Spartan:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="/embeds.css">
+    <script>
+      (function() {
+        function loadScript_(source) {
+          return new Promise(function(resolve, reject) {
+            var script = document.createElement("script");
+            script.src = source;
+            script.onload = resolve;
+            script.onerror = function() {
+              reject(new Error("Unable to load " + source));
+            };
+            document.head.appendChild(script);
+          });
+        }
+
+        window.CENTRAL_EMBEDS_FIREBASE_READY =
+          loadScript_("/__/firebase/11.10.0/firebase-app-compat.js")
+              .then(function() {
+                return loadScript_(
+                    "/__/firebase/11.10.0/firebase-auth-compat.js",
+                );
+              })
+              .then(function() {
+                return loadScript_("/__/firebase/init.js");
+              });
+      }());
+    </script>
+    <script defer src="/embeds.js"></script>
+  </head>
+  <body>
+    <div id="central-embeds-root">
+      <noscript>Central Embeds requires JavaScript.</noscript>
+    </div>
+  </body>
+</html>

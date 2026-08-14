@@ -106,6 +106,7 @@ import admin from "firebase-admin";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import {onRequest} from "firebase-functions/v2/https";
+import {onSchedule} from "firebase-functions/v2/scheduler";
 import {defineSecret} from "firebase-functions/params";
 
 import {mergePreviewSingletonPayload} from "./preview-publish.js";
@@ -180,6 +181,12 @@ import {
 } from "./planning-center/request-control.js";
 import {getSharedCachedValue} from
   "./planning-center/shared-cache.js";
+import {
+  createCentralEmbedPublicFunction,
+  createCentralEmbedsAdminFunction,
+} from "./embeds/function.js";
+import {createCentralEmbedsPlanningCenterService} from
+  "./embeds/planning-center.js";
 import {createPrintModeFunction} from "./print-mode/function.js";
 import {createPrintModePlanningCenterService} from
   "./print-mode/planning-center.js";
@@ -190,6 +197,12 @@ import {
 } from "./wayfinder/notices.js";
 import {createWayfinderPrototypeHandler} from "./wayfinder/prototype.js";
 import {
+  createPushScheduleDispatcher,
+  createPushScheduleHandler,
+  createPushSendHandler,
+  createPushSubscriptionHandler,
+} from "./push-notifications.js";
+import {
   createWayfinderWebsiteIndexHandler,
   getRelevantWayfinderWebsiteEntries,
 } from "./wayfinder/website-index.js";
@@ -198,6 +211,26 @@ setGlobalOptions({maxInstances: 10});
 admin.initializeApp();
 
 const firestore = admin.firestore();
+const pushSubscriptionHandler = createPushSubscriptionHandler({
+  firestore,
+  fieldValue: admin.firestore.FieldValue,
+});
+const pushSendHandler = createPushSendHandler({
+  firestore,
+  fieldValue: admin.firestore.FieldValue,
+  messaging: admin.messaging(),
+  verifySender: verifyPushNotificationSender_,
+});
+const pushScheduleHandler = createPushScheduleHandler({
+  firestore,
+  fieldValue: admin.firestore.FieldValue,
+  verifySender: verifyPushNotificationSender_,
+});
+const pushScheduleDispatcher = createPushScheduleDispatcher({
+  firestore,
+  fieldValue: admin.firestore.FieldValue,
+  messaging: admin.messaging(),
+});
 const getWayfinderFeaturedEvents = createWayfinderFeaturedEventProvider();
 const getWayfinderFeaturedEventEntries = async (question) => {
   return buildWayfinderFeaturedEventEntries(
@@ -503,6 +536,7 @@ const cachedYouVersionPassages = new Map();
 const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "hub", label: "Hub"},
   {key: "bulletin", label: "Print Mode"},
+  {key: "embeds", label: "Central Embeds"},
   {key: "studio", label: "Studio"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
@@ -742,6 +776,45 @@ export const eventEditorAccess = onRequest(
         });
       } catch (error) {
         response.status(401).json({error: "Your admin session expired."});
+      }
+    },
+);
+
+export const centralPushSubscription = onRequest(
+    {
+      region: "us-central1",
+      cors: false,
+    },
+    pushSubscriptionHandler,
+);
+
+export const centralPushSend = onRequest(
+    {
+      region: "us-central1",
+      cors: false,
+    },
+    pushSendHandler,
+);
+
+export const centralPushSchedule = onRequest(
+    {
+      region: "us-central1",
+      cors: false,
+    },
+    pushScheduleHandler,
+);
+
+export const centralPushDispatchScheduled = onSchedule(
+    {
+      region: "us-central1",
+      schedule: "every 1 minutes",
+      timeZone: "America/Chicago",
+      maxInstances: 1,
+    },
+    async () => {
+      const summary = await pushScheduleDispatcher();
+      if (summary.dueCount > 0) {
+        console.info("Scheduled push notification dispatch complete.", summary);
       }
     },
 );
@@ -1593,6 +1666,32 @@ export const bulletinMode = createPrintModeFunction({
   getFirestoreServeNeedsOverride: getFirestoreServeNeedsOverride_,
   getDefaultRoomRules: getDefaultCentralRoomRules_,
 });
+
+const centralEmbedsOptions = {
+  admin,
+  firestore,
+  planningCenter: createCentralEmbedsPlanningCenterService({
+    firestore,
+    baseService: printModePlanningCenter,
+    getCentralCalendarEvents: getCentralCalendarEvents_,
+    isValidCalendarEventsValue: isValidCalendarEventsValue_,
+    applyCalendarPresentation: applyCachedCalendarPresentation_,
+  }),
+  planningCenterSecrets: PLANNING_CENTER_SECRETS,
+  allowedAdminEmailDomains: CENTRAL_ALLOWED_ADMIN_EMAIL_DOMAINS,
+  allowedAdminEmails: CENTRAL_ALLOWED_ADMIN_EMAILS,
+  getFirestoreRoomRulesOverride: getFirestoreRoomRulesOverride_,
+  getFirestoreEventOverrides: getFirestoreEventOverrides_,
+  getDefaultRoomRules: getDefaultCentralRoomRules_,
+};
+
+export const centralEmbedsAdmin = createCentralEmbedsAdminFunction(
+    centralEmbedsOptions,
+);
+
+export const centralEmbedPublic = createCentralEmbedPublicFunction(
+    centralEmbedsOptions,
+);
 
 export const publishPreviewContent = onRequest(
     {
@@ -6160,6 +6259,54 @@ function getChangeRequestsPermission_(pageAccess) {
   );
 }
 
+/**
+ * Verifies that a request comes from an active Settings Admin.
+ * @param {object} request HTTP request.
+ * @return {Promise<{uid: string, email: string}>} Sender identity.
+ */
+async function verifyPushNotificationSender_(request) {
+  const idToken = getBearerToken_(request.headers.authorization);
+  if (!idToken) {
+    const error = new Error("Sign in before sending a push notification.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  let decodedToken = null;
+  try {
+    decodedToken = await admin.auth().verifyIdToken(idToken);
+  } catch (cause) {
+    const error = new Error("Your admin session expired. Sign in again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const email = normalizeAdminEmail_(decodedToken.email);
+  const userSnapshot = await firestore
+      .doc(getCentralAdminUserDocPath_(decodedToken.uid))
+      .get();
+  const permission = userSnapshot.exists ? getManagedAdminSectionPermission_(
+      userSnapshot.get("pageAccess") || {},
+      "settings",
+  ) : "none";
+
+  if (!isAllowedCentralAdminEmail_(email) ||
+    !userSnapshot.exists ||
+    userSnapshot.get("active") !== true ||
+    permission !== "admin") {
+    const error = new Error(
+        "Settings Admin access is required to send push notifications.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return {
+    uid: String(decodedToken.uid || "").trim(),
+    email,
+  };
+}
+
 async function verifyAdminUserManagerAccess_(decodedToken) {
   const email = normalizeAdminEmail_(decodedToken && decodedToken.email);
   if (!isAllowedCentralAdminEmail_(email)) {
@@ -6784,6 +6931,7 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
     const value = (
       key === "integrations" ||
       key === "bulletin" ||
+      key === "embeds" ||
       key === "studio"
     ) &&
       !Object.prototype.hasOwnProperty.call(source, key) ?

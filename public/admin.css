@@ -1254,6 +1254,63 @@
   grid-column: 1 / -1;
 }
 
+[data-app-route="admin"] .central-admin-static-field {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid rgba(39, 39, 42, 0.1);
+  border-radius: 14px;
+  background: rgba(39, 39, 42, 0.045);
+  color: var(--cp-text-strong);
+  font-weight: 700;
+}
+
+[data-app-route="admin"] .central-admin-push-schedules {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(39, 39, 42, 0.1);
+}
+
+[data-app-route="admin"] .central-admin-push-schedules-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+[data-app-route="admin"] .central-admin-push-schedules-header p,
+[data-app-route="admin"] .central-admin-push-schedule-item p {
+  margin: 4px 0 0;
+  color: var(--cp-muted);
+  line-height: 1.5;
+}
+
+[data-app-route="admin"] .central-admin-push-schedule-list {
+  margin-top: 0;
+}
+
+[data-app-route="admin"] .central-admin-push-schedule-item {
+  align-items: center;
+}
+
+[data-app-route="admin"] .central-admin-push-schedule-item small {
+  color: var(--cp-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+[data-app-route="admin"] .central-admin-push-schedule-item .central-admin-inline-link {
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
+[data-app-route="admin"] .central-admin-push-schedule-item small.is-error {
+  color: #b42318;
+}
+
 [data-app-route="admin"] .central-admin-checkbox {
   align-content: center;
   grid-template-columns: auto 1fr;
@@ -3654,6 +3711,16 @@
   [data-app-route="admin"] .central-admin-list-row,
   [data-app-route="admin"] .central-admin-overview-grid {
     grid-template-columns: 1fr;
+  }
+
+  [data-app-route="admin"] .central-admin-push-schedules-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-app-route="admin"] .central-admin-push-schedules-header .central-admin-link-button {
+    width: 100%;
+    justify-content: center;
   }
 
   [data-app-route="admin"] .central-admin-team-toolbar,

@@ -106,6 +106,7 @@ import admin from "firebase-admin";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import {onRequest} from "firebase-functions/v2/https";
+import {onSchedule} from "firebase-functions/v2/scheduler";
 import {defineSecret} from "firebase-functions/params";
 
 import {mergePreviewSingletonPayload} from "./preview-publish.js";
@@ -196,6 +197,8 @@ import {
 } from "./wayfinder/notices.js";
 import {createWayfinderPrototypeHandler} from "./wayfinder/prototype.js";
 import {
+  createPushScheduleDispatcher,
+  createPushScheduleHandler,
   createPushSendHandler,
   createPushSubscriptionHandler,
 } from "./push-notifications.js";
@@ -217,6 +220,16 @@ const pushSendHandler = createPushSendHandler({
   fieldValue: admin.firestore.FieldValue,
   messaging: admin.messaging(),
   verifySender: verifyPushNotificationSender_,
+});
+const pushScheduleHandler = createPushScheduleHandler({
+  firestore,
+  fieldValue: admin.firestore.FieldValue,
+  verifySender: verifyPushNotificationSender_,
+});
+const pushScheduleDispatcher = createPushScheduleDispatcher({
+  firestore,
+  fieldValue: admin.firestore.FieldValue,
+  messaging: admin.messaging(),
 });
 const getWayfinderFeaturedEvents = createWayfinderFeaturedEventProvider();
 const getWayfinderFeaturedEventEntries = async (question) => {
@@ -781,6 +794,29 @@ export const centralPushSend = onRequest(
       cors: false,
     },
     pushSendHandler,
+);
+
+export const centralPushSchedule = onRequest(
+    {
+      region: "us-central1",
+      cors: false,
+    },
+    pushScheduleHandler,
+);
+
+export const centralPushDispatchScheduled = onSchedule(
+    {
+      region: "us-central1",
+      schedule: "every 1 minutes",
+      timeZone: "America/Chicago",
+      maxInstances: 1,
+    },
+    async () => {
+      const summary = await pushScheduleDispatcher();
+      if (summary.dueCount > 0) {
+        console.info("Scheduled push notification dispatch complete.", summary);
+      }
+    },
 );
 
 export const wayfinderPrototypeQuery = onRequest(

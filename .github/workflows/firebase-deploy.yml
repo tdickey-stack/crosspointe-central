@@ -62,6 +62,9 @@ jobs:
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
 
+      - name: Test push notifications
+        run: npm --prefix functions run test:push
+
       - name: Write Functions environment file
         env:
           FIREBASE_FUNCTIONS_ENV: ${{ secrets.FIREBASE_FUNCTIONS_ENV }}
@@ -119,6 +122,9 @@ jobs:
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
 
+      - name: Test push notifications
+        run: npm --prefix functions run test:push
+
       - name: Write Functions environment file
         env:
           FIREBASE_FUNCTIONS_ENV: ${{ secrets.FIREBASE_FUNCTIONS_ENV }}
@@ -135,8 +141,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
-      - name: Deploy unpinned Wayfinder alpha endpoints
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings --non-interactive
+      - name: Deploy unpinned Dev endpoints
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled --non-interactive
 
       - name: Deploy Firebase preview channel
         run: ./node_modules/.bin/firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive

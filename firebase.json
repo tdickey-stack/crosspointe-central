@@ -612,6 +612,14 @@
         }
       },
       {
+        "source": "/api/admin/push/schedule",
+        "function": {
+          "functionId": "centralPushSchedule",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

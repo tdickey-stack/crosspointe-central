@@ -80,6 +80,83 @@ test("misspelled crisis language still skips Gemini", async () => {
   assert.match(response.body.answer, /988/);
 });
 
+test("standalone profanity uses the fixed conduct response", async () => {
+  let generatorCalls = 0;
+  const response = await runHandler_("Asshole", async () => {
+    generatorCalls += 1;
+    return null;
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "policy-answer");
+  assert.equal(response.body.policyRoute, "conduct");
+  assert.equal(response.body.modelUsed, false);
+  assert.equal(response.body.shouldContactChurch, false);
+  assert.equal(generatorCalls, 0);
+  assert.match(response.body.answer, /keep the conversation respectful/i);
+  assert.doesNotMatch(response.body.answer, /office|405-374-4740/i);
+});
+
+test("an explicit church complaint uses the fixed office route", async () => {
+  let generatorCalls = 0;
+  const response = await runHandler_(
+      "I'm furious with the church and want to complain",
+      async () => {
+        generatorCalls += 1;
+        return null;
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "policy-answer");
+  assert.equal(response.body.policyRoute, "complaint");
+  assert.equal(response.body.modelUsed, false);
+  assert.equal(response.body.shouldContactChurch, true);
+  assert.equal(generatorCalls, 0);
+  assert.match(response.body.answer, /405-374-4740/);
+});
+
+test("a stated threat keeps the crisis response ahead of conduct", async () => {
+  let generatorCalls = 0;
+  const response = await runHandler_(
+      "I'm going to hurt someone",
+      async () => {
+        generatorCalls += 1;
+        return null;
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.policyRoute, "crisis");
+  assert.equal(response.body.modelUsed, false);
+  assert.equal(generatorCalls, 0);
+  assert.match(response.body.answer, /911/);
+});
+
+test("incidental profanity does not block an answerable CARS question",
+    async () => {
+      let selectedIds = [];
+      const response = await runHandler_(
+          "My car is in shitty shape. Can CARS help?",
+          async (context) => {
+            selectedIds = context.entries.map((entry) => entry.id);
+            return {
+              answer: "CARS may help with some repairs. Start with the " +
+                "application.",
+              sourceEntryIds: ["outreach-cars-overview-and-application"],
+              shouldContactChurch: false,
+              followUpQuestion: "",
+            };
+          },
+      );
+
+      assert.equal(response.statusCode, 200);
+      assert.equal(response.body.mode, "gemini-grounded");
+      assert.deepEqual(selectedIds, [
+        "outreach-cars-overview-and-application",
+      ]);
+    });
+
 test("CARS transmission question uses approved grounded fallback", async () => {
   let generatorCalls = 0;
   const response = await runHandler_(
@@ -95,6 +172,112 @@ test("CARS transmission question uses approved grounded fallback", async () => {
   assert.equal(response.body.modelUsed, false);
   assert.equal(generatorCalls, 1);
   assert.match(response.body.answer, /transmission/i);
+});
+
+for (const question of [
+  "I need help with finances",
+  "I need help paying bills",
+]) {
+  test(question + " uses only the financial-assistance entry", async () => {
+    let selectedIds = [];
+    const response = await runHandler_(question, async (context) => {
+      selectedIds = context.entries.map((entry) => entry.id);
+      return {
+        answer: "Please contact the church office. Requests are evaluated " +
+          "individually and assistance is not guaranteed.",
+        sourceEntryIds: ["outreach-limited-member-financial-assistance"],
+        shouldContactChurch: true,
+        followUpQuestion: "",
+      };
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(selectedIds, [
+      "outreach-limited-member-financial-assistance",
+    ]);
+    assert.equal(response.body.sourceCards[0].links.length, 0);
+  });
+}
+
+const addictionGuidanceTestName =
+  "personal addiction language uses the approved addiction guidance";
+test(addictionGuidanceTestName, async () => {
+  let selectedIds = [];
+  const response = await runHandler_(
+      "I'm addicted to porn",
+      async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "Thank you for being honest. For personal spiritual " +
+            "guidance, please contact the CrossPointe office.",
+          sourceEntryIds: ["beliefs-life-abortion-and-abstinence"],
+          shouldContactChurch: true,
+          followUpQuestion: "",
+        };
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(selectedIds, ["beliefs-life-abortion-and-abstinence"]);
+  assert.equal(response.body.mode, "gemini-grounded");
+});
+
+for (const question of ["Event form", "Where is the event form"]) {
+  test(question + " asks which public event the person means", async () => {
+    let generatorCalls = 0;
+    let liveCalls = 0;
+    const response = await runHandler_(
+        question,
+        async () => {
+          generatorCalls += 1;
+          return null;
+        },
+        async () => {
+          liveCalls += 1;
+          return {statuses: {}, entries: []};
+        },
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.mode, "clarification");
+    assert.equal(response.body.modelUsed, false);
+    assert.equal(generatorCalls, 0);
+    assert.equal(liveCalls, 0);
+    assert.match(response.body.answer, /public event/i);
+    assert.match(response.body.answer, /internal staff or admin forms/i);
+    assert.match(response.body.sourceCards[0].links[0].url, /\/events$/);
+  });
+}
+
+test("a named public event form still checks live event details", async () => {
+  let liveCalls = 0;
+  const response = await runHandler_(
+      "Where is the Starting Pointe event form?",
+      async () => ({
+        answer: "Starting Pointe registration is available below.",
+        sourceEntryIds: ["live-event-starting-pointe"],
+        shouldContactChurch: false,
+        followUpQuestion: "",
+      }),
+      async () => {
+        liveCalls += 1;
+        return {
+          statuses: {planning_center_event: "ok"},
+          entries: [{
+            id: "live-event-starting-pointe",
+            topic: "live_events",
+            title: "Starting Pointe",
+            responseMode: "guided",
+            requiredFacts: ["Starting Pointe is open for registration."],
+            approvedLinks: [],
+          }],
+        };
+      },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(liveCalls, 1);
+  assert.equal(response.body.mode, "gemini-grounded");
 });
 
 test("date question waits for live Planning Center data", async () => {
@@ -1282,6 +1465,59 @@ test("general CARS help response keeps only its application link", async () => {
   assert.match(response.body.links[0].url, /forms\.gle\/13UrumiVUXEZCLgj9/);
 });
 
+for (const testCase of [
+  {
+    question: "My transmission is blown. Can you help?",
+    sourceId: "outreach-cars-repair-scope",
+  },
+  {
+    question: "How do I get my car fixed?",
+    sourceId: "outreach-cars-overview-and-application",
+  },
+  {
+    question: "My car won't start",
+    sourceId: "outreach-cars-overview-and-application",
+  },
+]) {
+  test(testCase.question + " returns only the CARS application", async () => {
+    let selectedIds = [];
+    const response = createResponse_();
+    const handler = createWayfinderAnswerHandler({
+      firestore: createFirestore_(),
+      requireAdminAuth: false,
+      publicResponse: true,
+      generateAnswer: async (context) => {
+        selectedIds = context.entries.map((entry) => entry.id);
+        return {
+          answer: "CARS may be able to help. Use the application below.",
+          sourceEntryIds: [testCase.sourceId],
+          shouldContactChurch: false,
+          followUpQuestion: "",
+        };
+      },
+    });
+
+    await handler({
+      method: "POST",
+      headers: {
+        "x-wayfinder-session": "public-cars-feedback-" +
+          Math.random().toString(36).slice(2),
+      },
+      ip: "127.0.0." + String(50 + Math.floor(Math.random() * 40)),
+      body: {question: testCase.question},
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(selectedIds, [testCase.sourceId]);
+    assert.equal(response.body.links.length, 1);
+    assert.match(
+        response.body.links[0].url,
+        /forms\.gle\/13UrumiVUXEZCLgj9/,
+    );
+    assert.doesNotMatch(response.body.links[0].url, /campus-map|324465/);
+  });
+}
+
 test("theology follow-up retrieves the prior disputed topic", async () => {
   const history = [{
     role: "user",
@@ -1402,6 +1638,91 @@ test("group-directory question returns the website directly", async () => {
 
   assert.equal(response.statusCode, 200);
   assert.equal(liveCalls, 0);
+  assert.equal(response.body.links.length, 1);
+  assert.match(response.body.links[0].url, /crosspointe\.tv\/small-groups/);
+});
+
+test("joining a small group returns the directory, not one group", async () => {
+  let liveCalls = 0;
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async () => ({
+      answer: "Browse the Pointe Group directory and request to join the " +
+        "group that fits you best.",
+      sourceEntryIds: ["groups-how-to-join"],
+      shouldContactChurch: false,
+      followUpQuestion: "",
+    }),
+    retrieveLiveContext: async () => {
+      liveCalls += 1;
+      return {statuses: {}, entries: []};
+    },
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-group-join-feedback-123"},
+    ip: "127.0.0.91",
+    body: {question: "How do I join a small group?"},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(liveCalls, 0);
+  assert.equal(response.body.links.length, 1);
+  assert.match(response.body.links[0].url, /crosspointe\.tv\/small-groups/);
+});
+
+test("broad age follow-up keeps group context and the directory", async () => {
+  const history = [{
+    role: "user",
+    content: "Do you guys have any small groups for women?",
+  }, {
+    role: "assistant",
+    content: "Yes. Several current groups are intended for women.",
+  }];
+  let selectedIds = [];
+  let liveQuestion = "";
+  const response = createResponse_();
+  const handler = createWayfinderAnswerHandler({
+    firestore: createFirestore_(),
+    requireAdminAuth: false,
+    publicResponse: true,
+    generateAnswer: async (context) => {
+      selectedIds = context.entries.map((entry) => entry.id);
+      return {
+        answer: "Several groups include adults in that age range. Browse " +
+          "the full directory to compare current options.",
+        sourceEntryIds: ["groups-live-directory"],
+        shouldContactChurch: false,
+        followUpQuestion: "",
+      };
+    },
+    retrieveLiveContext: async ({question}) => {
+      liveQuestion = question;
+      return {
+        statuses: {planning_center_groups: "ok"},
+        entries: [],
+      };
+    },
+  });
+
+  await handler({
+    method: "POST",
+    headers: {"x-wayfinder-session": "public-group-age-feedback-123"},
+    ip: "127.0.0.92",
+    body: {
+      question: "Do you have any others that are for people in their " +
+        "early 30s to 40s?",
+      history: history,
+    },
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.match(liveQuestion, /small groups for women/i);
+  assert.ok(selectedIds.includes("groups-live-directory"));
   assert.equal(response.body.links.length, 1);
   assert.match(response.body.links[0].url, /crosspointe\.tv\/small-groups/);
 });

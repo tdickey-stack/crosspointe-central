@@ -9,8 +9,46 @@ const CRISIS_PATTERNS = [
   /\bsubstance[- ]?use crisis\b/,
   /\bimmediate (?:physical )?danger\b/,
   /\bcredible threat\b/,
+  new RegExp(
+      "\\b(?:i(?:'m| am)?\\s+)?(?:want|plan|intend|going|gonna|will)" +
+      "\\s+(?:to\\s+)?(?:attack|hurt|kill|shoot|stab)\\s+" +
+      "(?:someone|somebody|people|you|him|her|them)\\b",
+  ),
+  /\b(?:bomb|shoot up|set fire to)\s+(?:the\s+)?(?:church|building)\b/,
   /\babuse (?:is )?(?:happening|occurring) (?:now|right now)\b/,
   /\bchild (?:is )?in (?:immediate )?danger\b/,
+];
+
+const DIRECT_CONDUCT_PATTERNS = [
+  new RegExp(
+      "^(?:you(?:'re| are)?\\s+)?(?:an?\\s+)?(?:assholes?|bastards?|" +
+      "bitches?|bullshit|dickheads?|fuck(?:er|ers|ing)?|motherfuckers?|" +
+      "shit(?:ty)?)" +
+      "[?!.]*$",
+  ),
+  /\bfuck\s+you\b/,
+  new RegExp(
+      "\\byou(?:'re| are)\\s+(?:an?\\s+)?(?:assholes?|bastards?|" +
+      "bitches?|dickheads?|fuck(?:er|ers|ing)?|motherfuckers?|" +
+      "stupid|worthless)\\b",
+  ),
+  /\b(?:stupid|worthless)\s+(?:bot|assistant|wayfinder)\b/,
+  /\b(?:shut up|go to hell)\b/,
+];
+
+const COMPLAINT_OR_AGITATION_PATTERNS = [
+  new RegExp(
+      "\\b(?:i\\s+(?:want|need)|how\\s+do\\s+i|where\\s+can\\s+i)" +
+      "\\s+(?:to\\s+)?(?:file|make|submit)\\s+(?:a\\s+)?complaint\\b",
+  ),
+  new RegExp(
+      "\\b(?:angry|furious|upset|frustrated|pissed(?:\\s+off)?)\\b" +
+      ".{0,80}\\b(?:crosspointe|church|pastor|staff|service|event)\\b",
+  ),
+  new RegExp(
+      "\\b(?:crosspointe|church|pastor|staff|service|event)\\b" +
+      ".{0,80}\\b(?:angry|furious|upset|frustrated|pissed(?:\\s+off)?)\\b",
+  ),
 ];
 
 const PROHIBITED_PATTERNS = [
@@ -54,6 +92,10 @@ export function classifyWayfinderPolicyQuestion(question) {
   if (matchesAny_(value, CRISIS_PATTERNS) ||
     matchesLikelyMisspelledCrisis_(value)) return "crisis";
   if (matchesAny_(value, PROHIBITED_PATTERNS)) return "prohibited";
+  if (matchesAny_(value, COMPLAINT_OR_AGITATION_PATTERNS)) {
+    return "complaint";
+  }
+  if (matchesAny_(value, DIRECT_CONDUCT_PATTERNS)) return "conduct";
   return "knowledge";
 }
 
@@ -77,6 +119,26 @@ export function buildWayfinderPolicyAnswer(route, policy) {
         value.prohibitedSubjectPolicy,
         "I'm not able to help with private records, personal disputes, " +
           "counseling, professional advice, or internal church matters.",
+    );
+  }
+
+  if (route === "conduct") {
+    return buildFixedAnswer_(
+        route,
+        value.conductPolicy && value.conductPolicy.profanityResponse,
+        "I'm here to help, but please keep the conversation respectful. " +
+          "Tell me what you need, and I'll do my best to help.",
+    );
+  }
+
+  if (route === "complaint") {
+    return buildFixedAnswer_(
+        route,
+        value.conductPolicy && value.conductPolicy.complaintResponse,
+        "I'm sorry this has been frustrating. Wayfinder can't resolve " +
+          "complaints or personal conflicts. Please call or text the " +
+          "CrossPointe office at 405-374-4740 or email info@crosspointe.tv " +
+          "so a staff member can help.",
     );
   }
 

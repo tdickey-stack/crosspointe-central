@@ -41,7 +41,15 @@ const GROUP_LIVE_QUESTION_PATTERN = new RegExp(
 const GROUP_DIRECTORY_LINK_PATTERN = new RegExp(
     "\\b(?:directory|list)\\s+(?:of\\s+)?(?:pointe|small)?\\s*groups?\\b|" +
     "\\b(?:where|place|page|website|link|see|view|browse)\\b" +
-    ".{0,60}\\b(?:pointe|small)?\\s*groups?\\b",
+    ".{0,60}\\b(?:pointe|small)?\\s*groups?\\b|" +
+    "\\b(?:how\\s+(?:do|can)\\s+i|can\\s+i)\\s+join\\s+" +
+    "(?:a\\s+)?(?:pointe|small)?\\s*group\\b",
+    "i",
+);
+const GROUP_BROAD_FOLLOW_UP_PATTERN = new RegExp(
+    "\\b(?:pointe|small)\\s+groups?\\b[\\s\\S]{0,240}" +
+      "\\b(?:any\\s+others?|other\\s+options?|more\\s+" +
+      "(?:options|groups))\\b",
     "i",
 );
 const SUNDAY_SCHOOL_DIRECTORY_PATTERN = new RegExp(
@@ -56,6 +64,7 @@ const DIFFERENCE_FOLLOW_UP_PATTERN = new RegExp(
 const FOLLOW_UP_QUESTION_PATTERN = new RegExp(
     "^(?:and\\b|also\\b|but\\b|yes\\b|no\\b|what about\\b|how about\\b|" +
     "what if\\b|what other\\b|which\\b|any other\\b|anything else\\b|" +
+    "do\\s+(?:you|we)\\s+have\\s+(?:any\\s+)?(?:other|others|more)\\b|" +
     "tell me more\\b|more details?\\b|" +
     "what(?:'s|s| is| are) the differences?\\b|" +
     "(?:the )?differences?\\b|what time\\b|when\\b|where\\b|" +
@@ -87,6 +96,37 @@ const SERVING_QUESTION_PATTERN = new RegExp(
 const PASTORAL_CONVERSATION_PATTERN = new RegExp(
     "\\b(?:griev(?:e|ing)|bereavement|pastoral care|" +
       "(?:speak|talk|meet|connect)\\s+(?:with|to)\\s+(?:a\\s+)?pastor)\\b",
+    "i",
+);
+const FINANCIAL_ASSISTANCE_PATTERN = new RegExp(
+    "\\b(?:financial|finances|money|bills?|rent|utilit(?:y|ies)|" +
+      "benevolence)\\b.{0,50}\\b(?:assistance|help|pay|paying|support)\\b|" +
+    "\\b(?:assistance|help|support)\\b.{0,50}\\b(?:financial|finances|" +
+      "money|bills?|rent|utilit(?:y|ies)|pay|paying)\\b",
+    "i",
+);
+const CARS_ASSISTANCE_PATTERN = new RegExp(
+    "\\b(?:cars\\s+ministry|car|vehicle|automotive|mechanic|transmission|" +
+      "engine|tires?|windshield)\\b.{0,70}\\b(?:application|blown|broken|" +
+      "fix|fixed|help|repair|start|work)\\b|" +
+    "\\b(?:application|fix|fixed|help|repair)\\b.{0,70}" +
+      "\\b(?:cars\\s+ministry|car|vehicle|automotive|mechanic|" +
+      "transmission|engine|tires?|windshield)\\b",
+    "i",
+);
+const CARS_SCOPE_PATTERN = new RegExp(
+    "\\b(?:roadside|tires?|windshield|collision|transmission|engine|" +
+      "head\\s+gasket|off[- ]site|vehicle\\s+loan)\\b",
+    "i",
+);
+const ADDICTION_SUPPORT_PATTERN = new RegExp(
+    "\\b(?:addict(?:ed|ion|ive)?|porn(?:ography)?|substance\\s+abuse|" +
+      "compulsive\\s+(?:behavior|behaviour))\\b",
+    "i",
+);
+const AMBIGUOUS_EVENT_FORM_PATTERN = new RegExp(
+    "^(?:(?:where\\s+(?:is|can\\s+i\\s+find)|how\\s+do\\s+i\\s+" +
+      "(?:find|get))\\s+)?(?:the\\s+)?event\\s+forms?[?!.]*$",
     "i",
 );
 
@@ -168,6 +208,9 @@ export function createWayfinderAnswerHandler(dependencies) {
       const weeklyScheduleEntryIds = getWeeklyScheduleEntryIds_(
           retrievalQuestion,
       );
+      const priorityEntryIds = getPriorityKnowledgeEntryIds_(
+          retrievalQuestion,
+      );
       const [
         approvedContext,
         activeNotices,
@@ -183,6 +226,9 @@ export function createWayfinderAnswerHandler(dependencies) {
           activeKnowledgeOverrides,
       );
       const weeklyScheduleEntries = weeklyScheduleEntryIds
+          .map((id) => entries.find((entry) => entry.id === id))
+          .filter(Boolean);
+      const priorityEntries = priorityEntryIds
           .map((id) => entries.find((entry) => entry.id === id))
           .filter(Boolean);
       const policy = approvedContext.policy;
@@ -207,13 +253,24 @@ export function createWayfinderAnswerHandler(dependencies) {
         return;
       }
 
+      if (isAmbiguousEventFormQuestion_(question)) {
+        sendWayfinderSuccess_(response, buildEventFormClarificationResponse_(
+            question,
+            entries.length,
+            entries.find((entry) => {
+              return entry.id === "events-live-source-failure-and-changes";
+            }),
+        ), publicResponse);
+        return;
+      }
+
       const noticeEntries = selectRelevantWayfinderNotices(
           retrievalQuestion,
           activeNotices,
       );
 
       const featuredEventEntries =
-        !weeklyScheduleEntryIds.length &&
+        !weeklyScheduleEntryIds.length && !priorityEntries.length &&
         typeof getFeaturedEventEntries === "function" ?
           await getFeaturedEventEntries(retrievalQuestion) : [];
       const rankedEntries = entries.concat(
@@ -226,13 +283,13 @@ export function createWayfinderAnswerHandler(dependencies) {
           {limit: 5},
       );
       const shouldCheckWebsite = typeof getWebsiteEntries === "function" &&
-        !weeklyScheduleEntryIds.length &&
+        !weeklyScheduleEntryIds.length && !priorityEntries.length &&
         (retrieval.confidence === "none" || retrieval.confidence === "low" ||
           WEBSITE_LINK_QUESTION_PATTERN.test(retrievalQuestion));
       const websiteEntries = shouldCheckWebsite ?
         await getWebsiteEntries(retrievalQuestion) : [];
 
-      if (!weeklyScheduleEntries.length &&
+      if (!weeklyScheduleEntries.length && !priorityEntries.length &&
         (retrieval.confidence === "none" ||
           retrieval.confidence === "low")) {
         if (noticeEntries.length) {
@@ -279,7 +336,8 @@ export function createWayfinderAnswerHandler(dependencies) {
         return;
       }
 
-      const sourceTypes = (weeklyScheduleEntries.length ? [] :
+      const sourceTypes = (weeklyScheduleEntries.length ||
+        priorityEntries.length ? [] :
         getRequiredLiveSourceTypes_(
             retrievalQuestion,
             retrieval.results,
@@ -326,16 +384,18 @@ export function createWayfinderAnswerHandler(dependencies) {
       const selectedEntries = deduplicateEntries_([
         ...noticeEntries,
         ...weeklyScheduleEntries,
+        ...priorityEntries,
         ...liveEntries,
         ...featuredEventEntries,
-        ...(weeklyScheduleEntries.length ? [] : selectRetrievedEntries_(
-            rankedEntries,
-            retrieval.results,
-            {forceMultiple: compareRecentContext},
-        )),
+        ...(weeklyScheduleEntries.length || priorityEntries.length ? [] :
+          selectRetrievedEntries_(
+              rankedEntries,
+              retrieval.results,
+              {forceMultiple: compareRecentContext},
+          )),
         ...websiteEntries,
       ]).slice(0, 5);
-      if (asksForGroupDirectory_(retrievalQuestion)) {
+      if (shouldIncludeGroupDirectory_(retrievalQuestion)) {
         const directoryEntry = entries.find((entry) => {
           return entry.id === "groups-live-directory";
         });
@@ -523,7 +583,7 @@ function buildAnswerSourceCards_(
     }),
   ].join(" ");
   const existingIds = new Set(cards.map((card) => card.id));
-  if (asksForGroupDirectory_(context)) {
+  if (shouldIncludeGroupDirectory_(context)) {
     entries.forEach((entry) => {
       if (existingIds.has(entry.id)) return;
       const links = Array.isArray(entry.approvedLinks) ?
@@ -719,6 +779,9 @@ function selectQuestionSpecificLinks_(links, question, history) {
   ].filter((intent) => intent.question.test(value));
 
   let selectedLinks = links;
+  if (FINANCIAL_ASSISTANCE_PATTERN.test(context)) {
+    return [];
+  }
   if (/\b(?:giving|donation)\s+(?:receipt|statement)\b/i.test(value) ||
     /\bannual\s+giving\s+statement\b/i.test(value)) {
     return [];
@@ -741,14 +804,18 @@ function selectQuestionSpecificLinks_(links, question, history) {
           .test(link.url);
     });
   }
-  if (/\bCARS\b|\bcar\s+repair\b|\bvehicle\s+repair\b/i.test(context)) {
+  if (CARS_ASSISTANCE_PATTERN.test(context)) {
     const asksAboutCosts = /\b(?:cost|pay|payment|parts|donat|give)\w*\b/i
         .test(value);
-    if (!asksAboutCosts) {
-      selectedLinks = selectedLinks.filter((link) => {
-        return !/crosspointe\.tv\/give/i.test(link.url);
-      });
-    }
+    selectedLinks = selectedLinks.filter((link) => {
+      if (/forms\.gle\/13UrumiVUXEZCLgj9/i.test(link.url)) return true;
+      return asksAboutCosts && /crosspointe\.tv\/give/i.test(link.url);
+    });
+  } else if (/\bCARS\b|\bcar\s+repair\b|\bvehicle\s+repair\b/i
+      .test(context)) {
+    selectedLinks = selectedLinks.filter((link) => {
+      return !/crosspointe\.tv\/give/i.test(link.url);
+    });
   }
   if (PASTORAL_CONVERSATION_PATTERN.test(context) &&
     !/\b(?:link|page|profile|contact form)\b/i.test(value)) {
@@ -776,6 +843,13 @@ function selectQuestionSpecificLinks_(links, question, history) {
       return /\/people\/forms\/324465/i.test(link.url);
     });
     if (nextStepsForm) return [nextStepsForm];
+  }
+
+  if (asksForGroupDirectory_(context)) {
+    const directory = selectedLinks.find((link) => {
+      return /crosspointe\.tv\/small-groups/i.test(link.url);
+    });
+    if (directory) return [directory];
   }
 
   if (/\b(?:other|else)\b/i.test(value)) {
@@ -939,10 +1013,36 @@ function getWeeklyScheduleEntryIds_(question) {
   return [];
 }
 
+function getPriorityKnowledgeEntryIds_(question) {
+  const value = String(question || "");
+  if (FINANCIAL_ASSISTANCE_PATTERN.test(value)) {
+    return ["outreach-limited-member-financial-assistance"];
+  }
+  if (CARS_ASSISTANCE_PATTERN.test(value)) {
+    return [CARS_SCOPE_PATTERN.test(value) ?
+      "outreach-cars-repair-scope" :
+      "outreach-cars-overview-and-application"];
+  }
+  if (ADDICTION_SUPPORT_PATTERN.test(value)) {
+    return ["beliefs-life-abortion-and-abstinence"];
+  }
+  return [];
+}
+
+function isAmbiguousEventFormQuestion_(question) {
+  return AMBIGUOUS_EVENT_FORM_PATTERN.test(String(question || "").trim());
+}
+
 function asksForGroupDirectory_(question) {
   const value = String(question || "");
   return GROUP_DIRECTORY_LINK_PATTERN.test(value) ||
     SUNDAY_SCHOOL_DIRECTORY_PATTERN.test(value);
+}
+
+function shouldIncludeGroupDirectory_(question) {
+  const value = String(question || "");
+  return asksForGroupDirectory_(value) ||
+    GROUP_BROAD_FOLLOW_UP_PATTERN.test(value);
 }
 
 function isStandaloneFollowUpQuestion_(question) {
@@ -1086,7 +1186,8 @@ function buildPolicyResponse_(question, entryCount, policy, policyAnswer) {
     answer: policyAnswer.answer,
     followUpQuestion: "",
     shouldContactChurch: policyAnswer.route === "prayer" ||
-      policyAnswer.route === "pastoral_care",
+      policyAnswer.route === "pastoral_care" ||
+      policyAnswer.route === "complaint",
     confidence: "high",
     knowledgeEntryCount: entryCount,
     sourceCards: [buildPolicySourceCard_(policy, policyAnswer.links)],
@@ -1123,6 +1224,28 @@ function buildFallbackResponse_(
         "data is available." :
       "Gemini was intentionally skipped because the approved match " +
         "was insufficient.",
+  };
+}
+
+function buildEventFormClarificationResponse_(question, entryCount, entry) {
+  return {
+    ok: true,
+    prototype: true,
+    mode: "clarification",
+    modelUsed: false,
+    model: "",
+    question: question,
+    answer: "If you mean registration for a public event, tell me the " +
+      "event name and I can find its public details or registration. " +
+      "Wayfinder does not provide internal staff or admin forms.",
+    followUpQuestion: "Which public event are you looking for?",
+    shouldContactChurch: false,
+    confidence: "high",
+    knowledgeEntryCount: entryCount,
+    sourceCards: entry ? [buildEntrySourceCard_(entry)] : [],
+    results: [],
+    notice: "Wayfinder asked for the missing public event name without " +
+      "searching internal forms.",
   };
 }
 

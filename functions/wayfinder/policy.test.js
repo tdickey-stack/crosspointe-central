@@ -18,6 +18,46 @@ test("routes crisis language before normal knowledge retrieval", () => {
       ),
       "crisis",
   );
+  assert.equal(
+      classifyWayfinderPolicyQuestion("I'm going to hurt someone"),
+      "crisis",
+  );
+  assert.equal(
+      classifyWayfinderPolicyQuestion("I will shoot up the church"),
+      "crisis",
+  );
+});
+
+test("routes standalone and directed insults to the conduct response", () => {
+  [
+    "Asshole",
+    "Bullshit",
+    "Fuck you",
+    "You're an asshole",
+    "Wayfinder is a stupid bot",
+  ].forEach((question) => {
+    assert.equal(classifyWayfinderPolicyQuestion(question), "conduct");
+  });
+});
+
+test("routes explicit CrossPointe complaints to the office response", () => {
+  [
+    "I want to file a complaint",
+    "I'm furious with the church",
+    "The service made me frustrated",
+  ].forEach((question) => {
+    assert.equal(classifyWayfinderPolicyQuestion(question), "complaint");
+  });
+});
+
+test("incidental profanity and ordinary frustration remain answerable", () => {
+  [
+    "My car is in shitty shape. Can CARS help?",
+    "I'm frustrated because my car won't start",
+    "What does CrossPointe believe about profanity?",
+  ].forEach((question) => {
+    assert.equal(classifyWayfinderPolicyQuestion(question), "knowledge");
+  });
 });
 
 test("routes private records and staff schedules to refusal", () => {
@@ -87,6 +127,21 @@ test("fixed crisis answer preserves 911 and 988", () => {
   assert.equal(result.responseMode, "fixed_safety");
   assert.match(result.answer, /911/);
   assert.match(result.answer, /988/);
+});
+
+test("conduct response asks for respect without escalating", () => {
+  const result = buildWayfinderPolicyAnswer("conduct", {});
+  assert.equal(result.responseMode, "fixed_safety");
+  assert.match(result.answer, /keep the conversation respectful/i);
+  assert.doesNotMatch(result.answer, /office|405-374-4740/i);
+});
+
+test("complaint response directs the person to the office", () => {
+  const result = buildWayfinderPolicyAnswer("complaint", {});
+  assert.equal(result.responseMode, "fixed_safety");
+  assert.match(result.answer, /can't resolve complaints/i);
+  assert.match(result.answer, /405-374-4740/);
+  assert.match(result.answer, /info@crosspointe\.tv/);
 });
 
 test("live event fallback never invents a date", () => {

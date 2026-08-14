@@ -916,6 +916,7 @@
     pushNotificationSending: false,
     pushNotificationError: "",
     pushNotificationMessage: "",
+    pushSubscriberCount: null,
     pushNotifications: [],
     pushNotificationsLoaded: false,
     pushNotificationsLoading: false,
@@ -9389,6 +9390,11 @@
       "<div class=\"central-admin-item-header\"><strong>Push notifications</strong>",
       renderStatusPill_(canSend ? "Settings Admin" : "Restricted",
           canSend ? "is-safe" : "is-warn"),
+      canSend && Number.isFinite(adminState.pushSubscriberCount) ?
+        renderStatusPill_(
+            formatPushSubscriberCount_(adminState.pushSubscriberCount),
+            adminState.pushSubscriberCount ? "is-safe" : "is-warn",
+        ) : "",
       "</div>",
       renderAdminNote_(canSend ?
         "Notify every subscribed device now or schedule a notification for later." :
@@ -9568,7 +9574,7 @@
     openDeleteConfirm_({
       title: "Send notification now?",
       message: "Send “" + String(draft.title || "Notification") +
-        "” now to every subscribed device?",
+        "” now to " + getPushSubscriberAudienceLabel_() + "?",
       confirmLabel: "Send Notification",
       showSkip: false,
       onConfirm: function() {
@@ -9599,6 +9605,11 @@
       adminState.pushNotificationMessage =
         "Sent to " + String(result.successCount || 0) + " of " +
         String(result.recipientCount || 0) + " subscribed devices.";
+      adminState.pushSubscriberCount = Math.max(
+          0,
+          Number(result.recipientCount || 0) -
+            Number(result.removedInvalidTokens || 0),
+      );
       renderAdmin_();
     }).catch(function(error) {
       adminState.pushNotificationSending = false;
@@ -9648,7 +9659,8 @@
         "Schedule notification?",
       message: (editingId ? "Update “" : "Schedule “") +
         String(draft.title || "Notification") + "” for " +
-        formatPushNotificationDate_(scheduledDate.toISOString()) + "?",
+        formatPushNotificationDate_(scheduledDate.toISOString()) + "? " +
+        getPushScheduledAudienceLabel_(),
       confirmLabel: editingId ?
         "Update Schedule" :
         "Schedule Notification",
@@ -9797,6 +9809,9 @@
         result.notifications.filter(function(notification) {
           return notification && notification.status !== "canceled";
         }) : [];
+      adminState.pushSubscriberCount = Number.isFinite(
+          Number(result.subscriberCount),
+      ) ? Math.max(0, Number(result.subscriberCount)) : null;
       renderAdmin_();
     }).catch(function(error) {
       adminState.pushNotificationsLoading = false;
@@ -9815,6 +9830,26 @@
       delivery: "now",
       scheduledFor: "",
     };
+  }
+
+  function formatPushSubscriberCount_(value) {
+    var count = Math.max(0, Number(value || 0));
+    return count + " subscribed " + (count === 1 ? "device" : "devices");
+  }
+
+  function getPushSubscriberAudienceLabel_() {
+    if (!Number.isFinite(adminState.pushSubscriberCount)) {
+      return "every currently subscribed device";
+    }
+    return formatPushSubscriberCount_(adminState.pushSubscriberCount);
+  }
+
+  function getPushScheduledAudienceLabel_() {
+    if (!Number.isFinite(adminState.pushSubscriberCount)) {
+      return "The recipient count will be determined when it sends.";
+    }
+    return formatPushSubscriberCount_(adminState.pushSubscriberCount) +
+      " currently. The final recipient count will be determined when it sends.";
   }
 
   function resetPushNotificationDraft_() {
@@ -17680,6 +17715,7 @@
     adminState.pushNotificationSending = false;
     adminState.pushNotificationError = "";
     adminState.pushNotificationMessage = "";
+    adminState.pushSubscriberCount = null;
     adminState.pushNotifications = [];
     adminState.pushNotificationsLoaded = false;
     adminState.pushNotificationsLoading = false;

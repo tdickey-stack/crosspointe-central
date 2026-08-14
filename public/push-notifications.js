@@ -92,6 +92,31 @@
     promptEl = null;
   }
 
+  function trackNotificationAction_(action, result, source) {
+    if (!source || !window.centralAnalyticsService ||
+      typeof window.centralAnalyticsService.track !== "function") {
+      return;
+    }
+
+    window.centralAnalyticsService.track("notification_action", {
+      section_id: source === "prompt" ? "notification_prompt" : "footer",
+      interaction_action: action,
+      content_type: "push_notifications",
+      content_id: "push_subscription",
+      content_label: action === "disable" ?
+        "Turn off notifications" : "Enable notifications",
+      result: result,
+    });
+  }
+
+  function trackNotificationFailure_(action, source) {
+    trackNotificationAction_(
+        action,
+        Notification.permission === "denied" ? "denied" : "error",
+        source,
+    );
+  }
+
   function postSubscription_(token, enabled) {
     return fetch(SUBSCRIPTION_ENDPOINT, {
       method: "POST",
@@ -166,6 +191,14 @@
     buttonEl.setAttribute("aria-pressed", enabled ? "true" : "false");
     buttonEl.textContent = working ? "Updating notifications..." :
       (enabled ? "Turn off notifications" : "Turn on notifications");
+    buttonEl.setAttribute(
+        "data-analytics-action",
+        enabled ? "disable_notifications" : "enable_notifications",
+    );
+    buttonEl.setAttribute(
+        "data-analytics-content-label",
+        enabled ? "Turn off notifications" : "Enable notifications",
+    );
     statusEl.textContent = enabled ?
       "Push notifications are on for this device." :
       (Notification.permission === "denied" ?
@@ -173,7 +206,7 @@
         "Get occasional updates from CrossPointe Central.");
   }
 
-  function enableNotifications_() {
+  function enableNotifications_(source) {
     working = true;
     renderButton_();
     return Notification.requestPermission()
@@ -191,11 +224,12 @@
             setStoredEnabled_(true);
             clearPromptDismissal_();
             closePrompt_();
+            trackNotificationAction_("enable", "success", source);
           });
         });
   }
 
-  function disableNotifications_() {
+  function disableNotifications_(source) {
     working = true;
     renderButton_();
     return messaging.getToken(getTokenOptions_())
@@ -208,6 +242,7 @@
       return messaging.deleteToken().catch(function() {});
     }).then(function() {
       setStoredEnabled_(false);
+      trackNotificationAction_("disable", "success", source);
     });
   }
 
@@ -216,8 +251,9 @@
     var isEnabled = Notification.permission === "granted" &&
       getStoredEnabled_();
     var action = isEnabled ?
-      disableNotifications_() : enableNotifications_();
+      disableNotifications_("footer") : enableNotifications_("footer");
     action.catch(function(error) {
+      trackNotificationFailure_(isEnabled ? "disable" : "enable", "footer");
       if (statusEl) {
         statusEl.textContent = error && error.message ? error.message :
           "Central could not update notifications.";
@@ -313,6 +349,7 @@
     promptEl = document.createElement("aside");
     promptEl.className = "central-push-prompt";
     promptEl.dataset.mode = mode;
+    promptEl.setAttribute("data-analytics-section", "notification_prompt");
     promptEl.setAttribute("role", "dialog");
     promptEl.setAttribute("aria-labelledby", "central-push-prompt-title");
     promptEl.innerHTML = [
@@ -324,14 +361,24 @@
       "</div><div class=\"central-push-prompt-actions\">",
       "<button type=\"button\" class=\"central-push-prompt-enable\"></button>",
       (canEnable ?
-        "<button type=\"button\" class=\"central-push-prompt-later\">" +
+        "<button type=\"button\" class=\"central-push-prompt-later\" data-analytics-action=\"notification_prompt_later\" data-analytics-content-label=\"Not now\">" +
           "Not now</button>" : ""),
       "</div>",
     ].join("");
     promptEl.querySelector("strong").textContent = title;
     promptEl.querySelector("p").textContent = message;
-    promptEl.querySelector(".central-push-prompt-enable").textContent =
-      primaryLabel;
+    var primaryButton = promptEl.querySelector(
+        ".central-push-prompt-enable",
+    );
+    primaryButton.textContent = primaryLabel;
+    primaryButton.setAttribute(
+        "data-analytics-action",
+        canEnable ? "enable_notifications" : "acknowledge_notification_prompt",
+    );
+    primaryButton.setAttribute(
+        "data-analytics-content-label",
+        primaryLabel,
+    );
     document.body.appendChild(promptEl);
 
     var laterButton = promptEl.querySelector(".central-push-prompt-later");
@@ -345,9 +392,10 @@
           var enableButton = event.currentTarget;
           enableButton.disabled = true;
           enableButton.textContent = "Enabling...";
-          enableNotifications_().then(function() {
+          enableNotifications_("prompt").then(function() {
             closePrompt_();
           }).catch(function(error) {
+            trackNotificationFailure_("enable", "prompt");
             enableButton.disabled = false;
             enableButton.textContent = "Enable notifications";
             if (promptEl) promptEl.querySelector("p").textContent =

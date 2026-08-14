@@ -287,16 +287,31 @@ export function createPushScheduleHandler({
     try {
       const sender = await verifySender(request);
       if (request.method === "GET") {
-        const snapshot = await firestore
-            .collection(PUSH_SCHEDULED_COLLECTION)
-            .orderBy("scheduledFor", "desc")
-            .limit(100)
-            .get();
-        const notifications = snapshot.docs
+        const [scheduleSnapshot, subscriptionSnapshot] = await Promise.all([
+          firestore
+              .collection(PUSH_SCHEDULED_COLLECTION)
+              .orderBy("scheduledFor", "desc")
+              .limit(100)
+              .get(),
+          firestore
+              .collection(PUSH_SUBSCRIPTIONS_COLLECTION)
+              .where("enabled", "==", true)
+              .get(),
+        ]);
+        const notifications = scheduleSnapshot.docs
             .map(serializeScheduledNotification_)
             .sort(compareScheduledNotifications_);
+        const subscriberCount = subscriptionSnapshot.docs.filter(
+            (documentSnapshot) => {
+              return String(documentSnapshot.get("token") || "").trim();
+            },
+        ).length;
         response.set("Cache-Control", "no-store");
-        response.status(200).json({ok: true, notifications});
+        response.status(200).json({
+          ok: true,
+          notifications,
+          subscriberCount,
+        });
         return;
       }
 

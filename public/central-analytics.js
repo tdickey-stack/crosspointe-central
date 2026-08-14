@@ -24,6 +24,7 @@
     generate_lead: true,
     notes_action: true,
     livestream_action: true,
+    notification_action: true,
     wayfinder_action: true,
   };
   var ALLOWED_PARAMETERS = {

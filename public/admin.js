@@ -9447,7 +9447,9 @@
 
   function renderScheduledPushNotifications_(canManage) {
     var notifications = Array.isArray(adminState.pushNotifications) ?
-      adminState.pushNotifications : [];
+      adminState.pushNotifications.filter(function(notification) {
+        return notification && notification.status !== "canceled";
+      }) : [];
 
     return [
       "<div class=\"central-admin-push-schedules\">",
@@ -9468,7 +9470,7 @@
         "<div class=\"central-admin-empty\"><strong>No scheduled notifications yet.</strong><p>Choose Schedule for later above to create one.</p></div>" :
         "",
       notifications.length ?
-        "<div class=\"central-admin-push-schedule-list\">" +
+        "<div class=\"central-admin-list central-admin-push-schedule-list\">" +
           notifications.map(function(notification) {
             return renderScheduledPushNotification_(notification, canManage);
           }).join("") +
@@ -9496,16 +9498,20 @@
     };
 
     return [
-      "<article class=\"central-admin-push-schedule-item\">",
-      "<div class=\"central-admin-push-schedule-heading\"><div>",
-      "<strong>", escapeHtml_(notification.title || "Notification"),
-      "</strong><span>",
-      escapeHtml_(formatPushNotificationDate_(notification.scheduledFor)),
-      "</span></div>",
+      "<article class=\"central-admin-list-item central-admin-push-schedule-item\">",
+      "<div class=\"central-admin-list-main\">",
+      "<div class=\"central-admin-item-meta\">",
       renderStatusPill_(statusLabels[status] || status,
           statusTones[status] || "is-warn"),
-      "</div><p>", escapeHtml_(notification.message || ""), "</p>",
-      "<a href=\"", escapeAttr_(notification.link || DEFAULT_PUSH_NOTIFICATION_LINK),
+      renderInlineMeta_(
+          "Delivery",
+          formatPushNotificationDate_(notification.scheduledFor),
+      ),
+      "</div>",
+      "<strong>", escapeHtml_(notification.title || "Notification"),
+      "</strong><p>", escapeHtml_(notification.message || ""), "</p>",
+      "<a class=\"central-admin-inline-link\" href=\"",
+      escapeAttr_(notification.link || DEFAULT_PUSH_NOTIFICATION_LINK),
       "\" target=\"_blank\" rel=\"noopener noreferrer\">",
       escapeHtml_(notification.link || DEFAULT_PUSH_NOTIFICATION_LINK), "</a>",
       status === "sent" ?
@@ -9516,12 +9522,13 @@
       notification.error ?
         "<small class=\"is-error\">" +
           escapeHtml_(notification.error) + "</small>" : "",
+      "</div>",
       isEditable ? [
-        "<div class=\"central-admin-action-row\">",
+        "<div class=\"central-admin-list-actions\">",
         "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"edit-push-notification\" data-push-id=\"",
         escapeAttr_(notification.id), "\">Edit</button>",
         "<button type=\"button\" class=\"central-admin-link-button is-danger\" data-admin-action=\"cancel-push-notification\" data-push-id=\"",
-        escapeAttr_(notification.id), "\">Cancel</button></div>",
+        escapeAttr_(notification.id), "\">Remove</button></div>",
       ].join("") : "",
       "</article>",
     ].join("");
@@ -9553,12 +9560,24 @@
       return;
     }
 
-    if (!window.confirm(
-        "Send this notification now to every subscribed device?",
-    )) {
-      return;
-    }
+    var payload = {
+      title: draft.title,
+      message: draft.message,
+      link: String(draft.link || "").trim(),
+    };
+    openDeleteConfirm_({
+      title: "Send notification now?",
+      message: "Send “" + String(draft.title || "Notification") +
+        "” now to every subscribed device?",
+      confirmLabel: "Send Notification",
+      showSkip: false,
+      onConfirm: function() {
+        submitPushNotification_(payload);
+      },
+    });
+  }
 
+  function submitPushNotification_(payload) {
     adminState.pushNotificationSending = true;
     adminState.pushNotificationError = "";
     adminState.pushNotificationMessage = "";
@@ -9572,11 +9591,7 @@
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({
-          title: draft.title,
-          message: draft.message,
-          link: String(draft.link || "").trim(),
-        }),
+        body: JSON.stringify(payload),
       });
     }).then(parseAdminEndpointResponse_).then(function(result) {
       adminState.pushNotificationSending = false;
@@ -9619,26 +9634,38 @@
     }
 
     var editingId = adminState.pushNotificationEditingId;
-    var action = editingId ? "update" : "create";
-    var confirmMessage = editingId ?
-      "Update this scheduled notification?" :
-      "Schedule this notification for " +
-        formatPushNotificationDate_(scheduledDate.toISOString()) + "?";
-    if (!window.confirm(confirmMessage)) return;
-
-    adminState.pushNotificationSending = true;
-    adminState.pushNotificationError = "";
-    adminState.pushNotificationMessage = "";
-    renderAdmin_();
-
-    postPushScheduleAction_({
-      action: action,
+    var payload = {
+      action: editingId ? "update" : "create",
       id: editingId,
       title: draft.title,
       message: draft.message,
       link: String(draft.link || "").trim(),
       scheduledFor: scheduledDate.toISOString(),
-    }).then(function() {
+    };
+    openDeleteConfirm_({
+      title: editingId ?
+        "Update scheduled notification?" :
+        "Schedule notification?",
+      message: (editingId ? "Update “" : "Schedule “") +
+        String(draft.title || "Notification") + "” for " +
+        formatPushNotificationDate_(scheduledDate.toISOString()) + "?",
+      confirmLabel: editingId ?
+        "Update Schedule" :
+        "Schedule Notification",
+      showSkip: false,
+      onConfirm: function() {
+        submitScheduledPushNotification_(payload, editingId);
+      },
+    });
+  }
+
+  function submitScheduledPushNotification_(payload, editingId) {
+    adminState.pushNotificationSending = true;
+    adminState.pushNotificationError = "";
+    adminState.pushNotificationMessage = "";
+    renderAdmin_();
+
+    postPushScheduleAction_(payload).then(function() {
       adminState.pushNotificationSending = false;
       resetPushNotificationDraft_();
       adminState.pushNotificationMessage = editingId ?
@@ -9681,10 +9708,19 @@
       return item && item.id === notificationId;
     });
     if (!notification || notification.status !== "scheduled") return;
-    if (!window.confirm(
-        "Cancel the scheduled notification “" + notification.title + "”?",
-    )) return;
+    openDeleteConfirm_({
+      title: "Remove scheduled notification?",
+      message: "Remove “" + String(notification.title || "Notification") +
+        "” from the schedule? It will not be sent.",
+      confirmLabel: "Remove Notification",
+      showSkip: false,
+      onConfirm: function() {
+        removeScheduledPushNotification_(notificationId);
+      },
+    });
+  }
 
+  function removeScheduledPushNotification_(notificationId) {
     adminState.pushNotificationSending = true;
     adminState.pushNotificationError = "";
     renderAdmin_();
@@ -9694,14 +9730,19 @@
           if (adminState.pushNotificationEditingId === notificationId) {
             resetPushNotificationDraft_();
           }
+          adminState.pushNotifications = adminState.pushNotifications.filter(
+              function(notification) {
+                return notification && notification.id !== notificationId;
+              },
+          );
           adminState.pushNotificationMessage =
-            "Scheduled notification canceled.";
+            "Scheduled notification removed.";
           return loadPushNotifications_(true);
         })
         .catch(function(error) {
           adminState.pushNotificationSending = false;
           adminState.pushNotificationError = error && error.message ?
-            error.message : "Unable to cancel the notification.";
+            error.message : "Unable to remove the notification.";
           renderAdmin_();
         });
   }
@@ -9753,7 +9794,9 @@
       adminState.pushNotificationsLoading = false;
       adminState.pushNotificationsLoaded = true;
       adminState.pushNotifications = Array.isArray(result.notifications) ?
-        result.notifications : [];
+        result.notifications.filter(function(notification) {
+          return notification && notification.status !== "canceled";
+        }) : [];
       renderAdmin_();
     }).catch(function(error) {
       adminState.pushNotificationsLoading = false;

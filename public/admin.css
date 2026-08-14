@@ -1274,8 +1274,7 @@
   border-top: 1px solid rgba(39, 39, 42, 0.1);
 }
 
-[data-app-route="admin"] .central-admin-push-schedules-header,
-[data-app-route="admin"] .central-admin-push-schedule-heading {
+[data-app-route="admin"] .central-admin-push-schedules-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1290,36 +1289,22 @@
 }
 
 [data-app-route="admin"] .central-admin-push-schedule-list {
-  display: grid;
-  gap: 12px;
+  margin-top: 0;
 }
 
 [data-app-route="admin"] .central-admin-push-schedule-item {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
-  border: 1px solid rgba(39, 39, 42, 0.1);
-  border-radius: 18px;
-  background: rgba(39, 39, 42, 0.035);
+  align-items: center;
 }
 
-[data-app-route="admin"] .central-admin-push-schedule-heading > div {
-  display: grid;
-  gap: 4px;
-}
-
-[data-app-route="admin"] .central-admin-push-schedule-heading span,
 [data-app-route="admin"] .central-admin-push-schedule-item small {
   color: var(--cp-muted);
   font-size: 0.78rem;
   line-height: 1.45;
 }
 
-[data-app-route="admin"] .central-admin-push-schedule-item > a {
+[data-app-route="admin"] .central-admin-push-schedule-item .central-admin-inline-link {
   overflow-wrap: anywhere;
-  color: var(--cp-red);
   font-size: 0.8rem;
-  font-weight: 700;
 }
 
 [data-app-route="admin"] .central-admin-push-schedule-item small.is-error {
@@ -3728,8 +3713,7 @@
     grid-template-columns: 1fr;
   }
 
-  [data-app-route="admin"] .central-admin-push-schedules-header,
-  [data-app-route="admin"] .central-admin-push-schedule-heading {
+  [data-app-route="admin"] .central-admin-push-schedules-header {
     align-items: stretch;
     flex-direction: column;
   }

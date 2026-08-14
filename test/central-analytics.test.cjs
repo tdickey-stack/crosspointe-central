@@ -9,6 +9,10 @@ test("analytics event names are restricted to the approved taxonomy", () => {
       "registration_click",
   );
   assert.equal(
+      analytics.sanitizeAnalyticsEventName_("notification_action"),
+      "notification_action",
+  );
+  assert.equal(
       analytics.sanitizeAnalyticsEventName_("user supplied event"),
       "central_ui_action",
   );
@@ -194,4 +198,42 @@ test("the delegated listener records one click plus one specialized outcome", ()
   );
   assert.equal(loggedEvents[0].parameters.content_label, "Starting Pointe");
   assert.equal(loggedEvents[1].parameters.calendar_provider, "google");
+});
+
+test("notification outcomes remain separate from raw click totals", () => {
+  const loggedEvents = [];
+  const documentObject = {
+    body: {setAttribute() {}},
+    addEventListener() {},
+  };
+  const windowObject = {
+    CENTRAL_BOOT_MODE: "public",
+    console: {
+      info(prefix, eventName, parameters) {
+        loggedEvents.push({prefix, eventName, parameters});
+      },
+    },
+    location: {
+      hostname: "localhost",
+      href: "http://localhost/",
+      search: "",
+    },
+  };
+  const service = analytics.createService_(windowObject, documentObject);
+
+  service.track("notification_action", {
+    section_id: "notification_prompt",
+    interaction_action: "enable",
+    content_type: "push_notifications",
+    content_id: "push_subscription",
+    content_label: "Enable notifications",
+    result: "success",
+  });
+
+  assert.deepEqual(
+      loggedEvents.map((entry) => entry.eventName),
+      ["notification_action"],
+  );
+  assert.equal(loggedEvents[0].parameters.result, "success");
+  assert.equal(loggedEvents[0].parameters.interaction_action, "enable");
 });

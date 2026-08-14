@@ -62,6 +62,9 @@ jobs:
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
 
+      - name: Test analytics
+        run: pnpm run test:analytics
+
       - name: Test push notifications
         run: npm --prefix functions run test:push
 
@@ -121,6 +124,9 @@ jobs:
 
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
+
+      - name: Test analytics
+        run: pnpm run test:analytics
 
       - name: Test push notifications
         run: npm --prefix functions run test:push

@@ -6,6 +6,7 @@ import {
   DEFAULT_PUSH_LINK,
   PUSH_HISTORY_COLLECTION,
   PUSH_SCHEDULED_COLLECTION,
+  PUSH_SUBSCRIPTIONS_COLLECTION,
   createPushScheduleDispatcher,
   createPushScheduleHandler,
   getPushSubscriptionId,
@@ -105,7 +106,13 @@ describe("push notification payloads", () => {
 describe("scheduled push notification handlers", () => {
   it("creates, updates, lists, and cancels scheduled notifications",
       async () => {
-        const firestore = createMemoryFirestore_();
+        const firestore = createMemoryFirestore_({
+          [PUSH_SUBSCRIPTIONS_COLLECTION]: {
+            enabled1: {token: "token-1", enabled: true},
+            disabled1: {token: "token-2", enabled: false},
+            empty1: {token: "", enabled: true},
+          },
+        });
         const fieldValue = createFieldValue_();
         const handler = createPushScheduleHandler({
           firestore,
@@ -155,6 +162,7 @@ describe("scheduled push notification handlers", () => {
         const listResponse = createResponse_();
         await handler({method: "GET"}, listResponse);
         assert.equal(listResponse.statusCode, 200);
+        assert.equal(listResponse.body.subscriberCount, 1);
         assert.equal(listResponse.body.notifications.length, 1);
         assert.equal(listResponse.body.notifications[0].message,
             "Doors now open at 6:15.");

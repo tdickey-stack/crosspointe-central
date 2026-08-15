@@ -102,6 +102,7 @@
     "/api/admin/wayfinder/featured-event-health";
   var WAYFINDER_ALPHA_SETTINGS_ENDPOINT =
     "/api/admin/wayfinder/alpha-settings";
+  var WAYFINDER_BETA_ENDPOINT = "/api/admin/wayfinder/beta";
   var WAYFINDER_FEEDBACK_ENDPOINT = "/api/admin/wayfinder/feedback";
   var WAYFINDER_EVALUATIONS_ENDPOINT =
     "/api/admin/wayfinder/evaluations";
@@ -927,6 +928,22 @@
     wayfinderAlphaSaving: false,
     wayfinderAlphaError: "",
     wayfinderAlphaMessage: "",
+    wayfinderBetaLoaded: false,
+    wayfinderBetaLoading: false,
+    wayfinderBetaWorking: false,
+    wayfinderBetaConfig: null,
+    wayfinderBetaUsage: null,
+    wayfinderBetaInvites: [],
+    wayfinderBetaAccess: [],
+    wayfinderBetaConversationAccessId: "",
+    wayfinderBetaConversationsByAccessId: {},
+    wayfinderBetaConversationCursorByAccessId: {},
+    wayfinderBetaConversationHasMoreByAccessId: {},
+    wayfinderBetaConversationLoadingAccessId: "",
+    wayfinderBetaConversationErrorsByAccessId: {},
+    wayfinderBetaCreatedInvite: null,
+    wayfinderBetaError: "",
+    wayfinderBetaMessage: "",
     integrationsPublishing: false,
     integrationsError: "",
     integrationsMessage: "",
@@ -2084,6 +2101,83 @@
         saveWayfinderAlphaSetting_(
             (button.getAttribute("data-wayfinder-enabled") || "") !== "true",
         );
+        return;
+      }
+
+      if (action === "refresh-wayfinder-beta") {
+        event.preventDefault();
+        loadWayfinderBeta_(true);
+        return;
+      }
+
+      if (action === "toggle-wayfinder-beta-conversation-user") {
+        event.preventDefault();
+        toggleWayfinderBetaConversationUser_(
+            button.getAttribute("data-wayfinder-beta-access-id") || "",
+        );
+        return;
+      }
+
+      if (action === "load-more-wayfinder-beta-user-conversations") {
+        event.preventDefault();
+        loadWayfinderBetaConversations_(
+            button.getAttribute("data-wayfinder-beta-access-id") || "",
+            true,
+        );
+        return;
+      }
+
+      if (action === "toggle-wayfinder-beta") {
+        event.preventDefault();
+        updateWayfinderBetaConfig_({
+          betaEnabled:
+            (button.getAttribute("data-wayfinder-beta-enabled") || "") !==
+              "true",
+        });
+        return;
+      }
+
+      if (action === "save-wayfinder-beta-limits") {
+        event.preventDefault();
+        saveWayfinderBetaLimits_();
+        return;
+      }
+
+      if (action === "create-wayfinder-beta-invite") {
+        event.preventDefault();
+        createWayfinderBetaInvite_();
+        return;
+      }
+
+      if (action === "copy-wayfinder-beta-link") {
+        event.preventDefault();
+        copyWayfinderBetaInviteLink_();
+        return;
+      }
+
+      if (action === "revoke-wayfinder-beta-invite") {
+        event.preventDefault();
+        if (!window.confirm(
+            "Revoke this invitation and every Access ID created from it?",
+        )) return;
+        runWayfinderBetaAction_({
+          action: "revoke_invite",
+          inviteRecordId:
+            button.getAttribute("data-wayfinder-beta-invite-id") || "",
+        });
+        return;
+      }
+
+      if (action === "revoke-wayfinder-beta-access") {
+        event.preventDefault();
+        if (!window.confirm(
+            "Revoke this anonymous Access ID? It will stop working immediately.",
+        )) return;
+        runWayfinderBetaAction_({
+          action: "revoke_access",
+          sessionRecordId:
+            button.getAttribute("data-wayfinder-beta-access-id") || "",
+        });
         return;
       }
 
@@ -10188,6 +10282,350 @@
     });
   }
 
+  function renderWayfinderBetaManagement_() {
+    var config = adminState.wayfinderBetaConfig || {
+      betaEnabled: false,
+      sessionDays: 30,
+      transcriptRetentionDays: 30,
+      defaultMaxActivations: 20,
+      perAccessDailyLimit: 25,
+      globalDailyLimit: 250,
+    };
+    var usage = adminState.wayfinderBetaUsage || {questionCount: 0};
+    var invites = Array.isArray(adminState.wayfinderBetaInvites) ?
+      adminState.wayfinderBetaInvites : [];
+    var accessItems = Array.isArray(adminState.wayfinderBetaAccess) ?
+      adminState.wayfinderBetaAccess : [];
+    var busy = adminState.wayfinderBetaLoading ||
+      adminState.wayfinderBetaWorking;
+    var activeAccess = accessItems.filter(function(item) {
+      return item.status === "active" &&
+        (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now());
+    }).length;
+    var conversationUsers = accessItems.filter(function(item) {
+      return Number(item.totalQuestions) > 0;
+    });
+    return [
+      renderCollapsibleAdminSection_({
+        id: "wayfinder-beta-access",
+        title: "Invited Beta Access",
+        pillHtml: renderStatusPill_(
+            adminState.wayfinderBetaLoading ? "Loading" :
+              config.betaEnabled ? "Enabled" : "Disabled",
+            config.betaEnabled ? "is-safe" : "is-warn",
+        ),
+        bodyHtml: [
+          renderAdminNote_(
+              "One reusable invitation link can be shared with a small beta cohort. Each browser that activates it receives its own anonymous Access ID and the normal Wayfinder experience on the Central homepage.",
+          ),
+          renderAdminNote_(
+              String(Number(usage.questionCount) || 0) + " of " +
+              String(Number(config.globalDailyLimit) || 250) +
+              " beta questions have been used today.",
+          ),
+          adminState.wayfinderBetaMessage ?
+            renderAdminNote_(adminState.wayfinderBetaMessage) : "",
+          adminState.wayfinderBetaError ? [
+            "<div class=\"wayfinder-lab-error\" role=\"alert\"><strong>Beta management needs attention.</strong><p>",
+            escapeHtml_(adminState.wayfinderBetaError), "</p></div>",
+          ].join("") : "",
+          "<div class=\"central-admin-action-row\">",
+          "<button type=\"button\" class=\"central-admin-link-button ",
+          config.betaEnabled ? "is-secondary" : "is-primary",
+          "\" data-admin-action=\"toggle-wayfinder-beta\" data-wayfinder-beta-enabled=\"",
+          config.betaEnabled ? "true" : "false", "\"",
+          busy ? " disabled" : "", ">",
+          config.betaEnabled ? "Pause Invited Beta" : "Enable Invited Beta",
+          "</button>",
+          "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"refresh-wayfinder-beta\"",
+          busy ? " disabled" : "", ">",
+          adminState.wayfinderBetaLoading ? "Refreshing..." : "Refresh Beta Data",
+          "</button></div>",
+          "<div class=\"wayfinder-beta-limit-grid\">",
+          renderWayfinderBetaNumberField_(
+              "Questions per Access ID / day",
+              "wayfinder-beta-access-limit",
+              config.perAccessDailyLimit,
+              1,
+              500,
+          ),
+          renderWayfinderBetaNumberField_(
+              "All beta questions / day",
+              "wayfinder-beta-global-limit",
+              config.globalDailyLimit,
+              1,
+              10000,
+          ),
+          renderWayfinderBetaNumberField_(
+              "Session length (days)",
+              "wayfinder-beta-session-days",
+              config.sessionDays,
+              1,
+              90,
+          ),
+          renderWayfinderBetaNumberField_(
+              "Conversation retention (days)",
+              "wayfinder-beta-retention-days",
+              config.transcriptRetentionDays,
+              1,
+              90,
+          ),
+          "</div><div class=\"central-admin-action-row\">",
+          "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"save-wayfinder-beta-limits\"",
+          busy ? " disabled" : "", ">Save Beta Limits</button></div>",
+        ].join(""),
+      }),
+      renderCollapsibleAdminSection_({
+        id: "wayfinder-beta-invitations",
+        title: "Beta Invitations",
+        pillHtml: renderStatusPill_(
+            String(invites.filter(function(item) {
+              return item.status === "active" &&
+                (!item.expiresAt ||
+                  new Date(item.expiresAt).getTime() > Date.now());
+            }).length) + " active",
+            "is-live",
+        ),
+        bodyHtml: renderWayfinderBetaInvitations_(invites, config, busy),
+      }),
+      renderCollapsibleAdminSection_({
+        id: "wayfinder-beta-access-ids",
+        title: "Anonymous Access IDs",
+        pillHtml: renderStatusPill_(
+            String(activeAccess) + " active",
+            activeAccess ? "is-live" : "is-safe",
+        ),
+        bodyHtml: renderWayfinderBetaAccessList_(accessItems, busy),
+      }),
+      renderCollapsibleAdminSection_({
+        id: "wayfinder-beta-conversations",
+        title: "Beta Conversations",
+        pillHtml: renderStatusPill_(
+            String(conversationUsers.length) +
+              (conversationUsers.length === 1 ? " user" : " users"),
+            conversationUsers.length ? "is-live" : "is-safe",
+        ),
+        bodyHtml: renderWayfinderBetaConversations_(accessItems, busy),
+      }),
+    ].join("");
+  }
+
+  function renderWayfinderBetaNumberField_(label, id, value, min, max) {
+    return [
+      "<label class=\"central-admin-field\"><span>",
+      escapeHtml_(label), "</span><input type=\"number\" id=\"",
+      escapeAttr_(id), "\" min=\"", escapeAttr_(String(min)),
+      "\" max=\"", escapeAttr_(String(max)), "\" value=\"",
+      escapeAttr_(String(value)), "\"></label>",
+    ].join("");
+  }
+
+  function renderWayfinderBetaInvitations_(items, config, busy) {
+    var created = adminState.wayfinderBetaCreatedInvite;
+    return [
+      renderAdminNote_(
+          "Share one reusable link with the whole cohort. Each browser receives a separate anonymous Access ID, up to the limit below. The raw invitation token is shown only when the invitation is created.",
+      ),
+      "<div class=\"wayfinder-beta-invite-form\">",
+      "<label class=\"central-admin-field central-admin-field-wide\"><span>Invitation label</span><input type=\"text\" id=\"wayfinder-beta-invite-label\" maxlength=\"80\" placeholder=\"Community Group Leaders · Fall Beta\"></label>",
+      renderWayfinderBetaNumberField_(
+          "Maximum participants / browsers",
+          "wayfinder-beta-invite-activations",
+          config.defaultMaxActivations || 20,
+          1,
+          100,
+      ),
+      renderWayfinderBetaNumberField_(
+          "Invitation length (days)",
+          "wayfinder-beta-invite-days",
+          config.sessionDays || 30,
+          1,
+          90,
+      ),
+      "</div><div class=\"central-admin-action-row\"><button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"create-wayfinder-beta-invite\"",
+      busy || !config.betaEnabled ? " disabled" : "",
+      ">Create Invitation Link</button></div>",
+      !config.betaEnabled ? renderAdminNote_(
+          "Enable Invited Beta before creating links.",
+      ) : "",
+      created && created.inviteLink ? [
+        "<div class=\"wayfinder-beta-created-link\"><strong>Copy this link now</strong><p>The secret portion is not stored and cannot be shown again.</p><div><input type=\"text\" id=\"wayfinder-beta-created-link\" readonly value=\"",
+        escapeAttr_(created.inviteLink),
+        "\"><button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"copy-wayfinder-beta-link\">Copy Link</button></div></div>",
+      ].join("") : "",
+      items.length ? [
+        "<div class=\"wayfinder-beta-card-list\">",
+        items.map(function(item) {
+          var active = item.status === "active" &&
+            (!item.expiresAt ||
+              new Date(item.expiresAt).getTime() > Date.now());
+          return [
+            "<article class=\"wayfinder-beta-card\"><div class=\"central-admin-item-header\"><div><span class=\"central-admin-kicker\">",
+            escapeHtml_(item.inviteId || "Invitation"),
+            "</span><strong>", escapeHtml_(item.label || "Beta invitation"),
+            "</strong></div>",
+            renderStatusPill_(active ? "Active" : item.status || "Expired",
+                active ? "is-safe" : "is-warn"),
+            "</div><p>",
+            escapeHtml_(String(item.activationCount || 0) + " of " +
+              String(item.maxActivations || 0) +
+              " participant / browser activations"),
+            "</p><p class=\"central-admin-footer-note\">Expires ",
+            escapeHtml_(formatAdminTimestamp_(item.expiresAt)), "</p>",
+            active ? [
+              "<button type=\"button\" class=\"central-admin-link-button is-danger\" data-admin-action=\"revoke-wayfinder-beta-invite\" data-wayfinder-beta-invite-id=\"",
+              escapeAttr_(item.inviteRecordId), "\"",
+              busy ? " disabled" : "", ">Revoke Invitation</button>",
+            ].join("") : "",
+            "</article>",
+          ].join("");
+        }).join(""),
+        "</div>",
+      ].join("") : "<div class=\"central-admin-empty\"><strong>No invitations yet.</strong><p>Create the first link when the beta is ready.</p></div>",
+    ].join("");
+  }
+
+  function renderWayfinderBetaAccessList_(items, busy) {
+    if (!items.length) {
+      return "<div class=\"central-admin-empty\"><strong>No Access IDs yet.</strong><p>Anonymous Access IDs appear after invitation links are redeemed.</p></div>";
+    }
+    return [
+      renderAdminNote_(
+          "Access IDs identify browser activations without storing a tester name, email address, or raw session token.",
+      ),
+      "<div class=\"wayfinder-beta-card-list\">",
+      items.map(function(item) {
+        var active = item.status === "active" &&
+          (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now());
+        return [
+          "<article class=\"wayfinder-beta-card\"><div class=\"central-admin-item-header\"><div><span class=\"central-admin-kicker\">",
+          escapeHtml_(item.inviteLabel || item.inviteId || "Beta"),
+          "</span><strong><code>", escapeHtml_(item.accessId || "Unknown"),
+          "</code></strong></div>",
+          renderStatusPill_(active ? "Active" : item.status || "Expired",
+              active ? "is-safe" : "is-warn"),
+          "</div><div class=\"wayfinder-beta-metrics\"><span><strong>",
+          escapeHtml_(String(item.questionsToday || 0)),
+          "</strong> today</span><span><strong>",
+          escapeHtml_(String(item.totalQuestions || 0)),
+          "</strong> total</span><span><strong>",
+          escapeHtml_(String(item.feedbackCount || 0)),
+          "</strong> feedback</span></div><p class=\"central-admin-footer-note\">Last active ",
+          escapeHtml_(formatAdminTimestamp_(item.lastActiveAt)),
+          " · Expires ", escapeHtml_(formatAdminTimestamp_(item.expiresAt)),
+          "</p>",
+          active ? [
+            "<button type=\"button\" class=\"central-admin-link-button is-danger\" data-admin-action=\"revoke-wayfinder-beta-access\" data-wayfinder-beta-access-id=\"",
+            escapeAttr_(item.sessionRecordId), "\"",
+            busy ? " disabled" : "", ">Revoke Access ID</button>",
+          ].join("") : "",
+          "</article>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderWayfinderBetaConversations_(accessItems, busy) {
+    var users = (Array.isArray(accessItems) ? accessItems : [])
+        .filter(function(item) {
+          return Number(item.totalQuestions) > 0;
+        });
+    if (!users.length) {
+      return "<div class=\"central-admin-empty\"><strong>No beta conversations yet.</strong><p>Each Access ID will appear here after its first interaction.</p></div>";
+    }
+    return [
+      renderAdminNote_(
+          "Choose an anonymous Access ID to review that tester's retained history. Email addresses and phone numbers are masked in stored questions and notes, and records remain eligible for automatic deletion after the configured retention period.",
+      ),
+      "<div class=\"wayfinder-beta-conversation-users\">",
+      users.map(function(user) {
+        return renderWayfinderBetaConversationUser_(user, busy);
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderWayfinderBetaConversationUser_(user, busy) {
+    var accessId = String(user.accessId || "");
+    var selected = adminState.wayfinderBetaConversationAccessId === accessId;
+    var loading = adminState.wayfinderBetaConversationLoadingAccessId ===
+      accessId;
+    var histories = adminState.wayfinderBetaConversationsByAccessId || {};
+    var hasLoaded = Object.prototype.hasOwnProperty.call(histories, accessId);
+    var items = hasLoaded && Array.isArray(histories[accessId]) ?
+      histories[accessId] : [];
+    var errors = adminState.wayfinderBetaConversationErrorsByAccessId || {};
+    var error = String(errors[accessId] || "");
+    var hasMore = !!(
+      adminState.wayfinderBetaConversationHasMoreByAccessId || {}
+    )[accessId];
+    return [
+      "<article class=\"wayfinder-beta-conversation-user",
+      selected ? " is-open" : "",
+      "\"><button type=\"button\" class=\"wayfinder-beta-conversation-user-summary\" data-admin-action=\"toggle-wayfinder-beta-conversation-user\" data-wayfinder-beta-access-id=\"",
+      escapeAttr_(accessId), "\" aria-expanded=\"",
+      selected ? "true" : "false", "\"><span class=\"wayfinder-beta-conversation-user-id\"><small>",
+      escapeHtml_(user.inviteLabel || user.inviteId || "Invited beta"),
+      "</small><strong><code>", escapeHtml_(accessId || "Unknown"),
+      "</code></strong></span><span class=\"wayfinder-beta-conversation-user-stats\"><strong>",
+      escapeHtml_(String(user.totalQuestions || 0)),
+      "</strong> submissions · <strong>",
+      escapeHtml_(String(user.feedbackCount || 0)),
+      "</strong> feedback</span><span class=\"wayfinder-beta-conversation-user-time\">Last active ",
+      escapeHtml_(formatAdminTimestamp_(user.lastActiveAt)),
+      "</span><span class=\"wayfinder-beta-conversation-user-chevron\" aria-hidden=\"true\"></span></button>",
+      selected ? [
+        "<div class=\"wayfinder-beta-conversation-user-body\">",
+        loading && !items.length ? renderAdminNote_(
+            "Loading this Access ID's retained conversations.",
+        ) : "",
+        error ? "<p class=\"wayfinder-lab-error\">" +
+          escapeHtml_(error) + "</p>" : "",
+        hasLoaded && !items.length && !loading && !error ?
+          "<div class=\"central-admin-empty\"><strong>No retained conversations.</strong><p>This Access ID's older records may have reached their retention date.</p></div>" : "",
+        items.length ? renderWayfinderBetaConversationItems_(items) : "",
+        hasMore ? [
+          "<div class=\"central-admin-action-row\"><button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"load-more-wayfinder-beta-user-conversations\" data-wayfinder-beta-access-id=\"",
+          escapeAttr_(accessId), "\"",
+          loading || busy ? " disabled" : "",
+          ">", loading ? "Loading..." : "Load Older Conversations",
+          "</button></div>",
+        ].join("") : "",
+        "</div>",
+      ].join("") : "",
+      "</article>",
+    ].join("");
+  }
+
+  function renderWayfinderBetaConversationItems_(items) {
+    return [
+      "<div class=\"wayfinder-beta-conversation-list\">",
+      items.map(function(item) {
+        return [
+          "<article class=\"wayfinder-beta-conversation\"><div class=\"wayfinder-beta-conversation-meta\"><time>",
+          escapeHtml_(formatAdminTimestamp_(item.createdAt)), "</time>",
+          item.modelUsed ? "<span>Gemini</span>" :
+            "<span>Fixed / fallback</span>",
+          item.feedbackRating ? "<span>" +
+            escapeHtml_(item.feedbackRating) + "</span>" : "",
+          "</div><div class=\"wayfinder-beta-conversation-turn\"><small>Tester</small><h4>",
+          escapeHtml_(item.question || "No question recorded"),
+          "</h4></div>",
+          item.answer ? "<div class=\"wayfinder-beta-conversation-turn is-answer\"><small>Wayfinder</small><p>" +
+            escapeHtml_(item.answer) + "</p></div>" : "",
+          item.error ? "<p class=\"wayfinder-lab-error\">" +
+            escapeHtml_(item.error) + "</p>" : "",
+          item.feedbackNote ? "<p class=\"wayfinder-feedback-note\"><strong>Tester note:</strong> " +
+            escapeHtml_(item.feedbackNote) + "</p>" : "",
+          "<p class=\"central-admin-footer-note\">Expires ",
+          escapeHtml_(formatAdminTimestamp_(item.expiresAt)), "</p></article>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
   function renderIntegrationsPagePanel_(currentPage) {
     var permission = getPageAccessLevel_("integrations");
     var canEdit = canEditIntegrations_();
@@ -10312,6 +10750,7 @@
       "</div>",
       "</div>",
       hasAccess ? renderWayfinderAlphaSettings_() : "",
+      hasAccess ? renderWayfinderBetaManagement_() : "",
       hasAccess ? renderWayfinderFeaturedEventHealth_() : "",
       hasAccess ? renderWayfinderWebsiteIndex_() : "",
       hasAccess ? renderWayfinderEvaluations_() : "",
@@ -15762,6 +16201,7 @@
 
     if (adminState.currentPageId === "wayfinder") {
       loadWayfinderAlphaSettingIfNeeded_();
+      loadWayfinderBeta_(false);
       loadWayfinderFeaturedEventHealth_(false);
       loadWayfinderWebsiteIndexStatus_(false);
       loadWayfinderFeedback_(false);
@@ -16334,6 +16774,249 @@
       adminState.wayfinderAlphaError = error && error.message ?
         error.message : "Unable to update Wayfinder alpha access.";
       renderAdmin_();
+    });
+  }
+
+  function callWayfinderBetaEndpoint_(payload) {
+    if (!adminState.user) {
+      return Promise.reject(new Error(
+          "Sign in with an approved Central admin account first.",
+      ));
+    }
+    return adminState.user.getIdToken().then(function(idToken) {
+      return fetch(WAYFINDER_BETA_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + idToken,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload || {}),
+      });
+    }).then(parseAdminEndpointResponse_);
+  }
+
+  function applyWayfinderBetaDashboard_(result) {
+    adminState.wayfinderBetaLoaded = true;
+    adminState.wayfinderBetaConfig = result && result.config || null;
+    adminState.wayfinderBetaUsage = result && result.usage || null;
+    adminState.wayfinderBetaInvites = result &&
+      Array.isArray(result.invites) ? result.invites : [];
+    adminState.wayfinderBetaAccess = result &&
+      Array.isArray(result.access) ? result.access : [];
+    adminState.wayfinderBetaConversationAccessId = "";
+    adminState.wayfinderBetaConversationsByAccessId = {};
+    adminState.wayfinderBetaConversationCursorByAccessId = {};
+    adminState.wayfinderBetaConversationHasMoreByAccessId = {};
+    adminState.wayfinderBetaConversationLoadingAccessId = "";
+    adminState.wayfinderBetaConversationErrorsByAccessId = {};
+    if (result && result.createdInvite) {
+      adminState.wayfinderBetaCreatedInvite = result.createdInvite;
+    }
+  }
+
+  function loadWayfinderBeta_(forceReload) {
+    if (!adminState.user || adminState.wayfinderBetaLoading ||
+      adminState.wayfinderBetaWorking) return;
+    if (adminState.wayfinderBetaLoaded && !forceReload) return;
+    adminState.wayfinderBetaLoading = true;
+    adminState.wayfinderBetaError = "";
+    renderAdmin_();
+    var payload = {action: "list"};
+    callWayfinderBetaEndpoint_(payload).then(function(result) {
+      adminState.wayfinderBetaLoading = false;
+      applyWayfinderBetaDashboard_(result);
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderBetaLoading = false;
+      adminState.wayfinderBetaLoaded = true;
+      adminState.wayfinderBetaError = error && error.message ?
+        error.message : "Wayfinder beta management is unavailable.";
+      renderAdmin_();
+    });
+  }
+
+  function toggleWayfinderBetaConversationUser_(accessId) {
+    var normalizedAccessId = String(accessId || "").trim();
+    if (!normalizedAccessId) return;
+    if (adminState.wayfinderBetaConversationAccessId ===
+      normalizedAccessId) {
+      adminState.wayfinderBetaConversationAccessId = "";
+      renderAdmin_();
+      return;
+    }
+    adminState.wayfinderBetaConversationAccessId = normalizedAccessId;
+    if (Object.prototype.hasOwnProperty.call(
+        adminState.wayfinderBetaConversationsByAccessId || {},
+        normalizedAccessId,
+    )) {
+      renderAdmin_();
+      return;
+    }
+    loadWayfinderBetaConversations_(normalizedAccessId, false);
+  }
+
+  function loadWayfinderBetaConversations_(accessId, append) {
+    var normalizedAccessId = String(accessId || "").trim();
+    if (!normalizedAccessId ||
+      adminState.wayfinderBetaConversationLoadingAccessId) return;
+    adminState.wayfinderBetaConversationAccessId = normalizedAccessId;
+    adminState.wayfinderBetaConversationLoadingAccessId = normalizedAccessId;
+    adminState.wayfinderBetaConversationErrorsByAccessId = Object.assign(
+        {},
+        adminState.wayfinderBetaConversationErrorsByAccessId || {},
+        {[normalizedAccessId]: ""},
+    );
+    renderAdmin_();
+    var payload = {
+      action: "list_conversations",
+      accessId: normalizedAccessId,
+    };
+    if (append) {
+      payload.conversationCursor = String(
+          (adminState.wayfinderBetaConversationCursorByAccessId || {})[
+              normalizedAccessId
+          ] || "",
+      );
+    }
+    callWayfinderBetaEndpoint_(payload).then(function(result) {
+      var nextItems = result && Array.isArray(result.conversations) ?
+        result.conversations : [];
+      var currentItems = append && Array.isArray(
+          (adminState.wayfinderBetaConversationsByAccessId || {})[
+              normalizedAccessId
+          ],
+      ) ? adminState.wayfinderBetaConversationsByAccessId[
+          normalizedAccessId
+      ] : [];
+      var existingIds = new Set(currentItems.map(function(item) {
+        return item.id;
+      }));
+      adminState.wayfinderBetaConversationsByAccessId = Object.assign(
+          {},
+          adminState.wayfinderBetaConversationsByAccessId || {},
+          {[normalizedAccessId]: currentItems.concat(
+              nextItems.filter(function(item) {
+                return !existingIds.has(item.id);
+              }),
+          )},
+      );
+      adminState.wayfinderBetaConversationCursorByAccessId = Object.assign(
+          {},
+          adminState.wayfinderBetaConversationCursorByAccessId || {},
+          {[normalizedAccessId]: result && result.conversationPage &&
+            result.conversationPage.nextCursor || ""},
+      );
+      adminState.wayfinderBetaConversationHasMoreByAccessId = Object.assign(
+          {},
+          adminState.wayfinderBetaConversationHasMoreByAccessId || {},
+          {[normalizedAccessId]: !!(result && result.conversationPage &&
+            result.conversationPage.hasMore)},
+      );
+      adminState.wayfinderBetaConversationLoadingAccessId = "";
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderBetaConversationLoadingAccessId = "";
+      adminState.wayfinderBetaConversationErrorsByAccessId = Object.assign(
+          {},
+          adminState.wayfinderBetaConversationErrorsByAccessId || {},
+          {[normalizedAccessId]: error && error.message ? error.message :
+            "This Access ID's conversations could not be loaded."},
+      );
+      renderAdmin_();
+    });
+  }
+
+  function runWayfinderBetaAction_(payload, successMessage) {
+    if (adminState.wayfinderBetaWorking) return;
+    adminState.wayfinderBetaWorking = true;
+    adminState.wayfinderBetaError = "";
+    adminState.wayfinderBetaMessage = "";
+    renderAdmin_();
+    callWayfinderBetaEndpoint_(payload).then(function(result) {
+      adminState.wayfinderBetaWorking = false;
+      applyWayfinderBetaDashboard_(result);
+      if (payload && payload.action === "revoke_invite" &&
+        adminState.wayfinderBetaCreatedInvite &&
+        adminState.wayfinderBetaCreatedInvite.inviteRecordId ===
+          payload.inviteRecordId) {
+        adminState.wayfinderBetaCreatedInvite = null;
+      }
+      adminState.wayfinderBetaMessage = successMessage ||
+        "Wayfinder beta access was updated.";
+      renderAdmin_();
+    }).catch(function(error) {
+      adminState.wayfinderBetaWorking = false;
+      adminState.wayfinderBetaError = error && error.message ?
+        error.message : "Wayfinder beta access could not be updated.";
+      renderAdmin_();
+    });
+  }
+
+  function updateWayfinderBetaConfig_(updates) {
+    runWayfinderBetaAction_(
+        Object.assign({action: "update_config"}, updates || {}),
+        updates && updates.betaEnabled === true ?
+          "Invited beta access is enabled." :
+          updates && updates.betaEnabled === false ?
+            "Invited beta access is paused." :
+            "Wayfinder beta limits were saved.",
+    );
+  }
+
+  function saveWayfinderBetaLimits_() {
+    var accessLimit = document.getElementById(
+        "wayfinder-beta-access-limit",
+    );
+    var globalLimit = document.getElementById(
+        "wayfinder-beta-global-limit",
+    );
+    var sessionDays = document.getElementById(
+        "wayfinder-beta-session-days",
+    );
+    var retentionDays = document.getElementById(
+        "wayfinder-beta-retention-days",
+    );
+    updateWayfinderBetaConfig_({
+      perAccessDailyLimit: Number(accessLimit && accessLimit.value),
+      globalDailyLimit: Number(globalLimit && globalLimit.value),
+      sessionDays: Number(sessionDays && sessionDays.value),
+      transcriptRetentionDays: Number(retentionDays && retentionDays.value),
+    });
+  }
+
+  function createWayfinderBetaInvite_() {
+    var label = document.getElementById("wayfinder-beta-invite-label");
+    var activations = document.getElementById(
+        "wayfinder-beta-invite-activations",
+    );
+    var days = document.getElementById("wayfinder-beta-invite-days");
+    var labelValue = String(label && label.value || "").trim();
+    if (!labelValue) {
+      adminState.wayfinderBetaError =
+        "Give the beta invitation a label before creating it.";
+      renderAdmin_();
+      return;
+    }
+    runWayfinderBetaAction_({
+      action: "create_invite",
+      label: labelValue,
+      maxActivations: Number(activations && activations.value),
+      expiresInDays: Number(days && days.value),
+    }, "The invitation is ready. Copy the link before leaving this page.");
+  }
+
+  function copyWayfinderBetaInviteLink_() {
+    var input = document.getElementById("wayfinder-beta-created-link");
+    var link = String(input && input.value || "").trim();
+    if (!link) return;
+    var copyPromise = navigator.clipboard && navigator.clipboard.writeText ?
+      navigator.clipboard.writeText(link) : Promise.reject(new Error("copy"));
+    copyPromise.then(function() {
+      adminState.wayfinderBetaMessage = "Beta invitation link copied.";
+      renderAdmin_();
+    }).catch(function() {
+      window.prompt("Copy this Wayfinder beta invitation:", link);
     });
   }
 
@@ -17726,6 +18409,22 @@
     adminState.wayfinderAlphaSaving = false;
     adminState.wayfinderAlphaError = "";
     adminState.wayfinderAlphaMessage = "";
+    adminState.wayfinderBetaLoaded = false;
+    adminState.wayfinderBetaLoading = false;
+    adminState.wayfinderBetaWorking = false;
+    adminState.wayfinderBetaConfig = null;
+    adminState.wayfinderBetaUsage = null;
+    adminState.wayfinderBetaInvites = [];
+    adminState.wayfinderBetaAccess = [];
+    adminState.wayfinderBetaConversationAccessId = "";
+    adminState.wayfinderBetaConversationsByAccessId = {};
+    adminState.wayfinderBetaConversationCursorByAccessId = {};
+    adminState.wayfinderBetaConversationHasMoreByAccessId = {};
+    adminState.wayfinderBetaConversationLoadingAccessId = "";
+    adminState.wayfinderBetaConversationErrorsByAccessId = {};
+    adminState.wayfinderBetaCreatedInvite = null;
+    adminState.wayfinderBetaError = "";
+    adminState.wayfinderBetaMessage = "";
     adminState.integrationsPublishing = false;
     adminState.integrationsError = "";
     adminState.integrationsMessage = "";
@@ -22595,6 +23294,7 @@
 
     if (pageId === "wayfinder" && previousPageId !== "wayfinder") {
       adminState.wayfinderAlphaLoaded = false;
+      adminState.wayfinderBetaLoaded = false;
     }
 
     if (pageId === "status-banner" && !hasPendingStatusBannerChanges_()) {

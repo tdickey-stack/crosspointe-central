@@ -6,8 +6,19 @@
   var PUBLIC_CHAT_ENDPOINT = "/api/wayfinder/chat";
   var ALPHA_ACCESS_ENDPOINT = "/api/wayfinder/access";
   var PUBLIC_FEEDBACK_ENDPOINT = "/api/wayfinder/feedback";
+  var BETA_REDEEM_ENDPOINT = "/api/wayfinder/beta/redeem";
+  var BETA_ACCESS_ENDPOINT = "/api/wayfinder/beta/access";
+  var BETA_CHAT_ENDPOINT = "/api/wayfinder/beta/chat";
+  var BETA_FEEDBACK_ENDPOINT = "/api/wayfinder/beta/feedback";
   var NOTICE_ENDPOINT = "/api/admin/wayfinder/notices";
   var KNOWLEDGE_ENDPOINT = "/api/admin/wayfinder/knowledge-changes";
+  var FALLBACK_REPLY_MINIMUM_MS = 2000;
+  var FALLBACK_REPLY_MAXIMUM_MS = 5000;
+  var PACED_FALLBACK_MODES = [
+    "knowledge-fallback",
+    "unknown",
+    "live_source_required",
+  ];
   var wayfinderChatState = {
     open: false,
     busy: false,
@@ -19,6 +30,8 @@
     messageCounter: 0,
     authPromise: null,
     permission: "none",
+    accessMode: "none",
+    betaAccess: null,
   };
   var chatRoot = null;
   var chatPanel = null;
@@ -31,7 +44,7 @@
 
   function initializeWayfinderAlpha_() {
     wayfinderChatState.authPromise = initializePublicFirebaseAuth_();
-    wayfinderChatState.authPromise.then(function(user) {
+    var staffAccessPromise = wayfinderChatState.authPromise.then(function(user) {
       if (!user) return null;
       return user.getIdToken().then(function(idToken) {
         return fetch(ALPHA_ACCESS_ENDPOINT, {
@@ -42,13 +55,139 @@
           },
         });
       }).then(parseWayfinderResponse_);
-    }).then(function(access) {
-      if (!access || access.enabled !== true || access.canUse !== true) return;
-      wayfinderChatState.permission = String(access.permission || "none");
-      mountWayfinderChat_();
     }).catch(function() {
-      // During alpha, ineligible and signed-out visitors should not see Wayfinder.
+      return null;
     });
+    var betaAccessPromise = initializeWayfinderBetaAccess_().catch(
+        function(error) {
+          if (getWayfinderInviteToken_()) {
+            removeWayfinderInviteToken_();
+            showWayfinderInviteStatus_(
+                error && error.message ? error.message :
+                  "That Wayfinder beta invitation could not be activated.",
+                true,
+            );
+          }
+          return null;
+        },
+    );
+
+    Promise.all([staffAccessPromise, betaAccessPromise]).then(
+        function(results) {
+          var staffAccess = results[0];
+          var betaAccess = results[1];
+          if (staffAccess && staffAccess.enabled === true &&
+            staffAccess.canUse === true) {
+            wayfinderChatState.permission = String(
+                staffAccess.permission || "none",
+            );
+            wayfinderChatState.accessMode = "staff";
+          } else if (betaAccess && betaAccess.canUse === true) {
+            wayfinderChatState.permission = "none";
+            wayfinderChatState.accessMode = "beta";
+            wayfinderChatState.betaAccess = betaAccess.access || null;
+          } else {
+            return;
+          }
+          mountWayfinderChat_();
+        },
+    );
+  }
+
+  function initializeWayfinderBetaAccess_() {
+    var inviteToken = getWayfinderInviteToken_();
+    if (!inviteToken) {
+      return fetch(BETA_ACCESS_ENDPOINT, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {Accept: "application/json"},
+      }).then(parseWayfinderResponse_).then(function(result) {
+        if (!result || result.canUse !== true) {
+          clearWayfinderBetaSession_();
+        }
+        return result;
+      });
+    }
+    return fetch(BETA_REDEEM_ENDPOINT, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({token: inviteToken}),
+    }).then(parseWayfinderResponse_).then(function(result) {
+      storeWayfinderBetaSession_(
+          result && result.sessionToken,
+          result && result.access && result.access.expiresAt,
+      );
+      removeWayfinderInviteToken_();
+      showWayfinderInviteStatus_(
+          String(result.message || "Wayfinder beta access is ready."),
+          false,
+      );
+      return result;
+    });
+  }
+
+  function storeWayfinderBetaSession_(token, expiresAt) {
+    var value = String(token || "").trim();
+    var expiration = new Date(expiresAt || "");
+    if (!/^[A-Za-z0-9_-]{32,100}$/.test(value) ||
+      Number.isNaN(expiration.getTime())) {
+      throw new Error("Wayfinder could not save this beta session.");
+    }
+    var maxAge = Math.max(
+        0,
+        Math.floor((expiration.getTime() - Date.now()) / 1000),
+    );
+    document.cookie = "__session=" + encodeURIComponent(value) +
+      "; Path=/; SameSite=Lax; Max-Age=" + String(maxAge) +
+      (window.location.protocol === "https:" ? "; Secure" : "");
+  }
+
+  function clearWayfinderBetaSession_() {
+    document.cookie = "__session=; Path=/; SameSite=Lax; Max-Age=0" +
+      (window.location.protocol === "https:" ? "; Secure" : "");
+  }
+
+  function getWayfinderInviteToken_() {
+    var match = String(window.location.hash || "").match(
+        /^#wayfinder-invite=([A-Za-z0-9_-]{32,100})$/,
+    );
+    return match ? match[1] : "";
+  }
+
+  function removeWayfinderInviteToken_() {
+    if (!window.history || typeof window.history.replaceState !== "function") {
+      return;
+    }
+    window.history.replaceState(
+        null,
+        document.title,
+        window.location.pathname + window.location.search,
+    );
+  }
+
+  function showWayfinderInviteStatus_(message, isError) {
+    var existing = document.querySelector(".wayfinder-beta-invite-status");
+    if (existing) existing.remove();
+    var status = document.createElement("div");
+    status.className = "wayfinder-beta-invite-status" +
+      (isError ? " is-error" : " is-success");
+    status.setAttribute("role", isError ? "alert" : "status");
+    status.innerHTML = [
+      "<strong>", isError ? "Invitation unavailable" : "Beta access ready",
+      "</strong><span></span><button type=\"button\" aria-label=\"Dismiss\">&times;</button>",
+    ].join("");
+    status.querySelector("span").textContent = String(message || "");
+    status.querySelector("button").addEventListener("click", function() {
+      status.remove();
+    });
+    document.body.appendChild(status);
+    window.setTimeout(function() {
+      if (status.isConnected && !isError) status.remove();
+    }, 7000);
   }
 
   function mountWayfinderChat_() {
@@ -63,7 +202,11 @@
       "<section class=\"wayfinder-chat-panel\" role=\"dialog\" aria-modal=\"false\" aria-label=\"Wayfinder chat\" hidden>",
       "<header class=\"wayfinder-chat-header\">",
       "<div class=\"wayfinder-chat-identity\"><img src=\"/loader-icon.svg\" alt=\"\"><div>",
-      "<strong>Wayfinder</strong><span>CrossPointe’s AI assistant</span>",
+      "<strong>Wayfinder</strong><span>",
+      wayfinderChatState.accessMode === "beta" ?
+        "CrossPointe’s AI assistant · Beta" :
+        "CrossPointe’s AI assistant",
+      "</span>",
       "</div></div>",
       "<button type=\"button\" class=\"wayfinder-chat-close\" data-analytics-event=\"wayfinder_action\" data-analytics-action=\"close\" aria-label=\"Close Wayfinder\">&times;</button>",
       "</header>",
@@ -79,7 +222,11 @@
       "<textarea id=\"wayfinder-chat-input\" rows=\"1\" maxlength=\"500\" placeholder=\"Ask Wayfinder a question…\"></textarea>",
       "<button type=\"submit\" class=\"wayfinder-chat-send\" data-analytics-event=\"wayfinder_action\" data-analytics-action=\"submit_question\" aria-label=\"Send message\"><span aria-hidden=\"true\">↑</span></button>",
       "</form>",
-      "<p class=\"wayfinder-chat-disclaimer\">Wayfinder uses approved public CrossPointe information. Don’t share sensitive personal information.</p>",
+      "<p class=\"wayfinder-chat-disclaimer\">",
+      wayfinderChatState.accessMode === "beta" ?
+        "Beta conversations are stored for up to 30 days and may be reviewed to improve Wayfinder. Don’t share sensitive personal information." :
+        "Wayfinder uses approved public CrossPointe information. Don’t share sensitive personal information.",
+      "</p>",
       "</section>",
     ].join("");
     document.body.appendChild(chatRoot);
@@ -127,11 +274,15 @@
       );
     }
 
-    addTextMessage_(
-        "assistant",
-        "Hello! I’m Wayfinder, CrossPointe’s virtual AI information " +
-          "assistant. What can I help you find?",
-    );
+    var welcome = "Hello! I’m Wayfinder, CrossPointe’s virtual AI " +
+      "information assistant. What can I help you find?";
+    if (wayfinderChatState.accessMode === "beta") {
+      welcome = "Thanks for helping test Wayfinder! Your beta conversations " +
+        "are stored for up to 30 days so CrossPointe can improve the " +
+        "experience. Please don’t include sensitive personal information. " +
+        "What can I help you find?";
+    }
+    addTextMessage_("assistant", welcome);
   }
 
   function openWayfinderChat_() {
@@ -168,6 +319,7 @@
     trackWayfinderAnalytics_("question_submitted");
 
     var normalized = question.toLowerCase();
+    var submittedAt = Date.now();
     var task;
     if (normalized === "alohomora") {
       task = enterPublicWayfinderAdminMode_();
@@ -179,6 +331,8 @@
       task = callPublicWayfinder_({
         question: question,
         history: wayfinderChatState.conversationHistory.slice(),
+      }).then(function(result) {
+        return paceWayfinderFallbackReply_(result, submittedAt);
       }).then(function(result) {
         var answer = String(
             result.answer || "I’m sorry, but I couldn’t answer that.",
@@ -215,6 +369,23 @@
     }).finally(function() {
       setWayfinderBusy_(false);
       chatInput.focus();
+    });
+  }
+
+  function paceWayfinderFallbackReply_(result, submittedAt) {
+    var mode = String(result && result.answerMode || "");
+    if (PACED_FALLBACK_MODES.indexOf(mode) === -1) {
+      return Promise.resolve(result);
+    }
+    var range = FALLBACK_REPLY_MAXIMUM_MS - FALLBACK_REPLY_MINIMUM_MS;
+    var targetDuration = FALLBACK_REPLY_MINIMUM_MS +
+      Math.floor(Math.random() * (range + 1));
+    var elapsed = Math.max(0, Date.now() - Number(submittedAt || 0));
+    var remaining = Math.max(0, targetDuration - elapsed);
+    return new Promise(function(resolve) {
+      window.setTimeout(function() {
+        resolve(result);
+      }, remaining);
     });
   }
 
@@ -363,6 +534,18 @@
   }
 
   function callPublicWayfinder_(payload) {
+    if (wayfinderChatState.accessMode === "beta") {
+      return fetch(BETA_CHAT_ENDPOINT, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Wayfinder-Session": wayfinderChatState.sessionId,
+        },
+        body: JSON.stringify(payload || {}),
+      }).then(parseWayfinderResponse_);
+    }
     return getCurrentAdminIdToken_().then(function(idToken) {
       return fetch(PUBLIC_CHAT_ENDPOINT, {
         method: "POST",
@@ -417,15 +600,21 @@
     feedback.error = "";
     renderWayfinderMessages_();
 
-    getCurrentAdminIdToken_().then(function(idToken) {
-      return fetch(PUBLIC_FEEDBACK_ENDPOINT, {
+    var endpoint = wayfinderChatState.accessMode === "beta" ?
+      BETA_FEEDBACK_ENDPOINT : PUBLIC_FEEDBACK_ENDPOINT;
+    var tokenPromise = wayfinderChatState.accessMode === "beta" ?
+      Promise.resolve("") : getCurrentAdminIdToken_();
+    tokenPromise.then(function(idToken) {
+      var headers = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Wayfinder-Session": wayfinderChatState.sessionId,
+      };
+      if (idToken) headers.Authorization = "Bearer " + idToken;
+      return fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + idToken,
-          "X-Wayfinder-Session": wayfinderChatState.sessionId,
-        },
+        credentials: "same-origin",
+        headers: headers,
         body: JSON.stringify({
           responseId: feedback.responseId,
           question: feedback.question,

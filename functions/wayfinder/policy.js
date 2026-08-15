@@ -36,6 +36,20 @@ const DIRECT_CONDUCT_PATTERNS = [
   /\b(?:shut up|go to hell)\b/,
 ];
 
+const COURTESY_CLOSE_PATTERNS = [
+  /^(?:thank you|thanks)(?: so much| very much| a lot)?$/,
+  /^(?:many thanks|much appreciated|i appreciate it|appreciate it)$/,
+  new RegExp(
+      "^(?:ok|okay|alright|great|awesome) " +
+      "(?:thank you|thanks)(?: so much| very much)?$",
+  ),
+  new RegExp(
+      "^(?:that|this) (?:helps|helped|was helpful|answered my question|" +
+      "answers my question)(?: (?:thank you|thanks))?$",
+  ),
+  /^(?:that is|that's) all(?: (?:thank you|thanks))?$/,
+];
+
 const COMPLAINT_OR_AGITATION_PATTERNS = [
   new RegExp(
       "\\b(?:i\\s+(?:want|need)|how\\s+do\\s+i|where\\s+can\\s+i)" +
@@ -96,6 +110,7 @@ export function classifyWayfinderPolicyQuestion(question) {
     return "complaint";
   }
   if (matchesAny_(value, DIRECT_CONDUCT_PATTERNS)) return "conduct";
+  if (matchesCourtesyClose_(value)) return "courtesy";
   return "knowledge";
 }
 
@@ -139,6 +154,15 @@ export function buildWayfinderPolicyAnswer(route, policy) {
           "complaints or personal conflicts. Please call or text the " +
           "CrossPointe office at 405-374-4740 or email info@crosspointe.tv " +
           "so a staff member can help.",
+    );
+  }
+
+  if (route === "courtesy") {
+    return buildFixedAnswer_(
+        route,
+        value.courtesyPolicy,
+        "You're welcome! I'm glad I could help. Have a great day!",
+        "fixed_courtesy",
     );
   }
 
@@ -210,7 +234,12 @@ export function buildWayfinderLiveSourceAnswer(sourceTypes = []) {
   };
 }
 
-function buildFixedAnswer_(route, policySection, fallback) {
+function buildFixedAnswer_(
+    route,
+    policySection,
+    fallback,
+    defaultResponseMode = "fixed_safety",
+) {
   const section = policySection && typeof policySection === "object" ?
     policySection : {};
   const examples = Array.isArray(section.exampleResponses) ?
@@ -219,7 +248,7 @@ function buildFixedAnswer_(route, policySection, fallback) {
 
   return {
     route: route,
-    responseMode: String(section.responseMode || "fixed_safety"),
+    responseMode: String(section.responseMode || defaultResponseMode),
     answer: answer,
     links: [],
   };
@@ -227,6 +256,14 @@ function buildFixedAnswer_(route, policySection, fallback) {
 
 function matchesAny_(value, patterns) {
   return patterns.some((pattern) => pattern.test(value));
+}
+
+function matchesCourtesyClose_(value) {
+  const withoutPunctuation = String(value || "")
+      .replace(/[.,!?;:]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  return matchesAny_(withoutPunctuation, COURTESY_CLOSE_PATTERNS);
 }
 
 function normalize_(value) {

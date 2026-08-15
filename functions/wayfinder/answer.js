@@ -659,6 +659,9 @@ function sendWayfinderSuccess_(response, payload, publicResponse) {
   response.status(200).json({
     ok: payload && payload.ok === true,
     responseId: crypto.randomUUID(),
+    answerMode: String(payload && payload.mode || "").slice(0, 80),
+    modelUsed: payload && payload.modelUsed === true,
+    confidence: String(payload && payload.confidence || "").slice(0, 40),
     answer: normalizePublicAnswer_(payload && payload.answer),
     followUpQuestion: "",
     shouldContactChurch: payload && payload.shouldContactChurch === true,

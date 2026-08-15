@@ -116,6 +116,22 @@ test("an explicit church complaint uses the fixed office route", async () => {
   assert.match(response.body.answer, /405-374-4740/);
 });
 
+test("a polite closing uses a friendly fixed response", async () => {
+  let generatorCalls = 0;
+  const response = await runHandler_("Thank you!", async () => {
+    generatorCalls += 1;
+    return null;
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.mode, "policy-answer");
+  assert.equal(response.body.policyRoute, "courtesy");
+  assert.equal(response.body.modelUsed, false);
+  assert.equal(response.body.shouldContactChurch, false);
+  assert.equal(generatorCalls, 0);
+  assert.match(response.body.answer, /you're welcome/i);
+});
+
 test("a stated threat keeps the crisis response ahead of conduct", async () => {
   let generatorCalls = 0;
   const response = await runHandler_(

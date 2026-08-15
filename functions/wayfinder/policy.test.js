@@ -50,6 +50,25 @@ test("routes explicit CrossPointe complaints to the office response", () => {
   });
 });
 
+test("routes short polite closings without swallowing real questions", () => {
+  [
+    "Thank you",
+    "Thanks so much!",
+    "Okay, thank you.",
+    "I appreciate it",
+    "That answers my question. Thanks!",
+    "That's all, thank you.",
+  ].forEach((question) => {
+    assert.equal(classifyWayfinderPolicyQuestion(question), "courtesy");
+  });
+  assert.equal(
+      classifyWayfinderPolicyQuestion(
+          "Can you tell me when services start? Thanks!",
+      ),
+      "knowledge",
+  );
+});
+
 test("incidental profanity and ordinary frustration remain answerable", () => {
   [
     "My car is in shitty shape. Can CARS help?",
@@ -142,6 +161,14 @@ test("complaint response directs the person to the office", () => {
   assert.match(result.answer, /can't resolve complaints/i);
   assert.match(result.answer, /405-374-4740/);
   assert.match(result.answer, /info@crosspointe\.tv/);
+});
+
+test("courtesy response closes the conversation without Gemini", () => {
+  const result = buildWayfinderPolicyAnswer("courtesy", {});
+  assert.equal(result.responseMode, "fixed_courtesy");
+  assert.match(result.answer, /you're welcome/i);
+  assert.match(result.answer, /great day/i);
+  assert.doesNotMatch(result.answer, /office|405-374-4740/i);
 });
 
 test("live event fallback never invents a date", () => {

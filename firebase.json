@@ -519,9 +519,44 @@
         }
       },
       {
+        "source": "/api/admin/wayfinder/beta",
+        "function": {
+          "functionId": "wayfinderBetaAdmin",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/wayfinder/access",
         "function": {
           "functionId": "wayfinderAlphaAccess",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/wayfinder/beta/redeem",
+        "function": {
+          "functionId": "wayfinderBetaRedeem",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/wayfinder/beta/access",
+        "function": {
+          "functionId": "wayfinderBetaAccess",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/wayfinder/beta/chat",
+        "function": {
+          "functionId": "wayfinderBetaAnswer",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/wayfinder/beta/feedback",
+        "function": {
+          "functionId": "wayfinderBetaFeedback",
           "pinTag": false
         }
       },

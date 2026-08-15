@@ -151,6 +151,14 @@ import {
   createWayfinderAdminFeedbackHandler,
   createWayfinderPublicFeedbackHandler,
 } from "./wayfinder/feedback.js";
+import {
+  createFirestoreWayfinderBetaService,
+  createWayfinderBetaAccessHandler,
+  createWayfinderBetaAdminHandler,
+  createWayfinderBetaAnswerHandler,
+  createWayfinderBetaFeedbackHandler,
+  createWayfinderBetaRedeemHandler,
+} from "./wayfinder/beta-access.js";
 import {createWayfinderEvaluationHandler} from
   "./wayfinder/evaluations.js";
 import {
@@ -836,6 +844,10 @@ export const wayfinderPrototypeQuery = onRequest(
 
 // Stored in Secret Manager and exposed only to the Wayfinder answer function.
 const WAYFINDER_GEMINI_API_KEY = defineSecret("WAYFINDER_GEMINI_API_KEY");
+const wayfinderBetaService = createFirestoreWayfinderBetaService({
+  firestore,
+  timestampFromDate: (date) => admin.firestore.Timestamp.fromDate(date),
+});
 const wayfinderGeminiGenerator = createDeveloperApiWayfinderGenerator({
   getApiKey: () => WAYFINDER_GEMINI_API_KEY.value(),
   model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
@@ -867,6 +879,32 @@ const wayfinderEvaluationAnswerHandler = createWayfinderAnswerHandler({
   requireAdminAuth: false,
   publicResponse: false,
   model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+});
+const wayfinderBetaAnswerCore = createWayfinderAnswerHandler({
+  admin,
+  firestore,
+  generateAnswer: wayfinderGeminiGenerator,
+  retrieveLiveContext: getWayfinderPlanningCenterContext_,
+  getActiveNotices: () => getActiveWayfinderNotices(firestore),
+  getActiveKnowledgeOverrides: () =>
+    getActiveWayfinderKnowledgeOverrides(firestore),
+  getWebsiteEntries: (question) =>
+    getRelevantWayfinderWebsiteEntries(firestore, question),
+  getFeaturedEventEntries: getWayfinderFeaturedEventEntries,
+  requireAdminAuth: false,
+  publicResponse: true,
+  model: process.env.WAYFINDER_GEMINI_MODEL || DEFAULT_WAYFINDER_MODEL,
+});
+const wayfinderBetaFeedbackCore = createWayfinderPublicFeedbackHandler({
+  firestore,
+  serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
+  getAttribution: (request) => ({
+    source: "beta_chat",
+    betaAccessId: request.wayfinderBetaAccess &&
+      request.wayfinderBetaAccess.accessId,
+    betaInviteId: request.wayfinderBetaAccess &&
+      request.wayfinderBetaAccess.inviteId,
+  }),
 });
 
 export const wayfinderNoticeCommand = onRequest(
@@ -1046,6 +1084,73 @@ export const wayfinderAlphaSettings = onRequest(
       firestore,
       isAllowedAdminEmail: isAllowedCentralAdminEmail_,
       getAdminUserDocPath: getCentralAdminUserDocPath_,
+    }),
+);
+
+export const wayfinderBetaRedeem = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderBetaRedeemHandler({
+      service: wayfinderBetaService,
+    }),
+);
+
+export const wayfinderBetaAccess = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderBetaAccessHandler({
+      service: wayfinderBetaService,
+    }),
+);
+
+export const wayfinderBetaAnswer = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+      secrets: [WAYFINDER_GEMINI_API_KEY, ...PLANNING_CENTER_SECRETS],
+    },
+    createWayfinderBetaAnswerHandler({
+      service: wayfinderBetaService,
+      answerHandler: wayfinderBetaAnswerCore,
+    }),
+);
+
+export const wayfinderBetaFeedback = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 30,
+      memory: "256MiB",
+    },
+    createWayfinderBetaFeedbackHandler({
+      service: wayfinderBetaService,
+      feedbackHandler: wayfinderBetaFeedbackCore,
+    }),
+);
+
+export const wayfinderBetaAdmin = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      timeoutSeconds: 60,
+      memory: "256MiB",
+    },
+    createWayfinderBetaAdminHandler({
+      admin,
+      firestore,
+      isAllowedAdminEmail: isAllowedCentralAdminEmail_,
+      getAdminUserDocPath: getCentralAdminUserDocPath_,
+      service: wayfinderBetaService,
     }),
 );
 

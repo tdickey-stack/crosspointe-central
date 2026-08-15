@@ -35,6 +35,9 @@ export function createWayfinderPublicFeedbackHandler(dependencies) {
     }
 
     try {
+      const attribution = typeof dependencies.getAttribution === "function" ?
+        sanitizeFeedbackAttribution_(dependencies.getAttribution(request)) :
+        {};
       if (dependencies.admin) {
         await authenticateWayfinderAdminRequest({
           request,
@@ -67,7 +70,9 @@ export function createWayfinderPublicFeedbackHandler(dependencies) {
         links: feedback.links,
         actions: feedback.actions,
         status: feedback.rating === "helpful" ? "recorded" : "new",
-        source: "public_chat",
+        source: attribution.source || "public_chat",
+        betaAccessId: attribution.betaAccessId || "",
+        betaInviteId: attribution.betaInviteId || "",
         updatedAt: now,
       };
       if (!existing.exists) stored.createdAt = now;
@@ -86,6 +91,15 @@ export function createWayfinderPublicFeedbackHandler(dependencies) {
           "Wayfinder could not save that feedback right now.",
       });
     }
+  };
+}
+
+function sanitizeFeedbackAttribution_(value) {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    source: String(source.source || "").trim().slice(0, 40),
+    betaAccessId: String(source.betaAccessId || "").trim().slice(0, 40),
+    betaInviteId: String(source.betaInviteId || "").trim().slice(0, 40),
   };
 }
 

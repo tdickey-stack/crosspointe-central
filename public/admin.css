@@ -2388,6 +2388,225 @@
   justify-self: start;
 }
 
+[data-app-route="admin"] .wayfinder-beta-limit-grid,
+[data-app-route="admin"] .wayfinder-beta-invite-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+[data-app-route="admin"] .wayfinder-beta-invite-form .central-admin-field-wide {
+  grid-column: 1 / -1;
+}
+
+[data-app-route="admin"] .wayfinder-beta-created-link {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid rgba(34, 197, 94, 0.24);
+  border-radius: 16px;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+[data-app-route="admin"] .wayfinder-beta-created-link > p,
+[data-app-route="admin"] .wayfinder-beta-card > p,
+[data-app-route="admin"] .wayfinder-beta-conversation > p {
+  margin: 0;
+}
+
+[data-app-route="admin"] .wayfinder-beta-created-link > div {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+[data-app-route="admin"] .wayfinder-beta-created-link input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0 12px;
+  border: 1px solid rgba(39, 39, 42, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--cp-text-strong);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+[data-app-route="admin"] .wayfinder-beta-card-list,
+[data-app-route="admin"] .wayfinder-beta-conversation-users,
+[data-app-route="admin"] .wayfinder-beta-conversation-list {
+  display: grid;
+  gap: 10px;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: var(--cp-surface-soft);
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user.is-open {
+  border-color: rgba(239, 59, 45, 0.3);
+  box-shadow: 0 12px 30px rgba(39, 39, 42, 0.08);
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-summary {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(140px, auto) 18px;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-summary:hover,
+[data-app-route="admin"] .wayfinder-beta-conversation-user-summary:focus-visible {
+  background: rgba(239, 59, 45, 0.06);
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-summary:focus-visible {
+  outline: 3px solid rgba(239, 59, 45, 0.28);
+  outline-offset: -3px;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-id {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-id small,
+[data-app-route="admin"] .wayfinder-beta-conversation-turn small {
+  color: var(--cp-text-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-id code {
+  overflow-wrap: anywhere;
+  color: var(--cp-text-strong);
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-stats,
+[data-app-route="admin"] .wayfinder-beta-conversation-user-time {
+  color: var(--cp-text-muted);
+  font-size: 0.76rem;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-stats strong {
+  color: var(--cp-text-strong);
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-chevron {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 160ms ease;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user.is-open
+.wayfinder-beta-conversation-user-chevron {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-user-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--cp-border);
+  background: rgba(255, 255, 255, 0.34);
+}
+
+[data-app-route="admin"] .wayfinder-beta-card,
+[data-app-route="admin"] .wayfinder-beta-conversation {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: var(--cp-surface-soft);
+}
+
+[data-app-route="admin"] .wayfinder-beta-card .central-admin-item-header > div {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-app-route="admin"] .wayfinder-beta-card code,
+[data-app-route="admin"] .wayfinder-beta-conversation code {
+  overflow-wrap: anywhere;
+}
+
+[data-app-route="admin"] .wayfinder-beta-card > button {
+  justify-self: start;
+}
+
+[data-app-route="admin"] .wayfinder-beta-metrics,
+[data-app-route="admin"] .wayfinder-beta-conversation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-app-route="admin"] .wayfinder-beta-metrics > span,
+[data-app-route="admin"] .wayfinder-beta-conversation-meta > span,
+[data-app-route="admin"] .wayfinder-beta-conversation-meta > code {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(39, 39, 42, 0.06);
+  color: var(--cp-text-strong);
+  font-size: 0.74rem;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-meta time {
+  margin-left: auto;
+  color: var(--cp-text-muted);
+  font-size: 0.74rem;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation h4 {
+  margin: 0;
+  color: var(--cp-text-strong);
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation > p,
+[data-app-route="admin"] .wayfinder-beta-conversation-turn > p {
+  white-space: pre-line;
+  line-height: 1.55;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-turn {
+  display: grid;
+  gap: 5px;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-turn > p {
+  margin: 0;
+}
+
+[data-app-route="admin"] .wayfinder-beta-conversation-turn.is-answer {
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: rgba(39, 39, 42, 0.05);
+}
+
 [data-app-route="admin"] .wayfinder-lab-question .central-admin-field textarea {
   min-height: 112px;
   font-size: 1rem;
@@ -3474,6 +3693,13 @@
   border-color: rgba(255, 255, 255, 0.09);
 }
 
+:root[data-theme="dark"][data-app-route="admin"]
+.wayfinder-beta-conversation-user-body,
+:root[data-theme="dark"][data-app-route="admin"]
+.wayfinder-beta-conversation-turn.is-answer {
+  background: rgba(255, 255, 255, 0.045);
+}
+
 :root[data-theme="dark"][data-app-route="admin"] .wayfinder-manager-card,
 :root[data-theme="dark"][data-app-route="admin"] .wayfinder-knowledge-diff section {
   background: rgba(24, 24, 27, 0.54);
@@ -3668,6 +3894,40 @@
   [data-app-route="admin"] .central-admin-item-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  [data-app-route="admin"] .wayfinder-beta-limit-grid,
+  [data-app-route="admin"] .wayfinder-beta-invite-form {
+    grid-template-columns: 1fr;
+  }
+
+  [data-app-route="admin"] .wayfinder-beta-created-link > div {
+    flex-direction: column;
+  }
+
+  [data-app-route="admin"] .wayfinder-beta-created-link input {
+    min-height: 42px;
+  }
+
+  [data-app-route="admin"] .wayfinder-beta-conversation-user-summary {
+    grid-template-columns: minmax(0, 1fr) 18px;
+    gap: 8px 12px;
+  }
+
+  [data-app-route="admin"] .wayfinder-beta-conversation-user-id,
+  [data-app-route="admin"] .wayfinder-beta-conversation-user-stats,
+  [data-app-route="admin"] .wayfinder-beta-conversation-user-time {
+    grid-column: 1;
+  }
+
+  [data-app-route="admin"] .wayfinder-beta-conversation-user-chevron {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+
+  [data-app-route="admin"] .wayfinder-beta-conversation-meta time {
+    width: 100%;
+    margin-left: 0;
   }
 
   [data-app-route="admin"] .central-admin-hero-top {

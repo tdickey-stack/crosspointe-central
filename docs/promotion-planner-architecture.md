@@ -23,6 +23,8 @@ Planner does not load or modify `public/admin.js` or `public/admin.css`. All pro
 
 Planner reads `pageAccess.planner` when present. During migration it falls back to `pageAccess.studio`, then `pageAccess.settings`, so existing Creative administrators are not unexpectedly locked out.
 
+`/admin/settings/team` manages Promotion Planner as an explicit Creative permission. Super User defaults grant `planner: "admin"`; saved legacy accounts inherit their prior Studio permission when Planner has not been set explicitly.
+
 ## Calendar dependency decision
 
 The repository had no calendar component or calendar UI dependency. Planner uses FullCalendar 7's official React 19 integration:

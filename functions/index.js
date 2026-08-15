@@ -546,6 +546,7 @@ const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "bulletin", label: "Print Mode"},
   {key: "embeds", label: "Central Embeds"},
   {key: "studio", label: "Studio"},
+  {key: "planner", label: "Promotion Planner"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
   {key: "wayfinder", label: "Wayfinder"},
@@ -7033,15 +7034,21 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
       {};
 
   MANAGED_ADMIN_PAGE_KEYS.forEach((key) => {
-    const value = (
-      key === "integrations" ||
-      key === "bulletin" ||
-      key === "embeds" ||
-      key === "studio"
-    ) &&
-      !Object.prototype.hasOwnProperty.call(source, key) ?
-      source.settings :
-      source[key];
+    let value = source[key];
+    if (!Object.prototype.hasOwnProperty.call(source, key)) {
+      if (key === "planner") {
+        value = Object.prototype.hasOwnProperty.call(source, "studio") ?
+          source.studio :
+          source.settings;
+      } else if (
+        key === "integrations" ||
+        key === "bulletin" ||
+        key === "embeds" ||
+        key === "studio"
+      ) {
+        value = source.settings;
+      }
+    }
     nextPageAccess[key] = normalizePreviewPermissionValue_(value);
   });
 

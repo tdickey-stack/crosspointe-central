@@ -16,6 +16,7 @@ function buildFirstAdminPageAccess_() {
     hub: "admin",
     bulletin: "admin",
     studio: "admin",
+    planner: "admin",
     settings: "admin",
     integrations: "admin",
     wayfinder: "admin",

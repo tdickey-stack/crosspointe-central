@@ -18,8 +18,53 @@ export const PLANNER_COLLECTIONS = {
   standingLanes: "centralPromotionStandingLanes",
 };
 
+const PLANNER_RULES_SAFE_BATCH_SIZE = 5;
+
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function isBoundedString(value, maximum, {required = false} = {}) {
+  return typeof value === "string" && value.length <= maximum &&
+    (!required || value.length > 0);
+}
+
+function assertValidPlaybookDefinition(playbook) {
+  const weeks = playbook?.weeks;
+  if (!Array.isArray(weeks) || weeks.length < 1 || weeks.length > 12 ||
+    Number(playbook.durationWeeks) !== weeks.length) {
+    throw new Error("The playbook must contain one definition for every campaign week.");
+  }
+  weeks.forEach((week, weekIndex) => {
+    if (!week || Number(week.weekNumber) !== weekIndex + 1 ||
+      !isBoundedString(week.phase, 50, {required: true}) ||
+      !isBoundedString(week.label, 120) ||
+      !Array.isArray(week.plays) || week.plays.length > 40) {
+      throw new Error(`Week ${weekIndex + 1} has an invalid playbook definition.`);
+    }
+    week.plays.forEach((play) => {
+      const weekdays = play?.eligibleWeekdays;
+      const validWeekdays = Array.isArray(weekdays) && weekdays.length <= 7 &&
+        weekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6);
+      if (!play || !isBoundedString(play.id, 100, {required: true}) ||
+        !isBoundedString(play.playType, 120, {required: true}) ||
+        !Number.isInteger(play.dayOfWeek) || play.dayOfWeek < 0 ||
+        play.dayOfWeek > 6 || !validWeekdays ||
+        !isBoundedString(play.channel, 100) ||
+        !isBoundedString(play.resourceId, 100) ||
+        !["required", "optional", "as-available"].includes(play.requirement) ||
+        typeof play.supportsSmuggle !== "boolean" ||
+        !["SKIP", "NEXT_AVAILABLE_SLOT", "NEXT_OCCURRENCE", "MANUAL_REVIEW"]
+          .includes(play.lateBehavior) ||
+        !Number.isInteger(play.maxPlacementsPerCampaignPerWeek) ||
+        play.maxPlacementsPerCampaignPerWeek < 1 ||
+        play.maxPlacementsPerCampaignPerWeek > 20) {
+        throw new Error(
+          `Week ${weekIndex + 1} contains an invalid promotion play.`,
+        );
+      }
+    });
+  });
 }
 
 function isoNow() {
@@ -192,6 +237,7 @@ function playbookMetaForCloud(playbook, ownerUid, timestamp) {
 }
 
 function playbookVersionForCloud(playbook, ownerUid, timestamp) {
+  assertValidPlaybookDefinition(playbook);
   return {
     schemaVersion: 1,
     playbookId: String(playbook.id || "").slice(0, 100),
@@ -250,6 +296,20 @@ function standingLaneForCloud(lane, ownerUid, timestamp) {
     createdAt: lane.createdAt ? instantTimestamp(lane.createdAt) : timestamp,
     updatedAt: timestamp,
   };
+}
+
+async function commitPlannerSetOperations(
+  firestore,
+  operations,
+  batchSize = PLANNER_RULES_SAFE_BATCH_SIZE,
+) {
+  for (let index = 0; index < operations.length; index += batchSize) {
+    const batch = firestore.batch();
+    operations.slice(index, index + batchSize).forEach((operation) => {
+      batch.set(operation.reference, operation.payload);
+    });
+    await batch.commit();
+  }
 }
 
 function createPreviewWorkspace() {
@@ -380,31 +440,38 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
       return deepClone(previewWorkspace);
     }
     const starter = cloneStarterData();
-    const batch = firestore.batch();
     const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
+    const operations = [];
     starter.playbooks.forEach((playbook) => {
-      batch.set(
-        firestore.collection(PLANNER_COLLECTIONS.playbooks).doc(playbook.id),
-        playbookMetaForCloud(playbook, user.uid, timestamp),
-      );
-      batch.set(
-        firestore.collection(PLANNER_COLLECTIONS.versions).doc(`${playbook.id}_v${playbook.version}`),
-        playbookVersionForCloud(playbook, user.uid, timestamp),
-      );
+      operations.push({
+        reference: firestore.collection(PLANNER_COLLECTIONS.playbooks).doc(playbook.id),
+        payload: playbookMetaForCloud(playbook, user.uid, timestamp),
+      });
+      operations.push({
+        reference: firestore.collection(PLANNER_COLLECTIONS.versions)
+          .doc(`${playbook.id}_v${playbook.version}`),
+        payload: playbookVersionForCloud(playbook, user.uid, timestamp),
+      });
     });
     starter.capacityRules.forEach((rule) => {
-      batch.set(
-        firestore.collection(PLANNER_COLLECTIONS.capacityRules).doc(rule.id),
-        capacityRuleForCloud(rule, user.uid, timestamp),
-      );
+      operations.push({
+        reference: firestore.collection(PLANNER_COLLECTIONS.capacityRules).doc(rule.id),
+        payload: capacityRuleForCloud(rule, user.uid, timestamp),
+      });
     });
     starter.standingLanes.forEach((lane) => {
-      batch.set(
-        firestore.collection(PLANNER_COLLECTIONS.standingLanes).doc(lane.id),
-        standingLaneForCloud(lane, user.uid, timestamp),
-      );
+      operations.push({
+        reference: firestore.collection(PLANNER_COLLECTIONS.standingLanes).doc(lane.id),
+        payload: standingLaneForCloud(lane, user.uid, timestamp),
+      });
     });
-    await batch.commit();
+    const snapshots = await Promise.all(
+      operations.map((operation) => operation.reference.get()),
+    );
+    const missingOperations = operations.filter(
+      (_operation, index) => !snapshots[index].exists,
+    );
+    await commitPlannerSetOperations(firestore, missingOperations);
     return loadWorkspace();
   }
 
@@ -592,4 +659,7 @@ export const plannerPersistenceInternals = {
   playbookVersionForCloud,
   capacityRuleForCloud,
   standingLaneForCloud,
+  assertValidPlaybookDefinition,
+  commitPlannerSetOperations,
+  PLANNER_RULES_SAFE_BATCH_SIZE,
 };

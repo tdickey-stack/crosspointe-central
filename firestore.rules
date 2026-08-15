@@ -838,19 +838,15 @@ service cloud.firestore {
     }
 
     function validPlannerWeeks(weeks) {
+      // Large six-to-eight-week playbooks can exceed Firestore's 1,000-rule
+      // expression limit when every nested week is expanded in one rule.
+      // Keep the immutable snapshot bounded and validate both boundary week
+      // envelopes here; Planner validates every week and play before writing.
       return weeks is list && weeks.size() > 0 && weeks.size() <= 12 &&
-        (weeks.size() < 1 || validPlannerWeek(weeks[0])) &&
-        (weeks.size() < 2 || validPlannerWeek(weeks[1])) &&
-        (weeks.size() < 3 || validPlannerWeek(weeks[2])) &&
-        (weeks.size() < 4 || validPlannerWeek(weeks[3])) &&
-        (weeks.size() < 5 || validPlannerWeek(weeks[4])) &&
-        (weeks.size() < 6 || validPlannerWeek(weeks[5])) &&
-        (weeks.size() < 7 || validPlannerWeek(weeks[6])) &&
-        (weeks.size() < 8 || validPlannerWeek(weeks[7])) &&
-        (weeks.size() < 9 || validPlannerWeek(weeks[8])) &&
-        (weeks.size() < 10 || validPlannerWeek(weeks[9])) &&
-        (weeks.size() < 11 || validPlannerWeek(weeks[10])) &&
-        (weeks.size() < 12 || validPlannerWeek(weeks[11]));
+        validPlannerWeek(weeks[0]) &&
+        validPlannerWeek(weeks[weeks.size() - 1]) &&
+        weeks[0].weekNumber == 1 &&
+        weeks[weeks.size() - 1].weekNumber == weeks.size();
     }
 
     function validPlannerPlaybook(data) {
@@ -886,7 +882,8 @@ service cloud.firestore {
         validPlannerLevel(data.level) && validPlannerString(data.name, 120) &&
         data.name.size() > 0 && validPlannerString(data.campaignType, 80) &&
         data.durationWeeks is int && data.durationWeeks >= 1 &&
-        data.durationWeeks <= 12 && data.version is int && data.version >= 1 &&
+        data.durationWeeks <= 12 && data.durationWeeks == data.weeks.size() &&
+        data.version is int && data.version >= 1 &&
         data.active is bool && validPlannerString(data.description, 1000) &&
         validPlannerWeeks(data.weeks) && data.createdByUid == request.auth.uid &&
         data.createdAt is timestamp && data.updatedAt is timestamp;

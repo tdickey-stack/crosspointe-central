@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
@@ -10,6 +11,12 @@ import {
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
 import test from "node:test";
+
+import {
+  PLANNER_COLLECTIONS,
+  plannerPersistenceInternals,
+} from "../src/planner/persistence.js";
+import {cloneStarterData} from "../src/planner/seed-data.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..");
@@ -46,12 +53,12 @@ function versionPayload() {
     version: 1,
     active: true,
     description: "Two-week interest campaign.",
-    weeks: [{
-      weekNumber: 1,
+    weeks: [1, 2].map((weekNumber) => ({
+      weekNumber,
       phase: "Interest",
-      label: "Build Interest",
+      label: weekNumber === 1 ? "Build Interest" : "Clear Invitation",
       plays: [{
-        id: "w1-social",
+        id: `w${weekNumber}-social`,
         playType: "Social Media Sprinkle",
         dayOfWeek: 1,
         eligibleWeekdays: [1, 5],
@@ -62,7 +69,7 @@ function versionPayload() {
         lateBehavior: "NEXT_AVAILABLE_SLOT",
         maxPlacementsPerCampaignPerWeek: 1,
       }],
-    }],
+    })),
     createdByUid: "editor",
     createdAt: serverTime(),
     updatedAt: serverTime(),
@@ -231,8 +238,70 @@ test("editor can create every valid planner entity", async () => {
   await assertSucceeds(db.doc("centralPromotionStandingLanes/level-2-weekly").set(lanePayload()));
 });
 
+test("editor can publish the complete starter configuration in safe batches", async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const starter = cloneStarterData();
+  const timestamp = serverTime();
+  const operations = [];
+  starter.playbooks.forEach((playbook) => {
+    operations.push({
+      reference: db.collection(PLANNER_COLLECTIONS.playbooks).doc(playbook.id),
+      payload: plannerPersistenceInternals.playbookMetaForCloud(
+        playbook,
+        "editor",
+        timestamp,
+      ),
+    });
+    operations.push({
+      reference: db.collection(PLANNER_COLLECTIONS.versions)
+        .doc(`${playbook.id}_v${playbook.version}`),
+      payload: plannerPersistenceInternals.playbookVersionForCloud(
+        playbook,
+        "editor",
+        timestamp,
+      ),
+    });
+  });
+  starter.capacityRules.forEach((rule) => {
+    operations.push({
+      reference: db.collection(PLANNER_COLLECTIONS.capacityRules).doc(rule.id),
+      payload: plannerPersistenceInternals.capacityRuleForCloud(
+        rule,
+        "editor",
+        timestamp,
+      ),
+    });
+  });
+  starter.standingLanes.forEach((lane) => {
+    operations.push({
+      reference: db.collection(PLANNER_COLLECTIONS.standingLanes).doc(lane.id),
+      payload: plannerPersistenceInternals.standingLaneForCloud(
+        lane,
+        "editor",
+        timestamp,
+      ),
+    });
+  });
+
+  await assertSucceeds(
+    plannerPersistenceInternals.commitPlannerSetOperations(db, operations),
+  );
+  assert.equal(
+    (await db.collection(PLANNER_COLLECTIONS.playbooks).get()).size,
+    starter.playbooks.length,
+  );
+  assert.equal(
+    (await db.collection(PLANNER_COLLECTIONS.versions).get()).size,
+    starter.playbooks.length,
+  );
+});
+
 test("create rejects oversized, mistyped, and extra fields", async () => {
   const db = environment.authenticatedContext("editor").firestore();
+  await assertFails(db.doc("centralPromotionPlaybookVersions/bad-duration_v1").set({
+    ...versionPayload(),
+    durationWeeks: 3,
+  }));
   await assertFails(db.doc("centralPromotionCampaigns/bad-notes").set({...campaignPayload(), notes: "x".repeat(3001)}));
   await assertFails(db.doc("centralPromotionScheduledPlays/bad-status").set({...scheduledPlayPayload(), status: "published"}));
   await assertFails(db.doc("centralPromotionCapacityRules/bad-capacity").set({...capacityPayload(), capacity: "two"}));

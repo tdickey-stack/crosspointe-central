@@ -243,6 +243,15 @@
         ]
       },
       {
+        "source": "/planner.@(html|js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/wayfinder-chat.js",
         "headers": [
           {
@@ -324,6 +333,14 @@
       {
         "source": "/studio/**",
         "destination": "/studio.html"
+      },
+      {
+        "source": "/planner",
+        "destination": "/planner.html"
+      },
+      {
+        "source": "/planner/**",
+        "destination": "/planner.html"
       },
       {
         "source": "/embeds",

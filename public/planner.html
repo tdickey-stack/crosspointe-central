@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#18181b">
+    <meta name="description" content="CrossPointe Central Promotion Planner.">
+    <title>Promotion Planner · CrossPointe Central</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/planner.css">
+    <script>
+      (function() {
+        function loadScript(source) {
+          return new Promise(function(resolve, reject) {
+            var script = document.createElement("script");
+            script.src = source;
+            script.onload = resolve;
+            script.onerror = function() {
+              reject(new Error("Unable to load " + source));
+            };
+            document.head.appendChild(script);
+          });
+        }
+
+        window.CENTRAL_PLANNER_FIREBASE_READY =
+          loadScript("/__/firebase/11.10.0/firebase-app-compat.js")
+            .then(function() {
+              return loadScript("/__/firebase/11.10.0/firebase-auth-compat.js");
+            })
+            .then(function() {
+              return loadScript("/__/firebase/11.10.0/firebase-firestore-compat.js");
+            })
+            .then(function() {
+              return loadScript("/__/firebase/init.js");
+            });
+      }());
+    </script>
+    <script type="module" src="/planner.js"></script>
+  </head>
+  <body>
+    <div id="planner-root">
+      <noscript>Promotion Planner requires JavaScript.</noscript>
+    </div>
+  </body>
+</html>

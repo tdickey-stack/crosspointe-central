@@ -3,6 +3,27 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
+    // Assumed Promotion Planner Data Model
+    // ===============================================================
+    // centralPromotionPlaybooks/{playbookId}: required schema/version
+    // metadata, level, name, campaign type, duration, active state,
+    // description, updater UID, and immutable creation timestamp.
+    // centralPromotionPlaybookVersions/{playbookId}_v{version}: immutable
+    // playbook snapshot with the editable week/play definition array.
+    // centralPromotionCampaigns/{campaignId}: event and submission timestamps,
+    // stored timeliness, immutable playbook/version reference, notes, status,
+    // creator/updater UIDs, and timestamps.
+    // centralPromotionScheduledPlays/{playId}: independent original/current
+    // schedule timestamps, campaign/playbook references, status, late/conflict
+    // handling, manual/lock flags, optional Smuggle relationship, UIDs, and
+    // timestamps.
+    // centralPromotionCapacityRules/{ruleId}: editable typical and hard resource
+    // capacity, period, weekdays, eligible levels, allocation strategy, and
+    // timestamps. Typical capacity must not exceed the hard capacity.
+    // centralPromotionStandingLanes/{laneId}: editable weekly lane fallback,
+    // priority order, Smuggle levels, active state, and timestamps.
+
+    // ===============================================================
     // Studio event project source model
     // ===============================================================
     // centralStudioProjects/{projectId} schemaVersion 1 event and social
@@ -724,6 +745,288 @@ service cloud.firestore {
       );
     }
 
+    function plannerPermission() {
+      return currentUser().data.pageAccess.keys().hasAny(["planner"]) ?
+        currentUser().data.pageAccess.planner :
+        currentUser().data.pageAccess.keys().hasAny(["studio"]) ?
+          currentUser().data.pageAccess.studio :
+          currentUser().data.pageAccess.keys().hasAny(["settings"]) ?
+            currentUser().data.pageAccess.settings :
+            "none";
+    }
+
+    function canReadPlanner() {
+      return isActiveAdminUser() && hasAnySectionAccess(plannerPermission());
+    }
+
+    function canEditPlanner() {
+      return isActiveAdminUser() && (
+        plannerPermission() == "propose" ||
+        isEditorLevel(plannerPermission())
+      );
+    }
+
+    function validPlannerString(value, maximum) {
+      return value is string && value.size() <= maximum;
+    }
+
+    function validPlannerId(value) {
+      return value is string && value.size() > 0 && value.size() <= 128 &&
+        value.matches("^[A-Za-z0-9_-]+$");
+    }
+
+    function isStarterPlannerPlaybook(playbookId) {
+      return playbookId in [
+        "level-1-major",
+        "level-2-event",
+        "level-2-ongoing-awareness",
+        "level-2-ongoing-interest",
+        "level-3-featured",
+        "level-3-standard",
+        "level-4-featured",
+        "level-4-standard",
+        "level-5-interest"
+      ];
+    }
+
+    function validPlannerWeekday(value) {
+      return value is int && value >= 0 && value <= 6;
+    }
+
+    function validPlannerWeekdays(values) {
+      return values is list && values.size() <= 7 &&
+        (values.size() < 1 || validPlannerWeekday(values[0])) &&
+        (values.size() < 2 || validPlannerWeekday(values[1])) &&
+        (values.size() < 3 || validPlannerWeekday(values[2])) &&
+        (values.size() < 4 || validPlannerWeekday(values[3])) &&
+        (values.size() < 5 || validPlannerWeekday(values[4])) &&
+        (values.size() < 6 || validPlannerWeekday(values[5])) &&
+        (values.size() < 7 || validPlannerWeekday(values[6]));
+    }
+
+    function validPlannerLevel(value) {
+      return value is int && value >= 1 && value <= 5;
+    }
+
+    function validPlannerLevels(values) {
+      return values is list && values.size() <= 5 &&
+        (values.size() < 1 || validPlannerLevel(values[0])) &&
+        (values.size() < 2 || validPlannerLevel(values[1])) &&
+        (values.size() < 3 || validPlannerLevel(values[2])) &&
+        (values.size() < 4 || validPlannerLevel(values[3])) &&
+        (values.size() < 5 || validPlannerLevel(values[4]));
+    }
+
+    function validPlannerShortStrings(values) {
+      return values is list && values.size() <= 5 &&
+        (values.size() < 1 || validPlannerString(values[0], 80)) &&
+        (values.size() < 2 || validPlannerString(values[1], 80)) &&
+        (values.size() < 3 || validPlannerString(values[2], 80)) &&
+        (values.size() < 4 || validPlannerString(values[3], 80)) &&
+        (values.size() < 5 || validPlannerString(values[4], 80));
+    }
+
+    function validPlannerWeek(week) {
+      return week is map &&
+        week.keys().hasAll(["weekNumber", "phase", "label", "plays"]) &&
+        week.keys().hasOnly(["weekNumber", "phase", "label", "plays"]) &&
+        week.weekNumber is int && week.weekNumber >= 1 &&
+        week.weekNumber <= 12 &&
+        validPlannerString(week.phase, 50) && week.phase.size() > 0 &&
+        validPlannerString(week.label, 120) &&
+        week.plays is list && week.plays.size() <= 40;
+    }
+
+    function validPlannerWeeks(weeks) {
+      return weeks is list && weeks.size() > 0 && weeks.size() <= 12 &&
+        (weeks.size() < 1 || validPlannerWeek(weeks[0])) &&
+        (weeks.size() < 2 || validPlannerWeek(weeks[1])) &&
+        (weeks.size() < 3 || validPlannerWeek(weeks[2])) &&
+        (weeks.size() < 4 || validPlannerWeek(weeks[3])) &&
+        (weeks.size() < 5 || validPlannerWeek(weeks[4])) &&
+        (weeks.size() < 6 || validPlannerWeek(weeks[5])) &&
+        (weeks.size() < 7 || validPlannerWeek(weeks[6])) &&
+        (weeks.size() < 8 || validPlannerWeek(weeks[7])) &&
+        (weeks.size() < 9 || validPlannerWeek(weeks[8])) &&
+        (weeks.size() < 10 || validPlannerWeek(weeks[9])) &&
+        (weeks.size() < 11 || validPlannerWeek(weeks[10])) &&
+        (weeks.size() < 12 || validPlannerWeek(weeks[11]));
+    }
+
+    function validPlannerPlaybook(data) {
+      return data is map && data.keys().hasAll([
+        "schemaVersion", "level", "name", "campaignType",
+        "durationWeeks", "currentVersion", "active", "description",
+        "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.keys().hasOnly([
+        "schemaVersion", "level", "name", "campaignType",
+        "durationWeeks", "currentVersion", "active", "description",
+        "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.schemaVersion == 1 && validPlannerLevel(data.level) &&
+        validPlannerString(data.name, 120) && data.name.size() > 0 &&
+        validPlannerString(data.campaignType, 80) &&
+        data.durationWeeks is int && data.durationWeeks >= 1 &&
+        data.durationWeeks <= 12 && data.currentVersion is int &&
+        data.currentVersion >= 1 && data.active is bool &&
+        validPlannerString(data.description, 1000) &&
+        data.updatedByUid == request.auth.uid &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function validPlannerPlaybookVersion(data) {
+      return data is map && data.keys().hasAll([
+        "schemaVersion", "playbookId", "level", "name", "campaignType",
+        "durationWeeks", "version", "active", "description", "weeks",
+        "createdByUid", "createdAt", "updatedAt"
+      ]) && data.keys().hasOnly([
+        "schemaVersion", "playbookId", "level", "name", "campaignType",
+        "durationWeeks", "version", "active", "description", "weeks",
+        "createdByUid", "createdAt", "updatedAt"
+      ]) && data.schemaVersion == 1 && validPlannerId(data.playbookId) &&
+        validPlannerLevel(data.level) && validPlannerString(data.name, 120) &&
+        data.name.size() > 0 && validPlannerString(data.campaignType, 80) &&
+        data.durationWeeks is int && data.durationWeeks >= 1 &&
+        data.durationWeeks <= 12 && data.version is int && data.version >= 1 &&
+        data.active is bool && validPlannerString(data.description, 1000) &&
+        validPlannerWeeks(data.weeks) && data.createdByUid == request.auth.uid &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function validPlannerCampaign(data) {
+      return data is map && data.keys().hasAll([
+        "schemaVersion", "name", "eventDate", "registrationDeadline",
+        "submittedAt", "recommendedStartDate", "isOnTime", "daysLate",
+        "weeksLate", "level", "campaignType", "playbookId",
+        "playbookVersion", "durationWeeks", "sourceEventId", "notes",
+        "status", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.keys().hasOnly([
+        "schemaVersion", "name", "eventDate", "registrationDeadline",
+        "submittedAt", "recommendedStartDate", "isOnTime", "daysLate",
+        "weeksLate", "level", "campaignType", "playbookId",
+        "playbookVersion", "durationWeeks", "sourceEventId", "notes",
+        "status", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.schemaVersion == 1 && validPlannerString(data.name, 140) &&
+        data.name.size() > 0 && data.eventDate is timestamp &&
+        (data.registrationDeadline == null || data.registrationDeadline is timestamp) &&
+        data.submittedAt is timestamp && data.recommendedStartDate is timestamp &&
+        data.isOnTime is bool && data.daysLate is int && data.daysLate >= 0 &&
+        data.weeksLate is int && data.weeksLate >= 0 &&
+        validPlannerLevel(data.level) && validPlannerString(data.campaignType, 80) &&
+        validPlannerId(data.playbookId) && data.playbookVersion is int &&
+        data.playbookVersion >= 1 && data.durationWeeks is int &&
+        data.durationWeeks >= 1 && data.durationWeeks <= 12 &&
+        validPlannerString(data.sourceEventId, 100) &&
+        validPlannerString(data.notes, 3000) &&
+        data.status in ["draft", "active", "completed", "archived"] &&
+        validPlannerString(data.createdByUid, 128) &&
+        data.createdByUid.size() > 0 && data.updatedByUid == request.auth.uid &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function validPlannerSmuggle(data) {
+      return data is map && data.keys().hasAll([
+        "hostCampaignId", "hostScheduledPlayId", "beneficiaryCampaignId",
+        "beneficiaryName", "strategy"
+      ]) && data.keys().hasOnly([
+        "hostCampaignId", "hostScheduledPlayId", "beneficiaryCampaignId",
+        "beneficiaryName", "strategy"
+      ]) && validPlannerId(data.hostCampaignId) &&
+        validPlannerId(data.hostScheduledPlayId) &&
+        validPlannerId(data.beneficiaryCampaignId) &&
+        validPlannerString(data.beneficiaryName, 140) &&
+        data.strategy == "SMUGGLE";
+    }
+
+    function validPlannerScheduledPlay(data) {
+      return data is map && data.keys().hasAll([
+        "schemaVersion", "campaignId", "campaignName", "campaignLevel",
+        "campaignType", "playbookId", "playbookVersion", "templatePlayId",
+        "weekNumber", "phase", "playType", "channel", "resourceId",
+        "originalScheduledDate", "scheduledDate", "eligibleWeekdays", "status",
+        "requirement", "lateBehavior", "source", "manuallyAdjusted", "locked",
+        "conflictState", "conflictReason", "lateReason", "supportsSmuggle",
+        "smuggle", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.keys().hasOnly([
+        "schemaVersion", "campaignId", "campaignName", "campaignLevel",
+        "campaignType", "playbookId", "playbookVersion", "templatePlayId",
+        "weekNumber", "phase", "playType", "channel", "resourceId",
+        "originalScheduledDate", "scheduledDate", "eligibleWeekdays", "status",
+        "requirement", "lateBehavior", "source", "manuallyAdjusted", "locked",
+        "conflictState", "conflictReason", "lateReason", "supportsSmuggle",
+        "smuggle", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.schemaVersion == 1 && validPlannerId(data.campaignId) &&
+        validPlannerString(data.campaignName, 140) && data.campaignName.size() > 0 &&
+        validPlannerLevel(data.campaignLevel) &&
+        validPlannerString(data.campaignType, 80) && validPlannerId(data.playbookId) &&
+        data.playbookVersion is int && data.playbookVersion >= 1 &&
+        validPlannerString(data.templatePlayId, 100) &&
+        data.weekNumber is int && data.weekNumber >= 1 && data.weekNumber <= 12 &&
+        validPlannerString(data.phase, 50) && validPlannerString(data.playType, 120) &&
+        data.playType.size() > 0 && validPlannerString(data.channel, 100) &&
+        validPlannerString(data.resourceId, 100) &&
+        data.originalScheduledDate is timestamp && data.scheduledDate is timestamp &&
+        validPlannerWeekdays(data.eligibleWeekdays) &&
+        data.status in [
+          "scheduled", "completed", "missed", "skipped", "rescheduled",
+          "conflict", "needs-decision"
+        ] && data.requirement in ["required", "optional", "as-available"] &&
+        data.lateBehavior in [
+          "SKIP", "NEXT_AVAILABLE_SLOT", "NEXT_OCCURRENCE", "MANUAL_REVIEW"
+        ] && validPlannerString(data.source, 60) && data.manuallyAdjusted is bool &&
+        data.locked is bool && validPlannerString(data.conflictState, 80) &&
+        validPlannerString(data.conflictReason, 800) &&
+        validPlannerString(data.lateReason, 800) && data.supportsSmuggle is bool &&
+        (data.smuggle == null || validPlannerSmuggle(data.smuggle)) &&
+        validPlannerString(data.createdByUid, 128) &&
+        data.createdByUid.size() > 0 && data.updatedByUid == request.auth.uid &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function validPlannerCapacityRule(data) {
+      return data is map && data.keys().hasAll([
+        "schemaVersion", "name", "channel", "capacity", "typicalCapacity",
+        "capacityPeriod", "allowedWeekdays", "perCampaignMaximum", "eligibleLevels",
+        "autoResolve", "supportsSmuggle", "allocationStrategy",
+        "showOnDashboard", "active", "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.keys().hasOnly([
+        "schemaVersion", "name", "channel", "capacity", "typicalCapacity",
+        "capacityPeriod", "allowedWeekdays", "perCampaignMaximum", "eligibleLevels",
+        "autoResolve", "supportsSmuggle", "allocationStrategy",
+        "showOnDashboard", "active", "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.schemaVersion == 1 && validPlannerString(data.name, 120) &&
+        data.name.size() > 0 && validPlannerString(data.channel, 100) &&
+        data.capacity is int && data.capacity >= 1 && data.capacity <= 50 &&
+        data.typicalCapacity is int && data.typicalCapacity >= 1 &&
+        data.typicalCapacity <= data.capacity &&
+        data.capacityPeriod in ["day", "week", "sunday"] &&
+        validPlannerWeekdays(data.allowedWeekdays) &&
+        data.perCampaignMaximum is int && data.perCampaignMaximum >= 1 &&
+        data.perCampaignMaximum <= 20 && validPlannerLevels(data.eligibleLevels) &&
+        data.autoResolve is bool && data.supportsSmuggle is bool &&
+        validPlannerString(data.allocationStrategy, 80) &&
+        data.showOnDashboard is bool && data.active is bool &&
+        data.updatedByUid == request.auth.uid &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function validPlannerStandingLane(data) {
+      return data is map && data.keys().hasAll([
+        "schemaVersion", "name", "level", "cadence", "fallbackPlaybookId",
+        "priorityOrder", "eligibleSmuggleLevels", "active", "updatedByUid",
+        "createdAt", "updatedAt"
+      ]) && data.keys().hasOnly([
+        "schemaVersion", "name", "level", "cadence", "fallbackPlaybookId",
+        "priorityOrder", "eligibleSmuggleLevels", "active", "updatedByUid",
+        "createdAt", "updatedAt"
+      ]) && data.schemaVersion == 1 && validPlannerString(data.name, 120) &&
+        data.name.size() > 0 && validPlannerLevel(data.level) &&
+        data.cadence == "weekly" && validPlannerId(data.fallbackPlaybookId) &&
+        validPlannerShortStrings(data.priorityOrder) &&
+        validPlannerLevels(data.eligibleSmuggleLevels) && data.active is bool &&
+        data.updatedByUid == request.auth.uid &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
     function contentSectionPermission(section) {
       return section == "quickLinks" ?
         currentUser().data.pageAccess.quickLinks :
@@ -1012,6 +1315,100 @@ service cloud.firestore {
 
     match /centralStudioShares/{shareId} {
       allow read, write: if false;
+    }
+
+    match /centralPromotionPlaybooks/{playbookId} {
+      allow read: if canReadPlanner();
+      allow create: if canEditPlanner() && validPlannerId(playbookId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerPlaybook(request.resource.data);
+      allow update: if canEditPlanner() && validPlannerId(playbookId) &&
+        request.resource.data.schemaVersion == resource.data.schemaVersion &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerPlaybook(request.resource.data);
+      allow delete: if canEditPlanner() &&
+        !isStarterPlannerPlaybook(playbookId);
+    }
+
+    match /centralPromotionPlaybookVersions/{versionId} {
+      allow read: if canReadPlanner();
+      allow create: if canEditPlanner() && validPlannerId(versionId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerPlaybookVersion(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /centralPromotionCampaigns/{campaignId} {
+      allow read: if canReadPlanner();
+      allow create: if canEditPlanner() && validPlannerId(campaignId) &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerCampaign(request.resource.data);
+      allow update: if canEditPlanner() && validPlannerId(campaignId) &&
+        request.resource.data.schemaVersion == resource.data.schemaVersion &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.playbookId == resource.data.playbookId &&
+        request.resource.data.playbookVersion == resource.data.playbookVersion &&
+        request.resource.data.submittedAt == resource.data.submittedAt &&
+        request.resource.data.recommendedStartDate == resource.data.recommendedStartDate &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerCampaign(request.resource.data);
+      allow delete: if canEditPlanner();
+    }
+
+    match /centralPromotionScheduledPlays/{playId} {
+      allow read: if canReadPlanner();
+      allow create: if canEditPlanner() && validPlannerId(playId) &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerScheduledPlay(request.resource.data);
+      allow update: if canEditPlanner() && validPlannerId(playId) &&
+        request.resource.data.schemaVersion == resource.data.schemaVersion &&
+        request.resource.data.campaignId == resource.data.campaignId &&
+        request.resource.data.playbookId == resource.data.playbookId &&
+        request.resource.data.playbookVersion == resource.data.playbookVersion &&
+        request.resource.data.templatePlayId == resource.data.templatePlayId &&
+        request.resource.data.originalScheduledDate == resource.data.originalScheduledDate &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerScheduledPlay(request.resource.data);
+      allow delete: if canEditPlanner() &&
+        !existsAfter(/databases/$(database)/documents/centralPromotionCampaigns/$(resource.data.campaignId));
+    }
+
+    match /centralPromotionCapacityRules/{ruleId} {
+      allow read: if canReadPlanner();
+      allow create: if canEditPlanner() && validPlannerId(ruleId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerCapacityRule(request.resource.data);
+      allow update: if canEditPlanner() && validPlannerId(ruleId) &&
+        request.resource.data.schemaVersion == resource.data.schemaVersion &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerCapacityRule(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /centralPromotionStandingLanes/{laneId} {
+      allow read: if canReadPlanner();
+      allow create: if canEditPlanner() && validPlannerId(laneId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerStandingLane(request.resource.data);
+      allow update: if canEditPlanner() && validPlannerId(laneId) &&
+        request.resource.data.schemaVersion == resource.data.schemaVersion &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time &&
+        validPlannerStandingLane(request.resource.data);
+      allow delete: if false;
     }
 
     match /{document=**} {

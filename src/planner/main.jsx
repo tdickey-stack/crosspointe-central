@@ -594,15 +594,22 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     (!filters.playType || play.playType === filters.playType),
   ), [workspace.scheduledPlays, filters]);
   const values = (key) => [...new Set(workspace.scheduledPlays.map((play) => play[key]).filter(Boolean))].sort();
-  const events = groupCalendarCampaignDays(filtered).map((group) => ({
-    id: group.id,
-    title: group.campaignName,
-    start: group.scheduledDate,
-    allDay: true,
-    className: `planner-level-calendar-event ${isStandaloneContent(group) ? "is-content" : `is-level-${group.campaignLevel}`}`,
-    editable: false,
-    extendedProps: {campaignDayGroup: group, sortLevel: isStandaloneContent(group) ? 6 : Number(group.campaignLevel)},
-  }));
+  const events = groupCalendarCampaignDays(filtered).map((group) => {
+    const content = isStandaloneContent(group);
+    const color = content ? "#f472b6" : LEVEL_COLORS[group.campaignLevel] || LEVEL_COLORS[5];
+    return {
+      id: group.id,
+      title: group.campaignName,
+      start: group.scheduledDate,
+      allDay: true,
+      classNames: ["planner-level-calendar-event", content ? "is-content" : `is-level-${group.campaignLevel}`],
+      backgroundColor: `${color}29`,
+      borderColor: `${color}80`,
+      textColor: color,
+      editable: false,
+      extendedProps: {campaignDayGroup: group, sortLevel: content ? 6 : Number(group.campaignLevel)},
+    };
+  });
   const changeView = (next) => {
     calendarRef.current?.getApi?.().changeView(
       next,
@@ -615,7 +622,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     const campaignDayGroup = info.event.extendedProps.campaignDayGroup;
     if (campaignDayGroup) {
       return (
-        <div className={`planner-calendar-event is-campaign-day ${view === "dayGridWeek" ? "is-week" : "is-month"}`}>
+        <div className={`planner-calendar-event is-campaign-day ${isStandaloneContent(campaignDayGroup) ? "is-content" : `is-level-${campaignDayGroup.campaignLevel}`} ${view === "dayGridWeek" ? "is-week" : "is-month"}`}>
           <div><PromotionKindBadge item={campaignDayGroup} /><strong>{campaignDayGroup.campaignName}</strong><small>{campaignDayGroup.plays.length} type{campaignDayGroup.plays.length === 1 ? "" : "s"}</small></div>
           <ul>{campaignDayGroup.plays.map((play) => (
             <li key={play.id}>{play.playType}{needsPromotionReview(play) ? ` · ${play.status === "conflict" ? "Conflict" : "Review"}` : ""}</li>
@@ -749,9 +756,34 @@ function CampaignsView({workspace, onNewCampaign, onOpenCampaign, canEdit}) {
   );
 }
 
-function buildStandaloneContent(form) {
-  const id = `content-${Date.now().toString(36)}`;
-  const submittedAt = new Date().toISOString();
+function contentFormFromSeries(campaign, plays) {
+  if (!campaign) {
+    return {
+      title: "",
+      publishDate: addDays(dateKey(new Date()), 7),
+      contentType: CONTENT_TYPES[0].value,
+      channel: CONTENT_TYPES[0].channel,
+      recurrence: "none",
+      occurrences: 12,
+      notes: "",
+    };
+  }
+  const series = contentSeriesDetails(visiblePromotions(plays));
+  const first = series.plays[0];
+  return {
+    title: campaign.name || "",
+    publishDate: series.firstDate || campaign.recommendedStartDate || campaign.eventDate,
+    contentType: first?.playType || CONTENT_TYPES[0].value,
+    channel: first?.channel || CONTENT_TYPES[0].channel,
+    recurrence: series.cadence || "none",
+    occurrences: Math.max(2, series.plays.length || 1),
+    notes: campaign.notes || "",
+  };
+}
+
+function buildStandaloneContent(form, existingCampaign = null, existingPlays = []) {
+  const id = existingCampaign?.id || `content-${Date.now().toString(36)}`;
+  const submittedAt = existingCampaign?.submittedAt || new Date().toISOString();
   const dates = recurringContentDates({
     startDate: form.publishDate,
     cadence: form.recurrence,
@@ -759,13 +791,14 @@ function buildStandaloneContent(form) {
   });
   const lastDate = dates.at(-1);
   const campaign = {
+    ...(existingCampaign || {}),
     id,
     name: form.title.trim(),
     eventDate: lastDate,
     registrationDeadline: "",
     submittedAt,
     submittedDate: dateKey(submittedAt),
-    recommendedStartDate: form.publishDate,
+    recommendedStartDate: existingCampaign?.recommendedStartDate || form.publishDate,
     isOnTime: true,
     daysLate: 0,
     weeksLate: 0,
@@ -774,60 +807,74 @@ function buildStandaloneContent(form) {
     playbookId: STANDALONE_CONTENT_TYPE,
     playbookVersion: 1,
     durationWeeks: dates.length,
-    currentWeek: 1,
+    currentWeek: existingCampaign?.currentWeek || 1,
     sourceEventId: "",
     notes: form.notes.trim(),
     status: "active",
   };
-  const plays = dates.map((scheduledDate, index) => ({
-    id: `${id}-promotion-${index + 1}`,
+  const priorPlays = [...existingPlays].sort((left, right) =>
+    Number(left.weekNumber || 1) - Number(right.weekNumber || 1) ||
+    String(left.scheduledDate).localeCompare(String(right.scheduledDate)),
+  );
+  const plays = dates.map((scheduledDate, index) => {
+    const prior = priorPlays[index];
+    return {
+    ...(prior || {}),
+    id: prior?.id || `${id}-promotion-${index + 1}`,
     campaignId: id,
     campaignName: campaign.name,
     campaignLevel: 5,
     campaignType: STANDALONE_CONTENT_TYPE,
     playbookId: STANDALONE_CONTENT_TYPE,
     playbookVersion: 1,
-    templatePlayId: `standalone-content-${index + 1}`,
+    templatePlayId: prior?.templatePlayId || `standalone-content-${index + 1}`,
     weekNumber: index + 1,
     phase: "Content",
     playType: form.contentType,
     channel: form.channel.trim(),
     resourceId: "standalone-content",
-    originalScheduledDate: scheduledDate,
+    originalScheduledDate: prior?.originalScheduledDate || scheduledDate,
     scheduledDate,
     eligibleWeekdays: [utcDateFromKey(scheduledDate).getUTCDay()],
     status: "scheduled",
     requirement: "required",
     lateBehavior: "SKIP",
     source: `${STANDALONE_CONTENT_TYPE}:${form.recurrence}`,
-    manuallyAdjusted: false,
+    manuallyAdjusted: prior ? scheduledDate !== prior.originalScheduledDate : false,
     locked: false,
     conflictState: "none",
     conflictReason: "",
     lateReason: "",
     supportsSmuggle: false,
     smuggle: null,
-  }));
+  };
+  });
+  priorPlays.slice(dates.length).forEach((prior) => {
+    plays.push({
+      ...prior,
+      campaignName: campaign.name,
+      playType: form.contentType,
+      channel: form.channel.trim(),
+      status: "skipped",
+      source: `${STANDALONE_CONTENT_TYPE}:${form.recurrence}`,
+      manuallyAdjusted: true,
+      conflictState: "none",
+      conflictReason: "",
+    });
+  });
   return {campaign, plays};
 }
 
-function NewContentDialog({onClose, onCreate}) {
-  const [form, setForm] = useState({
-    title: "",
-    publishDate: addDays(dateKey(new Date()), 7),
-    contentType: CONTENT_TYPES[0].value,
-    channel: CONTENT_TYPES[0].channel,
-    recurrence: "none",
-    occurrences: 12,
-    notes: "",
-  });
+function ContentDialog({campaign = null, plays = [], onClose, onSave}) {
+  const editing = Boolean(campaign);
+  const [form, setForm] = useState(() => contentFormFromSeries(campaign, plays));
   const [saving, setSaving] = useState(false);
   const update = (key, value) => setForm((current) => ({...current, [key]: value}));
   const recurrenceDates = useMemo(() => form.publishDate ? recurringContentDates({startDate: form.publishDate, cadence: form.recurrence, occurrences: form.occurrences}) : [], [form.publishDate, form.recurrence, form.occurrences]);
   const validOccurrences = form.recurrence === "none" || (Number(form.occurrences) >= 2 && Number(form.occurrences) <= 12);
   const valid = form.title.trim() && form.publishDate && form.contentType && form.channel.trim() && validOccurrences;
   return (
-    <Modal title="Add content" eyebrow="Social & video plan" onClose={onClose}>
+    <Modal title={editing ? "Edit content" : "Add content"} eyebrow="Social & video plan" onClose={onClose}>
       <div className="planner-form-grid">
         <Field label="Title" wide><input autoFocus value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="Weekend recap video" /></Field>
         <Field label="First publish date"><input type="date" value={form.publishDate} onChange={(event) => update("publishDate", event.target.value)} /></Field>
@@ -845,9 +892,9 @@ function NewContentDialog({onClose, onCreate}) {
         <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button>
         <button className="planner-button is-primary" disabled={!valid || saving} onClick={async () => {
           setSaving(true);
-          try { await onCreate(buildStandaloneContent(form)); }
+          try { await onSave(buildStandaloneContent(form, campaign, plays)); }
           catch (_error) { setSaving(false); }
-        }}>{saving ? "Adding…" : "Add to planner"}</button>
+        }}>{saving ? "Saving…" : editing ? "Save changes" : "Add to planner"}</button>
       </div>
     </Modal>
   );
@@ -856,7 +903,11 @@ function NewContentDialog({onClose, onCreate}) {
 function ContentView({workspace, canEdit, onNewContent, onOpenContent}) {
   const content = workspace.campaigns
     .filter(isStandaloneContent)
-    .sort((left, right) => String(left.recommendedStartDate).localeCompare(String(right.recommendedStartDate)));
+    .map((item) => ({
+      item,
+      series: contentSeriesDetails(visiblePromotions(workspace.scheduledPlays.filter((play) => play.campaignId === item.id))),
+    }))
+    .sort((left, right) => String(left.series.firstDate || left.item.eventDate).localeCompare(String(right.series.firstDate || right.item.eventDate)));
   return (
     <>
       <PageHeading
@@ -866,8 +917,7 @@ function ContentView({workspace, canEdit, onNewContent, onOpenContent}) {
         actions={canEdit && <button className="planner-button is-primary" onClick={onNewContent}>＋ Add content</button>}
       />
       <section className="planner-panel planner-content-list">
-        {content.length ? content.map((item) => {
-          const series = contentSeriesDetails(visiblePromotions(workspace.scheduledPlays.filter((play) => play.campaignId === item.id)));
+        {content.length ? content.map(({item, series}) => {
           const promotion = series.plays[0];
           const dateLabel = series.firstDate === series.lastDate
             ? formatDate(series.firstDate)
@@ -1221,7 +1271,7 @@ function PlayDialog({play, campaign, canEdit, onClose, onSave}) {
   );
 }
 
-function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onDelete}) {
+function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEditContent, onDelete}) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const plays = visiblePromotions(workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id)).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
@@ -1247,6 +1297,7 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onDe
       )}
       <div className="planner-modal-actions">
         {canEdit && !confirmDelete && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmDelete(true)}>Delete {standalone ? "content" : "campaign"}</button>}
+        {canEdit && standalone && !confirmDelete && <button className="planner-button is-primary" onClick={() => onEditContent(campaign)}>Edit content</button>}
         <button className="planner-button is-secondary" onClick={onClose}>Close</button>
       </div>
     </Modal>
@@ -1297,6 +1348,7 @@ function PlannerApp({authState}) {
   const [error, setError] = useState("");
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [newContentOpen, setNewContentOpen] = useState(false);
+  const [editingContent, setEditingContent] = useState(null);
   const [selectedPlay, setSelectedPlay] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const store = useMemo(() => createPlannerStore({
@@ -1411,13 +1463,22 @@ function PlannerApp({authState}) {
         setWorkspace((current) => ({...current, campaigns: [result.campaign, ...current.campaigns], scheduledPlays: [...current.scheduledPlays, ...result.plays]}));
         setNewCampaignOpen(false); setActiveView("campaigns");
       }} />}
-      {newContentOpen && <NewContentDialog onClose={() => setNewContentOpen(false)} onCreate={async ({campaign, plays}) => {
+      {newContentOpen && <ContentDialog onClose={() => setNewContentOpen(false)} onSave={async ({campaign, plays}) => {
         const result = await perform(() => store.saveCampaignSchedule(campaign, plays), `${campaign.name} added to the content plan.`);
         setWorkspace((current) => ({...current, campaigns: [result.campaign, ...current.campaigns], scheduledPlays: [...current.scheduledPlays, ...result.plays]}));
         setNewContentOpen(false); setActiveView("content");
       }} />}
+      {editingContent && <ContentDialog campaign={editingContent} plays={workspace.scheduledPlays.filter((play) => play.campaignId === editingContent.id)} onClose={() => setEditingContent(null)} onSave={async ({campaign, plays}) => {
+        const result = await perform(() => store.saveCampaignSchedule(campaign, plays), `${campaign.name} was updated.`);
+        setWorkspace((current) => ({
+          ...current,
+          campaigns: current.campaigns.map((item) => item.id === result.campaign.id ? result.campaign : item),
+          scheduledPlays: [...current.scheduledPlays.filter((item) => item.campaignId !== result.campaign.id), ...result.plays],
+        }));
+        setEditingContent(null); setActiveView("content");
+      }} />}
       {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} />}
-      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onDelete={deleteCampaign} />}
+      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onDelete={deleteCampaign} />}
     </div>
   );
 }

@@ -202,7 +202,20 @@ a { text-decoration: none; }
 .planner-calendar-panel .fc .fc-more-link { margin: 3px 6px; color: var(--planner-red); font-size: .56rem; font-weight: 900; }
 .planner-calendar-panel .fc .fc-popover { border: 1px solid var(--planner-line-strong); border-radius: 14px; background: var(--planner-panel); box-shadow: var(--planner-shadow); }
 .planner-calendar-panel .fc .fc-popover-header { background: var(--planner-panel-raised); }
+.planner-calendar-panel .fc .fc-popover button:has(.planner-calendar-event) { overflow: hidden; border: 0 !important; border-radius: 8px; background: transparent !important; color: inherit !important; }
+.planner-calendar-panel .fc .fc-popover .planner-calendar-event { width: 100%; border: 1px solid color-mix(in srgb, var(--calendar-level-color) 50%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--calendar-level-color) 16%, #18181b); color: color-mix(in srgb, var(--calendar-level-color) 76%, white); }
+.planner-calendar-panel [role="dialog"] { border: 1px solid var(--planner-line-strong); border-radius: 14px; background: var(--planner-panel); box-shadow: var(--planner-shadow); }
+.planner-calendar-panel [role="dialog"] [role="button"]:has(.planner-calendar-event) { overflow: hidden; border: 0 !important; border-radius: 8px; background: transparent !important; color: inherit !important; }
+.planner-calendar-panel [role="dialog"] .planner-calendar-event { width: 100%; border: 1px solid color-mix(in srgb, var(--calendar-level-color) 50%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--calendar-level-color) 16%, #18181b); color: color-mix(in srgb, var(--calendar-level-color) 76%, white); }
+[role="dialog"] [role="button"]:has(.planner-calendar-event) { overflow: hidden; border: 0 !important; border-radius: 8px; background: transparent !important; color: inherit !important; }
+[role="dialog"] .planner-calendar-event { width: 100%; border: 1px solid color-mix(in srgb, var(--calendar-level-color) 50%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--calendar-level-color) 16%, #18181b); color: color-mix(in srgb, var(--calendar-level-color) 76%, white); }
 .planner-calendar-event { min-width: 0; padding: 5px 6px; line-height: 1.15; }
+.planner-calendar-event.is-level-1 { --calendar-level-color: #ef3e2d; }
+.planner-calendar-event.is-level-2 { --calendar-level-color: #f59e0b; }
+.planner-calendar-event.is-level-3 { --calendar-level-color: #4bb8e9; }
+.planner-calendar-event.is-level-4 { --calendar-level-color: #4bc3a7; }
+.planner-calendar-event.is-level-5 { --calendar-level-color: #a78bfa; }
+.planner-calendar-event.is-content { --calendar-level-color: #f472b6; }
 .planner-calendar-event > div { display: flex; min-width: 0; align-items: center; gap: 5px; }
 .planner-calendar-event strong { min-width: 0; overflow: hidden; font-size: .52rem; text-overflow: ellipsis; white-space: nowrap; }
 .planner-calendar-event > span { display: block; margin-top: 3px; overflow: hidden; font-size: .48rem; font-weight: 750; opacity: .86; text-overflow: ellipsis; white-space: nowrap; }

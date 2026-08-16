@@ -563,8 +563,8 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
   }
 
   async function saveCampaignSchedule(campaign, plays) {
-    const nextCampaign = {...deepClone(campaign), id: campaign.id || createId("campaign")};
-    const nextPlays = plays.map((play) => ({
+    let nextCampaign = {...deepClone(campaign), id: campaign.id || createId("campaign")};
+    let nextPlays = plays.map((play) => ({
       ...deepClone(play),
       id: play.id || createId("play"),
       campaignId: nextCampaign.id,
@@ -580,10 +580,27 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
       ];
       return {campaign: deepClone(nextCampaign), plays: deepClone(nextPlays)};
     }
+    const campaignReference = firestore.collection(PLANNER_COLLECTIONS.campaigns).doc(nextCampaign.id);
+    const existingCampaignSnapshot = await campaignReference.get();
+    if (existingCampaignSnapshot.exists) {
+      const existingCampaign = normalizeCampaign(documentData(existingCampaignSnapshot));
+      const existingPlaySnapshot = await firestore.collection(PLANNER_COLLECTIONS.plays)
+        .where("campaignId", "==", nextCampaign.id)
+        .get();
+      const existingPlays = new Map(existingPlaySnapshot.docs.map((doc) => {
+        const play = normalizePlay(documentData(doc));
+        return [play.id, play];
+      }));
+      nextCampaign = {...existingCampaign, ...nextCampaign, id: existingCampaign.id};
+      nextPlays = nextPlays.map((play) => existingPlays.has(play.id)
+        ? {...existingPlays.get(play.id), ...play}
+        : play,
+      );
+    }
     const batch = firestore.batch();
     const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
     batch.set(
-      firestore.collection(PLANNER_COLLECTIONS.campaigns).doc(nextCampaign.id),
+      campaignReference,
       campaignForCloud(nextCampaign, user.uid, timestamp),
     );
     nextPlays.forEach((play) => {

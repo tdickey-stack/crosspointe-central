@@ -180,3 +180,95 @@ test("starter publishing skips existing documents and is retry safe", async () =
     }
   }
 });
+
+test("editing an existing content series preserves immutable creation metadata", async () => {
+  const createdAt = "2026-08-01T12:00:00.000Z";
+  const campaignPath = `${PLANNER_COLLECTIONS.campaigns}/content-series`;
+  const playPath = `${PLANNER_COLLECTIONS.plays}/content-series-promotion-1`;
+  const firestore = createFakeFirestore({
+    [campaignPath]: {
+      id: "content-series",
+      createdAt,
+      createdByUid: "original-owner",
+      eventDate: "2026-08-23",
+      registrationDeadline: "",
+      recommendedStartDate: "2026-08-23",
+      submittedAt: createdAt,
+    },
+    [playPath]: {
+      id: "content-series-promotion-1",
+      campaignId: "content-series",
+      createdAt,
+      createdByUid: "original-owner",
+      originalScheduledDate: "2026-08-23",
+      scheduledDate: "2026-08-23",
+    },
+  });
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    firebase: {
+      firestore: {
+        FieldValue: {serverTimestamp: () => "server-timestamp"},
+        Timestamp: {fromDate: (value) => value},
+      },
+    },
+  };
+
+  try {
+    const store = createPlannerStore({firestore, user: {uid: "planner-admin"}});
+    const result = await store.saveCampaignSchedule({
+      id: "content-series",
+      name: "Edited podcast",
+      eventDate: "2026-09-20",
+      registrationDeadline: "",
+      submittedAt: createdAt,
+      recommendedStartDate: "2026-08-23",
+      isOnTime: true,
+      daysLate: 0,
+      weeksLate: 0,
+      level: 5,
+      campaignType: "standalone-content",
+      playbookId: "standalone-content",
+      playbookVersion: 1,
+      durationWeeks: 3,
+      sourceEventId: "",
+      notes: "Edited",
+      status: "active",
+    }, [{
+      id: "content-series-promotion-1",
+      campaignId: "content-series",
+      campaignName: "Edited podcast",
+      campaignLevel: 5,
+      campaignType: "standalone-content",
+      playbookId: "standalone-content",
+      playbookVersion: 1,
+      templatePlayId: "standalone-content-1",
+      weekNumber: 1,
+      phase: "Content",
+      playType: "Podcast",
+      channel: "Podcast",
+      resourceId: "standalone-content",
+      originalScheduledDate: "2026-08-23",
+      scheduledDate: "2026-08-23",
+      eligibleWeekdays: [0],
+      status: "scheduled",
+      requirement: "required",
+      lateBehavior: "SKIP",
+      source: "standalone-content:biweekly",
+      manuallyAdjusted: false,
+      locked: false,
+      conflictState: "none",
+      conflictReason: "",
+      lateReason: "",
+      supportsSmuggle: false,
+      smuggle: null,
+    }]);
+    assert.equal(result.campaign.createdAt, createdAt);
+    assert.equal(result.campaign.createdByUid, "original-owner");
+    assert.equal(result.plays[0].createdAt, createdAt);
+    assert.equal(result.plays[0].createdByUid, "original-owner");
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});

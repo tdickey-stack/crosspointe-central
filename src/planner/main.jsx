@@ -10,7 +10,6 @@ import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
 
 import {
-  PLAY_STATUSES,
   addDays,
   allocateLevel4SocialSlots,
   applySmuggle,
@@ -24,6 +23,7 @@ import {
   recommendSmuggleOpportunities,
   scheduleSummary,
   utilizationForWeek,
+  utcDateFromKey,
   weeklyInventoryPlays,
 } from "./domain.js";
 import {createPlannerStore} from "./persistence.js";
@@ -36,6 +36,7 @@ const NAV_ITEMS = [
   {id: "overview", label: "Overview", icon: "◫"},
   {id: "calendar", label: "Calendar", icon: "▦"},
   {id: "campaigns", label: "Campaigns", icon: "◆"},
+  {id: "content", label: "Content", icon: "●"},
   {id: "playbooks", label: "Playbooks", icon: "▤"},
   {id: "rules", label: "Rules", icon: "⚙"},
 ];
@@ -47,6 +48,40 @@ const LEVEL_COLORS = {
   4: "#4bc3a7",
   5: "#a78bfa",
 };
+
+const STANDALONE_CONTENT_TYPE = "standalone-content";
+const CONTENT_TYPES = [
+  {value: "Social Post", channel: "Social Media"},
+  {value: "YouTube Video", channel: "YouTube"},
+  {value: "Short / Reel", channel: "Social Media"},
+  {value: "Other Content", channel: "Other"},
+];
+
+function isStandaloneContent(item) {
+  return item?.campaignType === STANDALONE_CONTENT_TYPE;
+}
+
+function visiblePromotions(plays) {
+  return (plays || []).filter((play) => !["missed", "skipped"].includes(play.status));
+}
+
+function needsPromotionReview(play) {
+  return ["conflict", "needs-decision"].includes(play.status) ||
+    (play.conflictState && play.conflictState !== "none");
+}
+
+function campaignDeadline(campaign) {
+  if (!campaign) return "";
+  return campaign.registrationDeadline && campaign.registrationDeadline < campaign.eventDate
+    ? campaign.registrationDeadline
+    : campaign.eventDate;
+}
+
+function PromotionKindBadge({item}) {
+  return isStandaloneContent(item)
+    ? <span className="planner-content-badge">Content</span>
+    : <LevelBadge level={item.campaignLevel ?? item.level} />;
+}
 
 function getPlannerPermission(userData) {
   const pageAccess = userData?.pageAccess && typeof userData.pageAccess === "object"
@@ -336,7 +371,7 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
   const [selectedMetric, setSelectedMetric] = useState(null);
   const weekStart = nextPlanningWeekStart(new Date());
   const weekEnd = addDays(weekStart, 6);
-  const weekPlays = workspace.scheduledPlays.filter((play) =>
+  const weekPlays = visiblePromotions(workspace.scheduledPlays).filter((play) =>
     play.scheduledDate >= weekStart && play.scheduledDate <= weekEnd,
   );
   const utilization = utilizationForWeek({
@@ -344,27 +379,18 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
     plays: workspace.scheduledPlays,
     capacityRules: workspace.capacityRules,
   });
-  const ongoing = workspace.playbooks.find((item) => item.id === "level-2-ongoing-awareness");
-  const lane = ongoing
-    ? workspace.scheduledPlays.some((play) =>
-      Number(play.campaignLevel) === 2 && play.scheduledDate >= weekStart && play.scheduledDate <= weekEnd && !["missed", "skipped"].includes(play.status),
-    )
-    : false;
   const opportunities = recommendSmuggleOpportunities({
     hostPlays: workspace.scheduledPlays,
     campaigns: workspace.campaigns,
   }).slice(0, 4);
-  const attention = weekPlays.filter((play) =>
-    ["conflict", "needs-decision", "missed"].includes(play.status),
-  );
-  const lateCampaigns = workspace.campaigns.filter((campaign) => campaign.isOnTime === false && campaign.status === "active");
+  const attention = weekPlays.filter(needsPromotionReview);
 
   return (
     <>
       <PageHeading
         eyebrow={`Next planning week · ${formatDate(weekStart, {year: false})}–${formatDate(weekEnd)}`}
         title="Creative operations at a glance"
-        copy="Capacity, coverage, and decisions across every active promotion campaign."
+        copy="Capacity, coverage, and decisions across campaigns and standalone content."
         actions={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>＋ New campaign</button>}
       />
       <section className="planner-metric-grid" aria-label="Next planning week capacity">
@@ -382,22 +408,12 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
             {item.typicalCapacity < item.capacity && <p>Typical target {item.typicalCapacity} · hard maximum {item.capacity}</p>}
           </button>
         ))}
-        <button
-          type="button"
-          className={`planner-metric-card ${lane ? "" : "has-alert"}`}
-          onClick={() => setSelectedMetric({id: "level-2-lane", name: "Level 2 Lane", inventoryType: "level", campaignLevel: 2})}
-          aria-label="Open Level 2 Lane promotions for next planning week"
-        >
-          <div><span>Level 2 Lane</span><StatusBadge status={lane ? "covered" : "needs-decision"}>{lane ? "Covered" : "Needs attention"}</StatusBadge></div>
-          <strong className="is-word">{lane ? "Active" : "Open"}</strong>
-          <p>{lane ? "Event or ongoing promotion is present." : "Add the ongoing Level 2 fallback."}</p>
-        </button>
       </section>
       <section className="planner-dashboard-grid">
         <article className="planner-panel planner-week-agenda">
           <div className="planner-panel-heading">
             <div><span className="planner-kicker">Schedule</span><h2>Next planning week</h2></div>
-            <StatusBadge>{weekPlays.length} plays</StatusBadge>
+            <StatusBadge>{weekPlays.length} promotions</StatusBadge>
           </div>
           {weekPlays.length ? (
             <div className="planner-agenda-list">
@@ -413,7 +429,7 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
                 );
               })}
             </div>
-          ) : <EmptyState title="A clear week" copy="No scheduled plays are loaded for this week." />}
+          ) : <EmptyState title="A clear week" copy="No promotions are planned for this week." />}
         </article>
         <div className="planner-dashboard-stack">
           <article className="planner-panel">
@@ -424,10 +440,10 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
             {attention.length ? attention.slice(0, 5).map((play) => (
               <button className="planner-attention-row" key={play.id} onClick={() => onOpenPlay(play)}>
                 <span className={`planner-attention-dot is-${play.status}`} />
-                <span><strong>{play.campaignName}</strong><small>{play.playType} · {titleCase(play.status)}</small></span>
+                <span><strong>{play.campaignName}</strong><small>{play.playType} · {play.status === "conflict" ? "Conflict" : "Needs review"}</small></span>
                 <span>›</span>
               </button>
-            )) : <p className="planner-quiet-copy">No conflicts or missed plays need a decision.</p>}
+            )) : <p className="planner-quiet-copy">No promotion conflicts need a decision.</p>}
           </article>
           <article className="planner-panel">
             <div className="planner-panel-heading">
@@ -440,15 +456,8 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
                 <p>{opportunity.scoreReason}</p>
                 {canEdit && <button className="planner-text-button" onClick={() => onUseSmuggle(opportunity)}>Use as Smuggle →</button>}
               </div>
-            )) : <p className="planner-quiet-copy">No open, Smuggle-capable Level 2 plays are currently loaded.</p>}
+            )) : <p className="planner-quiet-copy">No open, Smuggle-capable Level 2 promotions are currently loaded.</p>}
           </article>
-          {lateCampaigns.length > 0 && (
-            <article className="planner-panel planner-late-callout">
-              <span className="planner-kicker">Submission health</span>
-              <h2>{lateCampaigns.length} late campaign{lateCampaigns.length === 1 ? "" : "s"}</h2>
-              <p>Past plays remain visible as missed; nothing is compressed into the current week.</p>
-            </article>
-          )}
         </div>
       </section>
       {selectedMetric && (
@@ -457,6 +466,7 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
           weekStart={weekStart}
           weekEnd={weekEnd}
           plays={workspace.scheduledPlays}
+          campaigns={workspace.campaigns}
           canEdit={canEdit}
           onClose={() => setSelectedMetric(null)}
           onSavePlay={onSavePlay}
@@ -469,32 +479,32 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
 function PlayRow({play, onClick}) {
   return (
     <button className="planner-play-row" onClick={onClick}>
-      <span className="planner-play-level" style={{background: LEVEL_COLORS[play.campaignLevel]}} />
+      <span className="planner-play-level" style={{background: isStandaloneContent(play) ? "#f472b6" : LEVEL_COLORS[play.campaignLevel]}} />
       <span><strong>{play.playType}</strong><small>{play.campaignName} · {play.channel}</small></span>
       {play.smuggle && <StatusBadge status="smuggle">Smuggle</StatusBadge>}
-      <StatusBadge status={play.status} />
+      {needsPromotionReview(play) && <StatusBadge status="conflict">{play.status === "conflict" ? "Conflict" : "Review"}</StatusBadge>}
     </button>
   );
 }
 
-function WeeklyInventoryPlay({play, canEdit, onSave}) {
-  const needsAttention = ["conflict", "needs-decision", "missed"].includes(play.status);
+function WeeklyInventoryPlay({play, deadline, canEdit, onSave}) {
+  const needsAttention = needsPromotionReview(play);
   const [expanded, setExpanded] = useState(needsAttention);
   const [draft, setDraft] = useState({...play});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   useEffect(() => {
     setDraft({...play});
-    setExpanded((current) => current || ["conflict", "needs-decision", "missed"].includes(play.status));
+    setExpanded((current) => current || needsPromotionReview(play));
   }, [play]);
-  const changed = draft.scheduledDate !== play.scheduledDate || draft.status !== play.status;
+  const changed = draft.scheduledDate !== play.scheduledDate;
   const save = async () => {
     setSaving(true);
     setSaveError("");
     try {
       await onSave({...draft, manuallyAdjusted: true});
     } catch (error) {
-      setSaveError(error.message || "This scheduled play could not be updated.");
+      setSaveError(error.message || "This promotion could not be updated.");
     } finally {
       setSaving(false);
     }
@@ -502,15 +512,14 @@ function WeeklyInventoryPlay({play, canEdit, onSave}) {
   return (
     <article className={`planner-inventory-row ${needsAttention ? "has-alert" : ""}`}>
       <div className="planner-inventory-row-header">
-        <LevelBadge level={play.campaignLevel} />
+        <PromotionKindBadge item={play} />
         <div><strong>{play.campaignName}</strong><small>{play.playType} · {play.channel} · {formatDate(play.scheduledDate, {year: false})}</small></div>
-        <StatusBadge status={play.status} />
+        {needsAttention && <StatusBadge status="conflict">{play.status === "conflict" ? "Conflict" : "Review"}</StatusBadge>}
         {canEdit && <button className="planner-text-button" onClick={() => setExpanded((current) => !current)}>{expanded ? "Hide" : needsAttention ? "Resolve" : "Adjust"}</button>}
       </div>
       {expanded && canEdit && (
         <div className="planner-inventory-row-controls">
-          <Field label="Scheduled date"><input type="date" value={draft.scheduledDate} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled"})} /></Field>
-          <Field label="Status"><select value={draft.status} onChange={(event) => setDraft({...draft, status: event.target.value})}>{PLAY_STATUSES.map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}</select></Field>
+          <Field label="Planned date"><input type="date" value={draft.scheduledDate} max={deadline || undefined} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled", conflictState: "none", conflictReason: ""})} /></Field>
           <button className="planner-button is-primary" disabled={!changed || saving} onClick={save}>{saving ? "Saving…" : "Save change"}</button>
           {saveError && <p role="alert">{saveError}</p>}
         </div>
@@ -519,7 +528,7 @@ function WeeklyInventoryPlay({play, canEdit, onSave}) {
   );
 }
 
-function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, canEdit, onClose, onSavePlay}) {
+function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, canEdit, onClose, onSavePlay}) {
   const matching = weeklyInventoryPlays({
     plays,
     weekStart,
@@ -527,25 +536,24 @@ function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, canEdit, onClo
     resourceId: metric.inventoryType === "resource" ? metric.resourceId : "",
     campaignLevel: metric.inventoryType === "level" ? metric.campaignLevel : null,
   });
-  const attention = matching.filter((play) => ["conflict", "needs-decision", "missed"].includes(play.status));
-  const active = matching.filter((play) => !["missed", "skipped", "completed"].includes(play.status));
+  const attention = matching.filter(needsPromotionReview);
+  const active = visiblePromotions(matching);
   return (
     <Modal title={metric.name} eyebrow={`${formatDate(weekStart, {year: false})}–${formatDate(weekEnd)}`} onClose={onClose} size="wide">
       <div className="planner-inventory-summary">
-        <span><strong>{matching.length}</strong> total plays</span>
-        <span><strong>{active.length}</strong> active</span>
+        <span><strong>{active.length}</strong> promotions</span>
         <span><strong>{attention.length}</strong> need attention</span>
         {metric.capacity && <span><strong>{metric.capacity}</strong> weekly maximum</span>}
       </div>
       {attention.length > 0 && (
         <div className="planner-detail-note is-alert">
-          <strong>{attention.length} play{attention.length === 1 ? " needs" : "s need"} a decision</strong>
-          <p>Resolve a conflict here by moving the play to another date or changing its status. Moving it outside this week removes it from this list.</p>
+          <strong>{attention.length} promotion{attention.length === 1 ? " needs" : "s need"} a decision</strong>
+          <p>Resolve a conflict by moving the promotion to another valid date. Moving it outside this week removes it from this list.</p>
         </div>
       )}
-      {matching.length ? (
+      {active.length ? (
         <div className="planner-inventory-list">
-          {matching.map((play) => <WeeklyInventoryPlay key={play.id} play={play} canEdit={canEdit} onSave={onSavePlay} />)}
+          {active.map((play) => <WeeklyInventoryPlay key={play.id} play={play} deadline={campaignDeadline(campaigns.find((campaign) => campaign.id === play.campaignId))} canEdit={canEdit} onSave={onSavePlay} />)}
         </div>
       ) : <EmptyState title="Nothing scheduled" copy={`No ${metric.name.toLowerCase()} promotions are scheduled for this week.`} />}
       <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button></div>
@@ -556,13 +564,12 @@ function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, canEdit, onClo
 function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePlay}) {
   const calendarRef = useRef(null);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_STORAGE_KEY) || "dayGridMonth");
-  const [filters, setFilters] = useState({campaign: "", level: "", channel: "", playType: "", status: ""});
-  const filtered = useMemo(() => workspace.scheduledPlays.filter((play) =>
+  const [filters, setFilters] = useState({campaign: "", level: "", channel: "", playType: ""});
+  const filtered = useMemo(() => visiblePromotions(workspace.scheduledPlays).filter((play) =>
     (!filters.campaign || play.campaignId === filters.campaign) &&
-    (!filters.level || String(play.campaignLevel) === filters.level) &&
+    (!filters.level || (!isStandaloneContent(play) && String(play.campaignLevel) === filters.level)) &&
     (!filters.channel || play.channel === filters.channel) &&
-    (!filters.playType || play.playType === filters.playType) &&
-    (!filters.status || play.status === filters.status),
+    (!filters.playType || play.playType === filters.playType),
   ), [workspace.scheduledPlays, filters]);
   const values = (key) => [...new Set(workspace.scheduledPlays.map((play) => play[key]).filter(Boolean))].sort();
   const events = groupCalendarCampaignDays(filtered).map((group) => ({
@@ -570,9 +577,9 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     title: group.campaignName,
     start: group.scheduledDate,
     allDay: true,
-    className: `planner-level-calendar-event is-level-${group.campaignLevel}`,
+    className: `planner-level-calendar-event ${isStandaloneContent(group) ? "is-content" : `is-level-${group.campaignLevel}`}`,
     editable: false,
-    extendedProps: {campaignDayGroup: group, sortLevel: Number(group.campaignLevel)},
+    extendedProps: {campaignDayGroup: group, sortLevel: isStandaloneContent(group) ? 6 : Number(group.campaignLevel)},
   }));
   const changeView = (next) => {
     calendarRef.current?.getApi?.().changeView(
@@ -587,9 +594,9 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     if (campaignDayGroup) {
       return (
         <div className={`planner-calendar-event is-campaign-day ${view === "dayGridWeek" ? "is-week" : "is-month"}`}>
-          <div><LevelBadge level={campaignDayGroup.campaignLevel} /><strong>{campaignDayGroup.campaignName}</strong><small>{campaignDayGroup.plays.length} type{campaignDayGroup.plays.length === 1 ? "" : "s"}</small></div>
+          <div><PromotionKindBadge item={campaignDayGroup} /><strong>{campaignDayGroup.campaignName}</strong><small>{campaignDayGroup.plays.length} type{campaignDayGroup.plays.length === 1 ? "" : "s"}</small></div>
           <ul>{campaignDayGroup.plays.map((play) => (
-            <li key={play.id}>{play.playType}{["conflict", "needs-decision", "missed"].includes(play.status) ? ` · ${titleCase(play.status)}` : ""}</li>
+            <li key={play.id}>{play.playType}{needsPromotionReview(play) ? ` · ${play.status === "conflict" ? "Conflict" : "Review"}` : ""}</li>
           ))}</ul>
         </div>
       );
@@ -597,7 +604,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     const play = info.event.extendedProps.play;
     return (
       <div className="planner-calendar-event">
-        <div><LevelBadge level={play.campaignLevel} /><strong>{play.campaignName}</strong></div>
+        <div><PromotionKindBadge item={play} /><strong>{play.campaignName}</strong></div>
         <span>{play.playType}</span>
       </div>
     );
@@ -605,7 +612,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
   return (
     <>
       <PageHeading
-        eyebrow="Scheduled Plays"
+        eyebrow="Promotion plan"
         title="Promotion calendar"
         copy="Month and Week combine same-day promotion types into one card per campaign."
         actions={
@@ -617,12 +624,11 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
       />
       <section className="planner-panel planner-calendar-panel">
         <div className="planner-filter-bar">
-          <FilterSelect label="Campaign" value={filters.campaign} onChange={(campaign) => setFilters({...filters, campaign})} options={workspace.campaigns.map((item) => ({value: item.id, label: item.name}))} />
+          <FilterSelect label="Campaign / content" value={filters.campaign} onChange={(campaign) => setFilters({...filters, campaign})} options={workspace.campaigns.map((item) => ({value: item.id, label: item.name}))} />
           <FilterSelect label="Level" value={filters.level} onChange={(level) => setFilters({...filters, level})} options={[1, 2, 3, 4, 5].map((level) => ({value: String(level), label: `Level ${level}`}))} />
           <FilterSelect label="Channel" value={filters.channel} onChange={(channel) => setFilters({...filters, channel})} options={values("channel").map((value) => ({value, label: value}))} />
-          <FilterSelect label="Play type" value={filters.playType} onChange={(playType) => setFilters({...filters, playType})} options={values("playType").map((value) => ({value, label: value}))} />
-          <FilterSelect label="Status" value={filters.status} onChange={(status) => setFilters({...filters, status})} options={PLAY_STATUSES.map((value) => ({value, label: titleCase(value)}))} />
-          {Object.values(filters).some(Boolean) && <button className="planner-text-button" onClick={() => setFilters({campaign: "", level: "", channel: "", playType: "", status: ""})}>Clear filters</button>}
+          <FilterSelect label="Promotion type" value={filters.playType} onChange={(playType) => setFilters({...filters, playType})} options={values("playType").map((value) => ({value, label: value}))} />
+          {Object.values(filters).some(Boolean) && <button className="planner-text-button" onClick={() => setFilters({campaign: "", level: "", channel: "", playType: ""})}>Clear filters</button>}
         </div>
         <FullCalendar
           ref={calendarRef}
@@ -685,34 +691,155 @@ function FilterSelect({label, value, onChange, options}) {
 }
 
 function CampaignsView({workspace, onNewCampaign, onOpenCampaign, canEdit}) {
-  const sorted = [...workspace.campaigns].sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate)));
+  const sorted = workspace.campaigns
+    .filter((campaign) => !isStandaloneContent(campaign))
+    .sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate)));
   return (
     <>
       <PageHeading
         eyebrow="Campaigns"
         title="Every promotion in motion"
-        copy="Campaigns keep their original playbook version, timeliness, and independent scheduled plays."
+        copy="Campaigns turn each event playbook into a clear, date-specific promotion plan."
         actions={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>＋ New campaign</button>}
       />
       <section className="planner-panel planner-table-panel">
         {sorted.length ? (
           <div className="planner-campaign-table">
-            <div className="planner-table-header"><span>Campaign</span><span>Event</span><span>Playbook</span><span>Timing</span><span>Status</span><span /></div>
+            <div className="planner-table-header"><span>Campaign</span><span>Event</span><span>Playbook</span><span /></div>
             {sorted.map((campaign) => {
               const conflicts = workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id && play.status === "conflict").length;
               return (
                 <button className="planner-campaign-row" key={campaign.id} onClick={() => onOpenCampaign(campaign)}>
-                  <span className="planner-campaign-title"><LevelBadge level={campaign.level} /><span><strong>{campaign.name}</strong><small>{titleCase(campaign.campaignType)}</small></span></span>
+                  <span className="planner-campaign-title"><LevelBadge level={campaign.level} /><span><strong>{campaign.name}</strong><small>{titleCase(campaign.campaignType)}</small></span>{conflicts > 0 && <StatusBadge status="conflict">{conflicts} conflict{conflicts === 1 ? "" : "s"}</StatusBadge>}</span>
                   <span><strong>{formatDate(campaign.eventDate)}</strong><small>{campaign.currentWeek > 0 && campaign.currentWeek <= campaign.durationWeeks ? `Week ${campaign.currentWeek} of ${campaign.durationWeeks}` : "Upcoming"}</small></span>
                   <span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId}</strong><small>Version {campaign.playbookVersion}</small></span>
-                  <span><StatusBadge status={campaign.isOnTime ? "on-time" : "late"}>{campaign.isOnTime ? "On time" : `${campaign.daysLate}d late`}</StatusBadge></span>
-                  <span><StatusBadge status={conflicts ? "conflict" : campaign.status}>{conflicts ? `${conflicts} conflict${conflicts === 1 ? "" : "s"}` : titleCase(campaign.status)}</StatusBadge></span>
                   <span>›</span>
                 </button>
               );
             })}
           </div>
         ) : <EmptyState title="No campaigns yet" copy="Create the first campaign to generate an explainable schedule." action={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>New campaign</button>} />}
+      </section>
+    </>
+  );
+}
+
+function buildStandaloneContent(form) {
+  const id = `content-${Date.now().toString(36)}`;
+  const submittedAt = new Date().toISOString();
+  const weekday = utcDateFromKey(form.publishDate).getUTCDay();
+  const campaign = {
+    id,
+    name: form.title.trim(),
+    eventDate: form.publishDate,
+    registrationDeadline: "",
+    submittedAt,
+    submittedDate: dateKey(submittedAt),
+    recommendedStartDate: form.publishDate,
+    isOnTime: true,
+    daysLate: 0,
+    weeksLate: 0,
+    level: 5,
+    campaignType: STANDALONE_CONTENT_TYPE,
+    playbookId: STANDALONE_CONTENT_TYPE,
+    playbookVersion: 1,
+    durationWeeks: 1,
+    currentWeek: 1,
+    sourceEventId: "",
+    notes: form.notes.trim(),
+    status: "active",
+  };
+  const play = {
+    id: `${id}-promotion`,
+    campaignId: id,
+    campaignName: campaign.name,
+    campaignLevel: 5,
+    campaignType: STANDALONE_CONTENT_TYPE,
+    playbookId: STANDALONE_CONTENT_TYPE,
+    playbookVersion: 1,
+    templatePlayId: "standalone-content",
+    weekNumber: 1,
+    phase: "Content",
+    playType: form.contentType,
+    channel: form.channel.trim(),
+    resourceId: "standalone-content",
+    originalScheduledDate: form.publishDate,
+    scheduledDate: form.publishDate,
+    eligibleWeekdays: [weekday],
+    status: "scheduled",
+    requirement: "required",
+    lateBehavior: "SKIP",
+    source: STANDALONE_CONTENT_TYPE,
+    manuallyAdjusted: false,
+    locked: false,
+    conflictState: "none",
+    conflictReason: "",
+    lateReason: "",
+    supportsSmuggle: false,
+    smuggle: null,
+  };
+  return {campaign, plays: [play]};
+}
+
+function NewContentDialog({onClose, onCreate}) {
+  const [form, setForm] = useState({
+    title: "",
+    publishDate: addDays(dateKey(new Date()), 7),
+    contentType: CONTENT_TYPES[0].value,
+    channel: CONTENT_TYPES[0].channel,
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const update = (key, value) => setForm((current) => ({...current, [key]: value}));
+  const valid = form.title.trim() && form.publishDate && form.contentType && form.channel.trim();
+  return (
+    <Modal title="Add content" eyebrow="Social & video plan" onClose={onClose}>
+      <div className="planner-form-grid">
+        <Field label="Title" wide><input autoFocus value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="Weekend recap video" /></Field>
+        <Field label="Publish date"><input type="date" value={form.publishDate} onChange={(event) => update("publishDate", event.target.value)} /></Field>
+        <Field label="Content type"><select value={form.contentType} onChange={(event) => {
+          const type = CONTENT_TYPES.find((item) => item.value === event.target.value);
+          setForm((current) => ({...current, contentType: event.target.value, channel: type?.channel || current.channel}));
+        }}>{CONTENT_TYPES.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></Field>
+        <Field label="Channel" wide><input value={form.channel} onChange={(event) => update("channel", event.target.value)} placeholder="Instagram, YouTube, Facebook…" /></Field>
+        <Field label="Notes" wide><textarea value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Caption direction, links, assets, or production notes." /></Field>
+      </div>
+      <div className="planner-modal-actions">
+        <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button>
+        <button className="planner-button is-primary" disabled={!valid || saving} onClick={async () => {
+          setSaving(true);
+          try { await onCreate(buildStandaloneContent(form)); }
+          catch (_error) { setSaving(false); }
+        }}>{saving ? "Adding…" : "Add to planner"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function ContentView({workspace, canEdit, onNewContent, onOpenContent}) {
+  const content = workspace.campaigns
+    .filter(isStandaloneContent)
+    .sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate)));
+  return (
+    <>
+      <PageHeading
+        eyebrow="Content"
+        title="Social and video plan"
+        copy="Plan one-off social posts, YouTube videos, Shorts, Reels, and other content alongside event campaigns."
+        actions={canEdit && <button className="planner-button is-primary" onClick={onNewContent}>＋ Add content</button>}
+      />
+      <section className="planner-panel planner-content-list">
+        {content.length ? content.map((item) => {
+          const promotion = workspace.scheduledPlays.find((play) => play.campaignId === item.id);
+          return (
+            <button className="planner-content-row" key={item.id} onClick={() => onOpenContent(item)}>
+              <span className="planner-content-date"><strong>{dateKey(item.eventDate).slice(-2)}</strong><small>{formatDate(item.eventDate, {year: false}).split(" ")[0]}</small></span>
+              <span><strong>{item.name}</strong><small>{promotion?.playType || "Content"} · {promotion?.channel || "Channel not set"}</small></span>
+              <span><strong>{formatDate(item.eventDate)}</strong><small>Publish date</small></span>
+              <span>›</span>
+            </button>
+          );
+        }) : <EmptyState title="No standalone content yet" copy="Add a social post, YouTube video, Short, Reel, or other one-off content item." action={canEdit && <button className="planner-button is-primary" onClick={onNewContent}>Add content</button>} />}
       </section>
     </>
   );
@@ -757,7 +884,7 @@ function NewPlaybookDialog({onClose, onCreate}) {
         <Field label="Number of weeks"><input type="number" min="1" max="12" value={form.durationWeeks} onChange={(event) => update("durationWeeks", Number(event.target.value))} /></Field>
         <Field label="Description" wide><textarea value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="When and why this playbook should be used." /></Field>
       </div>
-      <div className="planner-detail-note"><strong>Start with a clean rhythm</strong><p>Each week is created empty so you can define the exact plays, phase, and label after the playbook is added.</p></div>
+      <div className="planner-detail-note"><strong>Start with a clean rhythm</strong><p>Each week is created empty so you can define the exact promotions, phase, and label after the playbook is added.</p></div>
       <div className="planner-modal-actions">
         <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button>
         <button className="planner-button is-primary" disabled={!valid || saving} onClick={async () => { setSaving(true); try { await onCreate(customPlaybookFromForm(form)); } catch (_error) { setSaving(false); } }}>{saving ? "Adding…" : "Add playbook"}</button>
@@ -801,7 +928,7 @@ function PlaybooksView({workspace, canEdit, onSave, onDelete}) {
     const next = structuredClone(draft);
     next.weeks[weekIndex].plays.push({
       id: `play-${Date.now()}`,
-      playType: "New Play",
+      playType: "New Promotion",
       dayOfWeek: 0,
       eligibleWeekdays: [0],
       channel: "Central",
@@ -863,7 +990,7 @@ function PlaybooksView({workspace, canEdit, onSave, onDelete}) {
               <section className={`planner-panel planner-week-editor ${expanded ? "is-expanded" : "is-collapsed"}`} key={`${draft.id}-${week.weekNumber}`}>
                 <button className="planner-week-toggle" aria-expanded={expanded} aria-controls={bodyId} onClick={() => toggleWeek(week.weekNumber)}>
                   <span className="planner-week-toggle-title"><b>Week {week.weekNumber}</b><StatusBadge status={String(week.phase).toLowerCase()}>{week.phase}</StatusBadge></span>
-                  <span className="planner-week-toggle-summary"><strong>{week.label || "Untitled week"}</strong><small>{week.plays.length} play{week.plays.length === 1 ? "" : "s"}</small></span>
+                  <span className="planner-week-toggle-summary"><strong>{week.label || "Untitled week"}</strong><small>{week.plays.length} promotion{week.plays.length === 1 ? "" : "s"}</small></span>
                   <span className="planner-week-chevron" aria-hidden="true">⌄</span>
                 </button>
                 {expanded && (
@@ -876,7 +1003,7 @@ function PlaybooksView({workspace, canEdit, onSave, onDelete}) {
                       {week.plays.map((item, playIndex) => (
                         <div className="planner-play-editor-row" key={item.id}>
                           <select aria-label="Day" value={item.dayOfWeek} disabled={!canEdit} onChange={(event) => updateWeekPlay(weekIndex, playIndex, "dayOfWeek", Number(event.target.value))}>{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => <option key={day} value={index}>{day}</option>)}</select>
-                          <input aria-label="Play type" value={item.playType} disabled={!canEdit} onChange={(event) => updateWeekPlay(weekIndex, playIndex, "playType", event.target.value)} />
+                          <input aria-label="Promotion type" value={item.playType} disabled={!canEdit} onChange={(event) => updateWeekPlay(weekIndex, playIndex, "playType", event.target.value)} />
                           <input aria-label="Channel" value={item.channel} disabled={!canEdit} onChange={(event) => updateWeekPlay(weekIndex, playIndex, "channel", event.target.value)} />
                           <select aria-label="Requirement" value={item.requirement} disabled={!canEdit} onChange={(event) => updateWeekPlay(weekIndex, playIndex, "requirement", event.target.value)}><option value="required">Required</option><option value="optional">Optional</option><option value="as-available">As available</option></select>
                           <select aria-label="Late behavior" value={item.lateBehavior} disabled={!canEdit} onChange={(event) => updateWeekPlay(weekIndex, playIndex, "lateBehavior", event.target.value)}><option value="SKIP">Skip</option><option value="NEXT_AVAILABLE_SLOT">Next slot</option><option value="NEXT_OCCURRENCE">Next occurrence</option><option value="MANUAL_REVIEW">Manual review</option></select>
@@ -885,7 +1012,7 @@ function PlaybooksView({workspace, canEdit, onSave, onDelete}) {
                         </div>
                       ))}
                     </div>
-                    {canEdit && <button className="planner-text-button" onClick={() => addPlay(weekIndex)}>＋ Add play to Week {week.weekNumber}</button>}
+                    {canEdit && <button className="planner-text-button" onClick={() => addPlay(weekIndex)}>＋ Add promotion</button>}
                   </div>
                 )}
               </section>
@@ -990,11 +1117,12 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
       campaigns: combinedCampaigns,
     });
     const ownPlays = capacity.plays.filter((item) => item.campaignId === id);
-    return {...generated, plays: ownPlays, summary: scheduleSummary(ownPlays), conflicts: [...level4.conflicts, ...capacity.conflicts].filter((item) => item.overflowPlayIds.some((playId) => ownPlays.some((play) => play.id === playId)))};
+    const plannedPlays = visiblePromotions(ownPlays);
+    return {...generated, plays: ownPlays, plannedPlays, summary: scheduleSummary(ownPlays), conflicts: [...level4.conflicts, ...capacity.conflicts].filter((item) => item.overflowPlayIds.some((playId) => ownPlays.some((play) => play.id === playId)))};
   }, [form, playbook, workspace]);
   const update = (key, value) => setForm((current) => ({...current, [key]: value}));
   return (
-    <Modal title="Build a new campaign" eyebrow="Schedule preview" onClose={onClose} size="wide">
+    <Modal title="Build a new campaign" eyebrow="Promotion preview" onClose={onClose} size="wide">
       <div className="planner-campaign-builder">
         <form onSubmit={(event) => event.preventDefault()}>
           <div className="planner-form-grid">
@@ -1008,22 +1136,22 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
           </div>
         </form>
         <section className="planner-schedule-preview">
-          {!preview ? <EmptyState title="Ready for the details" copy="Name the campaign and choose an event date to preview the rules-based schedule." /> : (
+          {!preview ? <EmptyState title="Ready for the details" copy="Name the campaign and choose an event date to preview its promotion plan." /> : (
             <>
               <div className={`planner-timeliness-card ${preview.campaign.isOnTime ? "is-on-time" : "is-late"}`}>
-                <div><span className="planner-kicker">{preview.campaign.durationWeeks}-week campaign</span><h3>{preview.campaign.isOnTime ? "On-time submission" : "Late submission"}</h3></div>
-                <dl><div><dt>Recommended start</dt><dd>{formatDate(preview.campaign.recommendedStartDate)}</dd></div><div><dt>Request received</dt><dd>{formatDate(preview.campaign.submittedDate)}</dd></div><div><dt>Current week</dt><dd>{preview.campaign.currentWeek > 0 && preview.campaign.currentWeek <= preview.campaign.durationWeeks ? `Week ${preview.campaign.currentWeek}` : preview.campaign.currentWeek === 0 ? "Before campaign" : "Campaign passed"}</dd></div></dl>
-                {!preview.campaign.isOnTime && <p>{preview.campaign.daysLate} days late. Passed plays are recorded, never compressed into the current week.</p>}
+                <div><span className="planner-kicker">{preview.campaign.durationWeeks}-week campaign</span><h3>Planning window</h3></div>
+                <dl><div><dt>Recommended start</dt><dd>{formatDate(preview.campaign.recommendedStartDate)}</dd></div><div><dt>Event</dt><dd>{formatDate(preview.campaign.eventDate)}</dd></div><div><dt>Request received</dt><dd>{formatDate(preview.campaign.submittedDate)}</dd></div></dl>
+                {preview.summary.missed > 0 && <p>{preview.summary.missed} promotion{preview.summary.missed === 1 ? "" : "s"} in the playbook already passed and will not be added to the plan.</p>}
               </div>
               <div className="planner-preview-metrics">
-                <span><strong>{preview.summary.missed}</strong> missed</span><span><strong>{preview.summary.rescheduled}</strong> rescheduled</span><span><strong>{preview.summary.remaining}</strong> remaining</span><span><strong>{preview.summary.conflicts}</strong> conflicts</span>
+                <span><strong>{preview.plannedPlays.length}</strong> promotions</span><span><strong>{preview.summary.conflicts}</strong> conflicts</span>
               </div>
               <div className="planner-preview-list">
-                {preview.plays.map((play) => <PlayRow key={play.id} play={play} onClick={() => {}} />)}
+                {preview.plannedPlays.map((play) => <PlayRow key={play.id} play={play} onClick={() => {}} />)}
               </div>
               <div className="planner-modal-actions">
                 <button className="planner-button is-secondary" onClick={onClose}>Cancel</button>
-                <button className="planner-button is-primary" onClick={() => onGenerate(preview.campaign, preview.plays)}>Generate {preview.summary.total} plays</button>
+                <button className="planner-button is-primary" onClick={() => onGenerate(preview.campaign, preview.plannedPlays)}>Add {preview.plannedPlays.length} promotions</button>
               </div>
             </>
           )}
@@ -1036,19 +1164,18 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
 function PlayDialog({play, campaign, canEdit, onClose, onSave}) {
   const [draft, setDraft] = useState({...play});
   return (
-    <Modal title={play.playType} eyebrow="Scheduled Play" onClose={onClose}>
-      <div className="planner-detail-hero"><LevelBadge level={play.campaignLevel} /><div><h3>{play.campaignName}</h3><p>{play.channel} · Week {play.weekNumber} · {play.phase}</p></div><StatusBadge status={draft.status} /></div>
-      <dl className="planner-detail-list"><div><dt>Original date</dt><dd>{formatDate(play.originalScheduledDate)}</dd></div><div><dt>Scheduled date</dt><dd>{formatDate(draft.scheduledDate)}</dd></div><div><dt>Playbook</dt><dd>{play.playbookId} · v{play.playbookVersion}</dd></div><div><dt>Requirement</dt><dd>{titleCase(play.requirement)}</dd></div><div><dt>Late behavior</dt><dd>{titleCase(play.lateBehavior)}</dd></div><div><dt>Source</dt><dd>{titleCase(play.source)}</dd></div></dl>
+    <Modal title={play.playType} eyebrow="Promotion" onClose={onClose}>
+      <div className="planner-detail-hero"><PromotionKindBadge item={play} /><div><h3>{play.campaignName}</h3><p>{play.channel}{!isStandaloneContent(play) ? ` · Week ${play.weekNumber} · ${play.phase}` : ""}</p></div>{needsPromotionReview(draft) && <StatusBadge status="conflict">{draft.status === "conflict" ? "Conflict" : "Review"}</StatusBadge>}</div>
+      <dl className="planner-detail-list"><div><dt>Planned date</dt><dd>{formatDate(draft.scheduledDate)}</dd></div>{!isStandaloneContent(play) && <div><dt>Playbook</dt><dd>{play.playbookId} · v{play.playbookVersion}</dd></div>}</dl>
       {play.lateReason && <div className="planner-detail-note"><strong>Late handling</strong><p>{play.lateReason}</p></div>}
       {play.conflictReason && <div className="planner-detail-note is-alert"><strong>Conflict</strong><p>{play.conflictReason}</p></div>}
-      {play.smuggle && <div className="planner-detail-note is-smuggle"><strong>Smuggle promotion</strong><p>This Level 2 play intentionally includes {play.smuggle.beneficiaryName}.</p></div>}
+      {play.smuggle && <div className="planner-detail-note is-smuggle"><strong>Smuggle promotion</strong><p>This Level 2 promotion intentionally includes {play.smuggle.beneficiaryName}.</p></div>}
       {canEdit && (
         <div className="planner-form-grid planner-play-adjustment">
-          <Field label="Move scheduled play"><input type="date" value={draft.scheduledDate} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled", manuallyAdjusted: true})} /></Field>
-          <Field label="Status"><select value={draft.status} onChange={(event) => setDraft({...draft, status: event.target.value})}>{PLAY_STATUSES.map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}</select></Field>
+          <Field label="Move promotion"><input type="date" value={draft.scheduledDate} max={campaignDeadline(campaign) || undefined} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true})} /></Field>
         </div>
       )}
-      <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button>{canEdit && <button className="planner-button is-primary" onClick={() => onSave(draft)}>Save play</button>}</div>
+      <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button>{canEdit && <button className="planner-button is-primary" onClick={() => onSave(draft)}>Save promotion</button>}</div>
     </Modal>
   );
 }
@@ -1056,24 +1183,25 @@ function PlayDialog({play, campaign, canEdit, onClose, onSave}) {
 function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onDelete}) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const plays = workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
+  const plays = visiblePromotions(workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id)).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
   const summary = scheduleSummary(plays);
+  const standalone = isStandaloneContent(campaign);
   return (
-    <Modal title={campaign.name} eyebrow={`Level ${campaign.level} campaign`} onClose={onClose} size="wide">
+    <Modal title={campaign.name} eyebrow={standalone ? "Content" : `Level ${campaign.level} campaign`} onClose={onClose} size="wide">
       <div className="planner-campaign-detail-summary">
-        <div><span>Event date</span><strong>{formatDate(campaign.eventDate)}</strong></div><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div><div><span>Submission</span><StatusBadge status={campaign.isOnTime ? "on-time" : "late"}>{campaign.isOnTime ? "On time" : `${campaign.daysLate} days late`}</StatusBadge></div>
+        <div><span>{standalone ? "Publish date" : "Event date"}</span><strong>{formatDate(campaign.eventDate)}</strong></div>{standalone ? <><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div></>}
       </div>
-      <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> plays</span><span><strong>{summary.missed}</strong> missed</span><span><strong>{summary.rescheduled}</strong> moved</span><span><strong>{summary.conflicts}</strong> conflicts</span></div>
+      {!standalone && <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> promotions</span><span><strong>{summary.conflicts}</strong> conflicts</span></div>}
       {campaign.notes && <div className="planner-detail-note"><strong>Notes</strong><p>{campaign.notes}</p></div>}
       <div className="planner-campaign-play-list">{plays.map((play) => <PlayRow key={play.id} play={play} onClick={() => onOpenPlay(play)} />)}</div>
       {confirmDelete && (
         <div className="planner-delete-confirmation" role="alert">
-          <div><strong>Delete this campaign and all {plays.length} scheduled play{plays.length === 1 ? "" : "s"}?</strong><p>This cannot be undone and removes the campaign from every Planner view.</p></div>
-          <div><button className="planner-button is-secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>Keep campaign</button><button className="planner-button is-danger" disabled={deleting} onClick={async () => { setDeleting(true); try { await onDelete(campaign); } catch (_error) { /* PlannerApp displays the save error. */ } finally { setDeleting(false); } }}>{deleting ? "Deleting…" : "Delete permanently"}</button></div>
+          <div><strong>Delete this {standalone ? "content item" : `campaign and all ${plays.length} promotion${plays.length === 1 ? "" : "s"}`}?</strong><p>This cannot be undone and removes it from every Planner view.</p></div>
+          <div><button className="planner-button is-secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>Keep {standalone ? "content" : "campaign"}</button><button className="planner-button is-danger" disabled={deleting} onClick={async () => { setDeleting(true); try { await onDelete(campaign); } catch (_error) { /* PlannerApp displays the save error. */ } finally { setDeleting(false); } }}>{deleting ? "Deleting…" : "Delete permanently"}</button></div>
         </div>
       )}
       <div className="planner-modal-actions">
-        {canEdit && !confirmDelete && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmDelete(true)}>Delete campaign</button>}
+        {canEdit && !confirmDelete && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmDelete(true)}>Delete {standalone ? "content" : "campaign"}</button>}
         <button className="planner-button is-secondary" onClick={onClose}>Close</button>
       </div>
     </Modal>
@@ -1123,6 +1251,7 @@ function PlannerApp({authState}) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  const [newContentOpen, setNewContentOpen] = useState(false);
   const [selectedPlay, setSelectedPlay] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const store = useMemo(() => createPlannerStore({
@@ -1154,10 +1283,16 @@ function PlannerApp({authState}) {
   };
 
   if (loading || !workspace) {
-    return <main className="planner-loading"><Brand /><span className="planner-loader" /><p>{error || "Loading playbooks, campaigns, and scheduled plays."}</p></main>;
+    return <main className="planner-loading"><Brand /><span className="planner-loader" /><p>{error || "Loading playbooks, campaigns, and promotions."}</p></main>;
   }
 
-  const updatePlay = async (play, success = "Scheduled play updated.") => {
+  const updatePlay = async (play, success = "Promotion updated.") => {
+    const campaign = workspace.campaigns.find((item) => item.id === play.campaignId);
+    const deadline = campaignDeadline(campaign);
+    if (deadline && play.scheduledDate > deadline) {
+      setError(`This promotion cannot be planned after ${formatDate(deadline)}.`);
+      throw new Error("A promotion cannot be planned after its campaign deadline.");
+    }
     const saved = await perform(() => store.saveScheduledPlay(play), success);
     setWorkspace((current) => ({...current, scheduledPlays: current.scheduledPlays.map((item) => item.id === saved.id ? saved : item)}));
     setSelectedPlay(null);
@@ -1165,7 +1300,7 @@ function PlannerApp({authState}) {
   };
 
   const deleteCampaign = async (campaign) => {
-    const result = await perform(() => store.deleteCampaign(campaign.id), `${campaign.name} and its scheduled plays were deleted.`);
+    const result = await perform(() => store.deleteCampaign(campaign.id), `${campaign.name} was deleted from the Planner.`);
     setWorkspace((current) => ({
       ...current,
       campaigns: current.campaigns.filter((item) => item.id !== campaign.id),
@@ -1182,8 +1317,9 @@ function PlannerApp({authState}) {
   };
 
   let content = null;
-  if (activeView === "calendar") content = <CalendarView workspace={workspace} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", manuallyAdjusted: true}, "Scheduled play moved.")} />;
+  if (activeView === "calendar") content = <CalendarView workspace={workspace} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
   else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} />;
+  else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
   else if (activeView === "playbooks") content = <PlaybooksView workspace={workspace} canEdit={canEdit} onSave={async (playbook) => {
     const isNew = !workspace.playbooks.some((item) => item.id === playbook.id);
     const saved = await perform(() => store.savePlaybook(playbook), isNew ? `Added ${playbook.name}.` : `Saved ${playbook.name} as a new version.`);
@@ -1226,9 +1362,14 @@ function PlannerApp({authState}) {
         {content}
       </main>
       {newCampaignOpen && <NewCampaignDialog workspace={workspace} onClose={() => setNewCampaignOpen(false)} onGenerate={async (campaign, plays) => {
-        const result = await perform(() => store.saveCampaignSchedule(campaign, plays), `${campaign.name} generated with ${plays.length} independent scheduled plays.`);
+        const result = await perform(() => store.saveCampaignSchedule(campaign, plays), `${campaign.name} added with ${plays.length} promotion${plays.length === 1 ? "" : "s"}.`);
         setWorkspace((current) => ({...current, campaigns: [result.campaign, ...current.campaigns], scheduledPlays: [...current.scheduledPlays, ...result.plays]}));
         setNewCampaignOpen(false); setActiveView("campaigns");
+      }} />}
+      {newContentOpen && <NewContentDialog onClose={() => setNewContentOpen(false)} onCreate={async ({campaign, plays}) => {
+        const result = await perform(() => store.saveCampaignSchedule(campaign, plays), `${campaign.name} added to the content plan.`);
+        setWorkspace((current) => ({...current, campaigns: [result.campaign, ...current.campaigns], scheduledPlays: [...current.scheduledPlays, ...result.plays]}));
+        setNewContentOpen(false); setActiveView("content");
       }} />}
       {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} />}
       {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onDelete={deleteCampaign} />}

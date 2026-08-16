@@ -52,6 +52,32 @@ test("normal on-time campaign generates every play", () => {
   assert.equal(result.campaign.isOnTime, true);
 });
 
+test("event-week promotions stop at a midweek event deadline", () => {
+  const definition = {
+    id: "midweek-event",
+    level: 3,
+    version: 1,
+    durationWeeks: 1,
+    campaignType: "standard",
+    weeks: [{
+      weekNumber: 1,
+      phase: "Event Week",
+      plays: [
+        {id: "sunday", playType: "Stage Announcement", channel: "Stage", resourceId: "stage-announcement", dayOfWeek: 0, eligibleWeekdays: [0], lateBehavior: "SKIP"},
+        {id: "monday", playType: "Social Post", channel: "Social", resourceId: "social-content", dayOfWeek: 1, eligibleWeekdays: [1], lateBehavior: "SKIP"},
+        {id: "wednesday", playType: "Newsletter", channel: "Newsletter", resourceId: "newsletter-feature", dayOfWeek: 3, eligibleWeekdays: [3], lateBehavior: "SKIP"},
+      ],
+    }],
+  };
+  const result = generateCampaignSchedule({
+    campaign: campaign({eventDate: "2026-08-17", registrationDeadline: ""}),
+    playbook: definition,
+    generatedAt: new Date("2026-08-01T12:00:00-05:00"),
+  });
+  assert.deepEqual(result.plays.map((play) => play.templatePlayId), ["sunday", "monday"]);
+  assert.ok(result.plays.every((play) => play.scheduledDate <= "2026-08-17"));
+});
+
 test("two-week campaign submitted during week two does not compress week one", () => {
   const result = generateCampaignSchedule({
     campaign: campaign({submittedAt: "2026-10-12T15:00:00-05:00"}),
@@ -285,6 +311,31 @@ test("Smuggle recommends Level 4 before Level 5 and never applies automatically"
   const applied = applySmuggle(host, recommendations[0]);
   assert.equal(applied.smuggle.beneficiaryCampaignId, "l4");
   assert.equal(host.smuggle, null);
+});
+
+test("standalone content is never treated as a Smuggle campaign", () => {
+  const recommendations = recommendSmuggleOpportunities({
+    hostPlays: [{
+      id: "host-play",
+      campaignId: "level-2-host",
+      campaignLevel: 2,
+      playType: "Stage Announcement",
+      scheduledDate: "2026-10-10",
+      supportsSmuggle: true,
+      status: "scheduled",
+      smuggle: null,
+    }],
+    campaigns: [campaign({
+      id: "content-item",
+      name: "Weekend recap",
+      level: 5,
+      campaignType: "standalone-content",
+      eventDate: "2026-10-12",
+      isOnTime: true,
+    })],
+    now: new Date("2026-10-01T12:00:00-05:00"),
+  });
+  assert.deepEqual(recommendations, []);
 });
 
 test("playbook revision and manual move do not mutate prior templates or schedules", () => {

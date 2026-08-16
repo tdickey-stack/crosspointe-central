@@ -198,6 +198,10 @@ export function generateCampaignSchedule({
         week.weekNumber,
         primaryDay,
       );
+      // A playbook describes a Sunday-through-Saturday rhythm, but the event
+      // can happen on any day in that final week. Promotions after the event
+      // (or an earlier registration deadline) are not part of the plan.
+      if (originalScheduledDate > finalDate) return;
       let scheduledDate = originalScheduledDate;
       let status = "scheduled";
       let conflictState = "none";
@@ -243,11 +247,6 @@ export function generateCampaignSchedule({
           status = "missed";
           lateReason = "The configured late behavior skips plays that have passed.";
         }
-      }
-
-      if (scheduledDate > finalDate) {
-        status = "missed";
-        lateReason = "The play would occur after the event or registration deadline.";
       }
 
       plays.push({
@@ -345,6 +344,7 @@ export function groupCalendarCampaignDays(plays) {
         campaignId,
         campaignName: play.campaignName || "Uncategorized promotion",
         campaignLevel: Number(play.campaignLevel || 1),
+        campaignType: play.campaignType || "",
         scheduledDate,
         plays: [],
       });
@@ -557,6 +557,7 @@ export function recommendSmuggleOpportunities({
 }) {
   const today = dateKey(now);
   const candidates = (campaigns || []).filter((campaign) =>
+    campaign.campaignType !== "standalone-content" &&
     eligibleLevels.includes(Number(campaign.level)) &&
     dateKey(campaign.eventDate) >= today &&
     campaign.status !== "archived",

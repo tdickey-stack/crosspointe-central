@@ -21,6 +21,7 @@ import {
   groupCalendarCampaignDays,
   nextPlanningWeekStart,
   recommendSmuggleOpportunities,
+  recurringContentDates,
   scheduleSummary,
   utilizationForWeek,
   utcDateFromKey,
@@ -56,6 +57,12 @@ const CONTENT_TYPES = [
   {value: "Short / Reel", channel: "Social Media"},
   {value: "Other Content", channel: "Other"},
 ];
+const CONTENT_RECURRENCE_OPTIONS = [
+  {value: "none", label: "Does not repeat"},
+  {value: "weekly", label: "Weekly"},
+  {value: "biweekly", label: "Every 2 weeks"},
+  {value: "monthly", label: "Monthly"},
+];
 
 function isStandaloneContent(item) {
   return item?.campaignType === STANDALONE_CONTENT_TYPE;
@@ -81,6 +88,20 @@ function PromotionKindBadge({item}) {
   return isStandaloneContent(item)
     ? <span className="planner-content-badge">Content</span>
     : <LevelBadge level={item.campaignLevel ?? item.level} />;
+}
+
+function contentSeriesDetails(plays) {
+  const sorted = [...(plays || [])].sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
+  const source = String(sorted[0]?.source || "");
+  const cadence = source.includes(":") ? source.split(":").at(-1) : "none";
+  const cadenceLabel = CONTENT_RECURRENCE_OPTIONS.find((item) => item.value === cadence)?.label || "Recurring";
+  return {
+    plays: sorted,
+    firstDate: sorted[0]?.scheduledDate || "",
+    lastDate: sorted.at(-1)?.scheduledDate || "",
+    cadence,
+    label: sorted.length > 1 ? `${cadenceLabel} · ${sorted.length} occurrences` : "One time",
+  };
 }
 
 function getPlannerPermission(userData) {
@@ -476,11 +497,11 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
   );
 }
 
-function PlayRow({play, onClick}) {
+function PlayRow({play, onClick, showDate = false}) {
   return (
     <button className="planner-play-row" onClick={onClick}>
       <span className="planner-play-level" style={{background: isStandaloneContent(play) ? "#f472b6" : LEVEL_COLORS[play.campaignLevel]}} />
-      <span><strong>{play.playType}</strong><small>{play.campaignName} · {play.channel}</small></span>
+      <span><strong>{play.playType}</strong><small>{play.campaignName} · {play.channel}{showDate ? ` · ${formatDate(play.scheduledDate)}` : ""}</small></span>
       {play.smuggle && <StatusBadge status="smuggle">Smuggle</StatusBadge>}
       {needsPromotionReview(play) && <StatusBadge status="conflict">{play.status === "conflict" ? "Conflict" : "Review"}</StatusBadge>}
     </button>
@@ -727,11 +748,16 @@ function CampaignsView({workspace, onNewCampaign, onOpenCampaign, canEdit}) {
 function buildStandaloneContent(form) {
   const id = `content-${Date.now().toString(36)}`;
   const submittedAt = new Date().toISOString();
-  const weekday = utcDateFromKey(form.publishDate).getUTCDay();
+  const dates = recurringContentDates({
+    startDate: form.publishDate,
+    cadence: form.recurrence,
+    occurrences: form.occurrences,
+  });
+  const lastDate = dates.at(-1);
   const campaign = {
     id,
     name: form.title.trim(),
-    eventDate: form.publishDate,
+    eventDate: lastDate,
     registrationDeadline: "",
     submittedAt,
     submittedDate: dateKey(submittedAt),
@@ -743,33 +769,33 @@ function buildStandaloneContent(form) {
     campaignType: STANDALONE_CONTENT_TYPE,
     playbookId: STANDALONE_CONTENT_TYPE,
     playbookVersion: 1,
-    durationWeeks: 1,
+    durationWeeks: dates.length,
     currentWeek: 1,
     sourceEventId: "",
     notes: form.notes.trim(),
     status: "active",
   };
-  const play = {
-    id: `${id}-promotion`,
+  const plays = dates.map((scheduledDate, index) => ({
+    id: `${id}-promotion-${index + 1}`,
     campaignId: id,
     campaignName: campaign.name,
     campaignLevel: 5,
     campaignType: STANDALONE_CONTENT_TYPE,
     playbookId: STANDALONE_CONTENT_TYPE,
     playbookVersion: 1,
-    templatePlayId: "standalone-content",
-    weekNumber: 1,
+    templatePlayId: `standalone-content-${index + 1}`,
+    weekNumber: index + 1,
     phase: "Content",
     playType: form.contentType,
     channel: form.channel.trim(),
     resourceId: "standalone-content",
-    originalScheduledDate: form.publishDate,
-    scheduledDate: form.publishDate,
-    eligibleWeekdays: [weekday],
+    originalScheduledDate: scheduledDate,
+    scheduledDate,
+    eligibleWeekdays: [utcDateFromKey(scheduledDate).getUTCDay()],
     status: "scheduled",
     requirement: "required",
     lateBehavior: "SKIP",
-    source: STANDALONE_CONTENT_TYPE,
+    source: `${STANDALONE_CONTENT_TYPE}:${form.recurrence}`,
     manuallyAdjusted: false,
     locked: false,
     conflictState: "none",
@@ -777,8 +803,8 @@ function buildStandaloneContent(form) {
     lateReason: "",
     supportsSmuggle: false,
     smuggle: null,
-  };
-  return {campaign, plays: [play]};
+  }));
+  return {campaign, plays};
 }
 
 function NewContentDialog({onClose, onCreate}) {
@@ -787,23 +813,30 @@ function NewContentDialog({onClose, onCreate}) {
     publishDate: addDays(dateKey(new Date()), 7),
     contentType: CONTENT_TYPES[0].value,
     channel: CONTENT_TYPES[0].channel,
+    recurrence: "none",
+    occurrences: 12,
     notes: "",
   });
   const [saving, setSaving] = useState(false);
   const update = (key, value) => setForm((current) => ({...current, [key]: value}));
-  const valid = form.title.trim() && form.publishDate && form.contentType && form.channel.trim();
+  const recurrenceDates = useMemo(() => form.publishDate ? recurringContentDates({startDate: form.publishDate, cadence: form.recurrence, occurrences: form.occurrences}) : [], [form.publishDate, form.recurrence, form.occurrences]);
+  const validOccurrences = form.recurrence === "none" || (Number(form.occurrences) >= 2 && Number(form.occurrences) <= 12);
+  const valid = form.title.trim() && form.publishDate && form.contentType && form.channel.trim() && validOccurrences;
   return (
     <Modal title="Add content" eyebrow="Social & video plan" onClose={onClose}>
       <div className="planner-form-grid">
         <Field label="Title" wide><input autoFocus value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="Weekend recap video" /></Field>
-        <Field label="Publish date"><input type="date" value={form.publishDate} onChange={(event) => update("publishDate", event.target.value)} /></Field>
+        <Field label="First publish date"><input type="date" value={form.publishDate} onChange={(event) => update("publishDate", event.target.value)} /></Field>
         <Field label="Content type"><select value={form.contentType} onChange={(event) => {
           const type = CONTENT_TYPES.find((item) => item.value === event.target.value);
           setForm((current) => ({...current, contentType: event.target.value, channel: type?.channel || current.channel}));
         }}>{CONTENT_TYPES.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></Field>
+        <Field label="Repeat"><select value={form.recurrence} onChange={(event) => update("recurrence", event.target.value)}>{CONTENT_RECURRENCE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+        {form.recurrence !== "none" && <Field label="Number of occurrences" help="Creates up to 12 concrete calendar entries in this series."><input type="number" min="2" max="12" value={form.occurrences} onChange={(event) => update("occurrences", Number(event.target.value))} /></Field>}
         <Field label="Channel" wide><input value={form.channel} onChange={(event) => update("channel", event.target.value)} placeholder="Instagram, YouTube, Facebook…" /></Field>
         <Field label="Notes" wide><textarea value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Caption direction, links, assets, or production notes." /></Field>
       </div>
+      {form.recurrence !== "none" && recurrenceDates.length > 0 && <div className="planner-detail-note"><strong>{recurrenceDates.length} scheduled occurrences</strong><p>{CONTENT_RECURRENCE_OPTIONS.find((item) => item.value === form.recurrence)?.label} from {formatDate(recurrenceDates[0])} through {formatDate(recurrenceDates.at(-1))}. Each occurrence will appear separately on the calendar.</p></div>}
       <div className="planner-modal-actions">
         <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button>
         <button className="planner-button is-primary" disabled={!valid || saving} onClick={async () => {
@@ -819,27 +852,31 @@ function NewContentDialog({onClose, onCreate}) {
 function ContentView({workspace, canEdit, onNewContent, onOpenContent}) {
   const content = workspace.campaigns
     .filter(isStandaloneContent)
-    .sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate)));
+    .sort((left, right) => String(left.recommendedStartDate).localeCompare(String(right.recommendedStartDate)));
   return (
     <>
       <PageHeading
         eyebrow="Content"
         title="Social and video plan"
-        copy="Plan one-off social posts, YouTube videos, Shorts, Reels, and other content alongside event campaigns."
+        copy="Plan one-time or recurring social posts, YouTube videos, Shorts, Reels, and other content alongside event campaigns."
         actions={canEdit && <button className="planner-button is-primary" onClick={onNewContent}>＋ Add content</button>}
       />
       <section className="planner-panel planner-content-list">
         {content.length ? content.map((item) => {
-          const promotion = workspace.scheduledPlays.find((play) => play.campaignId === item.id);
+          const series = contentSeriesDetails(visiblePromotions(workspace.scheduledPlays.filter((play) => play.campaignId === item.id)));
+          const promotion = series.plays[0];
+          const dateLabel = series.firstDate === series.lastDate
+            ? formatDate(series.firstDate)
+            : `${formatDate(series.firstDate, {year: false})}–${formatDate(series.lastDate)}`;
           return (
             <button className="planner-content-row" key={item.id} onClick={() => onOpenContent(item)}>
-              <span className="planner-content-date"><strong>{dateKey(item.eventDate).slice(-2)}</strong><small>{formatDate(item.eventDate, {year: false}).split(" ")[0]}</small></span>
-              <span><strong>{item.name}</strong><small>{promotion?.playType || "Content"} · {promotion?.channel || "Channel not set"}</small></span>
-              <span><strong>{formatDate(item.eventDate)}</strong><small>Publish date</small></span>
+              <span className="planner-content-date"><strong>{dateKey(series.firstDate || item.recommendedStartDate).slice(-2)}</strong><small>{formatDate(series.firstDate || item.recommendedStartDate, {year: false}).split(" ")[0]}</small></span>
+              <span><strong>{item.name}</strong><small>{promotion?.playType || "Content"} · {promotion?.channel || "Channel not set"} · {series.label}</small></span>
+              <span><strong>{dateLabel}</strong><small>{series.plays.length > 1 ? "Series schedule" : "Publish date"}</small></span>
               <span>›</span>
             </button>
           );
-        }) : <EmptyState title="No standalone content yet" copy="Add a social post, YouTube video, Short, Reel, or other one-off content item." action={canEdit && <button className="planner-button is-primary" onClick={onNewContent}>Add content</button>} />}
+        }) : <EmptyState title="No standalone content yet" copy="Add a one-time or recurring social post, YouTube video, Short, Reel, or other content item." action={canEdit && <button className="planner-button is-primary" onClick={onNewContent}>Add content</button>} />}
       </section>
     </>
   );
@@ -1186,17 +1223,21 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onDe
   const plays = visiblePromotions(workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id)).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
   const summary = scheduleSummary(plays);
   const standalone = isStandaloneContent(campaign);
+  const series = standalone ? contentSeriesDetails(plays) : null;
+  const seriesSchedule = series?.firstDate === series?.lastDate
+    ? formatDate(series?.firstDate)
+    : `${formatDate(series?.firstDate, {year: false})}–${formatDate(series?.lastDate)}`;
   return (
     <Modal title={campaign.name} eyebrow={standalone ? "Content" : `Level ${campaign.level} campaign`} onClose={onClose} size="wide">
       <div className="planner-campaign-detail-summary">
-        <div><span>{standalone ? "Publish date" : "Event date"}</span><strong>{formatDate(campaign.eventDate)}</strong></div>{standalone ? <><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div></>}
+        <div><span>{standalone ? "Schedule" : "Event date"}</span><strong>{standalone ? seriesSchedule : formatDate(campaign.eventDate)}</strong></div>{standalone ? <><div><span>Repeat</span><strong>{series?.label || "One time"}</strong></div><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div></>}
       </div>
-      {!standalone && <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> promotions</span><span><strong>{summary.conflicts}</strong> conflicts</span></div>}
+      <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> {standalone ? "occurrences" : "promotions"}</span>{!standalone && <span><strong>{summary.conflicts}</strong> conflicts</span>}</div>
       {campaign.notes && <div className="planner-detail-note"><strong>Notes</strong><p>{campaign.notes}</p></div>}
-      <div className="planner-campaign-play-list">{plays.map((play) => <PlayRow key={play.id} play={play} onClick={() => onOpenPlay(play)} />)}</div>
+      <div className="planner-campaign-play-list">{plays.map((play) => <PlayRow key={play.id} play={play} showDate={standalone && plays.length > 1} onClick={() => onOpenPlay(play)} />)}</div>
       {confirmDelete && (
         <div className="planner-delete-confirmation" role="alert">
-          <div><strong>Delete this {standalone ? "content item" : `campaign and all ${plays.length} promotion${plays.length === 1 ? "" : "s"}`}?</strong><p>This cannot be undone and removes it from every Planner view.</p></div>
+          <div><strong>Delete this {standalone ? plays.length > 1 ? `content series and all ${plays.length} occurrences` : "content item" : `campaign and all ${plays.length} promotion${plays.length === 1 ? "" : "s"}`}?</strong><p>This cannot be undone and removes it from every Planner view.</p></div>
           <div><button className="planner-button is-secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>Keep {standalone ? "content" : "campaign"}</button><button className="planner-button is-danger" disabled={deleting} onClick={async () => { setDeleting(true); try { await onDelete(campaign); } catch (_error) { /* PlannerApp displays the save error. */ } finally { setDeleting(false); } }}>{deleting ? "Deleting…" : "Delete permanently"}</button></div>
         </div>
       )}

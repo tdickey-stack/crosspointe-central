@@ -12,6 +12,7 @@ import {
   groupCalendarCampaignDays,
   nextPlanningWeekStart,
   recommendSmuggleOpportunities,
+  recurringContentDates,
   startOfSundayWeek,
   utilizationForWeek,
   weeklyInventoryPlays,
@@ -247,6 +248,24 @@ test("weekly inventory includes every matching status and excludes other weeks a
 test("planning overview always starts on the next Sunday", () => {
   assert.equal(nextPlanningWeekStart("2026-08-15"), "2026-08-16");
   assert.equal(nextPlanningWeekStart("2026-08-16"), "2026-08-23");
+});
+
+test("recurring content supports bounded weekly and anchored monthly series", () => {
+  assert.deepEqual(recurringContentDates({
+    startDate: "2026-08-17",
+    cadence: "weekly",
+    occurrences: 3,
+  }), ["2026-08-17", "2026-08-24", "2026-08-31"]);
+  assert.deepEqual(recurringContentDates({
+    startDate: "2026-01-31",
+    cadence: "monthly",
+    occurrences: 3,
+  }), ["2026-01-31", "2026-02-28", "2026-03-31"]);
+  assert.equal(recurringContentDates({
+    startDate: "2026-08-17",
+    cadence: "weekly",
+    occurrences: 99,
+  }).length, 12);
 });
 
 test("calendar groups only same-day plays for the same campaign", () => {

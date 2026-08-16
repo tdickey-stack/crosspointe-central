@@ -69,6 +69,21 @@ export function addDays(value, amount) {
   return keyFromUtcDate(date);
 }
 
+export function recurringContentDates({startDate, cadence = "none", occurrences = 1}) {
+  const allowedCadences = new Set(["none", "weekly", "biweekly", "monthly"]);
+  if (!allowedCadences.has(cadence)) throw new Error("A valid content cadence is required.");
+  const count = cadence === "none"
+    ? 1
+    : Math.min(12, Math.max(2, Number(occurrences) || 2));
+  const anchor = Temporal.PlainDate.from(dateKey(startDate));
+  return Array.from({length: count}, (_value, index) => {
+    if (cadence === "weekly") return anchor.add({days: index * 7}).toString();
+    if (cadence === "biweekly") return anchor.add({days: index * 14}).toString();
+    if (cadence === "monthly") return anchor.add({months: index}).toString();
+    return anchor.toString();
+  });
+}
+
 export function differenceInDays(later, earlier) {
   return Math.round((utcDateFromKey(later) - utcDateFromKey(earlier)) / DAY_MS);
 }

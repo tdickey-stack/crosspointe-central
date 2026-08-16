@@ -602,10 +602,9 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
       title: group.campaignName,
       start: group.scheduledDate,
       allDay: true,
-      classNames: ["planner-level-calendar-event", content ? "is-content" : `is-level-${group.campaignLevel}`],
-      backgroundColor: `${color}29`,
-      borderColor: `${color}80`,
-      textColor: color,
+      className: `planner-level-calendar-event ${content ? "is-content" : `is-level-${group.campaignLevel}`}`,
+      color: `color-mix(in srgb, ${color} 16%, #18181b)`,
+      contrastColor: `color-mix(in srgb, ${color} 76%, white)`,
       editable: false,
       extendedProps: {campaignDayGroup: group, sortLevel: content ? 6 : Number(group.campaignLevel)},
     };

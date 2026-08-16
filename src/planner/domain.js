@@ -341,6 +341,7 @@ export function weeklyInventoryPlays({
     .filter((play) => play.scheduledDate >= weekStart && play.scheduledDate <= weekEnd)
     .filter((play) => resourceId ? play.resourceId === resourceId : Number(play.campaignLevel) === Number(campaignLevel))
     .sort((left, right) =>
+      Number(left.campaignLevel || 5) - Number(right.campaignLevel || 5) ||
       String(left.scheduledDate).localeCompare(String(right.scheduledDate)) ||
       String(left.campaignName).localeCompare(String(right.campaignName)) ||
       String(left.playType).localeCompare(String(right.playType)),

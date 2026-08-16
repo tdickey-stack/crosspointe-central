@@ -187,6 +187,7 @@ a { text-decoration: none; }
 .planner-calendar-panel .fc .fc-col-header-cell-cushion { padding: 12px 4px; color: var(--planner-muted); font-size: .56rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .planner-calendar-panel .fc .fc-daygrid-day { background: rgba(17,17,19,.28); }
 .planner-calendar-panel .fc .fc-daygrid-day.fc-day-today { background: rgba(239,62,45,.06); }
+.planner-calendar-panel .fc .fc-dayGridWeek-view .fc-daygrid-day-frame { min-height: 430px; }
 .planner-calendar-panel .fc .fc-daygrid-day-number { padding: 8px; color: var(--planner-muted); font-size: .62rem; font-weight: 800; }
 .planner-calendar-panel .fc .fc-day-today .fc-daygrid-day-number { color: #fff; }
 .planner-calendar-panel .fc .fc-event { margin: 2px 4px; overflow: hidden; border-radius: 8px; box-shadow: none; cursor: pointer; }

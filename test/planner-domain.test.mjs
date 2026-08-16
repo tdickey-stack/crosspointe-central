@@ -229,15 +229,17 @@ test("Newsletter Event Cards warn above four and conflict only above six", () =>
 
 test("weekly inventory includes every matching status and excludes other weeks and resources", () => {
   const plays = [
+    {id: "level-1", campaignName: "Priority", resourceId: "stage-announcement", campaignLevel: 1, scheduledDate: "2026-10-17", status: "scheduled"},
     {id: "scheduled", campaignName: "A", resourceId: "stage-announcement", campaignLevel: 4, scheduledDate: "2026-10-11", status: "scheduled"},
     {id: "conflict", campaignName: "B", resourceId: "stage-announcement", campaignLevel: 3, scheduledDate: "2026-10-14", status: "conflict"},
     {id: "missed", campaignName: "C", resourceId: "stage-announcement", campaignLevel: 2, scheduledDate: "2026-10-17", status: "missed"},
+    {id: "level-5", campaignName: "Later", resourceId: "stage-announcement", campaignLevel: 5, scheduledDate: "2026-10-11", status: "scheduled"},
     {id: "other-resource", campaignName: "D", resourceId: "newsletter-feature", campaignLevel: 2, scheduledDate: "2026-10-14", status: "scheduled"},
     {id: "other-week", campaignName: "E", resourceId: "stage-announcement", campaignLevel: 2, scheduledDate: "2026-10-18", status: "scheduled"},
   ];
   assert.deepEqual(
     weeklyInventoryPlays({plays, weekStart: "2026-10-11", resourceId: "stage-announcement"}).map((play) => play.id),
-    ["scheduled", "conflict", "missed"],
+    ["level-1", "missed", "conflict", "scheduled", "level-5"],
   );
   assert.deepEqual(
     weeklyInventoryPlays({plays, weekStart: "2026-10-11", campaignLevel: 2}).map((play) => play.id),

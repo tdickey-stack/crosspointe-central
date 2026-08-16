@@ -659,6 +659,10 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
           firstDay={0}
           headerToolbar={{left: "prev,next today", center: "title", right: ""}}
           height="auto"
+          views={{
+            dayGridMonth: {dayMaxEventRows: 3},
+            dayGridWeek: {dayMaxEventRows: 5},
+          }}
           events={events}
           eventOrder={(left, right) =>
             Number(left.extendedProps.sortLevel) - Number(right.extendedProps.sortLevel) ||
@@ -676,7 +680,6 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
             const play = info.event.extendedProps.play;
             if (play) onMovePlay(play, info.event.startStr.slice(0, 10));
           }}
-          dayMaxEventRows={3}
           eventMaxStack={4}
           moreLinkClick="popover"
           fixedWeekCount={false}

@@ -55,6 +55,7 @@ const CONTENT_TYPES = [
   {value: "Social Post", channel: "Social Media"},
   {value: "YouTube Video", channel: "YouTube"},
   {value: "Short / Reel", channel: "Social Media"},
+  {value: "Podcast", channel: "Podcast"},
   {value: "Other Content", channel: "Other"},
 ];
 const CONTENT_RECURRENCE_OPTIONS = [

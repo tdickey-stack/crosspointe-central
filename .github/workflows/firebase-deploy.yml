@@ -148,7 +148,7 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
       - name: Deploy unpinned Dev endpoints
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled --non-interactive
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief --non-interactive
 
       - name: Deploy Firebase preview channel
         run: ./node_modules/.bin/firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive

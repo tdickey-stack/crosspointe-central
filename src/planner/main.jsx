@@ -22,11 +22,18 @@ import {
   nextPlanningWeekStart,
   recommendSmuggleOpportunities,
   recurringContentDates,
+  reportPresetDateRange,
   scheduleSummary,
   utilizationForWeek,
   utcDateFromKey,
   weeklyInventoryPlays,
 } from "./domain.js";
+import {
+  buildPromotionBrief,
+  downloadPromotionBriefPdf,
+  formatBriefDate,
+  sendPromotionBriefEmail,
+} from "./briefs.js";
 import {createPlannerStore} from "./persistence.js";
 import {isStarterPlaybookId} from "./seed-data.js";
 import "./planner.css";
@@ -38,6 +45,7 @@ const NAV_ITEMS = [
   {id: "calendar", label: "Calendar", icon: "▦"},
   {id: "campaigns", label: "Campaigns", icon: "◆"},
   {id: "content", label: "Content", icon: "●"},
+  {id: "reports", label: "Reports", icon: "▧"},
   {id: "playbooks", label: "Playbooks", icon: "▤"},
   {id: "rules", label: "Rules", icon: "⚙"},
 ];
@@ -63,6 +71,12 @@ const CONTENT_RECURRENCE_OPTIONS = [
   {value: "weekly", label: "Weekly"},
   {value: "biweekly", label: "Every 2 weeks"},
   {value: "monthly", label: "Monthly"},
+];
+const REPORT_DATE_PRESETS = [
+  {value: "upcoming", label: "Upcoming"},
+  {value: "next-two-weeks", label: "Next 2 Weeks"},
+  {value: "month-at-a-glance", label: "Month at a Glance"},
+  {value: "custom", label: "Custom"},
 ];
 
 function isStandaloneContent(item) {
@@ -935,6 +949,148 @@ function ContentView({workspace, canEdit, onNewContent, onOpenContent}) {
   );
 }
 
+function BriefEntryPreview({entry}) {
+  const color = entry.kind === "content" ? "#f472b6" : LEVEL_COLORS[entry.level] || LEVEL_COLORS[5];
+  return (
+    <article className="planner-brief-entry" style={{"--brief-accent": color}}>
+      <header>
+        <div>
+          <PromotionKindBadge item={entry.kind === "content" ? {campaignType: STANDALONE_CONTENT_TYPE} : {level: entry.level}} />
+          <span><strong>{entry.name}</strong><small>{entry.kind === "content" ? `${formatDate(entry.firstPromotionDate)}–${formatDate(entry.lastPromotionDate)}` : `Event ${formatDate(entry.eventDate)}`}</small></span>
+        </div>
+        <StatusBadge>{entry.announcements.length} selected</StatusBadge>
+      </header>
+      {entry.registrationDeadline && <p className="planner-brief-deadline">Registration deadline · {formatDate(entry.registrationDeadline)}</p>}
+      <div className="planner-brief-announcements">
+        {entry.announcements.map((announcement) => (
+          <div key={announcement.id} className={announcement.needsAttention ? "has-alert" : ""}>
+            <span><strong>{announcement.playType}</strong><small>{announcement.channel || "Channel not set"}</small></span>
+            <time dateTime={announcement.scheduledDate}>{formatDate(announcement.scheduledDate)}</time>
+          </div>
+        ))}
+      </div>
+      {entry.notes && <p className="planner-brief-notes"><strong>Notes</strong>{entry.notes}</p>}
+    </article>
+  );
+}
+
+function ReportEmailDialog({brief, authState, onClose, onSent}) {
+  const [recipients, setRecipients] = useState("");
+  const [subject, setSubject] = useState(`${brief.title} · ${formatBriefDate(brief.startDate, {year: false})}–${formatBriefDate(brief.endDate)}`);
+  const [message, setMessage] = useState("Here is the latest promotion brief from Central.");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const valid = recipients.trim() && subject.trim();
+  return (
+    <Modal title="Email promotion brief" eyebrow="Sent by central@crosspointe.tv" onClose={onClose}>
+      <div className="planner-form-grid">
+        <Field label="Recipients" wide help="Separate multiple email addresses with commas."><input autoFocus type="text" value={recipients} onChange={(event) => setRecipients(event.target.value)} placeholder="creative@crosspointe.tv, ministry@crosspointe.tv" /></Field>
+        <Field label="Subject" wide><input value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
+        <Field label="Message" wide><textarea value={message} onChange={(event) => setMessage(event.target.value)} /></Field>
+      </div>
+      <div className="planner-detail-note"><strong>PDF included</strong><p>Central will attach the same {brief.entries.length}-item brief available from Download PDF. The email body also includes a readable campaign summary.</p></div>
+      {error && <div className="planner-detail-note is-alert"><strong>Email not sent</strong><p>{error}</p></div>}
+      <div className="planner-modal-actions">
+        <button className="planner-button is-secondary" disabled={sending} onClick={onClose}>Cancel</button>
+        <button className="planner-button is-primary" disabled={!valid || sending} onClick={async () => {
+          setSending(true); setError("");
+          try {
+            const result = await sendPromotionBriefEmail({user: authState.user, recipients, subject, message, brief});
+            onSent(result);
+          } catch (sendError) {
+            setError(sendError.message || "Central could not send this brief.");
+            setSending(false);
+          }
+        }}>{sending ? "Sending…" : "Send brief"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function ReportsView({workspace, authState, canEmail, onNotice, onError}) {
+  const initialRange = reportPresetDateRange("upcoming", new Date());
+  const [datePreset, setDatePreset] = useState("upcoming");
+  const [startDate, setStartDate] = useState(initialRange.startDate);
+  const [endDate, setEndDate] = useState(initialRange.endDate);
+  const [title, setTitle] = useState("Weekly Promotion Brief");
+  const playTypes = useMemo(() => [...new Set(visiblePromotions(workspace.scheduledPlays).map((play) => play.playType).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [workspace.scheduledPlays]);
+  const [selectedTypes, setSelectedTypes] = useState(() => new Set(playTypes));
+  const [emailOpen, setEmailOpen] = useState(false);
+  const brief = useMemo(() => buildPromotionBrief({
+    campaigns: workspace.campaigns,
+    scheduledPlays: workspace.scheduledPlays,
+    selectedPlayTypes: [...selectedTypes],
+    startDate,
+    endDate,
+    title,
+  }), [workspace.campaigns, workspace.scheduledPlays, selectedTypes, startDate, endDate, title]);
+  const dateRangeValid = startDate && endDate && startDate <= endDate;
+  const ready = dateRangeValid && selectedTypes.size > 0 && brief.entries.length > 0;
+  const toggleType = (playType) => setSelectedTypes((current) => {
+    const next = new Set(current);
+    if (next.has(playType)) next.delete(playType);
+    else next.add(playType);
+    return next;
+  });
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Reports"
+        title="Build a promotion brief"
+        copy="Choose a planning window and promotion types, then download a PDF or send the same brief by email. Campaign details come from Planner until Planning Center Calendar is connected later."
+        actions={<div className="planner-heading-action-group"><button className="planner-button is-secondary" disabled={!ready} onClick={() => {
+          try {
+            const result = downloadPromotionBriefPdf(brief);
+            onNotice(`${result.filename} downloaded.`);
+          } catch (pdfError) { onError(pdfError.message || "The PDF could not be generated."); }
+        }}>↓ Download PDF</button>{canEmail && !authState.preview && <button className="planner-button is-primary" disabled={!ready} onClick={() => setEmailOpen(true)}>✉ Email brief</button>}</div>}
+      />
+      <section className="planner-report-layout">
+        <aside className="planner-panel planner-report-controls">
+          <div className="planner-panel-heading"><div><span className="planner-kicker">Brief setup</span><h2>What to include</h2></div></div>
+          <div className="planner-form-grid">
+            <Field label="Brief title" wide><input value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
+            <Field label="Date range" wide help={`${formatBriefDate(startDate)} through ${formatBriefDate(endDate)}`}>
+              <select value={datePreset} onChange={(event) => {
+                const nextPreset = event.target.value;
+                setDatePreset(nextPreset);
+                if (nextPreset !== "custom") {
+                  const nextRange = reportPresetDateRange(nextPreset, new Date());
+                  setStartDate(nextRange.startDate);
+                  setEndDate(nextRange.endDate);
+                }
+              }}>
+                {REPORT_DATE_PRESETS.map((preset) => <option key={preset.value} value={preset.value}>{preset.label}</option>)}
+              </select>
+            </Field>
+            {datePreset === "custom" && <>
+              <Field label="From"><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field>
+              <Field label="Through"><input type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} /></Field>
+            </>}
+          </div>
+          {!dateRangeValid && <div className="planner-detail-note is-alert"><strong>Check the date range</strong><p>The end date must be the same as or later than the start date.</p></div>}
+          <div className="planner-report-type-heading"><strong>Promotion types</strong><span>{selectedTypes.size} selected</span></div>
+          <div className="planner-report-type-actions"><button className="planner-text-button" onClick={() => setSelectedTypes(new Set(playTypes))}>Select all</button><button className="planner-text-button" onClick={() => setSelectedTypes(new Set())}>Clear</button></div>
+          <div className="planner-report-types">
+            {playTypes.map((playType) => <label key={playType}><input type="checkbox" checked={selectedTypes.has(playType)} onChange={() => toggleType(playType)} /><span>{playType}</span></label>)}
+          </div>
+          {!canEmail && <div className="planner-detail-note"><strong>PDF access only</strong><p>Planner Approve or Admin permission is required to send an external email.</p></div>}
+          {authState.preview && <div className="planner-detail-note"><strong>Email disabled in local preview</strong><p>PDF generation is available here. Email sending requires an authenticated Central environment.</p></div>}
+        </aside>
+        <section className="planner-panel planner-report-preview">
+          <div className="planner-report-preview-header">
+            <div><span className="planner-kicker">Live preview</span><h2>{brief.title || "Promotion Brief"}</h2><p>{formatBriefDate(startDate)}–{formatBriefDate(endDate)}</p></div>
+            <div><span><strong>{brief.announcementCount}</strong> promotions</span><span><strong>{brief.entries.length}</strong> campaigns + content</span><span className={brief.attentionCount ? "has-alert" : ""}><strong>{brief.attentionCount}</strong> need attention</span></div>
+          </div>
+          {brief.entries.length ? <div className="planner-brief-entry-list">{brief.entries.map((entry) => <BriefEntryPreview key={entry.id} entry={entry} />)}</div> : <EmptyState title="No matching promotions" copy="Choose at least one promotion type and a date range containing planned promotions." />}
+        </section>
+      </section>
+      {emailOpen && <ReportEmailDialog brief={brief} authState={authState} onClose={() => setEmailOpen(false)} onSent={(result) => { setEmailOpen(false); onNotice(result.message || "Promotion brief sent."); }} />}
+    </>
+  );
+}
+
 function customPlaybookFromForm(form) {
   const slug = String(form.name || "custom-playbook")
     .toLowerCase()
@@ -1356,6 +1512,7 @@ function PlannerApp({authState}) {
     preview: authState.preview,
   }), [authState.firestore, authState.user?.uid, authState.preview]);
   const canEdit = EDIT_PERMISSIONS.has(authState.permission);
+  const canEmail = ["approve", "admin"].includes(authState.permission);
 
   const load = async () => {
     setLoading(true); setError("");
@@ -1416,6 +1573,7 @@ function PlannerApp({authState}) {
   if (activeView === "calendar") content = <CalendarView workspace={workspace} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
   else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} />;
   else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
+  else if (activeView === "reports") content = <ReportsView workspace={workspace} authState={authState} canEmail={canEmail} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
   else if (activeView === "playbooks") content = <PlaybooksView workspace={workspace} canEdit={canEdit} onSave={async (playbook) => {
     const isNew = !workspace.playbooks.some((item) => item.id === playbook.id);
     const saved = await perform(() => store.savePlaybook(playbook), isNew ? `Added ${playbook.name}.` : `Saved ${playbook.name} as a new version.`);

@@ -13,6 +13,7 @@ import {
   nextPlanningWeekStart,
   recommendSmuggleOpportunities,
   recurringContentDates,
+  reportPresetDateRange,
   startOfSundayWeek,
   utilizationForWeek,
   weeklyInventoryPlays,
@@ -39,6 +40,23 @@ function campaign(overrides = {}) {
     ...overrides,
   };
 }
+
+test("report date presets follow the upcoming planning Sunday", () => {
+  const reference = new Date("2026-08-16T12:00:00-05:00");
+  assert.deepEqual(reportPresetDateRange("upcoming", reference), {
+    startDate: "2026-08-23",
+    endDate: "2026-08-29",
+  });
+  assert.deepEqual(reportPresetDateRange("next-two-weeks", reference), {
+    startDate: "2026-08-23",
+    endDate: "2026-09-05",
+  });
+  assert.deepEqual(reportPresetDateRange("month-at-a-glance", reference), {
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+  });
+  assert.throws(() => reportPresetDateRange("custom", reference), /valid report date preset/);
+});
 
 test("normal on-time campaign generates every play", () => {
   const definition = playbook("level-4-standard");

@@ -634,6 +634,13 @@
         }
       },
       {
+        "source": "/api/planner/send-brief",
+        "function": {
+          "functionId": "sendPlannerBrief",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/campaigns/share-interest",
         "function": {
           "functionId": "shareCampaignInterest",

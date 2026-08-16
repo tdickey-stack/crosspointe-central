@@ -118,6 +118,11 @@ import {
   normalizeCampaignContactSubmission,
 } from "./campaigns/contact.js";
 import {
+  buildPlannerBriefEmailHtml,
+  buildPlannerBriefEmailText,
+  normalizePlannerBriefEmailPayload,
+} from "./planner/brief-email.js";
+import {
   applyEventOverrides,
   buildEventOverrideId,
   createEventOverridesHash,
@@ -1631,6 +1636,77 @@ export const upsertAdminUser = onRequest(
     },
 );
 
+export const sendPlannerBrief = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      secrets: GMAIL_SECRETS,
+    },
+    async (request, response) => {
+      if (request.method !== "POST") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      const idToken = getBearerToken_(request.headers.authorization);
+      if (!idToken) {
+        response.status(401).json({
+          error: "Sign in to Promotion Planner before sending a brief.",
+        });
+        return;
+      }
+
+      let decodedToken = null;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+      } catch (error) {
+        response.status(401).json({
+          error: "Your Planner session expired. Sign in again and retry.",
+        });
+        return;
+      }
+
+      try {
+        const sender = await verifyPlannerBriefSenderAccess_(decodedToken);
+        const payload = normalizePlannerBriefEmailPayload(
+            request.body && typeof request.body === "object" ?
+              request.body :
+              {},
+        );
+        const emailText = buildPlannerBriefEmailText(payload);
+        const emailHtml = buildPlannerBriefEmailHtml(payload);
+        const deliveries = await Promise.all(payload.recipients.map((to) => {
+          return sendCentralEmail_({
+            to,
+            replyTo: sender.email,
+            subject: payload.subject,
+            text: emailText,
+            html: emailHtml,
+            attachments: [payload.attachment],
+          });
+        }));
+
+        response.set("Cache-Control", "no-store");
+        response.status(200).json({
+          ok: true,
+          recipientCount: payload.recipients.length,
+          messageIds: deliveries
+              .map((delivery) => delivery.id)
+              .filter(Boolean),
+          message: payload.recipients.length === 1 ?
+            "Promotion brief sent." :
+            `Promotion brief sent to ${payload.recipients.length} recipients.`,
+        });
+      } catch (error) {
+        response.status(Number(error && error.statusCode) || 500).json({
+          error: error && error.message ?
+            error.message :
+            "Central could not send the promotion brief.",
+        });
+      }
+    },
+);
+
 export const deleteAdminUser = onRequest(
     {
       region: "us-central1",
@@ -2844,6 +2920,9 @@ async function sendCentralEmail_(options) {
   const text = String(config.text || "").trim();
   const html = String(config.html || "").trim();
   const replyTo = String(config.replyTo || "").trim();
+  const attachments = Array.isArray(config.attachments) ?
+    config.attachments :
+    [];
   const gmailConfig = getCentralGmailConfig_();
 
   if (!looksLikeEmailAddress_(to)) {
@@ -2867,6 +2946,7 @@ async function sendCentralEmail_(options) {
     subject: subject,
     text: text,
     html: html,
+    attachments: attachments,
   });
   const gmailResponse = await fetch(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
@@ -2993,7 +3073,20 @@ async function fetchCentralGmailAccessToken_(gmailConfig) {
 
 function buildCentralGmailRawMessage_(options) {
   const config = options && typeof options === "object" ? options : {};
-  const boundary = "central-" + crypto.randomBytes(12).toString("hex");
+  const attachments = Array.isArray(config.attachments) ?
+    config.attachments.filter((attachment) => {
+      return attachment && attachment.base64 && attachment.filename;
+    }) :
+    [];
+  const alternativeBoundary =
+    "central-alt-" + crypto.randomBytes(12).toString("hex");
+  const mixedBoundary = attachments.length ?
+    "central-mixed-" + crypto.randomBytes(12).toString("hex") :
+    "";
+  const messageSubtype = attachments.length ? "mixed" : "alternative";
+  const messageBoundary = attachments.length ?
+    mixedBoundary :
+    alternativeBoundary;
   const headers = [
     "From: " + buildCentralMailboxHeader_(
         config.fromName,
@@ -3005,24 +3098,50 @@ function buildCentralGmailRawMessage_(options) {
       "",
     "Subject: " + encodeMimeHeaderValue_(String(config.subject || "").trim()),
     "MIME-Version: 1.0",
-    "Content-Type: multipart/alternative; boundary=\"" + boundary + "\"",
+    "Content-Type: multipart/" + messageSubtype +
+      "; boundary=\"" + messageBoundary + "\"",
   ].filter(Boolean);
-  const parts = [
-    "--" + boundary,
+  const alternativeParts = [
+    "--" + alternativeBoundary,
     "Content-Type: text/plain; charset=\"UTF-8\"",
     "Content-Transfer-Encoding: base64",
     "",
     splitMimeBase64Lines_(Buffer.from(String(config.text || ""), "utf8")
         .toString("base64")),
-    "--" + boundary,
+    "--" + alternativeBoundary,
     "Content-Type: text/html; charset=\"UTF-8\"",
     "Content-Transfer-Encoding: base64",
     "",
     splitMimeBase64Lines_(Buffer.from(String(config.html || ""), "utf8")
         .toString("base64")),
-    "--" + boundary + "--",
+    "--" + alternativeBoundary + "--",
     "",
   ];
+  const parts = attachments.length ? [
+    "--" + mixedBoundary,
+    "Content-Type: multipart/alternative; boundary=\"" +
+      alternativeBoundary + "\"",
+    "",
+    ...alternativeParts,
+    ...attachments.flatMap((attachment) => {
+      const filename = String(attachment.filename || "attachment")
+          .replace(/[\r\n"]+/g, "-")
+          .slice(0, 140);
+      const contentType = String(
+          attachment.contentType || "application/octet-stream",
+      ).replace(/[\r\n;]+/g, "").slice(0, 100);
+      return [
+        "--" + mixedBoundary,
+        "Content-Type: " + contentType + "; name=\"" + filename + "\"",
+        "Content-Disposition: attachment; filename=\"" + filename + "\"",
+        "Content-Transfer-Encoding: base64",
+        "",
+        splitMimeBase64Lines_(String(attachment.base64 || "")),
+      ];
+    }),
+    "--" + mixedBoundary + "--",
+    "",
+  ] : alternativeParts;
   const mimeMessage = headers.concat([""], parts).join("\r\n");
 
   return Buffer.from(mimeMessage, "utf8")
@@ -6363,6 +6482,56 @@ function getChangeRequestsPermission_(pageAccess) {
   return normalizePreviewPermissionValue_(
       pageAccess && pageAccess.changeRequests,
   );
+}
+
+/**
+ * Verifies that an active Planner approver can send an external brief.
+ * @param {object} decodedToken Verified Firebase authentication token.
+ * @return {Promise<{uid: string, email: string, permission: string}>} Sender.
+ */
+async function verifyPlannerBriefSenderAccess_(decodedToken) {
+  const email = normalizeAdminEmail_(decodedToken && decodedToken.email);
+  if (!isAllowedCentralAdminEmail_(email)) {
+    const error = new Error(
+        "Use an approved Central admin account to email promotion briefs.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const userSnapshot = await firestore
+      .doc(getCentralAdminUserDocPath_(decodedToken.uid))
+      .get();
+  if (!userSnapshot.exists || userSnapshot.get("active") !== true) {
+    const error = new Error(
+        "Your Central admin access must be active to email promotion briefs.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const pageAccess = userSnapshot.get("pageAccess") || {};
+  let permission = "none";
+  if (hasManagedAdminPageAccessKey_(pageAccess, "planner")) {
+    permission = normalizePreviewPermissionValue_(pageAccess.planner);
+  } else if (hasManagedAdminPageAccessKey_(pageAccess, "studio")) {
+    permission = normalizePreviewPermissionValue_(pageAccess.studio);
+  } else {
+    permission = normalizePreviewPermissionValue_(pageAccess.settings);
+  }
+  if (!["approve", "admin"].includes(permission)) {
+    const error = new Error(
+        "Planner Approve or Admin permission is required to email a brief.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return {
+    uid: String(decodedToken.uid || "").trim(),
+    email,
+    permission,
+  };
 }
 
 /**

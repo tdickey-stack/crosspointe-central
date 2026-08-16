@@ -97,6 +97,24 @@ export function nextPlanningWeekStart(value = new Date()) {
   return addDays(startOfSundayWeek(value), 7);
 }
 
+export function reportPresetDateRange(preset, value = new Date()) {
+  const upcomingStart = nextPlanningWeekStart(value);
+  if (preset === "upcoming") {
+    return {startDate: upcomingStart, endDate: addDays(upcomingStart, 6)};
+  }
+  if (preset === "next-two-weeks") {
+    return {startDate: upcomingStart, endDate: addDays(upcomingStart, 13)};
+  }
+  if (preset === "month-at-a-glance") {
+    const monthStart = Temporal.PlainDate.from(upcomingStart).with({day: 1});
+    return {
+      startDate: monthStart.toString(),
+      endDate: monthStart.add({months: 1}).subtract({days: 1}).toString(),
+    };
+  }
+  throw new Error("A valid report date preset is required.");
+}
+
 export function endOfSaturdayWeek(value) {
   return addDays(startOfSundayWeek(value), 6);
 }

@@ -1,4 +1,5 @@
 import {jsPDF} from "jspdf";
+import {buildSmuggleRelationships} from "./domain.js";
 
 const HIDDEN_PROMOTION_STATUSES = new Set(["missed", "skipped"]);
 const LEVEL_COLORS = {
@@ -60,17 +61,22 @@ export function buildPromotionBrief({
 } = {}) {
   const selected = new Set(selectedPlayTypes.map((item) => safeText(item, 100)).filter(Boolean));
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
+  const relationships = buildSmuggleRelationships({plays: scheduledPlays, campaigns});
+  const smuggledPlayIds = new Set(relationships.map((relationship) => relationship.beneficiaryPlayId).filter(Boolean));
   const matching = scheduledPlays.filter((play) =>
+    !smuggledPlayIds.has(play.id) &&
     !HIDDEN_PROMOTION_STATUSES.has(play.status) &&
     selected.has(safeText(play.playType, 100)) &&
     (!startDate || play.scheduledDate >= startDate) &&
     (!endDate || play.scheduledDate <= endDate),
   );
   const grouped = new Map();
+  const matchingPlayIds = new Set(matching.map((play) => play.id));
+  const relationshipsByHostPlay = new Map(relationships
+    .filter((relationship) => matchingPlayIds.has(relationship.hostPlayId))
+    .map((relationship) => [relationship.hostPlayId, relationship]));
 
-  matching.forEach((play) => {
-    const campaign = campaignById.get(play.campaignId) || {};
-    const id = safeText(play.campaignId || campaign.id || play.campaignName, 180);
+  const ensureEntry = (id, campaign = {}, play = {}) => {
     if (!grouped.has(id)) {
       const content = campaign.campaignType === "standalone-content" ||
         play.campaignType === "standalone-content";
@@ -83,9 +89,17 @@ export function buildPromotionBrief({
         registrationDeadline: safeText(campaign.registrationDeadline, 10),
         notes: safeText(campaign.notes, 2400),
         announcements: [],
+        smuggledInto: [],
       });
     }
-    grouped.get(id).announcements.push({
+    return grouped.get(id);
+  };
+
+  matching.forEach((play) => {
+    const campaign = campaignById.get(play.campaignId) || {};
+    const id = safeText(play.campaignId || campaign.id || play.campaignName, 180);
+    const relationship = relationshipsByHostPlay.get(play.id);
+    ensureEntry(id, campaign, play).announcements.push({
       id: safeText(play.id, 180),
       playType: safeText(play.playType, 100),
       channel: safeText(play.channel, 100),
@@ -95,7 +109,32 @@ export function buildPromotionBrief({
       needsAttention: ["conflict", "needs-decision"].includes(play.status) ||
         (play.conflictState && play.conflictState !== "none"),
       conflictReason: safeText(play.conflictReason, 500),
+      smuggle: relationship ? {
+        beneficiaryCampaignId: safeText(relationship.beneficiaryCampaignId, 180),
+        beneficiaryName: safeText(relationship.beneficiaryName, 180),
+        beneficiaryLevel: Number(relationship.beneficiaryLevel || 5),
+        beneficiaryPlayType: safeText(relationship.beneficiaryPlayType, 100),
+        hostCampaignId: safeText(relationship.hostCampaignId, 180),
+        hostCampaignName: safeText(relationship.hostCampaignName, 180),
+        hostCampaignLevel: Number(relationship.hostCampaignLevel || 3),
+      } : null,
     });
+    if (relationship) {
+      const beneficiaryCampaign = campaignById.get(relationship.beneficiaryCampaignId) || {};
+      const beneficiaryId = safeText(relationship.beneficiaryCampaignId, 180);
+      ensureEntry(beneficiaryId, beneficiaryCampaign, {
+        campaignName: relationship.beneficiaryName,
+        campaignLevel: relationship.beneficiaryLevel,
+      }).smuggledInto.push({
+        id: relationship.id,
+        hostCampaignId: safeText(relationship.hostCampaignId, 180),
+        hostCampaignName: safeText(relationship.hostCampaignName, 180),
+        hostCampaignLevel: Number(relationship.hostCampaignLevel || 3),
+        hostPlayType: safeText(relationship.hostPlayType, 100),
+        hostChannel: safeText(relationship.hostChannel, 100),
+        scheduledDate: safeText(relationship.scheduledDate, 10),
+      });
+    }
   });
 
   const entries = [...grouped.values()].map((entry) => {
@@ -103,8 +142,9 @@ export function buildPromotionBrief({
     return {
       ...entry,
       announcements,
-      firstPromotionDate: announcements[0]?.scheduledDate || "",
-      lastPromotionDate: announcements.at(-1)?.scheduledDate || "",
+      smuggledInto: entry.smuggledInto.sort((left, right) => String(left.scheduledDate).localeCompare(String(right.scheduledDate))),
+      firstPromotionDate: announcements[0]?.scheduledDate || entry.smuggledInto[0]?.scheduledDate || "",
+      lastPromotionDate: announcements.at(-1)?.scheduledDate || entry.smuggledInto.at(-1)?.scheduledDate || "",
     };
   }).sort(campaignSort);
 
@@ -196,12 +236,36 @@ function announcementLayout(pdf, announcement) {
     3.0,
   );
   const lineCount = Math.max(titleLines.length, detailLines.length);
+  const smuggleLines = announcement.smuggle ? wrap(
+    pdf,
+    `SMUGGLE CONTAINS LEVEL ${announcement.smuggle.beneficiaryLevel} ${announcement.smuggle.beneficiaryName}`,
+    6.35,
+  ).slice(0, 2) : [];
   return {
     kind: "announcement",
     announcement,
     titleLines,
     detailLines,
-    height: 0.14 + lineCount * 0.13 + (announcement.needsAttention ? 0.16 : 0) + 0.09,
+    lineCount,
+    smuggleLines,
+    height: 0.14 + lineCount * 0.13 + smuggleLines.length * 0.13 +
+      (smuggleLines.length ? 0.08 : 0) + (announcement.needsAttention ? 0.16 : 0) + 0.09,
+  };
+}
+
+function smuggledIntoLayout(pdf, relationship) {
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8);
+  const lines = wrap(
+    pdf,
+    `SMUGGLED INTO LEVEL ${relationship.hostCampaignLevel} ${relationship.hostCampaignName} - ${relationship.hostPlayType} - ${formatBriefDate(relationship.scheduledDate)}`,
+    6.35,
+  ).slice(0, 3);
+  return {
+    kind: "smuggled-into",
+    relationship,
+    lines,
+    height: 0.19 + lines.length * 0.13 + 0.09,
   };
 }
 
@@ -266,6 +330,12 @@ function drawEntrySegment(pdf, entry, items, y, continued = false) {
       pdf.setFontSize(8);
       pdf.setTextColor(100, 100, 108);
       pdf.text(item.detailLines, 7.62, rowY + 0.18, {align: "right", lineHeightFactor: 1});
+      if (item.smuggleLines.length) {
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7.4);
+        pdf.setTextColor(126, 92, 196);
+        pdf.text(item.smuggleLines, 0.84, rowY + 0.21 + item.lineCount * 0.13, {lineHeightFactor: 1});
+      }
       if (item.announcement.needsAttention) {
         const attentionY = rowY + item.height - 0.12;
         pdf.setFont("helvetica", "bold");
@@ -279,6 +349,13 @@ function drawEntrySegment(pdf, entry, items, y, continued = false) {
           pdf.text(wrap(pdf, reason, 4.7).slice(0, 1), 2.0, attentionY);
         }
       }
+    } else if (item.kind === "smuggled-into") {
+      pdf.setFillColor(246, 242, 253);
+      pdf.rect(0.7, rowY, 7.18, item.height, "F");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.6);
+      pdf.setTextColor(126, 92, 196);
+      pdf.text(item.lines, 0.84, rowY + 0.19, {lineHeightFactor: 1});
     } else {
       pdf.setFillColor(246, 246, 248);
       pdf.rect(0.7, rowY, 7.18, item.height, "F");
@@ -302,6 +379,7 @@ function drawEntry(pdf, brief, entry, startY) {
   let y = startY;
   let continued = false;
   const items = [
+    ...entry.smuggledInto.map((relationship) => smuggledIntoLayout(pdf, relationship)),
     ...entry.announcements.map((announcement) => announcementLayout(pdf, announcement)),
     ...noteLayouts(pdf, entry.notes),
   ];

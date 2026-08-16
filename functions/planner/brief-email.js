@@ -57,6 +57,32 @@ function normalizeAnnouncement(value) {
     channel: text(source.channel, 100),
     scheduledDate: dateValue(source.scheduledDate),
     needsAttention: source.needsAttention === true,
+    smuggle: normalizeAnnouncementSmuggle(source.smuggle),
+  };
+}
+
+function normalizeAnnouncementSmuggle(value) {
+  const source = value && typeof value === "object" ? value : null;
+  if (!source) return null;
+  const beneficiaryName = text(source.beneficiaryName, 180);
+  if (!beneficiaryName) return null;
+  return {
+    beneficiaryName,
+    beneficiaryLevel: Math.min(5, Math.max(4, Number(source.beneficiaryLevel || 5))),
+  };
+}
+
+function normalizeSmuggledInto(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const hostCampaignName = text(source.hostCampaignName, 180);
+  if (!hostCampaignName) fail("Each Smuggle relationship needs a host campaign.");
+  return {
+    id: text(source.id, 240),
+    hostCampaignName,
+    hostCampaignLevel: Math.min(3, Math.max(1, Number(source.hostCampaignLevel || 3))),
+    hostPlayType: text(source.hostPlayType, 100) || "Promotion",
+    hostChannel: text(source.hostChannel, 100),
+    scheduledDate: dateValue(source.scheduledDate),
   };
 }
 
@@ -67,7 +93,10 @@ function normalizeEntry(value) {
   const announcements = Array.isArray(source.announcements) ?
     source.announcements.slice(0, 60).map(normalizeAnnouncement) :
     [];
-  if (!announcements.length) fail(`${name} does not contain any selected promotions.`);
+  const smuggledInto = Array.isArray(source.smuggledInto) ?
+    source.smuggledInto.slice(0, 20).map(normalizeSmuggledInto) :
+    [];
+  if (!announcements.length && !smuggledInto.length) fail(`${name} does not contain any selected promotions.`);
   return {
     name,
     kind: source.kind === "content" ? "content" : "campaign",
@@ -76,6 +105,7 @@ function normalizeEntry(value) {
     registrationDeadline: dateValue(source.registrationDeadline),
     notes: text(source.notes, 2400),
     announcements,
+    smuggledInto,
   };
 }
 
@@ -142,8 +172,12 @@ export function buildPlannerBriefEmailText(payload) {
   brief.entries.forEach((entry) => {
     lines.push(`${entry.kind === "content" ? "CONTENT" : `LEVEL ${entry.level}`} - ${entry.name}`);
     if (entry.eventDate) lines.push(`Event: ${formatDate(entry.eventDate)}`);
+    entry.smuggledInto.forEach((relationship) => {
+      lines.push(`SMUGGLED INTO: Level ${relationship.hostCampaignLevel} ${relationship.hostCampaignName} | ${relationship.hostPlayType} | ${formatDate(relationship.scheduledDate)}`);
+    });
     entry.announcements.forEach((announcement) => {
       lines.push(`- ${announcement.playType} | ${formatDate(announcement.scheduledDate)} | ${announcement.channel || "Channel not set"}${announcement.needsAttention ? " | NEEDS ATTENTION" : ""}`);
+      if (announcement.smuggle) lines.push(`  SMUGGLE CONTAINS: Level ${announcement.smuggle.beneficiaryLevel} ${announcement.smuggle.beneficiaryName}`);
     });
     if (entry.notes) lines.push(`Notes: ${entry.notes}`);
     lines.push("");
@@ -158,14 +192,20 @@ export function buildPlannerBriefEmailHtml(payload) {
   const cards = brief.entries.map((entry) => {
     const announcements = entry.announcements.map((announcement) => `
       <tr>
-        <td style="padding:9px 0;border-top:1px solid #e5e7eb;font-weight:700;color:#27272a;">${escapeHtml(announcement.playType)}</td>
+        <td style="padding:9px 0;border-top:1px solid #e5e7eb;font-weight:700;color:#27272a;">${escapeHtml(announcement.playType)}${announcement.smuggle ? `<br><span style="display:inline-block;margin-top:5px;color:#7e5cc4;font-size:11px;">Smuggle contains Level ${announcement.smuggle.beneficiaryLevel} ${escapeHtml(announcement.smuggle.beneficiaryName)}</span>` : ""}</td>
         <td style="padding:9px 0;border-top:1px solid #e5e7eb;color:#71717a;text-align:right;">${escapeHtml(formatDate(announcement.scheduledDate))}<br>${escapeHtml(announcement.channel || "Channel not set")}${announcement.needsAttention ? "<br><strong style=\"color:#ef3e2d;\">Needs attention</strong>" : ""}</td>
       </tr>`).join("");
+    const smuggledInto = entry.smuggledInto.map((relationship) => `
+      <div style="margin:10px 0;padding:10px 12px;border:1px solid #ddd6fe;border-radius:9px;background:#f5f3ff;color:#6d4bb3;font-size:12px;font-weight:700;">
+        Smuggled into Level ${relationship.hostCampaignLevel} ${escapeHtml(relationship.hostCampaignName)}<br>
+        <span style="color:#71717a;font-weight:400;">${escapeHtml(relationship.hostPlayType)} &nbsp;|&nbsp; ${escapeHtml(formatDate(relationship.scheduledDate))}</span>
+      </div>`).join("");
     return `
       <div style="margin:0 0 14px;padding:18px;border:1px solid #e4e4e7;border-left:5px solid ${entry.kind === "content" ? "#f472b6" : ["", "#ef3e2d", "#f59e0b", "#4bb8e9", "#4bc3a7", "#a78bfa"][entry.level]};border-radius:12px;background:#ffffff;">
         <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#71717a;">${entry.kind === "content" ? "Content" : `Level ${entry.level}`}</div>
         <h2 style="margin:5px 0 3px;font-size:19px;line-height:1.25;color:#18181b;">${escapeHtml(entry.name)}</h2>
         ${entry.eventDate ? `<p style="margin:0 0 10px;color:#71717a;font-size:13px;">Event ${escapeHtml(formatDate(entry.eventDate))}${entry.registrationDeadline ? ` &nbsp;|&nbsp; Registration ${escapeHtml(formatDate(entry.registrationDeadline))}` : ""}</p>` : ""}
+        ${smuggledInto}
         <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;">${announcements}</table>
         ${entry.notes ? `<p style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e5e7eb;color:#52525b;font-size:13px;line-height:1.55;"><strong style="color:#27272a;">Notes:</strong> ${escapeHtml(entry.notes)}</p>` : ""}
       </div>`;

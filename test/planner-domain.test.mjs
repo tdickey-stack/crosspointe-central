@@ -5,6 +5,7 @@ import {
   addDays,
   allocateLevel4SocialSlots,
   applySmuggle,
+  buildSmuggleRelationships,
   calculateTimeliness,
   ensureLevel2StandingLane,
   evaluateCapacity,
@@ -14,6 +15,8 @@ import {
   recommendSmuggleOpportunities,
   recurringContentDates,
   reportPresetDateRange,
+  scheduleSummary,
+  skipPromotion,
   startOfSundayWeek,
   utilizationForWeek,
   weeklyInventoryPlays,
@@ -338,7 +341,11 @@ test("Smuggle recommends Level 4 before Level 5 and never applies automatically"
     smuggle: null,
   };
   const recommendations = recommendSmuggleOpportunities({
-    hostPlays: [host],
+    hostPlays: [
+      host,
+      {id: "l4-stage", campaignId: "l4", campaignLevel: 4, playType: "Social Media Sprinkle", resourceId: "social-sprinkle", scheduledDate: "2026-10-10", status: "scheduled"},
+      {id: "l5-stage", campaignId: "l5", campaignLevel: 5, playType: "Social Media Sprinkle", resourceId: "social-sprinkle", scheduledDate: "2026-10-10", status: "scheduled"},
+    ],
     campaigns: [
       campaign({id: "l5", name: "Sewing Group", level: 5, eventDate: "2026-10-20", isOnTime: true}),
       campaign({id: "l4", name: "Women's Breakfast", level: 4, eventDate: "2026-10-22", isOnTime: true}),
@@ -350,6 +357,149 @@ test("Smuggle recommends Level 4 before Level 5 and never applies automatically"
   const applied = applySmuggle(host, recommendations[0]);
   assert.equal(applied.smuggle.beneficiaryCampaignId, "l4");
   assert.equal(host.smuggle, null);
+});
+
+test("Smuggle offers every eligible Level 1 through Level 3 host promotion", () => {
+  const host = (level, resourceId, suffix) => ({
+    id: `host-${suffix}`,
+    campaignId: `campaign-${suffix}`,
+    campaignName: `Host ${suffix}`,
+    campaignLevel: level,
+    playType: resourceId === "stage-announcement" ? "Stage Announcement" : "Social Media Sprinkle",
+    channel: "Main channel",
+    resourceId,
+    scheduledDate: "2026-10-10",
+    supportsSmuggle: false,
+    status: "scheduled",
+    smuggle: null,
+  });
+  const recommendations = recommendSmuggleOpportunities({
+    hostPlays: [
+      host(3, "stage-announcement", "l3"),
+      host(1, "stage-announcement", "l1"),
+      host(2, "stage-announcement", "l2"),
+      host(4, "stage-announcement", "l4"),
+      {
+        id: "guest-stage",
+        campaignId: "guest",
+        campaignName: "Ladies Bunco Night",
+        campaignLevel: 4,
+        playType: "Stage Announcement",
+        channel: "Sunday / Stage",
+        resourceId: "stage-announcement",
+        scheduledDate: "2026-10-10",
+        status: "conflict",
+      },
+    ],
+    campaigns: [
+      campaign({id: "campaign-l1", name: "Level 1 Host", level: 1, eventDate: "2026-11-01"}),
+      campaign({id: "campaign-l2", name: "Level 2 Host", level: 2, eventDate: "2026-11-01"}),
+      campaign({id: "campaign-l3", name: "Level 3 Host", level: 3, eventDate: "2026-11-01"}),
+      campaign({id: "guest", name: "Ladies Bunco Night", level: 4, eventDate: "2026-10-20"}),
+    ],
+    now: new Date("2026-10-01T12:00:00-05:00"),
+  });
+  assert.deepEqual(recommendations.map((item) => item.hostCampaignLevel), [1, 2, 3]);
+  assert.deepEqual(recommendations.map((item) => item.hostCampaignName), [
+    "Level 1 Host",
+    "Level 2 Host",
+    "Level 3 Host",
+  ]);
+  assert.ok(recommendations.every((item) => item.beneficiaryScheduledPlayId === "guest-stage"));
+});
+
+test("Smuggle only pairs the same announcement type on the same date", () => {
+  const recommendations = recommendSmuggleOpportunities({
+    hostPlays: [
+      {id: "same", campaignId: "l1", campaignName: "Same Day Host", campaignLevel: 1, playType: "Stage Announcement", resourceId: "stage-announcement", scheduledDate: "2026-10-11", supportsSmuggle: true, status: "scheduled", smuggle: null},
+      {id: "wrong-date", campaignId: "l2", campaignName: "Wrong Date", campaignLevel: 2, playType: "Stage Announcement", resourceId: "stage-announcement", scheduledDate: "2026-10-18", supportsSmuggle: true, status: "scheduled", smuggle: null},
+      {id: "wrong-type", campaignId: "l3", campaignName: "Wrong Type", campaignLevel: 3, playType: "Social Media Sprinkle", resourceId: "social-sprinkle", scheduledDate: "2026-10-11", supportsSmuggle: true, status: "scheduled", smuggle: null},
+      {id: "guest-stage", campaignId: "guest", campaignName: "Ladies Bunco Night", campaignLevel: 4, playType: "Stage Announcement", resourceId: "stage-announcement", scheduledDate: "2026-10-11", status: "needs-decision"},
+    ],
+    campaigns: [
+      campaign({id: "l1", name: "Same Day Host", level: 1, eventDate: "2026-11-01"}),
+      campaign({id: "l2", name: "Wrong Date", level: 2, eventDate: "2026-11-01"}),
+      campaign({id: "l3", name: "Wrong Type", level: 3, eventDate: "2026-11-01"}),
+      campaign({id: "guest", name: "Ladies Bunco Night", level: 4, eventDate: "2026-10-20"}),
+    ],
+    now: new Date("2026-10-01T12:00:00-05:00"),
+  });
+  assert.deepEqual(recommendations.map((item) => item.hostScheduledPlayId), ["same"]);
+  assert.equal(recommendations[0].scheduledDate, "2026-10-11");
+  assert.equal(recommendations[0].beneficiaryPlayType, "Stage Announcement");
+});
+
+test("declining a Smuggle skips only that announcement and clears its conflict", () => {
+  const guest = {
+    id: "guest-stage",
+    campaignId: "guest",
+    campaignName: "Ladies Bunco Night",
+    campaignLevel: 4,
+    playType: "Stage Announcement",
+    resourceId: "stage-announcement",
+    scheduledDate: "2026-10-11",
+    status: "conflict",
+    conflictState: "capacity-overflow",
+    conflictReason: "The stage announcement capacity is full.",
+    manuallyAdjusted: false,
+  };
+  const skipped = skipPromotion(guest);
+
+  assert.equal(skipped.status, "skipped");
+  assert.equal(skipped.conflictState, "none");
+  assert.equal(skipped.conflictReason, "");
+  assert.equal(skipped.manuallyAdjusted, true);
+  assert.equal(guest.status, "conflict");
+  assert.equal(recommendSmuggleOpportunities({
+    hostPlays: [
+      {id: "host", campaignId: "l1", campaignName: "Host", campaignLevel: 1, playType: "Stage Announcement", resourceId: "stage-announcement", scheduledDate: "2026-10-11", supportsSmuggle: true, status: "scheduled", smuggle: null},
+      skipped,
+    ],
+    campaigns: [
+      campaign({id: "l1", name: "Host", level: 1, eventDate: "2026-10-20"}),
+      campaign({id: "guest", name: "Ladies Bunco Night", level: 4, eventDate: "2026-10-20"}),
+    ],
+    now: new Date("2026-10-01T12:00:00-05:00"),
+  }).length, 0);
+  assert.equal(scheduleSummary([skipped]).conflicts, 0);
+});
+
+test("saved Smuggle maps resolve into host and guest display relationships", () => {
+  const relationships = buildSmuggleRelationships({
+    campaigns: [
+      campaign({id: "host", name: "Big Small Group Relaunch", level: 1}),
+      campaign({id: "guest", name: "Ladies Bunco Night", level: 4}),
+    ],
+    plays: [{
+      id: "host-play",
+      campaignId: "host",
+      campaignName: "Old host name",
+      campaignLevel: 1,
+      playType: "Stage Announcement",
+      channel: "Sunday / Stage",
+      scheduledDate: "2026-10-11",
+      smuggle: {
+        hostCampaignId: "host",
+        hostScheduledPlayId: "host-play",
+        beneficiaryCampaignId: "guest",
+        beneficiaryName: "Old guest name",
+        strategy: "SMUGGLE",
+      },
+    }, {
+      id: "guest-stage",
+      campaignId: "guest",
+      campaignName: "Ladies Bunco Night",
+      campaignLevel: 4,
+      playType: "Stage Announcement",
+      channel: "Sunday / Stage",
+      scheduledDate: "2026-10-11",
+      status: "conflict",
+    }],
+  });
+  assert.equal(relationships[0].hostCampaignName, "Big Small Group Relaunch");
+  assert.equal(relationships[0].beneficiaryName, "Ladies Bunco Night");
+  assert.equal(relationships[0].beneficiaryLevel, 4);
+  assert.equal(relationships[0].beneficiaryPlayId, "guest-stage");
 });
 
 test("standalone content is never treated as a Smuggle campaign", () => {

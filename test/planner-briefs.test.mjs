@@ -14,7 +14,8 @@ const campaigns = [
 ];
 const scheduledPlays = [
   {id: "one", campaignId: "l4", campaignName: "Women's Breakfast", campaignLevel: 4, playType: "Stage Announcement", channel: "Sunday / Stage", scheduledDate: "2026-08-23", status: "scheduled"},
-  {id: "two", campaignId: "l1", campaignName: "Stewardship Campaign", campaignLevel: 1, playType: "Newsletter Feature", channel: "Newsletter", scheduledDate: "2026-08-26", status: "needs-decision", conflictState: "capacity"},
+  {id: "two", campaignId: "l1", campaignName: "Stewardship Campaign", campaignLevel: 1, playType: "Newsletter Feature", channel: "Newsletter", scheduledDate: "2026-08-26", status: "needs-decision", conflictState: "capacity", smuggle: {hostCampaignId: "l1", hostScheduledPlayId: "two", beneficiaryCampaignId: "l4", beneficiaryName: "Women's Breakfast", strategy: "SMUGGLE"}},
+  {id: "guest-paired", campaignId: "l4", campaignName: "Women's Breakfast", campaignLevel: 4, playType: "Newsletter Feature", channel: "Newsletter", scheduledDate: "2026-08-26", status: "conflict", conflictState: "capacity"},
   {id: "three", campaignId: "content", campaignName: "Weekly Podcast", campaignType: "standalone-content", playType: "Podcast", channel: "Podcast", scheduledDate: "2026-08-25", status: "scheduled"},
   {id: "hidden", campaignId: "l1", campaignName: "Stewardship Campaign", campaignLevel: 1, playType: "Stage Announcement", channel: "Sunday / Stage", scheduledDate: "2026-08-23", status: "skipped"},
   {id: "outside", campaignId: "l4", campaignName: "Women's Breakfast", campaignLevel: 4, playType: "Stage Announcement", channel: "Sunday / Stage", scheduledDate: "2026-09-06", status: "scheduled"},
@@ -42,7 +43,25 @@ test("promotion brief filters the planning window and sorts Level 1 through cont
     "Weekly Podcast",
   ]);
   assert.equal(brief.entries[0].announcements[0].needsAttention, true);
+  assert.equal(brief.entries[0].announcements[0].smuggle.beneficiaryName, "Women's Breakfast");
+  assert.equal(brief.entries[0].announcements[0].smuggle.beneficiaryPlayType, "Newsletter Feature");
+  assert.equal(brief.entries[1].smuggledInto[0].hostCampaignName, "Stewardship Campaign");
+  assert.equal(brief.entries[1].announcements.some((item) => item.id === "guest-paired"), false);
   assert.equal(brief.entries[1].notes, "Invite a friend.");
+});
+
+test("promotion brief includes a Smuggle beneficiary even without a direct selected promotion", () => {
+  const brief = buildPromotionBrief({
+    campaigns,
+    scheduledPlays,
+    selectedPlayTypes: ["Newsletter Feature"],
+    startDate: "2026-08-23",
+    endDate: "2026-08-29",
+  });
+  assert.equal(brief.announcementCount, 1);
+  assert.deepEqual(brief.entries.map((entry) => entry.name), ["Stewardship Campaign", "Women's Breakfast"]);
+  assert.equal(brief.entries[1].announcements.length, 0);
+  assert.equal(brief.entries[1].smuggledInto[0].hostCampaignLevel, 1);
 });
 
 test("promotion brief PDF produces a readable PDF document", () => {

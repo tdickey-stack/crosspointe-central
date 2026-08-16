@@ -151,6 +151,7 @@ a { text-decoration: none; }
 .planner-play-row > span:nth-child(2) { display: grid; gap: 4px; min-width: 0; }
 .planner-play-row strong { overflow: hidden; font-size: .69rem; text-overflow: ellipsis; white-space: nowrap; }
 .planner-play-row small { overflow: hidden; color: var(--planner-muted); font-size: .57rem; text-overflow: ellipsis; white-space: nowrap; }
+.planner-play-row .planner-play-smuggle { overflow: hidden; color: #c4b5fd; font-size: .54rem; font-style: normal; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .planner-attention-row { display: grid; width: 100%; grid-template-columns: 9px minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 11px 2px; border-top: 1px solid var(--planner-line); background: transparent; cursor: pointer; text-align: left; }
 .planner-attention-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--planner-amber); }
 .planner-attention-dot.is-conflict, .planner-attention-dot.is-missed { background: var(--planner-red); box-shadow: 0 0 0 5px rgba(239,62,45,.08); }
@@ -227,7 +228,10 @@ a { text-decoration: none; }
 .planner-calendar-event.is-week > span { white-space: normal; }
 .planner-calendar-event.is-campaign-day > div > small { margin: 0 0 0 auto; font-size: .46rem; font-weight: 850; opacity: .72; white-space: nowrap; }
 .planner-calendar-event.is-campaign-day ul { margin: 5px 0 0; padding: 0; list-style: none; }
-.planner-calendar-event.is-campaign-day li { overflow: hidden; font-size: .46rem; font-weight: 700; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.planner-calendar-event.is-campaign-day li { display: grid; overflow: hidden; gap: 2px; font-size: .46rem; font-weight: 700; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.planner-calendar-event.is-campaign-day li > span { overflow: hidden; text-overflow: ellipsis; }
+.planner-calendar-event.is-campaign-day li.has-smuggle { margin-top: 4px; padding: 4px 5px; border: 1px solid rgba(196,181,253,.28); border-radius: 6px; background: rgba(167,139,250,.12); white-space: normal; }
+.planner-calendar-event.is-campaign-day li.has-smuggle em { overflow: hidden; color: #ddd6fe; font-size: .43rem; font-style: normal; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
 .planner-calendar-event.is-campaign-day.is-week { min-height: 84px; padding: 9px 11px; }
 .planner-calendar-event.is-campaign-day.is-week ul { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
 .planner-calendar-event.is-campaign-day.is-week li { font-size: .5rem; white-space: normal; }
@@ -284,6 +288,10 @@ a { text-decoration: none; }
 .planner-brief-entry > header strong { overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
 .planner-brief-entry > header small { color: var(--planner-muted); font-size: .52rem; }
 .planner-brief-deadline { margin: 0; padding: 8px 15px; border-top: 1px solid var(--planner-line); color: var(--planner-muted); font-size: .52rem; }
+.planner-brief-smuggled-into { display: flex; align-items: center; gap: 10px; padding: 10px 15px; border-top: 1px solid rgba(167,139,250,.22); background: rgba(167,139,250,.08); }
+.planner-brief-smuggled-into > span:last-child { display: grid; gap: 3px; }
+.planner-brief-smuggled-into strong { color: #ddd6fe; font-size: .59rem; }
+.planner-brief-smuggled-into small { color: var(--planner-muted); font-size: .5rem; }
 .planner-brief-announcements { border-top: 1px solid var(--planner-line); }
 .planner-brief-announcements > div { display: flex; min-height: 46px; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 15px; border-top: 1px solid var(--planner-line); }
 .planner-brief-announcements > div:first-child { border-top: 0; }
@@ -291,6 +299,7 @@ a { text-decoration: none; }
 .planner-brief-announcements span { display: grid; gap: 3px; }
 .planner-brief-announcements strong { font-size: .59rem; }
 .planner-brief-announcements small, .planner-brief-announcements time { color: var(--planner-muted); font-size: .5rem; }
+.planner-brief-announcements .planner-brief-smuggle { color: #c4b5fd; font-size: .51rem; font-style: normal; font-weight: 800; }
 .planner-brief-announcements > div.has-alert strong { color: #ff887c; }
 .planner-brief-notes { display: grid; gap: 4px; margin: 0; padding: 11px 15px; border-top: 1px solid var(--planner-line); color: var(--planner-muted); font-size: .54rem; line-height: 1.5; }
 .planner-brief-notes strong { color: #fff; font-size: .52rem; text-transform: uppercase; }
@@ -369,6 +378,25 @@ a { text-decoration: none; }
 .planner-modal > header + * { margin-top: 24px; }
 .planner-modal > *:last-child { margin-bottom: 24px; }
 .planner-modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
+.planner-smuggle-explainer { display: flex; align-items: flex-start; gap: 13px; padding: 16px; border: 1px solid rgba(167,139,250,.3); border-radius: 15px; background: rgba(167,139,250,.08); }
+.planner-smuggle-explainer > div { display: grid; gap: 5px; }
+.planner-smuggle-explainer strong { font-size: .7rem; }
+.planner-smuggle-explainer p { margin: 0; color: var(--planner-muted); font-size: .58rem; line-height: 1.55; }
+.planner-smuggle-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 14px; }
+.planner-smuggle-option { display: grid; align-content: start; gap: 12px; padding: 15px; border: 1px solid var(--planner-line); border-radius: 15px; background: rgba(17,17,19,.42); }
+.planner-smuggle-option-heading { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; }
+.planner-smuggle-option-heading > span { display: grid; min-width: 0; gap: 4px; }
+.planner-smuggle-option-heading strong, .planner-smuggle-option-heading small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planner-smuggle-option-heading strong { font-size: .68rem; }
+.planner-smuggle-option-heading small, .planner-smuggle-option-heading time { color: var(--planner-muted); font-size: .53rem; }
+.planner-smuggle-option-heading time { white-space: nowrap; }
+.planner-smuggle-option > p { margin: 0; color: var(--planner-muted); font-size: .56rem; line-height: 1.5; }
+.planner-smuggle-option > .planner-button { justify-self: start; }
+.planner-smuggle-decline { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 14px; padding: 15px; border: 1px solid var(--planner-line); border-radius: 15px; background: rgba(255,255,255,.025); }
+.planner-smuggle-decline > div { display: grid; gap: 5px; }
+.planner-smuggle-decline strong { font-size: .68rem; }
+.planner-smuggle-decline p { margin: 0; color: var(--planner-muted); font-size: .56rem; line-height: 1.5; }
+.planner-smuggle-decline .planner-button { flex: none; }
 .planner-campaign-builder { display: grid; grid-template-columns: minmax(300px,.75fr) minmax(420px,1.25fr); gap: 24px; }
 .planner-schedule-preview { min-width: 0; padding-left: 24px; border-left: 1px solid var(--planner-line); }
 .planner-timeliness-card { padding: 17px; border: 1px solid rgba(75,195,167,.25); border-radius: 15px; background: rgba(75,195,167,.07); }
@@ -397,6 +425,7 @@ a { text-decoration: none; }
 .planner-detail-note p { margin: 5px 0 0; color: var(--planner-muted); font-size: .58rem; line-height: 1.5; }
 .planner-detail-note.is-alert { border-color: rgba(239,62,45,.26); background: rgba(239,62,45,.07); }
 .planner-detail-note.is-smuggle { border-color: rgba(167,139,250,.28); background: rgba(167,139,250,.07); }
+.planner-detail-note.is-skipped { border-color: rgba(161,161,170,.25); background: rgba(161,161,170,.06); }
 .planner-play-adjustment { margin-top: 15px; }
 .planner-inventory-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
 .planner-inventory-summary > span { display: grid; gap: 4px; padding: 13px; border: 1px solid var(--planner-line); border-radius: 12px; background: rgba(17,17,19,.42); color: var(--planner-muted); font-size: .54rem; }
@@ -532,6 +561,11 @@ a { text-decoration: none; }
   .planner-brief-entry > header { align-items: start; }
   .planner-brief-entry > header > .planner-badge { display: none; }
   .planner-brief-announcements > div { align-items: start; }
+  .planner-smuggle-options { grid-template-columns: 1fr; }
+  .planner-smuggle-option-heading { grid-template-columns: auto minmax(0,1fr); }
+  .planner-smuggle-option-heading time { grid-column: 2; }
+  .planner-smuggle-decline { align-items: stretch; flex-direction: column; }
+  .planner-smuggle-decline .planner-button { width: 100%; }
   .planner-delete-confirmation { display: grid; }
   .planner-delete-confirmation > div:last-child { display: grid; }
   .planner-seed-banner { display: grid; }

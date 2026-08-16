@@ -325,6 +325,15 @@ test("valid updates cannot bypass validators or mutate immutable history", async
     updatedByUid: "editor",
     updatedAt: serverTime(),
   }));
+  await assertSucceeds(playRef.update({
+    status: "skipped",
+    conflictState: "none",
+    conflictReason: "",
+    smuggle: null,
+    manuallyAdjusted: true,
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
   await assertFails(playRef.update({campaignId: "campaign-b", updatedByUid: "editor", updatedAt: serverTime()}));
   await assertFails(playRef.update({status: "hacked", updatedByUid: "editor", updatedAt: serverTime()}));
   await assertFails(campaignRef.update({playbookVersion: 99, updatedByUid: "editor", updatedAt: serverTime()}));

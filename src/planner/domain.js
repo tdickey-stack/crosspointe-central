@@ -590,49 +590,140 @@ export function recommendSmuggleOpportunities({
   eligibleLevels = [4, 5],
 }) {
   const today = dateKey(now);
-  const candidates = (campaigns || []).filter((campaign) =>
+  const campaignById = new Map((campaigns || []).map((campaign) => [campaign.id, campaign]));
+  const relationships = buildSmuggleRelationships({plays: hostPlays, campaigns});
+  const alreadyPlacedPlayIds = new Set(relationships.map((relationship) => relationship.beneficiaryPlayId).filter(Boolean));
+  const legacyPlacedCampaignIds = new Set(relationships
+    .filter((relationship) => !relationship.beneficiaryPlayId)
+    .map((relationship) => relationship.beneficiaryCampaignId));
+  const candidates = new Map((campaigns || []).filter((campaign) =>
     campaign.campaignType !== "standalone-content" &&
     eligibleLevels.includes(Number(campaign.level)) &&
     dateKey(campaign.eventDate) >= today &&
+    !legacyPlacedCampaignIds.has(campaign.id) &&
     campaign.status !== "archived",
+  ).map((campaign) => [campaign.id, campaign]));
+  const beneficiaryPlays = (hostPlays || []).filter((play) =>
+    candidates.has(play.campaignId) &&
+    !alreadyPlacedPlayIds.has(play.id) &&
+    play.scheduledDate >= today &&
+    ["scheduled", "rescheduled", "conflict", "needs-decision"].includes(play.status),
   );
   const opportunities = [];
   (hostPlays || []).filter((play) =>
-    Number(play.campaignLevel) === 2 &&
-    play.supportsSmuggle === true &&
+    [1, 2, 3].includes(Number(play.campaignLevel)) &&
+    canHostSmuggle(play) &&
     !play.smuggle &&
     play.scheduledDate >= today &&
     ["scheduled", "rescheduled"].includes(play.status),
   ).forEach((hostPlay) => {
-    candidates
-      .filter((campaign) => dateKey(campaign.eventDate) >= hostPlay.scheduledDate)
-      .sort((left, right) => {
-        if (Number(left.level) !== Number(right.level)) return Number(left.level) - Number(right.level);
-        return compareCampaignPriority(left, right);
-      })
-      .slice(0, 3)
-      .forEach((campaign) => {
-        const daysUntilEvent = differenceInDays(campaign.eventDate, hostPlay.scheduledDate);
+    const hostCampaign = campaignById.get(hostPlay.campaignId) || {};
+    beneficiaryPlays
+      .filter((beneficiaryPlay) =>
+        beneficiaryPlay.campaignId !== hostPlay.campaignId &&
+        smuggleAnnouncementsMatch(hostPlay, beneficiaryPlay),
+      )
+      .forEach((beneficiaryPlay) => {
+        const campaign = candidates.get(beneficiaryPlay.campaignId);
         opportunities.push({
-          id: `${hostPlay.id}_${campaign.id}`,
+          id: `${hostPlay.id}_${beneficiaryPlay.id}`,
           hostCampaignId: hostPlay.campaignId,
           hostScheduledPlayId: hostPlay.id,
           beneficiaryCampaignId: campaign.id,
+          beneficiaryScheduledPlayId: beneficiaryPlay.id,
           strategy: "SMUGGLE",
           beneficiaryName: campaign.name,
           beneficiaryLevel: Number(campaign.level),
+          beneficiaryPlayType: beneficiaryPlay.playType,
+          beneficiaryChannel: beneficiaryPlay.channel,
+          hostCampaignName: hostCampaign.name || hostPlay.campaignName || "Higher-level campaign",
+          hostCampaignLevel: Number(hostCampaign.level || hostPlay.campaignLevel),
           hostPlayType: hostPlay.playType,
+          hostChannel: hostPlay.channel,
           scheduledDate: hostPlay.scheduledDate,
-          scoreReason: `Level ${campaign.level}; ${campaign.isOnTime === false ? "late submission" : "submitted on time"}; event in ${daysUntilEvent} day${daysUntilEvent === 1 ? "" : "s"}; no existing Smuggle on this play.`,
+          scoreReason: `Both campaigns have a ${hostPlay.playType} planned for ${hostPlay.scheduledDate}.`,
           applied: false,
         });
       });
   });
-  return opportunities;
+  return opportunities.sort((left, right) =>
+    Number(left.beneficiaryLevel) - Number(right.beneficiaryLevel) ||
+    String(left.beneficiaryName).localeCompare(String(right.beneficiaryName)) ||
+    String(left.scheduledDate).localeCompare(String(right.scheduledDate)) ||
+    String(left.beneficiaryPlayType).localeCompare(String(right.beneficiaryPlayType)) ||
+    Number(left.hostCampaignLevel) - Number(right.hostCampaignLevel) ||
+    String(left.hostCampaignName).localeCompare(String(right.hostCampaignName)),
+  );
+}
+
+const SMUGGLE_HOST_RESOURCE_IDS = new Set([
+  "stage-announcement",
+  "social-sprinkle",
+  "ministry-social",
+  "main-social-crosspost",
+]);
+
+export function canHostSmuggle(play) {
+  return play?.supportsSmuggle === true || SMUGGLE_HOST_RESOURCE_IDS.has(String(play?.resourceId || ""));
+}
+
+export function smuggleAnnouncementsMatch(hostPlay, beneficiaryPlay) {
+  if (!hostPlay || !beneficiaryPlay || hostPlay.scheduledDate !== beneficiaryPlay.scheduledDate) return false;
+  const hostType = String(hostPlay.playType || "").trim().toLowerCase();
+  const beneficiaryType = String(beneficiaryPlay.playType || "").trim().toLowerCase();
+  if (hostType && hostType === beneficiaryType) return true;
+  const hostResource = String(hostPlay.resourceId || "").trim();
+  const beneficiaryResource = String(beneficiaryPlay.resourceId || "").trim();
+  return Boolean(hostResource && hostResource === beneficiaryResource);
+}
+
+export function buildSmuggleRelationships({plays = [], campaigns = []} = {}) {
+  const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
+  return plays.filter((play) => play.smuggle?.beneficiaryCampaignId).map((play) => {
+    const hostCampaign = campaignById.get(play.campaignId) || {};
+    const beneficiaryCampaign = campaignById.get(play.smuggle.beneficiaryCampaignId) || {};
+    const beneficiaryPlay = plays
+      .filter((candidate) =>
+        candidate.campaignId === play.smuggle.beneficiaryCampaignId &&
+        !["missed", "skipped"].includes(candidate.status) &&
+        smuggleAnnouncementsMatch(play, candidate),
+      )
+      .sort((left, right) => {
+        const leftExactResource = left.resourceId && left.resourceId === play.resourceId ? 0 : 1;
+        const rightExactResource = right.resourceId && right.resourceId === play.resourceId ? 0 : 1;
+        return leftExactResource - rightExactResource || String(left.id).localeCompare(String(right.id));
+      })[0] || null;
+    return {
+      id: `${play.id}:${play.smuggle.beneficiaryCampaignId}`,
+      hostPlayId: play.id,
+      hostCampaignId: play.campaignId || play.smuggle.hostCampaignId,
+      hostCampaignName: hostCampaign.name || play.campaignName || "Higher-level campaign",
+      hostCampaignLevel: Number(hostCampaign.level || play.campaignLevel || 3),
+      hostPlayType: play.playType || "Promotion",
+      hostChannel: play.channel || "",
+      scheduledDate: play.scheduledDate || "",
+      beneficiaryCampaignId: play.smuggle.beneficiaryCampaignId,
+      beneficiaryName: beneficiaryCampaign.name || play.smuggle.beneficiaryName || "Lower-level campaign",
+      beneficiaryLevel: Number(beneficiaryCampaign.level || 5),
+      beneficiaryPlayId: beneficiaryPlay?.id || "",
+      beneficiaryPlayType: beneficiaryPlay?.playType || play.playType || "Promotion",
+      beneficiaryChannel: beneficiaryPlay?.channel || "",
+    };
+  }).sort((left, right) =>
+    String(left.scheduledDate).localeCompare(String(right.scheduledDate)) ||
+    Number(left.hostCampaignLevel) - Number(right.hostCampaignLevel) ||
+    String(left.hostCampaignName).localeCompare(String(right.hostCampaignName)),
+  );
+}
+
+export function smuggledBeneficiaryPlayIds({plays = [], campaigns = []} = {}) {
+  return new Set(buildSmuggleRelationships({plays, campaigns})
+    .map((relationship) => relationship.beneficiaryPlayId)
+    .filter(Boolean));
 }
 
 export function applySmuggle(play, opportunity) {
-  if (!play?.supportsSmuggle) throw new Error("This play does not support Smuggle.");
+  if (!canHostSmuggle(play)) throw new Error("This promotion does not support Smuggle.");
   if (!opportunity || opportunity.hostScheduledPlayId !== play.id) {
     throw new Error("The Smuggle opportunity does not match this host play.");
   }
@@ -648,12 +739,26 @@ export function applySmuggle(play, opportunity) {
   };
 }
 
+export function skipPromotion(play) {
+  if (!play?.id) throw new Error("A scheduled promotion is required.");
+  return {
+    ...play,
+    status: "skipped",
+    conflictState: "none",
+    conflictReason: "",
+    smuggle: null,
+    manuallyAdjusted: true,
+  };
+}
+
 export function utilizationForWeek({weekStart, plays, capacityRules}) {
   const start = startOfSundayWeek(weekStart);
   const end = addDays(start, 6);
+  const smuggledPlayIds = smuggledBeneficiaryPlayIds({plays});
   const active = (plays || []).filter((play) =>
     play.scheduledDate >= start &&
     play.scheduledDate <= end &&
+    !smuggledPlayIds.has(play.id) &&
     !["missed", "skipped"].includes(play.status),
   );
   return (capacityRules || []).filter((rule) => rule.showOnDashboard !== false).map((rule) => {

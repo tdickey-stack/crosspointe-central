@@ -13,6 +13,7 @@ import {
   addDays,
   allocateLevel4SocialSlots,
   applySmuggle,
+  buildSmuggleRelationships,
   businessLocalToIso,
   businessNowInputValue,
   dateKey,
@@ -24,6 +25,7 @@ import {
   recurringContentDates,
   reportPresetDateRange,
   scheduleSummary,
+  skipPromotion,
   utilizationForWeek,
   utcDateFromKey,
   weeklyInventoryPlays,
@@ -90,6 +92,35 @@ function visiblePromotions(plays) {
 function needsPromotionReview(play) {
   return ["conflict", "needs-decision"].includes(play.status) ||
     (play.conflictState && play.conflictState !== "none");
+}
+
+function groupSmuggleOpportunities(opportunities) {
+  const grouped = new Map();
+  (opportunities || []).forEach((opportunity) => {
+    const key = opportunity.beneficiaryScheduledPlayId || `${opportunity.beneficiaryCampaignId}:${opportunity.scheduledDate}:${opportunity.beneficiaryPlayType}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        id: key,
+        beneficiaryCampaignId: opportunity.beneficiaryCampaignId,
+        beneficiaryScheduledPlayId: opportunity.beneficiaryScheduledPlayId,
+        beneficiaryName: opportunity.beneficiaryName,
+        beneficiaryLevel: opportunity.beneficiaryLevel,
+        beneficiaryPlayType: opportunity.beneficiaryPlayType,
+        beneficiaryChannel: opportunity.beneficiaryChannel,
+        scheduledDate: opportunity.scheduledDate,
+        options: [],
+      });
+    }
+    grouped.get(key).options.push(opportunity);
+  });
+  return [...grouped.values()].map((group) => ({
+    ...group,
+    options: group.options.sort((left, right) =>
+      Number(left.hostCampaignLevel) - Number(right.hostCampaignLevel) ||
+      String(left.scheduledDate).localeCompare(String(right.scheduledDate)) ||
+      String(left.hostCampaignName).localeCompare(String(right.hostCampaignName)),
+    ),
+  }));
 }
 
 function campaignDeadline(campaign) {
@@ -403,22 +434,30 @@ function PageHeading({eyebrow, title, copy, actions}) {
   );
 }
 
-function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggle, canEdit}) {
+function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggle, onSkipSmuggle, canEdit}) {
   const [selectedMetric, setSelectedMetric] = useState(null);
+  const [selectedSmuggle, setSelectedSmuggle] = useState(null);
   const weekStart = nextPlanningWeekStart(new Date());
   const weekEnd = addDays(weekStart, 6);
-  const weekPlays = visiblePromotions(workspace.scheduledPlays).filter((play) =>
+  const smuggleRelationships = buildSmuggleRelationships({
+    plays: workspace.scheduledPlays,
+    campaigns: workspace.campaigns,
+  });
+  const smuggledPlayIds = new Set(smuggleRelationships.map((relationship) => relationship.beneficiaryPlayId).filter(Boolean));
+  const visibleWorkspacePlays = workspace.scheduledPlays.filter((play) => !smuggledPlayIds.has(play.id));
+  const weekPlays = visiblePromotions(visibleWorkspacePlays).filter((play) =>
     play.scheduledDate >= weekStart && play.scheduledDate <= weekEnd,
   );
   const utilization = utilizationForWeek({
     weekStart,
-    plays: workspace.scheduledPlays,
+    plays: visibleWorkspacePlays,
     capacityRules: workspace.capacityRules,
   });
-  const opportunities = recommendSmuggleOpportunities({
+  const opportunityGroups = groupSmuggleOpportunities(recommendSmuggleOpportunities({
     hostPlays: workspace.scheduledPlays,
     campaigns: workspace.campaigns,
-  }).slice(0, 4);
+  })).slice(0, 4);
+  const smuggleByHostPlay = new Map(smuggleRelationships.map((relationship) => [relationship.hostPlayId, relationship]));
   const attention = weekPlays.filter(needsPromotionReview);
 
   return (
@@ -460,7 +499,7 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
                 return (
                   <div className="planner-agenda-day" key={day}>
                     <time dateTime={day}><b>{formatDate(day, {year: false}).split(" ")[0]}</b><strong>{dateKey(day).slice(-2)}</strong></time>
-                    <div>{daily.map((play) => <PlayRow key={play.id} play={play} onClick={() => onOpenPlay(play)} />)}</div>
+                    <div>{daily.map((play) => <PlayRow key={play.id} play={play} smuggleRelationship={smuggleByHostPlay.get(play.id)} onClick={() => onOpenPlay(play)} />)}</div>
                   </div>
                 );
               })}
@@ -484,15 +523,18 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
           <article className="planner-panel">
             <div className="planner-panel-heading">
               <div><span className="planner-kicker">Smuggle</span><h2>Opportunities</h2></div>
-              <StatusBadge status="opportunity">{opportunities.length}</StatusBadge>
+              <StatusBadge status="opportunity">{opportunityGroups.length}</StatusBadge>
             </div>
-            {opportunities.length ? opportunities.map((opportunity) => (
-              <div className="planner-smuggle-row" key={opportunity.id}>
-                <div><LevelBadge level={opportunity.beneficiaryLevel} /><span><strong>{opportunity.beneficiaryName}</strong><small>{opportunity.hostPlayType} · {formatDate(opportunity.scheduledDate)}</small></span></div>
-                <p>{opportunity.scoreReason}</p>
-                {canEdit && <button className="planner-text-button" onClick={() => onUseSmuggle(opportunity)}>Use as Smuggle →</button>}
+            {opportunityGroups.length ? opportunityGroups.map((group) => {
+              const campaignCount = new Set(group.options.map((option) => option.hostCampaignId)).size;
+              return (
+              <div className="planner-smuggle-row" key={group.id}>
+                <div><LevelBadge level={group.beneficiaryLevel} /><span><strong>{group.beneficiaryName}</strong><small>{group.beneficiaryPlayType} · {formatDate(group.scheduledDate)}</small></span></div>
+                <p>{campaignCount} same-day Level 1–3 host event{campaignCount === 1 ? " is" : "s are"} available for this announcement.</p>
+                {canEdit && <button className="planner-text-button" onClick={() => setSelectedSmuggle(group)}>Choose the host event →</button>}
               </div>
-            )) : <p className="planner-quiet-copy">No open, Smuggle-capable Level 2 promotions are currently loaded.</p>}
+              );
+            }) : <p className="planner-quiet-copy">No open Level 1–3 promotions can currently host a Smuggle.</p>}
           </article>
         </div>
       </section>
@@ -501,23 +543,37 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
           metric={selectedMetric}
           weekStart={weekStart}
           weekEnd={weekEnd}
-          plays={workspace.scheduledPlays}
+          plays={visibleWorkspacePlays}
           campaigns={workspace.campaigns}
           canEdit={canEdit}
           onClose={() => setSelectedMetric(null)}
           onSavePlay={onSavePlay}
         />
       )}
+      {selectedSmuggle && (
+        <SmuggleSelectionDialog
+          candidate={selectedSmuggle}
+          onClose={() => setSelectedSmuggle(null)}
+          onChoose={async (opportunity) => {
+            await onUseSmuggle(opportunity);
+            setSelectedSmuggle(null);
+          }}
+          onSkip={async () => {
+            await onSkipSmuggle(selectedSmuggle);
+            setSelectedSmuggle(null);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function PlayRow({play, onClick, showDate = false}) {
+function PlayRow({play, onClick, showDate = false, smuggleRelationship = null}) {
   return (
     <button className="planner-play-row" onClick={onClick}>
       <span className="planner-play-level" style={{background: isStandaloneContent(play) ? "#f472b6" : LEVEL_COLORS[play.campaignLevel]}} />
-      <span><strong>{play.playType}</strong><small>{play.campaignName} · {play.channel}{showDate ? ` · ${formatDate(play.scheduledDate)}` : ""}</small></span>
-      {play.smuggle && <StatusBadge status="smuggle">Smuggle</StatusBadge>}
+      <span><strong>{play.playType}</strong><small>{play.campaignName} · {play.channel}{showDate ? ` · ${formatDate(play.scheduledDate)}` : ""}</small>{smuggleRelationship && <em className="planner-play-smuggle">↳ Contains L{smuggleRelationship.beneficiaryLevel} {smuggleRelationship.beneficiaryName}</em>}</span>
+      {smuggleRelationship && <StatusBadge status="smuggle">Smuggle</StatusBadge>}
       {needsPromotionReview(play) && <StatusBadge status="conflict">{play.status === "conflict" ? "Conflict" : "Review"}</StatusBadge>}
     </button>
   );
@@ -601,13 +657,24 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
   const calendarRef = useRef(null);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_STORAGE_KEY) || "dayGridMonth");
   const [filters, setFilters] = useState({campaign: "", level: "", channel: "", playType: ""});
+  const smuggleRelationships = useMemo(() => buildSmuggleRelationships({
+    plays: workspace.scheduledPlays,
+    campaigns: workspace.campaigns,
+  }), [workspace.scheduledPlays, workspace.campaigns]);
+  const smuggledPlayIds = useMemo(() => new Set(
+    smuggleRelationships.map((relationship) => relationship.beneficiaryPlayId).filter(Boolean),
+  ), [smuggleRelationships]);
   const filtered = useMemo(() => visiblePromotions(workspace.scheduledPlays).filter((play) =>
+    !smuggledPlayIds.has(play.id) &&
     (!filters.campaign || play.campaignId === filters.campaign) &&
     (!filters.level || (!isStandaloneContent(play) && String(play.campaignLevel) === filters.level)) &&
     (!filters.channel || play.channel === filters.channel) &&
     (!filters.playType || play.playType === filters.playType),
-  ), [workspace.scheduledPlays, filters]);
+  ), [workspace.scheduledPlays, filters, smuggledPlayIds]);
   const values = (key) => [...new Set(workspace.scheduledPlays.map((play) => play[key]).filter(Boolean))].sort();
+  const smuggleByHostPlay = useMemo(() => new Map(
+    smuggleRelationships.map((relationship) => [relationship.hostPlayId, relationship]),
+  ), [smuggleRelationships]);
   const events = groupCalendarCampaignDays(filtered).map((group) => {
     const content = isStandaloneContent(group);
     const color = content ? "#f472b6" : LEVEL_COLORS[group.campaignLevel] || LEVEL_COLORS[5];
@@ -637,9 +704,15 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
       return (
         <div className={`planner-calendar-event is-campaign-day ${isStandaloneContent(campaignDayGroup) ? "is-content" : `is-level-${campaignDayGroup.campaignLevel}`} ${view === "dayGridWeek" ? "is-week" : "is-month"}`}>
           <div><PromotionKindBadge item={campaignDayGroup} /><strong>{campaignDayGroup.campaignName}</strong><small>{campaignDayGroup.plays.length} type{campaignDayGroup.plays.length === 1 ? "" : "s"}</small></div>
-          <ul>{campaignDayGroup.plays.map((play) => (
-            <li key={play.id}>{play.playType}{needsPromotionReview(play) ? ` · ${play.status === "conflict" ? "Conflict" : "Review"}` : ""}</li>
-          ))}</ul>
+          <ul>{campaignDayGroup.plays.map((play) => {
+            const relationship = smuggleByHostPlay.get(play.id);
+            return (
+              <li key={play.id} className={relationship ? "has-smuggle" : ""}>
+                <span>{play.playType}{needsPromotionReview(play) ? ` · ${play.status === "conflict" ? "Conflict" : "Review"}` : ""}</span>
+                {relationship && <em>↳ Smuggle contains L{relationship.beneficiaryLevel} {relationship.beneficiaryName}</em>}
+              </li>
+            );
+          })}</ul>
         </div>
       );
     }
@@ -958,13 +1031,19 @@ function BriefEntryPreview({entry}) {
           <PromotionKindBadge item={entry.kind === "content" ? {campaignType: STANDALONE_CONTENT_TYPE} : {level: entry.level}} />
           <span><strong>{entry.name}</strong><small>{entry.kind === "content" ? `${formatDate(entry.firstPromotionDate)}–${formatDate(entry.lastPromotionDate)}` : `Event ${formatDate(entry.eventDate)}`}</small></span>
         </div>
-        <StatusBadge>{entry.announcements.length} selected</StatusBadge>
+        <StatusBadge status={entry.smuggledInto.length && !entry.announcements.length ? "smuggle" : ""}>{entry.announcements.length ? `${entry.announcements.length} selected` : "Smuggle"}</StatusBadge>
       </header>
       {entry.registrationDeadline && <p className="planner-brief-deadline">Registration deadline · {formatDate(entry.registrationDeadline)}</p>}
+      {entry.smuggledInto.map((relationship) => (
+        <div className="planner-brief-smuggled-into" key={relationship.id}>
+          <StatusBadge status="smuggle">Smuggled into</StatusBadge>
+          <span><strong>L{relationship.hostCampaignLevel} {relationship.hostCampaignName}</strong><small>{relationship.hostPlayType} · {formatDate(relationship.scheduledDate)}</small></span>
+        </div>
+      ))}
       <div className="planner-brief-announcements">
         {entry.announcements.map((announcement) => (
           <div key={announcement.id} className={announcement.needsAttention ? "has-alert" : ""}>
-            <span><strong>{announcement.playType}</strong><small>{announcement.channel || "Channel not set"}</small></span>
+            <span><strong>{announcement.playType}</strong><small>{announcement.channel || "Channel not set"}</small>{announcement.smuggle && <em className="planner-brief-smuggle">↳ Contains L{announcement.smuggle.beneficiaryLevel} {announcement.smuggle.beneficiaryName}</em>}</span>
             <time dateTime={announcement.scheduledDate}>{formatDate(announcement.scheduledDate)}</time>
           </div>
         ))}
@@ -1323,6 +1402,57 @@ function Modal({title, eyebrow, onClose, children, size = "normal"}) {
   );
 }
 
+function SmuggleSelectionDialog({candidate, onClose, onChoose, onSkip}) {
+  const [savingId, setSavingId] = useState("");
+  const [error, setError] = useState("");
+  return (
+    <Modal title={`Place ${candidate.beneficiaryName}`} eyebrow="Choose the host event" onClose={onClose} size="wide">
+      <div className="planner-smuggle-explainer">
+        <LevelBadge level={candidate.beneficiaryLevel} />
+        <div><strong>Place the Level {candidate.beneficiaryLevel} {candidate.beneficiaryPlayType} for {candidate.beneficiaryName}.</strong><p>Only compatible Level 1–3 announcements already planned for {formatDate(candidate.scheduledDate)} are shown. The lower-level announcement will appear inside the host instead of as a separate item.</p></div>
+      </div>
+      <div className="planner-smuggle-options">
+        {candidate.options.map((option) => (
+          <article className="planner-smuggle-option" key={option.id}>
+            <div className="planner-smuggle-option-heading">
+              <LevelBadge level={option.hostCampaignLevel} />
+              <span><strong>{option.hostCampaignName}</strong><small>{option.hostPlayType} · {option.hostChannel || "Channel not set"}</small></span>
+              <time dateTime={option.scheduledDate}>{formatDate(option.scheduledDate)}</time>
+            </div>
+            <p>This {option.hostPlayType} will contain the Level {candidate.beneficiaryLevel} announcement on the same date.</p>
+            <button className="planner-button is-primary" disabled={Boolean(savingId)} onClick={async () => {
+              setSavingId(option.id); setError("");
+              try {
+                await onChoose(option);
+              } catch (saveError) {
+                setError(saveError.message || "This Smuggle choice could not be saved.");
+                setSavingId("");
+              }
+            }}>{savingId === option.id ? "Saving…" : `Use ${option.hostCampaignName}`}</button>
+          </article>
+        ))}
+      </div>
+      <div className="planner-smuggle-decline">
+        <div>
+          <strong>Do not run this announcement</strong>
+          <p>Remove the {candidate.beneficiaryPlayType} on {formatDate(candidate.scheduledDate)} from the plan. Other promotions for {candidate.beneficiaryName} will stay scheduled, and this conflict will be resolved.</p>
+        </div>
+        <button className="planner-button is-secondary" disabled={Boolean(savingId)} onClick={async () => {
+          setSavingId("skip"); setError("");
+          try {
+            await onSkip();
+          } catch (saveError) {
+            setError(saveError.message || "This decision could not be saved.");
+            setSavingId("");
+          }
+        }}>{savingId === "skip" ? "Saving…" : "Do not announce"}</button>
+      </div>
+      {error && <div className="planner-detail-note is-alert"><strong>Decision not saved</strong><p>{error}</p></div>}
+      <div className="planner-modal-actions"><button className="planner-button is-secondary" disabled={Boolean(savingId)} onClick={onClose}>Cancel</button></div>
+    </Modal>
+  );
+}
+
 function NewCampaignDialog({workspace, onClose, onGenerate}) {
   const campaignPlaybooks = workspace.playbooks.filter((item) =>
     item.active !== false &&
@@ -1407,7 +1537,7 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
   );
 }
 
-function PlayDialog({play, campaign, canEdit, onClose, onSave}) {
+function PlayDialog({play, campaign, smuggleRelationship, canEdit, onClose, onSave}) {
   const [draft, setDraft] = useState({...play});
   return (
     <Modal title={play.playType} eyebrow="Promotion" onClose={onClose}>
@@ -1415,7 +1545,7 @@ function PlayDialog({play, campaign, canEdit, onClose, onSave}) {
       <dl className="planner-detail-list"><div><dt>Planned date</dt><dd>{formatDate(draft.scheduledDate)}</dd></div>{!isStandaloneContent(play) && <div><dt>Playbook</dt><dd>{play.playbookId} · v{play.playbookVersion}</dd></div>}</dl>
       {play.lateReason && <div className="planner-detail-note"><strong>Late handling</strong><p>{play.lateReason}</p></div>}
       {play.conflictReason && <div className="planner-detail-note is-alert"><strong>Conflict</strong><p>{play.conflictReason}</p></div>}
-      {play.smuggle && <div className="planner-detail-note is-smuggle"><strong>Smuggle promotion</strong><p>This Level 2 promotion intentionally includes {play.smuggle.beneficiaryName}.</p></div>}
+      {smuggleRelationship && <div className="planner-detail-note is-smuggle"><strong>Smuggle host</strong><p>This Level {smuggleRelationship.hostCampaignLevel} {smuggleRelationship.hostCampaignName} promotion contains Level {smuggleRelationship.beneficiaryLevel} {smuggleRelationship.beneficiaryName}.</p></div>}
       {canEdit && (
         <div className="planner-form-grid planner-play-adjustment">
           <Field label="Move promotion"><input type="date" value={draft.scheduledDate} max={campaignDeadline(campaign) || undefined} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true})} /></Field>
@@ -1429,21 +1559,33 @@ function PlayDialog({play, campaign, canEdit, onClose, onSave}) {
 function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEditContent, onDelete}) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const plays = visiblePromotions(workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id)).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
-  const summary = scheduleSummary(plays);
+  const smuggleRelationships = buildSmuggleRelationships({plays: workspace.scheduledPlays, campaigns: workspace.campaigns});
+  const smuggledPlayIds = new Set(smuggleRelationships.map((relationship) => relationship.beneficiaryPlayId).filter(Boolean));
+  const campaignPlays = workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id);
+  const intentionallySkipped = campaignPlays.filter((play) =>
+    play.status === "skipped" && play.manuallyAdjusted === true,
+  ).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
+  const plays = visiblePromotions(campaignPlays.filter((play) =>
+    !smuggledPlayIds.has(play.id),
+  )).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
   const standalone = isStandaloneContent(campaign);
   const series = standalone ? contentSeriesDetails(plays) : null;
   const seriesSchedule = series?.firstDate === series?.lastDate
     ? formatDate(series?.firstDate)
     : `${formatDate(series?.firstDate, {year: false})}–${formatDate(series?.lastDate)}`;
+  const hostedByPlay = new Map(smuggleRelationships.map((relationship) => [relationship.hostPlayId, relationship]));
+  const guestRelationships = smuggleRelationships.filter((relationship) => relationship.beneficiaryCampaignId === campaign.id);
+  const summary = scheduleSummary(plays);
   return (
     <Modal title={campaign.name} eyebrow={standalone ? "Content" : `Level ${campaign.level} campaign`} onClose={onClose} size="wide">
       <div className="planner-campaign-detail-summary">
         <div><span>{standalone ? "Schedule" : "Event date"}</span><strong>{standalone ? seriesSchedule : formatDate(campaign.eventDate)}</strong></div>{standalone ? <><div><span>Repeat</span><strong>{series?.label || "One time"}</strong></div><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div></>}
       </div>
-      <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> {standalone ? "occurrences" : "promotions"}</span>{!standalone && <span><strong>{summary.conflicts}</strong> conflicts</span>}</div>
+      <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> {standalone ? "occurrences" : "promotions"}</span>{!standalone && <span><strong>{summary.conflicts}</strong> conflicts</span>}{intentionallySkipped.length > 0 && <span><strong>{intentionallySkipped.length}</strong> not running</span>}</div>
       {campaign.notes && <div className="planner-detail-note"><strong>Notes</strong><p>{campaign.notes}</p></div>}
-      <div className="planner-campaign-play-list">{plays.map((play) => <PlayRow key={play.id} play={play} showDate={standalone && plays.length > 1} onClick={() => onOpenPlay(play)} />)}</div>
+      {guestRelationships.map((relationship) => <div className="planner-detail-note is-smuggle" key={relationship.id}><strong>{relationship.beneficiaryPlayType} smuggled into Level {relationship.hostCampaignLevel} {relationship.hostCampaignName}</strong><p>{formatDate(relationship.scheduledDate)} · The announcement appears inside that higher-level {relationship.hostPlayType} instead of separately.</p></div>)}
+      {intentionallySkipped.map((play) => <div className="planner-detail-note is-skipped" key={play.id}><strong>{play.playType} will not run</strong><p>{formatDate(play.scheduledDate)} · This decision removes the announcement from the calendar, capacity totals, and reports.</p></div>)}
+      <div className="planner-campaign-play-list">{plays.map((play) => <PlayRow key={play.id} play={play} showDate={standalone && plays.length > 1} smuggleRelationship={hostedByPlay.get(play.id)} onClick={() => onOpenPlay(play)} />)}</div>
       {confirmDelete && (
         <div className="planner-delete-confirmation" role="alert">
           <div><strong>Delete this {standalone ? plays.length > 1 ? `content series and all ${plays.length} occurrences` : "content item" : `campaign and all ${plays.length} promotion${plays.length === 1 ? "" : "s"}`}?</strong><p>This cannot be undone and removes it from every Planner view.</p></div>
@@ -1513,6 +1655,11 @@ function PlannerApp({authState}) {
   }), [authState.firestore, authState.user?.uid, authState.preview]);
   const canEdit = EDIT_PERMISSIONS.has(authState.permission);
   const canEmail = ["approve", "admin"].includes(authState.permission);
+  const smuggleRelationships = workspace ? buildSmuggleRelationships({
+    plays: workspace.scheduledPlays,
+    campaigns: workspace.campaigns,
+  }) : [];
+  const smuggleByHostPlay = new Map(smuggleRelationships.map((relationship) => [relationship.hostPlayId, relationship]));
 
   const load = async () => {
     setLoading(true); setError("");
@@ -1569,6 +1716,12 @@ function PlannerApp({authState}) {
     await updatePlay(applySmuggle(host, opportunity), `${opportunity.beneficiaryName} is now intentionally included as a Smuggle promotion.`);
   };
 
+  const skipSmuggle = async (candidate) => {
+    const beneficiary = workspace.scheduledPlays.find((play) => play.id === candidate.beneficiaryScheduledPlayId);
+    if (!beneficiary) throw new Error("The announcement to remove could not be found.");
+    await updatePlay(skipPromotion(beneficiary), `${beneficiary.campaignName} will not receive a ${beneficiary.playType} on ${formatDate(beneficiary.scheduledDate)}.`);
+  };
+
   let content = null;
   if (activeView === "calendar") content = <CalendarView workspace={workspace} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
   else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} />;
@@ -1594,7 +1747,7 @@ function PlannerApp({authState}) {
     const saved = await perform(() => store.saveStandingLane(lane), `${lane.name} standing lane saved.`);
     setWorkspace((current) => ({...current, standingLanes: current.standingLanes.map((item) => item.id === saved.id ? saved : item)}));
   }} />;
-  else content = <Overview workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenPlay={setSelectedPlay} onSavePlay={updatePlay} onUseSmuggle={useSmuggle} />;
+  else content = <Overview workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenPlay={setSelectedPlay} onSavePlay={updatePlay} onUseSmuggle={useSmuggle} onSkipSmuggle={skipSmuggle} />;
 
   return (
     <div className="planner-app">
@@ -1634,7 +1787,7 @@ function PlannerApp({authState}) {
         }));
         setEditingContent(null); setActiveView("content");
       }} />}
-      {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} />}
+      {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} smuggleRelationship={smuggleByHostPlay.get(selectedPlay.id)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} />}
       {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onDelete={deleteCampaign} />}
     </div>
   );

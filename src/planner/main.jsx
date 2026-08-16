@@ -565,25 +565,15 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     (!filters.status || play.status === filters.status),
   ), [workspace.scheduledPlays, filters]);
   const values = (key) => [...new Set(workspace.scheduledPlays.map((play) => play[key]).filter(Boolean))].sort();
-  const events = view === "dayGridWeek"
-    ? groupCalendarCampaignDays(filtered).map((group) => ({
-      id: group.id,
-      title: group.campaignName,
-      start: group.scheduledDate,
-      allDay: true,
-      className: `planner-level-calendar-event is-level-${group.campaignLevel}`,
-      editable: false,
-      extendedProps: {weeklyGroup: group, sortLevel: Number(group.campaignLevel)},
-    }))
-    : filtered.map((play) => ({
-      id: play.id,
-      title: `${play.campaignName} · ${play.playType}`,
-      start: play.scheduledDate,
-      allDay: true,
-      className: `planner-level-calendar-event is-level-${play.campaignLevel}`,
-      editable: canEdit && !play.locked && !["completed", "missed", "skipped"].includes(play.status),
-      extendedProps: {play, sortLevel: Number(play.campaignLevel)},
-    }));
+  const events = groupCalendarCampaignDays(filtered).map((group) => ({
+    id: group.id,
+    title: group.campaignName,
+    start: group.scheduledDate,
+    allDay: true,
+    className: `planner-level-calendar-event is-level-${group.campaignLevel}`,
+    editable: false,
+    extendedProps: {campaignDayGroup: group, sortLevel: Number(group.campaignLevel)},
+  }));
   const changeView = (next) => {
     calendarRef.current?.getApi?.().changeView(
       next,
@@ -593,12 +583,12 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     localStorage.setItem(VIEW_STORAGE_KEY, next);
   };
   const eventContent = (info) => {
-    const weeklyGroup = info.event.extendedProps.weeklyGroup;
-    if (weeklyGroup) {
+    const campaignDayGroup = info.event.extendedProps.campaignDayGroup;
+    if (campaignDayGroup) {
       return (
-        <div className="planner-calendar-event is-week is-campaign-week">
-          <div><LevelBadge level={weeklyGroup.campaignLevel} /><strong>{weeklyGroup.campaignName}</strong><small>{weeklyGroup.plays.length} type{weeklyGroup.plays.length === 1 ? "" : "s"}</small></div>
-          <ul>{weeklyGroup.plays.map((play) => (
+        <div className={`planner-calendar-event is-campaign-day ${view === "dayGridWeek" ? "is-week" : "is-month"}`}>
+          <div><LevelBadge level={campaignDayGroup.campaignLevel} /><strong>{campaignDayGroup.campaignName}</strong><small>{campaignDayGroup.plays.length} type{campaignDayGroup.plays.length === 1 ? "" : "s"}</small></div>
+          <ul>{campaignDayGroup.plays.map((play) => (
             <li key={play.id}>{play.playType}{["conflict", "needs-decision", "missed"].includes(play.status) ? ` · ${titleCase(play.status)}` : ""}</li>
           ))}</ul>
         </div>
@@ -617,7 +607,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
       <PageHeading
         eyebrow="Scheduled Plays"
         title="Promotion calendar"
-        copy="Month shows individual scheduled plays. Week combines same-day promotion types into one card per campaign."
+        copy="Month and Week combine same-day promotion types into one card per campaign."
         actions={
           <div className="planner-segmented">
             <button className={view === "dayGridMonth" ? "is-active" : ""} onClick={() => changeView("dayGridMonth")}>Month</button>
@@ -650,7 +640,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
           eventOrderStrict
           eventContent={eventContent}
           eventClick={(info) => {
-            const group = info.event.extendedProps.weeklyGroup;
+            const group = info.event.extendedProps.campaignDayGroup;
             if (!group) return onOpenPlay(info.event.extendedProps.play);
             const campaign = workspace.campaigns.find((item) => item.id === group.campaignId);
             return campaign ? onOpenCampaign(campaign) : onOpenPlay(group.plays[0]);

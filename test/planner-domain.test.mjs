@@ -223,7 +223,7 @@ test("planning overview always starts on the next Sunday", () => {
   assert.equal(nextPlanningWeekStart("2026-08-16"), "2026-08-23");
 });
 
-test("weekly calendar groups only same-day plays for the same campaign", () => {
+test("calendar groups only same-day plays for the same campaign", () => {
   const groups = groupCalendarCampaignDays([
     {id: "stage", campaignId: "campaign-a", campaignName: "Women's Breakfast", campaignLevel: 4, scheduledDate: "2026-08-16", playType: "Stage Announcement"},
     {id: "slide", campaignId: "campaign-a", campaignName: "Women's Breakfast", campaignLevel: 4, scheduledDate: "2026-08-16", playType: "Pre-Service Slide"},

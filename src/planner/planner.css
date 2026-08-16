@@ -208,10 +208,12 @@ a { text-decoration: none; }
 .planner-calendar-event.is-week { min-height: 76px; padding: 8px; }
 .planner-calendar-event.is-week strong { font-size: .58rem; }
 .planner-calendar-event.is-week > span { white-space: normal; }
-.planner-calendar-event.is-campaign-week { min-height: 84px; padding: 9px 11px; }
-.planner-calendar-event.is-campaign-week > div > small { margin: 0 0 0 auto; font-size: .46rem; font-weight: 850; opacity: .72; white-space: nowrap; }
-.planner-calendar-event.is-campaign-week ul { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0 0; padding: 0; list-style: none; }
-.planner-calendar-event.is-campaign-week li { font-size: .5rem; font-weight: 700; line-height: 1.35; }
+.planner-calendar-event.is-campaign-day > div > small { margin: 0 0 0 auto; font-size: .46rem; font-weight: 850; opacity: .72; white-space: nowrap; }
+.planner-calendar-event.is-campaign-day ul { margin: 5px 0 0; padding: 0; list-style: none; }
+.planner-calendar-event.is-campaign-day li { overflow: hidden; font-size: .46rem; font-weight: 700; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.planner-calendar-event.is-campaign-day.is-week { min-height: 84px; padding: 9px 11px; }
+.planner-calendar-event.is-campaign-day.is-week ul { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.planner-calendar-event.is-campaign-day.is-week li { font-size: .5rem; white-space: normal; }
 
 .planner-table-panel { max-width: 1500px; margin: 0 auto; padding: 12px; overflow-x: auto; }
 .planner-campaign-table { min-width: 880px; }

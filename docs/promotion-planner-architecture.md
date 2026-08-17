@@ -69,8 +69,17 @@ The target is the existing Standard edition, Firestore Native `(default)` databa
 | `centralPromotionScheduledPlays` | Independent dated records used by Calendar and Campaign detail |
 | `centralPromotionCapacityRules` | Editable promotional inventory and allocation configuration |
 | `centralPromotionStandingLanes` | Editable recurring Level 2 coverage configuration |
+| `centralPromotionRequests` | Idempotent, server-created Planning Center form requests awaiting review |
 
 Scheduled Plays always retain both `originalScheduledDate` and `scheduledDate`. Manual changes update only the Scheduled Play. Playbook saves create a new version rather than rewriting previous version snapshots.
+
+Planning Center People form submissions enter through the signed
+`/api/webhooks/planning-center/forms` endpoint. The webhook stores only the
+campaign-planning subset of each qualifying submission. A Planner editor must
+confirm the name, primary event date, level, and playbook before Central creates
+the campaign. General Promotion submissions always require manual date review;
+Event/Promo submissions use conservative free-text parsing and retain the
+original date answer.
 
 The initial Scheduled Play query is bounded from 70 days before today through 400 days after today and ordered by `scheduledDate`. That uses a Standard edition single-field index; no new composite index is required.
 
@@ -98,6 +107,8 @@ The PDFs remain reference material. The authenticated UI shows starter configura
 - `view` is read-only.
 - `propose`, `edit`, `approve`, and `admin` may create/update Planner data.
 - Browser deletes are denied.
+- Browser creation and deletion of Planning Center form requests are denied;
+  only review-owned fields can be updated by Planner editors.
 - Playbook versions are immutable.
 - Campaign playbook/submission history and Scheduled Play source history are immutable.
 - Creates and updates use strict top-level schemas, type/range/length checks, trusted admin authorization, and server timestamps.
@@ -106,10 +117,10 @@ The PDFs remain reference material. The authenticated UI shows starter configura
 ## Local verification
 
 ```bash
-pnpm run build:planner
-pnpm run test:planner
-pnpm run test:planner-rules
-pnpm run check:syntax
+npm run build:planner
+npm run test:planner
+npm run test:planner-rules
+npm run check:syntax
 ```
 
 For UI review through Hosting:

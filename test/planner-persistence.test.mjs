@@ -272,3 +272,143 @@ test("editing an existing content series preserves immutable creation metadata",
     else globalThis.window = previousWindow;
   }
 });
+
+test("promotion requests normalize PCO date fields for the Planner UI", () => {
+  const timestamp = (iso) => ({toDate: () => new Date(iso)});
+  const normalized = plannerPersistenceInternals.normalizePromotionRequest({
+    id: "pco_930568_123",
+    submittedAt: timestamp("2026-08-16T15:30:00.000Z"),
+    receivedAt: timestamp("2026-08-16T15:31:00.000Z"),
+    eventDate: timestamp("2026-09-12T12:00:00.000Z"),
+    eventDateEnd: timestamp("2026-09-13T12:00:00.000Z"),
+    eventDates: [
+      timestamp("2026-09-12T12:00:00.000Z"),
+      timestamp("2026-09-13T12:00:00.000Z"),
+    ],
+    requestedPromotionStart: null,
+    requestedPromotionEnd: null,
+    requestedPlatforms: ["Newsletter", "Stage Announcement"],
+  });
+
+  assert.equal(normalized.eventDate, "2026-09-12");
+  assert.equal(normalized.eventDateEnd, "2026-09-13");
+  assert.deepEqual(normalized.eventDates, ["2026-09-12", "2026-09-13"]);
+  assert.equal(normalized.submittedAt, "2026-08-16T15:30:00.000Z");
+  assert.deepEqual(normalized.requestedPlatforms, ["Newsletter", "Stage Announcement"]);
+});
+
+test("promotion request review updates are whitelisted and timestamped", () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    firebase: {
+      firestore: {
+        Timestamp: {fromDate: (value) => value},
+      },
+    },
+  };
+  try {
+    const payload = plannerPersistenceInternals.promotionRequestUpdateForCloud({
+      proposedName: "  Fall Kickoff  ",
+      eventDate: "2026-09-12",
+      eventDates: ["2026-09-12", "2026-09-13"],
+      eventDateEnd: "2026-09-13",
+      dateParseStatus: "manual",
+      dateParseKind: "multiple",
+      dateSource: "manual-review",
+      status: "converted",
+      campaignId: "pco-form-930568-123",
+      sourceFormId: "must-not-change",
+    }, "planner-admin", "server-timestamp");
+
+    assert.equal(payload.proposedName, "Fall Kickoff");
+    assert.equal(payload.status, "converted");
+    assert.equal(payload.reviewedByUid, "planner-admin");
+    assert.equal(payload.updatedAt, "server-timestamp");
+    assert.equal(payload.eventDates.length, 2);
+    assert.equal(payload.sourceFormId, undefined);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("request conversion commits the campaign, promos, and review state atomically", async () => {
+  const requestId = "pco_1229879_456789";
+  const campaignId = "pco-form-1229879-456789";
+  const firestore = createFakeFirestore({
+    [`${PLANNER_COLLECTIONS.requests}/${requestId}`]: {
+      status: "pending-review",
+    },
+  });
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    firebase: {
+      firestore: {
+        FieldValue: {serverTimestamp: () => "server-timestamp"},
+        Timestamp: {fromDate: (value) => value},
+      },
+    },
+  };
+
+  try {
+    const store = createPlannerStore({firestore, user: {uid: "planner-admin"}});
+    const result = await store.convertPromotionRequest(
+      requestId,
+      {
+        id: campaignId,
+        name: "Community Story",
+        eventDate: "2026-09-06",
+        submittedAt: "2026-08-16T15:30:00.000Z",
+        recommendedStartDate: "2026-08-23",
+        isOnTime: true,
+        level: 3,
+        campaignType: "standard",
+        playbookId: "level-3-standard",
+        playbookVersion: 1,
+        durationWeeks: 3,
+        sourceEventId: "pco-form:1229879:456789",
+        status: "active",
+      },
+      [{
+        id: `${campaignId}-stage`,
+        campaignId,
+        campaignName: "Community Story",
+        campaignLevel: 3,
+        campaignType: "standard",
+        playbookId: "level-3-standard",
+        playbookVersion: 1,
+        templatePlayId: "stage",
+        weekNumber: 1,
+        phase: "Awareness",
+        playType: "Stage Announcement",
+        originalScheduledDate: "2026-08-23",
+        scheduledDate: "2026-08-23",
+        eligibleWeekdays: [0],
+        status: "scheduled",
+        requirement: "required",
+        lateBehavior: "SKIP",
+      }],
+      {
+        proposedName: "Community Story",
+        eventDate: "2026-09-06",
+        eventDates: ["2026-09-06"],
+        eventDateEnd: "",
+        dateParseStatus: "manual",
+        dateParseKind: "single",
+        dateSource: "manual-review",
+      },
+    );
+
+    assert.deepEqual(firestore.committedBatchSizes, [3]);
+    assert.deepEqual(new Set(firestore.writtenPaths), new Set([
+      `${PLANNER_COLLECTIONS.campaigns}/${campaignId}`,
+      `${PLANNER_COLLECTIONS.plays}/${campaignId}-stage`,
+      `${PLANNER_COLLECTIONS.requests}/${requestId}`,
+    ]));
+    assert.equal(result.request.status, "converted");
+    assert.equal(result.request.campaignId, campaignId);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});

@@ -176,6 +176,38 @@ function lanePayload() {
   };
 }
 
+function promotionRequestPayload() {
+  return {
+    schemaVersion: 1,
+    source: "planning-center-form",
+    sourceFormId: "1229879",
+    sourceFormName: "General Promotion Form",
+    sourceSubmissionId: "456789",
+    submittedAt: date("2026-08-16"),
+    receivedAt: date("2026-08-16"),
+    status: "pending-review",
+    proposedName: "Community Story",
+    ministry: "Communications",
+    description: "Share a ministry story across Central channels.",
+    notes: "Coordinate with the ministry lead.",
+    requestedPlatforms: ["Social Media", "Newsletter"],
+    requestedPromotionStart: date("2026-08-23"),
+    requestedPromotionEnd: date("2026-09-06"),
+    rawEventDateText: "",
+    eventDate: null,
+    eventDates: [],
+    eventDateEnd: null,
+    dateParseStatus: "manual-required",
+    dateParseKind: null,
+    dateSource: "manual-review",
+    eligibility: {qualified: true},
+    campaignId: "",
+    reviewedByUid: "",
+    createdAt: date("2026-08-16"),
+    updatedAt: date("2026-08-16"),
+  };
+}
+
 async function seedUser(uid, permission = "edit", active = true, key = "planner") {
   await environment.withSecurityRulesDisabled(async (context) => {
     await context.firestore().doc(`centralAdmin/root/users/${uid}`).set({
@@ -405,6 +437,171 @@ test("Smuggle relationship must use the strict explicit schema", async () => {
       strategy: "AUTO_SMUGGLE",
     },
     updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+});
+
+test("Planning Center requests are private and server-created only", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore()
+      .doc("centralPromotionRequests/pco_1229879_456789")
+      .set(promotionRequestPayload());
+  });
+  const requestPath = "centralPromotionRequests/pco_1229879_456789";
+  await assertFails(
+    environment.unauthenticatedContext().firestore().doc(requestPath).get(),
+  );
+  await assertSucceeds(
+    environment.authenticatedContext("viewer").firestore().doc(requestPath).get(),
+  );
+  await assertFails(
+    environment.authenticatedContext("viewer").firestore().doc(requestPath)
+      .update({proposedName: "Changed"}),
+  );
+  await assertFails(
+    environment.authenticatedContext("editor").firestore()
+      .doc("centralPromotionRequests/pco_1229879_999999")
+      .set({...promotionRequestPayload(), sourceSubmissionId: "999999"}),
+  );
+  await assertFails(
+    environment.authenticatedContext("editor").firestore().doc(requestPath)
+      .delete(),
+  );
+});
+
+test("Planner editors can review and convert a PCO request without rewriting its source", async () => {
+  const requestPath = "centralPromotionRequests/pco_1229879_456789";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc(requestPath).set(promotionRequestPayload());
+  });
+  const reference = environment.authenticatedContext("editor")
+    .firestore().doc(requestPath);
+  await assertSucceeds(reference.update({
+    proposedName: "Edited Community Story",
+    eventDate: date("2026-09-06"),
+    eventDates: [date("2026-09-06")],
+    eventDateEnd: null,
+    dateParseStatus: "manual",
+    dateParseKind: "single",
+    dateSource: "manual-review",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  const campaignId = "request-campaign-456789";
+  const wrongLinkBatch = reference.firestore.batch();
+  wrongLinkBatch.set(
+    reference.firestore.doc(`centralPromotionCampaigns/${campaignId}`),
+    {...campaignPayload(), sourceEventId: "pco-form:1229879:wrong"},
+  );
+  wrongLinkBatch.update(reference, {
+    status: "converted",
+    campaignId,
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  });
+  await assertFails(wrongLinkBatch.commit());
+
+  const conversionBatch = reference.firestore.batch();
+  conversionBatch.set(
+    reference.firestore.doc(`centralPromotionCampaigns/${campaignId}`),
+    {
+      ...campaignPayload(),
+      sourceEventId: "pco-form:1229879:456789",
+    },
+  );
+  conversionBatch.update(reference, {
+    status: "converted",
+    campaignId,
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  });
+  await assertSucceeds(conversionBatch.commit());
+  await assertFails(reference.update({
+    sourceSubmissionId: "another-submission",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    description: "x".repeat(3001),
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    proposedName: "Changed after conversion",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    campaignId: "another-campaign",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    injectedRole: "admin",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+});
+
+test("dismissed PCO requests cannot be converted or assigned a campaign later", async () => {
+  const requestPath = "centralPromotionRequests/pco_1229879_456789";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc(requestPath).set(promotionRequestPayload());
+  });
+  const reference = environment.authenticatedContext("editor")
+    .firestore().doc(requestPath);
+  await assertSucceeds(reference.update({
+    status: "dismissed",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    status: "converted",
+    campaignId: "late-campaign",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    proposedName: "Changed after dismissal",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+});
+
+test("PCO request date-review fields must remain internally consistent", async () => {
+  const requestPath = "centralPromotionRequests/pco_1229879_456789";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc(requestPath).set(promotionRequestPayload());
+  });
+  const reference = environment.authenticatedContext("editor")
+    .firestore().doc(requestPath);
+  await assertFails(reference.update({
+    eventDate: date("2026-09-06"),
+    eventDates: [],
+    dateParseStatus: "manual",
+    dateParseKind: "single",
+    dateSource: "manual-review",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    eventDates: [date("2026-09-06")],
+    dateParseKind: "single",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    eventDate: date("2026-09-10"),
+    eventDates: [date("2026-09-10"), date("2026-09-05")],
+    eventDateEnd: date("2026-09-05"),
+    dateParseStatus: "manual",
+    dateParseKind: "range",
+    dateSource: "manual-review",
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    reviewedByUid: "another-user",
     updatedAt: serverTime(),
   }));
 });

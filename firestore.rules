@@ -22,6 +22,10 @@ service cloud.firestore {
     // timestamps. Typical capacity must not exceed the hard capacity.
     // centralPromotionStandingLanes/{laneId}: editable weekly lane fallback,
     // priority order, Smuggle levels, active state, and timestamps.
+    // centralPromotionRequests/{pco_formId_submissionId}: server-created,
+    // idempotent Planning Center form request containing campaign-only source
+    // answers, parsed/manual event-date review state, immutable source identity,
+    // and an editor-controlled conversion or dismissal outcome.
 
     // ===============================================================
     // Studio event project source model
@@ -1024,6 +1028,185 @@ service cloud.firestore {
         data.createdAt is timestamp && data.updatedAt is timestamp;
     }
 
+    function validPlannerRequestStrings(values) {
+      return values is list && values.size() <= 12 &&
+        (values.size() < 1 || validPlannerString(values[0], 120)) &&
+        (values.size() < 2 || validPlannerString(values[1], 120)) &&
+        (values.size() < 3 || validPlannerString(values[2], 120)) &&
+        (values.size() < 4 || validPlannerString(values[3], 120)) &&
+        (values.size() < 5 || validPlannerString(values[4], 120)) &&
+        (values.size() < 6 || validPlannerString(values[5], 120)) &&
+        (values.size() < 7 || validPlannerString(values[6], 120)) &&
+        (values.size() < 8 || validPlannerString(values[7], 120)) &&
+        (values.size() < 9 || validPlannerString(values[8], 120)) &&
+        (values.size() < 10 || validPlannerString(values[9], 120)) &&
+        (values.size() < 11 || validPlannerString(values[10], 120)) &&
+        (values.size() < 12 || validPlannerString(values[11], 120));
+    }
+
+    function validPlannerRequestDates(values) {
+      return values is list && values.size() <= 8 &&
+        (values.size() < 1 || values[0] is timestamp) &&
+        (values.size() < 2 || values[1] is timestamp) &&
+        (values.size() < 3 || values[2] is timestamp) &&
+        (values.size() < 4 || values[3] is timestamp) &&
+        (values.size() < 5 || values[4] is timestamp) &&
+        (values.size() < 6 || values[5] is timestamp) &&
+        (values.size() < 7 || values[6] is timestamp) &&
+        (values.size() < 8 || values[7] is timestamp);
+    }
+
+    function validPlannerRequestEligibility(value) {
+      return value is map && value.keys().hasAll(["qualified"]) &&
+        value.keys().hasOnly(["qualified"]) && value.qualified == true;
+    }
+
+    function validPlannerRequestDateOrder(values) {
+      return (values.size() < 2 || values[1] > values[0]) &&
+        (values.size() < 3 || values[2] > values[1]) &&
+        (values.size() < 4 || values[3] > values[2]) &&
+        (values.size() < 5 || values[4] > values[3]) &&
+        (values.size() < 6 || values[5] > values[4]) &&
+        (values.size() < 7 || values[6] > values[5]) &&
+        (values.size() < 8 || values[7] > values[6]);
+    }
+
+    function validPlannerRequestDateState(data) {
+      return (
+        data.dateParseStatus in ["needs-review", "manual-required"] &&
+        data.dateParseKind == null && data.eventDate == null &&
+        data.eventDates.size() == 0 && data.eventDateEnd == null &&
+        data.dateSource == "manual-review"
+      ) || (
+        data.dateParseStatus in ["parsed", "manual"] &&
+        data.dateParseKind in ["single", "range", "multiple"] &&
+        data.eventDate is timestamp && data.eventDates.size() >= 1 &&
+        data.eventDates[0] == data.eventDate &&
+        (
+          (data.dateParseKind == "single" && data.eventDates.size() == 1 &&
+            data.eventDateEnd == null) ||
+          (data.dateParseKind == "range" && data.eventDates.size() == 2 &&
+            data.eventDateEnd == data.eventDates[1] &&
+            data.eventDateEnd >= data.eventDate) ||
+          (data.dateParseKind == "multiple" &&
+            data.eventDates.size() >= 2 && data.eventDateEnd == null &&
+            validPlannerRequestDateOrder(data.eventDates))
+        ) &&
+        (
+          (data.dateParseStatus == "parsed" &&
+            data.dateSource == "form-parser") ||
+          (data.dateParseStatus == "manual" &&
+            data.dateSource == "manual-review")
+        )
+      );
+    }
+
+    function validPlannerRequestCampaignLink(data) {
+      return data.status != "converted" || (
+        existsAfter(
+          /databases/$(database)/documents/centralPromotionCampaigns/$(data.campaignId)
+        ) &&
+        getAfter(
+          /databases/$(database)/documents/centralPromotionCampaigns/$(data.campaignId)
+        ).data.sourceEventId ==
+          "pco-form:" + data.sourceFormId + ":" + data.sourceSubmissionId
+      );
+    }
+
+    function validPlannerRequest(data) {
+      return data is map && data.keys().hasAll([
+        "schemaVersion", "source", "sourceFormId", "sourceFormName",
+        "sourceSubmissionId", "submittedAt", "receivedAt", "status",
+        "proposedName", "ministry", "description", "notes",
+        "requestedPlatforms", "requestedPromotionStart",
+        "requestedPromotionEnd", "rawEventDateText", "eventDate",
+        "eventDates", "eventDateEnd", "dateParseStatus", "dateParseKind",
+        "dateSource", "eligibility", "campaignId", "reviewedByUid",
+        "createdAt", "updatedAt"
+      ]) && data.keys().hasOnly([
+        "schemaVersion", "source", "sourceFormId", "sourceFormName",
+        "sourceSubmissionId", "submittedAt", "receivedAt", "status",
+        "proposedName", "ministry", "description", "notes",
+        "requestedPlatforms", "requestedPromotionStart",
+        "requestedPromotionEnd", "rawEventDateText", "eventDate",
+        "eventDates", "eventDateEnd", "dateParseStatus", "dateParseKind",
+        "dateSource", "eligibility", "campaignId", "reviewedByUid",
+        "createdAt", "updatedAt"
+      ]) && data.schemaVersion == 1 &&
+        data.source == "planning-center-form" &&
+        validPlannerString(data.sourceFormId, 32) &&
+        data.sourceFormId.matches("^[0-9]+$") &&
+        validPlannerString(data.sourceFormName, 120) &&
+        data.sourceFormName.size() > 0 &&
+        validPlannerString(data.sourceSubmissionId, 64) &&
+        data.sourceSubmissionId.matches("^[0-9]+$") &&
+        data.submittedAt is timestamp && data.receivedAt is timestamp &&
+        data.status in ["pending-review", "converted", "dismissed"] &&
+        validPlannerString(data.proposedName, 140) &&
+        data.proposedName.size() > 0 &&
+        validPlannerString(data.ministry, 140) &&
+        validPlannerString(data.description, 3000) &&
+        validPlannerString(data.notes, 3000) &&
+        validPlannerRequestStrings(data.requestedPlatforms) &&
+        (data.requestedPromotionStart == null ||
+          data.requestedPromotionStart is timestamp) &&
+        (data.requestedPromotionEnd == null ||
+          data.requestedPromotionEnd is timestamp) &&
+        validPlannerString(data.rawEventDateText, 500) &&
+        (data.eventDate == null || data.eventDate is timestamp) &&
+        validPlannerRequestDates(data.eventDates) &&
+        (data.eventDateEnd == null || data.eventDateEnd is timestamp) &&
+        data.dateParseStatus in [
+          "parsed", "needs-review", "manual-required", "manual"
+        ] &&
+        (data.dateParseKind == null || data.dateParseKind in [
+          "single", "range", "multiple"
+        ]) &&
+        data.dateSource in ["form-parser", "manual-review"] &&
+        validPlannerRequestEligibility(data.eligibility) &&
+        validPlannerString(data.campaignId, 128) &&
+        (
+          (data.status == "converted" && validPlannerId(data.campaignId)) ||
+          (data.status != "converted" && data.campaignId.size() == 0)
+        ) &&
+        validPlannerRequestDateState(data) &&
+        validPlannerRequestCampaignLink(data) &&
+        validPlannerString(data.reviewedByUid, 128) &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function validPlannerRequestStatusTransition() {
+      return resource.data.status == "pending-review" &&
+        request.resource.data.status in [
+          "pending-review", "converted", "dismissed"
+        ];
+    }
+
+    function validPlannerRequestReview(data) {
+      return validPlannerString(data.proposedName, 140) &&
+        data.proposedName.size() > 0 &&
+        (data.eventDate == null || data.eventDate is timestamp) &&
+        validPlannerRequestDates(data.eventDates) &&
+        (data.eventDateEnd == null || data.eventDateEnd is timestamp) &&
+        data.dateParseStatus in [
+          "parsed", "needs-review", "manual-required", "manual"
+        ] &&
+        (data.dateParseKind == null || data.dateParseKind in [
+          "single", "range", "multiple"
+        ]) &&
+        data.dateSource in ["form-parser", "manual-review"] &&
+        data.status in ["pending-review", "converted", "dismissed"] &&
+        validPlannerString(data.campaignId, 128) &&
+        (
+          (data.status == "converted" && validPlannerId(data.campaignId)) ||
+          (data.status != "converted" && data.campaignId.size() == 0)
+        ) &&
+        validPlannerRequestDateState(data) &&
+        validPlannerRequestCampaignLink(data) &&
+        data.reviewedByUid == request.auth.uid &&
+        data.updatedAt == request.time;
+    }
+
     function contentSectionPermission(section) {
       return section == "quickLinks" ?
         currentUser().data.pageAccess.quickLinks :
@@ -1353,6 +1536,7 @@ service cloud.firestore {
         request.resource.data.playbookVersion == resource.data.playbookVersion &&
         request.resource.data.submittedAt == resource.data.submittedAt &&
         request.resource.data.recommendedStartDate == resource.data.recommendedStartDate &&
+        request.resource.data.sourceEventId == resource.data.sourceEventId &&
         request.resource.data.updatedAt == request.time &&
         validPlannerCampaign(request.resource.data);
       allow delete: if canEditPlanner();
@@ -1406,6 +1590,22 @@ service cloud.firestore {
         request.resource.data.updatedAt == request.time &&
         validPlannerStandingLane(request.resource.data);
       allow delete: if false;
+    }
+
+    match /centralPromotionRequests/{requestId} {
+      allow read: if canReadPlanner();
+      // Only the signed Planning Center webhook uses the Admin SDK to create
+      // requests. Browsers cannot fabricate or delete source submissions.
+      allow create, delete: if false;
+      allow update: if canEditPlanner() &&
+        requestId.matches("^pco_[0-9]+_[0-9]+$") &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "proposedName", "eventDate", "eventDates", "eventDateEnd",
+          "dateParseStatus", "dateParseKind", "dateSource", "status",
+          "campaignId", "reviewedByUid", "updatedAt"
+        ]) &&
+        validPlannerRequestStatusTransition() &&
+        validPlannerRequestReview(request.resource.data);
     }
 
     match /{document=**} {

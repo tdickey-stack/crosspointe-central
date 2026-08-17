@@ -641,6 +641,14 @@
         }
       },
       {
+        "source": "/api/webhooks/planning-center/forms",
+        "function": {
+          "functionId": "planningCenterPlannerWebhook",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/campaigns/share-interest",
         "function": {
           "functionId": "shareCampaignInterest",

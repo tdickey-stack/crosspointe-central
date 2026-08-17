@@ -16,6 +16,7 @@ export const PLANNER_COLLECTIONS = {
   plays: "centralPromotionScheduledPlays",
   capacityRules: "centralPromotionCapacityRules",
   standingLanes: "centralPromotionStandingLanes",
+  requests: "centralPromotionRequests",
 };
 
 const PLANNER_RULES_SAFE_BATCH_SIZE = 5;
@@ -141,6 +142,71 @@ function normalizePlay(data) {
     createdAt: timestampToIso(data.createdAt),
     updatedAt: timestampToIso(data.updatedAt),
   };
+}
+
+function normalizePromotionRequest(data) {
+  return {
+    ...data,
+    submittedAt: timestampToIso(data.submittedAt),
+    receivedAt: timestampToIso(data.receivedAt),
+    eventDate: timestampToDateKey(data.eventDate),
+    eventDateEnd: timestampToDateKey(data.eventDateEnd),
+    requestedPromotionStart: timestampToDateKey(data.requestedPromotionStart),
+    requestedPromotionEnd: timestampToDateKey(data.requestedPromotionEnd),
+    eventDates: Array.isArray(data.eventDates)
+      ? data.eventDates.map(timestampToDateKey).filter(Boolean)
+      : [],
+    requestedPlatforms: Array.isArray(data.requestedPlatforms)
+      ? data.requestedPlatforms.map(String).filter(Boolean)
+      : [],
+    createdAt: timestampToIso(data.createdAt),
+    updatedAt: timestampToIso(data.updatedAt),
+  };
+}
+
+function promotionRequestUpdateForCloud(updates, ownerUid, timestamp) {
+  const payload = {
+    updatedAt: timestamp,
+    reviewedByUid: ownerUid,
+  };
+  if (Object.hasOwn(updates, "proposedName")) {
+    payload.proposedName = String(updates.proposedName || "").trim().slice(0, 140);
+  }
+  if (Object.hasOwn(updates, "eventDate")) {
+    payload.eventDate = updates.eventDate ? dateTimestamp(updates.eventDate) : null;
+  }
+  if (Object.hasOwn(updates, "eventDates")) {
+    payload.eventDates = Array.isArray(updates.eventDates)
+      ? updates.eventDates.map(dateTimestamp).filter(Boolean).slice(0, 8)
+      : [];
+  }
+  if (Object.hasOwn(updates, "eventDateEnd")) {
+    payload.eventDateEnd = updates.eventDateEnd ? dateTimestamp(updates.eventDateEnd) : null;
+  }
+  if (Object.hasOwn(updates, "dateParseStatus")) {
+    payload.dateParseStatus = ["parsed", "needs-review", "manual-required", "manual"].includes(updates.dateParseStatus)
+      ? updates.dateParseStatus
+      : "needs-review";
+  }
+  if (Object.hasOwn(updates, "dateParseKind")) {
+    payload.dateParseKind = ["single", "range", "multiple"].includes(updates.dateParseKind)
+      ? updates.dateParseKind
+      : null;
+  }
+  if (Object.hasOwn(updates, "dateSource")) {
+    payload.dateSource = ["form-parser", "manual-review"].includes(updates.dateSource)
+      ? updates.dateSource
+      : "manual-review";
+  }
+  if (Object.hasOwn(updates, "status")) {
+    payload.status = ["pending-review", "converted", "dismissed"].includes(updates.status)
+      ? updates.status
+      : "pending-review";
+  }
+  if (Object.hasOwn(updates, "campaignId")) {
+    payload.campaignId = String(updates.campaignId || "").slice(0, 128);
+  }
+  return payload;
 }
 
 function campaignForCloud(campaign, ownerUid, timestamp) {
@@ -383,6 +449,58 @@ function createPreviewWorkspace() {
     ...starter,
     campaigns,
     scheduledPlays: plays,
+    promotionRequests: [
+      {
+        id: "pco_930568_preview-event-request",
+        schemaVersion: 1,
+        source: "planning-center-form",
+        sourceFormId: "930568",
+        sourceFormName: "CrossPointe Event & Promo Form",
+        sourceSubmissionId: "preview-event-request",
+        submittedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+        proposedName: "Student Fall Kickoff",
+        ministry: "Students",
+        description: "Fall kickoff night for students and families.",
+        notes: "The form date was parsed confidently and is ready to confirm.",
+        requestedPlatforms: ["Social Media", "Newsletter", "Stage Announcement"],
+        rawEventDateText: addDays(weekStart, 34),
+        eventDates: [addDays(weekStart, 34)],
+        eventDate: addDays(weekStart, 34),
+        eventDateEnd: "",
+        requestedPromotionStart: "",
+        requestedPromotionEnd: "",
+        dateParseStatus: "parsed",
+        dateParseKind: "single",
+        dateSource: "form-parser",
+        status: "pending-review",
+        campaignId: "",
+      },
+      {
+        id: "pco_1229879_preview-general-request",
+        schemaVersion: 1,
+        source: "planning-center-form",
+        sourceFormId: "1229879",
+        sourceFormName: "General Promotion Form",
+        sourceSubmissionId: "preview-general-request",
+        submittedAt: new Date(Date.now() - 86400000).toISOString(),
+        proposedName: "Christmas Eve Volunteer Push",
+        ministry: "Connections",
+        description: "Recruit additional volunteers for Christmas Eve services.",
+        notes: "General Promotion requests require a manual campaign date.",
+        requestedPlatforms: ["Newsletter", "Social Media", "Pre-Service Slide"],
+        rawEventDateText: "",
+        eventDates: [],
+        eventDate: "",
+        eventDateEnd: "",
+        requestedPromotionStart: addDays(weekStart, 14),
+        requestedPromotionEnd: addDays(weekStart, 28),
+        dateParseStatus: "manual-required",
+        dateParseKind: null,
+        dateSource: "manual-review",
+        status: "pending-review",
+        campaignId: "",
+      },
+    ],
     isSeeded: true,
     preview: true,
   };
@@ -397,7 +515,7 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     const now = new Date();
     const rangeStart = addDays(dateKey(now), -70);
     const rangeEnd = addDays(dateKey(now), 400);
-    const [playbookSnapshot, versionSnapshot, campaignSnapshot, playSnapshot, ruleSnapshot, laneSnapshot] =
+    const [playbookSnapshot, versionSnapshot, campaignSnapshot, playSnapshot, ruleSnapshot, laneSnapshot, requestSnapshot] =
       await Promise.all([
         firestore.collection(PLANNER_COLLECTIONS.playbooks).get(),
         firestore.collection(PLANNER_COLLECTIONS.versions).get(),
@@ -409,6 +527,7 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
           .get(),
         firestore.collection(PLANNER_COLLECTIONS.capacityRules).get(),
         firestore.collection(PLANNER_COLLECTIONS.standingLanes).get(),
+        firestore.collection(PLANNER_COLLECTIONS.requests).get(),
       ]);
     const metadata = playbookSnapshot.docs.map((doc) => normalizePlannerDocument(documentData(doc)));
     const versions = versionSnapshot.docs.map((doc) => normalizePlaybookVersion(documentData(doc)));
@@ -429,6 +548,9 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
         : laneSnapshot.docs.map((doc) => normalizePlannerDocument(documentData(doc))),
       campaigns: campaignSnapshot.docs.map((doc) => normalizeCampaign(documentData(doc))),
       scheduledPlays: playSnapshot.docs.map((doc) => normalizePlay(documentData(doc))),
+      promotionRequests: requestSnapshot.docs
+        .map((doc) => normalizePromotionRequest(documentData(doc)))
+        .sort((left, right) => String(right.submittedAt).localeCompare(String(left.submittedAt))),
       isSeeded: !playbookSnapshot.empty && !ruleSnapshot.empty && !laneSnapshot.empty,
       preview: false,
     };
@@ -562,14 +684,26 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     return next;
   }
 
-  async function saveCampaignSchedule(campaign, plays) {
+  async function saveCampaignSchedule(campaign, plays, requestConversion = null) {
     let nextCampaign = {...deepClone(campaign), id: campaign.id || createId("campaign")};
     let nextPlays = plays.map((play) => ({
       ...deepClone(play),
       id: play.id || createId("play"),
       campaignId: nextCampaign.id,
     }));
+    const conversionUpdates = requestConversion ? {
+      ...deepClone(requestConversion.updates || {}),
+      status: "converted",
+      campaignId: nextCampaign.id,
+    } : null;
     if (preview) {
+      const requestIndex = requestConversion
+        ? previewWorkspace.promotionRequests
+          .findIndex((item) => item.id === requestConversion.requestId)
+        : -1;
+      if (requestConversion && requestIndex === -1) {
+        throw new Error("The promotion request could not be found.");
+      }
       previewWorkspace.campaigns = [
         nextCampaign,
         ...previewWorkspace.campaigns.filter((item) => item.id !== nextCampaign.id),
@@ -578,7 +712,21 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
         ...previewWorkspace.scheduledPlays.filter((item) => item.campaignId !== nextCampaign.id),
         ...nextPlays,
       ];
-      return {campaign: deepClone(nextCampaign), plays: deepClone(nextPlays)};
+      let savedRequest = null;
+      if (requestConversion) {
+        savedRequest = {
+          ...previewWorkspace.promotionRequests[requestIndex],
+          ...conversionUpdates,
+          reviewedByUid: user?.uid || "planner-local-preview",
+          updatedAt: isoNow(),
+        };
+        previewWorkspace.promotionRequests[requestIndex] = savedRequest;
+      }
+      return {
+        campaign: deepClone(nextCampaign),
+        plays: deepClone(nextPlays),
+        request: savedRequest ? deepClone(savedRequest) : null,
+      };
     }
     const campaignReference = firestore.collection(PLANNER_COLLECTIONS.campaigns).doc(nextCampaign.id);
     const existingCampaignSnapshot = await campaignReference.get();
@@ -609,8 +757,39 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
         playForCloud(play, user.uid, timestamp),
       );
     });
+    if (requestConversion) {
+      const requestId = String(requestConversion.requestId || "").trim();
+      if (!requestId) throw new Error("A promotion request ID is required.");
+      batch.set(
+        firestore.collection(PLANNER_COLLECTIONS.requests).doc(requestId),
+        promotionRequestUpdateForCloud(
+          conversionUpdates,
+          user.uid,
+          timestamp,
+        ),
+        {merge: true},
+      );
+    }
     await batch.commit();
-    return {campaign: nextCampaign, plays: nextPlays};
+    return {
+      campaign: nextCampaign,
+      plays: nextPlays,
+      request: requestConversion ? normalizePromotionRequest({
+        id: requestConversion.requestId,
+        ...conversionUpdates,
+        reviewedByUid: user.uid,
+        updatedAt: isoNow(),
+      }) : null,
+    };
+  }
+
+  async function convertPromotionRequest(requestId, campaign, plays, updates) {
+    const id = String(requestId || "").trim();
+    if (!id) throw new Error("A promotion request ID is required.");
+    return saveCampaignSchedule(campaign, plays, {
+      requestId: id,
+      updates,
+    });
   }
 
   async function saveScheduledPlay(play) {
@@ -656,6 +835,30 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     return {campaignId: id, deletedPlayIds: playSnapshot.docs.map((doc) => doc.id)};
   }
 
+  async function updatePromotionRequest(requestId, updates) {
+    const id = String(requestId || "").trim();
+    if (!id) throw new Error("A promotion request ID is required.");
+    if (preview) {
+      const index = previewWorkspace.promotionRequests.findIndex((item) => item.id === id);
+      if (index === -1) throw new Error("The promotion request could not be found.");
+      const next = {
+        ...previewWorkspace.promotionRequests[index],
+        ...deepClone(updates),
+        reviewedByUid: user?.uid || "planner-local-preview",
+        updatedAt: isoNow(),
+      };
+      previewWorkspace.promotionRequests[index] = next;
+      return deepClone(next);
+    }
+    const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
+    const reference = firestore.collection(PLANNER_COLLECTIONS.requests).doc(id);
+    await reference.set(
+      promotionRequestUpdateForCloud(updates, user.uid, timestamp),
+      {merge: true},
+    );
+    return normalizePromotionRequest({id, ...updates, reviewedByUid: user.uid, updatedAt: isoNow()});
+  }
+
   return {
     loadWorkspace,
     publishStarterConfiguration,
@@ -664,8 +867,10 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     saveCapacityRule,
     saveStandingLane,
     saveCampaignSchedule,
+    convertPromotionRequest,
     saveScheduledPlay,
     deleteCampaign,
+    updatePromotionRequest,
   };
 }
 
@@ -676,6 +881,8 @@ export const plannerPersistenceInternals = {
   playbookVersionForCloud,
   capacityRuleForCloud,
   standingLaneForCloud,
+  normalizePromotionRequest,
+  promotionRequestUpdateForCloud,
   assertValidPlaybookDefinition,
   commitPlannerSetOperations,
   PLANNER_RULES_SAFE_BATCH_SIZE,

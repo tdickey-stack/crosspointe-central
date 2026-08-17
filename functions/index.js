@@ -123,6 +123,12 @@ import {
   normalizePlannerBriefEmailPayload,
 } from "./planner/brief-email.js";
 import {
+  buildPlannerRequestDocument,
+  buildPlanningCenterFormSubmissionUrl,
+  extractPlanningCenterFormSubmissionRefs,
+  verifyPlanningCenterWebhookSignature,
+} from "./planner/pco-form-webhook.js";
+import {
   applyEventOverrides,
   buildEventOverrideId,
   createEventOverridesHash,
@@ -479,6 +485,8 @@ const CENTRAL_GMAIL_REFRESH_TOKEN =
   defineSecret("CENTRAL_GMAIL_REFRESH_TOKEN");
 const PCO_APP_ID = defineSecret("PCO_APP_ID");
 const PCO_SECRET = defineSecret("PCO_SECRET");
+const PCO_WEBHOOK_AUTHENTICITY_SECRET =
+  defineSecret("PCO_WEBHOOK_AUTHENTICITY_SECRET");
 const CENTRAL_CALENDAR_SIGNING_KEY =
   defineSecret("CENTRAL_CALENDAR_SIGNING_KEY");
 const GMAIL_SECRETS = [
@@ -486,6 +494,11 @@ const GMAIL_SECRETS = [
   CENTRAL_GMAIL_REFRESH_TOKEN,
 ];
 const PLANNING_CENTER_SECRETS = [PCO_APP_ID, PCO_SECRET];
+const PLANNER_PCO_WEBHOOK_SECRETS = [
+  PCO_APP_ID,
+  PCO_SECRET,
+  PCO_WEBHOOK_AUTHENTICITY_SECRET,
+];
 const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
 const PCO_CENTRAL_TAG_NAME = process.env.PCO_CENTRAL_TAG_NAME || "Central";
 const PCO_CENTRAL_FEATURED_TAG_NAME =
@@ -1704,6 +1717,180 @@ export const sendPlannerBrief = onRequest(
             "Central could not send the promotion brief.",
         });
       }
+    },
+);
+
+/**
+ * Converts a normalized date-only value into a stable Firestore timestamp.
+ * Noon UTC avoids a local-time rollover when Planner renders the date.
+ *
+ * @param {string|null} value ISO date-only value.
+ * @return {FirebaseFirestore.Timestamp|null} Firestore timestamp or null.
+ */
+function plannerDateTimestamp_(value) {
+  const normalized = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+  const parsed = new Date(`${normalized}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== normalized) {
+    return null;
+  }
+  return admin.firestore.Timestamp.fromDate(parsed);
+}
+
+/**
+ * Converts the pure webhook normalizer output to the private Firestore shape.
+ * The mapping is explicit so new upstream fields cannot be persisted by
+ * accident.
+ *
+ * @param {Object} source Normalized campaign request.
+ * @return {Object} Firestore-safe request document.
+ */
+function plannerRequestForFirestore_(source) {
+  const submittedAt = new Date(source.submittedAt);
+  const receivedAt = new Date(source.receivedAt);
+  const timestamp = admin.firestore.FieldValue.serverTimestamp();
+  return {
+    schemaVersion: 1,
+    source: "planning-center-form",
+    sourceFormId: String(source.sourceFormId || ""),
+    sourceFormName: String(source.sourceFormName || "").slice(0, 120),
+    sourceSubmissionId: String(source.sourceSubmissionId || ""),
+    submittedAt: admin.firestore.Timestamp.fromDate(submittedAt),
+    receivedAt: admin.firestore.Timestamp.fromDate(receivedAt),
+    status: "pending-review",
+    proposedName: String(source.proposedName || "Untitled promotion request")
+        .trim().slice(0, 140) || "Untitled promotion request",
+    ministry: String(source.ministry || "").slice(0, 140),
+    description: String(source.description || "").slice(0, 3000),
+    notes: String(source.notes || "").slice(0, 3000),
+    requestedPlatforms: Array.isArray(source.requestedPlatforms) ?
+      source.requestedPlatforms.map((value) => String(value).slice(0, 120))
+          .filter(Boolean).slice(0, 12) : [],
+    requestedPromotionStart:
+      plannerDateTimestamp_(source.requestedPromotionStart),
+    requestedPromotionEnd:
+      plannerDateTimestamp_(source.requestedPromotionEnd),
+    rawEventDateText: String(source.rawEventDateText || "").slice(0, 500),
+    eventDate: plannerDateTimestamp_(source.eventDate),
+    eventDates: Array.isArray(source.eventDates) ?
+      source.eventDates.map(plannerDateTimestamp_).filter(Boolean).slice(0, 8) :
+      [],
+    eventDateEnd: plannerDateTimestamp_(source.eventDateEnd),
+    dateParseStatus: source.dateParseStatus,
+    dateParseKind: source.dateParseKind || null,
+    dateSource: source.dateSource,
+    eligibility: {qualified: true},
+    campaignId: "",
+    reviewedByUid: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+/**
+ * Checks whether an Admin SDK create failed because the document exists.
+ *
+ * @param {Error|Object} error Firestore error.
+ * @return {boolean} Whether this is an idempotent duplicate delivery.
+ */
+function isAlreadyExistsError_(error) {
+  const code = String(error && error.code || "").toLowerCase();
+  return code === "6" || code === "already-exists" ||
+    code === "already_exists";
+}
+
+export const planningCenterPlannerWebhook = onRequest(
+    {
+      region: "us-central1",
+      secrets: PLANNER_PCO_WEBHOOK_SECRETS,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      if (request.method !== "POST") {
+        response.set("Allow", "POST");
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      const authenticitySecret = String(
+          PCO_WEBHOOK_AUTHENTICITY_SECRET.value() || "",
+      ).trim();
+      if (!authenticitySecret) {
+        response.set("Retry-After", "60");
+        response.status(503).json({error: "Webhook is not configured."});
+        return;
+      }
+
+      const rawBody = Buffer.isBuffer(request.rawBody) ?
+        request.rawBody : null;
+      const signature = request.get("X-PCO-Webhooks-Authenticity") || "";
+      if (!rawBody || !verifyPlanningCenterWebhookSignature(
+          rawBody,
+          signature,
+          authenticitySecret,
+      )) {
+        response.status(401).json({error: "Invalid webhook signature."});
+        return;
+      }
+
+      let payload = null;
+      try {
+        payload = JSON.parse(rawBody.toString("utf8"));
+      } catch (_error) {
+        response.status(400).json({error: "Invalid webhook payload."});
+        return;
+      }
+
+      const supportedFormIds = new Set(["930568", "1229879"]);
+      const refs = extractPlanningCenterFormSubmissionRefs(payload)
+          .filter((ref) => supportedFormIds.has(ref.formId));
+      const result = {
+        ok: true,
+        received: refs.length,
+        created: 0,
+        duplicates: 0,
+        ignored: 0,
+      };
+
+      try {
+        for (const ref of refs) {
+          const apiDocument = await fetchPcoJson_(
+              buildPlanningCenterFormSubmissionUrl(
+                  ref.formId,
+                  ref.submissionId,
+              ),
+          );
+          const normalized = buildPlannerRequestDocument(apiDocument, {
+            formId: ref.formId,
+            receivedAt: new Date().toISOString(),
+          });
+          if (normalized.action !== "upsert") {
+            result.ignored += 1;
+            continue;
+          }
+          try {
+            await firestore.collection("centralPromotionRequests")
+                .doc(normalized.docId)
+                .create(plannerRequestForFirestore_(normalized.request));
+            result.created += 1;
+          } catch (error) {
+            if (!isAlreadyExistsError_(error)) throw error;
+            result.duplicates += 1;
+          }
+        }
+      } catch (error) {
+        console.error("Planning Center Planner webhook failed.", {
+          code: error && error.code ? String(error.code) : "",
+          message: error && error.message ? String(error.message) :
+            "Unknown error",
+        });
+        response.set("Retry-After", "60");
+        response.status(503).json({error: "Webhook processing failed."});
+        return;
+      }
+
+      response.status(200).json(result);
     },
 );
 

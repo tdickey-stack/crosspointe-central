@@ -44,6 +44,7 @@ const EDIT_PERMISSIONS = new Set(["propose", "edit", "approve", "admin"]);
 const VIEW_STORAGE_KEY = "central-promotion-planner-calendar-view";
 const NAV_ITEMS = [
   {id: "overview", label: "Overview", icon: "◫"},
+  {id: "requests", label: "Requests", icon: "◇"},
   {id: "calendar", label: "Calendar", icon: "▦"},
   {id: "campaigns", label: "Campaigns", icon: "◆"},
   {id: "content", label: "Content", icon: "●"},
@@ -1022,6 +1023,172 @@ function ContentView({workspace, canEdit, onNewContent, onOpenContent}) {
   );
 }
 
+function requestDateLabel(request) {
+  if (request.eventDate) return formatDate(request.eventDate);
+  if (request.rawEventDateText) return request.rawEventDateText;
+  if (request.requestedPromotionStart || request.requestedPromotionEnd) {
+    const start = request.requestedPromotionStart ? formatDate(request.requestedPromotionStart) : "No start";
+    const end = request.requestedPromotionEnd ? formatDate(request.requestedPromotionEnd) : "No end";
+    return `${start} – ${end}`;
+  }
+  return "Manual date review needed";
+}
+
+function RequestsView({workspace, canEdit, onOpenRequest}) {
+  const [status, setStatus] = useState("pending-review");
+  const requests = [...(workspace.promotionRequests || [])]
+    .filter((request) => request.status === status)
+    .sort((left, right) => String(right.submittedAt).localeCompare(String(left.submittedAt)));
+  const pendingCount = (workspace.promotionRequests || [])
+    .filter((request) => request.status === "pending-review").length;
+  return (
+    <>
+      <PageHeading
+        eyebrow="Planning Center Forms"
+        title="Campaign requests"
+        copy="Review new Event & Promo and General Promotion submissions before they become campaign schedules. Nothing is added to the calendar until you approve it here."
+        actions={<div className="planner-segmented planner-request-filters" aria-label="Request status">
+          {[
+            ["pending-review", `Pending · ${pendingCount}`],
+            ["converted", "Converted"],
+            ["dismissed", "Dismissed"],
+          ].map(([value, label]) => <button key={value} className={status === value ? "is-active" : ""} onClick={() => setStatus(value)}>{label}</button>)}
+        </div>}
+      />
+      <section className="planner-panel planner-request-list">
+        {requests.length ? requests.map((request) => (
+          <button className="planner-request-row" key={request.id} onClick={() => onOpenRequest(request)}>
+            <span className={`planner-request-source is-${request.sourceFormId === "930568" ? "event" : "general"}`} aria-hidden="true">{request.sourceFormId === "930568" ? "E" : "G"}</span>
+            <span className="planner-request-title">
+              <strong>{request.proposedName || "Untitled promotion request"}</strong>
+              <small>{request.ministry || request.sourceFormName || "Planning Center form"}</small>
+            </span>
+            <span className="planner-request-date">
+              <strong>{requestDateLabel(request)}</strong>
+              <small>{["needs-review", "manual-required"].includes(request.dateParseStatus) ? "Date needs review" : "Proposed event date"}</small>
+            </span>
+            <span className="planner-request-submitted">
+              <strong>{formatDate(request.submittedAt)}</strong>
+              <small>Submitted</small>
+            </span>
+            <StatusBadge status={["needs-review", "manual-required"].includes(request.dateParseStatus) ? "needs-decision" : request.status}>{request.status === "pending-review" ? ["needs-review", "manual-required"].includes(request.dateParseStatus) ? "Needs date" : "Ready to review" : request.status}</StatusBadge>
+            <span className="planner-request-chevron">›</span>
+          </button>
+        )) : <EmptyState
+          title={status === "pending-review" ? "No requests waiting" : `No ${titleCase(status)} requests`}
+          copy={status === "pending-review" ? "New qualifying Planning Center form submissions will appear here automatically." : "Requests will remain available here for reference after review."}
+        />}
+      </section>
+      {!canEdit && <p className="planner-request-readonly">You have view access. A Planner editor or administrator can convert and dismiss requests.</p>}
+    </>
+  );
+}
+
+function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, onDismiss}) {
+  const campaignPlaybooks = workspace.playbooks.filter((item) =>
+    item.active !== false &&
+    (!isStarterPlaybookId(item.id) || !String(item.campaignType).startsWith("ongoing")),
+  );
+  const [form, setForm] = useState({
+    name: request.proposedName || "",
+    eventDate: request.eventDate || "",
+    level: "",
+    playbookId: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [dismissConfirm, setDismissConfirm] = useState(false);
+  const playbooksForLevel = campaignPlaybooks.filter((item) => Number(item.level) === Number(form.level));
+  const playbook = campaignPlaybooks.find((item) => item.id === form.playbookId);
+  const preview = useMemo(() => {
+    if (!form.name.trim() || !form.eventDate || !playbook) return null;
+    const id = `pco-form-${request.sourceFormId}-${request.sourceSubmissionId}`
+      .replace(/[^a-zA-Z0-9_-]/g, "-")
+      .slice(0, 128);
+    const details = [request.description, request.notes].map((value) => String(value || "").trim()).filter(Boolean);
+    const generated = generateCampaignSchedule({
+      campaign: {
+        id,
+        name: form.name.trim(),
+        eventDate: form.eventDate,
+        registrationDeadline: "",
+        submittedAt: request.submittedAt || new Date().toISOString(),
+        level: playbook.level,
+        campaignType: playbook.campaignType,
+        playbookId: playbook.id,
+        sourceEventId: `pco-form:${request.sourceFormId}:${request.sourceSubmissionId}`,
+        notes: details.join("\n\n"),
+        status: "active",
+      },
+      playbook,
+      generatedAt: new Date(),
+    });
+    const combinedCampaigns = [...workspace.campaigns, generated.campaign];
+    const combinedPlays = [...workspace.scheduledPlays, ...generated.plays];
+    const level4 = allocateLevel4SocialSlots({plays: combinedPlays, campaigns: combinedCampaigns});
+    const capacity = evaluateCapacity({
+      plays: level4.plays,
+      capacityRules: workspace.capacityRules.filter((rule) => rule.id !== "level-4-social"),
+      campaigns: combinedCampaigns,
+    });
+    const ownPlays = capacity.plays.filter((item) => item.campaignId === id);
+    return {
+      ...generated,
+      plays: ownPlays,
+      plannedPlays: visiblePromotions(ownPlays),
+      summary: scheduleSummary(ownPlays),
+    };
+  }, [form, playbook, request, workspace]);
+  const update = (key, value) => setForm((current) => ({...current, [key]: value}));
+  const statusIsPending = request.status === "pending-review";
+  return (
+    <Modal title={request.proposedName || "Promotion request"} eyebrow="Planning Center request" onClose={onClose} size="wide">
+      <div className="planner-request-review-grid">
+        <section className="planner-request-source-details">
+          <div className="planner-request-source-heading">
+            <span className={`planner-request-source is-${request.sourceFormId === "930568" ? "event" : "general"}`}>{request.sourceFormId === "930568" ? "E" : "G"}</span>
+            <div><strong>{request.sourceFormName || "Planning Center Form"}</strong><small>Submitted {formatDate(request.submittedAt)}</small></div>
+          </div>
+          <dl className="planner-detail-list">
+            <div><dt>Ministry</dt><dd>{request.ministry || "Not provided"}</dd></div>
+            <div><dt>Submission ID</dt><dd>{request.sourceSubmissionId || "Not provided"}</dd></div>
+            <div><dt>Original date response</dt><dd>{request.rawEventDateText || "Not included"}</dd></div>
+            <div><dt>Requested promotion window</dt><dd>{request.requestedPromotionStart || request.requestedPromotionEnd ? requestDateLabel({...request, eventDate: "", rawEventDateText: ""}) : "Not included"}</dd></div>
+          </dl>
+          {request.description && <div className="planner-detail-note"><strong>Description</strong><p>{request.description}</p></div>}
+          {request.notes && <div className="planner-detail-note"><strong>Additional notes</strong><p>{request.notes}</p></div>}
+          {request.requestedPlatforms?.length > 0 && <div className="planner-request-platforms"><strong>Requested platforms</strong><div>{request.requestedPlatforms.map((platform) => <span key={platform}>{platform}</span>)}</div></div>}
+          {request.eventDates?.length > 1 && <div className="planner-detail-note"><strong>Dates found in the form response</strong><p>{request.eventDates.map((value) => formatDate(value)).join(" · ")}</p></div>}
+        </section>
+        <section className="planner-request-conversion">
+          <div className="planner-form-grid">
+            <Field label="Campaign / Event name" wide><input autoFocus value={form.name} disabled={!canEdit || !statusIsPending} onChange={(event) => update("name", event.target.value)} /></Field>
+            <Field label="Primary event date" help={["needs-review", "manual-required"].includes(request.dateParseStatus) ? "This request requires a manually confirmed date." : "Confirm or correct the proposed date."}><input type="date" value={form.eventDate} disabled={!canEdit || !statusIsPending} onChange={(event) => update("eventDate", event.target.value)} /></Field>
+            <Field label="Promotion level"><select value={form.level} disabled={!canEdit || !statusIsPending} onChange={(event) => setForm((current) => ({...current, level: event.target.value, playbookId: ""}))}><option value="">Choose a level</option>{[1, 2, 3, 4, 5].filter((level) => campaignPlaybooks.some((item) => Number(item.level) === level)).map((level) => <option key={level} value={level}>Level {level}</option>)}</select></Field>
+            <Field label="Promotion playbook" wide><select value={form.playbookId} disabled={!canEdit || !statusIsPending || !form.level} onChange={(event) => update("playbookId", event.target.value)}><option value="">Choose a playbook</option>{playbooksForLevel.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          </div>
+          {!statusIsPending && <div className="planner-detail-note"><strong>{request.status === "converted" ? "Campaign created" : "Request dismissed"}</strong><p>{request.status === "converted" ? `This submission was converted to campaign ${request.campaignId || "(ID unavailable)"}.` : "This submission was reviewed and intentionally left out of the Planner."}</p></div>}
+          {statusIsPending && !preview && <EmptyState title="Complete the campaign details" copy="Confirm the name and primary event date, then deliberately choose a promotion level and playbook." />}
+          {statusIsPending && preview && <>
+            <div className={`planner-timeliness-card ${preview.campaign.isOnTime ? "is-on-time" : "is-late"}`}>
+              <div><span className="planner-kicker">Level {playbook.level} · {preview.campaign.durationWeeks}-week campaign</span><h3>Schedule preview</h3></div>
+              <dl><div><dt>Recommended start</dt><dd>{formatDate(preview.campaign.recommendedStartDate)}</dd></div><div><dt>Event</dt><dd>{formatDate(preview.campaign.eventDate)}</dd></div><div><dt>Submitted</dt><dd>{formatDate(preview.campaign.submittedAt)}</dd></div></dl>
+              {preview.summary.missed > 0 && <p>{preview.summary.missed} promotion{preview.summary.missed === 1 ? "" : "s"} already passed and will not be added.</p>}
+            </div>
+            <div className="planner-preview-metrics"><span><strong>{preview.plannedPlays.length}</strong> promotions</span><span><strong>{preview.summary.conflicts}</strong> conflicts</span></div>
+            <div className="planner-preview-list">{preview.plannedPlays.map((play) => <PlayRow key={play.id} play={play} onClick={() => {}} />)}</div>
+          </>}
+        </section>
+      </div>
+      {dismissConfirm && <div className="planner-delete-confirmation"><div><strong>Dismiss this request?</strong><p>It will remain available under Dismissed, but no campaign or calendar promotions will be created.</p></div><div><button className="planner-button is-secondary" disabled={saving} onClick={() => setDismissConfirm(false)}>Keep reviewing</button><button className="planner-button is-danger" disabled={saving} onClick={async () => { setSaving(true); try { await onDismiss(request); } catch (_error) { setSaving(false); } }}>{saving ? "Dismissing…" : "Dismiss request"}</button></div></div>}
+      <div className="planner-modal-actions">
+        {canEdit && statusIsPending && !dismissConfirm && <button className="planner-button is-danger is-quiet" disabled={saving} onClick={() => setDismissConfirm(true)}>Dismiss</button>}
+        <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Close</button>
+        {canEdit && statusIsPending && <button className="planner-button is-primary" disabled={!preview || saving || dismissConfirm} onClick={async () => { setSaving(true); try { await onConvert(request, preview.campaign, preview.plannedPlays, form.eventDate); } catch (_error) { setSaving(false); } }}>{saving ? "Creating campaign…" : preview ? `Create campaign · ${preview.plannedPlays.length} promos` : "Create campaign"}</button>}
+      </div>
+    </Modal>
+  );
+}
+
 function BriefEntryPreview({entry}) {
   const color = entry.kind === "content" ? "#f472b6" : LEVEL_COLORS[entry.level] || LEVEL_COLORS[5];
   return (
@@ -1648,6 +1815,7 @@ function PlannerApp({authState}) {
   const [editingContent, setEditingContent] = useState(null);
   const [selectedPlay, setSelectedPlay] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
+  const [selectedRequest, setSelectedRequest] = useState(null);
   const store = useMemo(() => createPlannerStore({
     firestore: authState.firestore,
     user: authState.user,
@@ -1724,6 +1892,7 @@ function PlannerApp({authState}) {
 
   let content = null;
   if (activeView === "calendar") content = <CalendarView workspace={workspace} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
+  else if (activeView === "requests") content = <RequestsView workspace={workspace} canEdit={canEdit} onOpenRequest={setSelectedRequest} />;
   else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} />;
   else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
   else if (activeView === "reports") content = <ReportsView workspace={workspace} authState={authState} canEmail={canEmail} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
@@ -1789,6 +1958,42 @@ function PlannerApp({authState}) {
       }} />}
       {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} smuggleRelationship={smuggleByHostPlay.get(selectedPlay.id)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} />}
       {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onDelete={deleteCampaign} />}
+      {selectedRequest && <RequestReviewDialog request={selectedRequest} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedRequest(null)} onConvert={async (request, campaign, plays, eventDate) => {
+        const dateWasChanged = eventDate !== request.eventDate || ["needs-review", "manual-required"].includes(request.dateParseStatus);
+        const {result, savedRequest, updates} = await perform(async () => {
+          const updates = {
+            proposedName: campaign.name,
+            eventDate,
+            eventDates: dateWasChanged ? [eventDate] : request.eventDates?.length ? request.eventDates : [eventDate],
+            eventDateEnd: dateWasChanged ? "" : request.eventDateEnd || "",
+            dateParseStatus: dateWasChanged ? "manual" : request.dateParseStatus || "parsed",
+            dateParseKind: dateWasChanged ? "single" : request.dateParseKind || "single",
+            dateSource: dateWasChanged ? "manual-review" : request.dateSource || "form-parser",
+            status: "converted",
+            campaignId: campaign.id,
+          };
+          const result = await store.convertPromotionRequest(
+            request.id,
+            campaign,
+            plays,
+            updates,
+          );
+          const savedRequest = result.request;
+          return {result, savedRequest, updates};
+        }, `${campaign.name} was created from the Planning Center request.`);
+        setWorkspace((current) => ({
+          ...current,
+          campaigns: [result.campaign, ...current.campaigns.filter((item) => item.id !== result.campaign.id)],
+          scheduledPlays: [...current.scheduledPlays.filter((item) => item.campaignId !== result.campaign.id), ...result.plays],
+          promotionRequests: current.promotionRequests.map((item) => item.id === request.id ? {...item, ...savedRequest, ...updates} : item),
+        }));
+        setSelectedRequest(null);
+        setActiveView("campaigns");
+      }} onDismiss={async (request) => {
+        const savedRequest = await perform(() => store.updatePromotionRequest(request.id, {status: "dismissed", campaignId: ""}), `${request.proposedName || "The request"} was dismissed.`);
+        setWorkspace((current) => ({...current, promotionRequests: current.promotionRequests.map((item) => item.id === request.id ? {...item, ...savedRequest, status: "dismissed", campaignId: ""} : item)}));
+        setSelectedRequest(null);
+      }} />}
     </div>
   );
 }

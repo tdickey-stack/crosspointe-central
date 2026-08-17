@@ -21,6 +21,7 @@ do not provide a separate secret store.
 
 - `PCO_APP_ID`
 - `PCO_SECRET`
+- `PCO_WEBHOOK_AUTHENTICITY_SECRET`
 - `CENTRAL_GMAIL_CLIENT_SECRET`
 - `CENTRAL_GMAIL_REFRESH_TOKEN`
 - `CENTRAL_CALENDAR_SIGNING_KEY`
@@ -114,6 +115,11 @@ links do not need to match production.
    links, and Wayfinder live context.
 5. Delete the old Personal Access Token in Planning Center only after those
    checks pass.
+
+The Promotion Planner's People Form webhook has a separate
+`PCO_WEBHOOK_AUTHENTICITY_SECRET`. Planning Center generates that value for the
+subscription; follow `docs/planning-center-form-requests.md` when configuring
+or rotating it.
 
 ### 3. Replace Gmail credentials
 

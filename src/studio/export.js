@@ -49,12 +49,26 @@ function getLayoutSignature(elements) {
             `${section.className}:${section.clientWidth}x${section.clientHeight}`,
         )
         .join(",");
+      const fittedText = Array.from(
+        element.querySelectorAll("[data-auto-fit-lines]"),
+      )
+        .map((textElement) => {
+          const textBounds = textElement.getBoundingClientRect();
+          return [
+            textElement.dataset.autoFitScale || "pending",
+            textBounds.width,
+            textBounds.height,
+            window.getComputedStyle(textElement).fontSize,
+          ].join(":");
+        })
+        .join(",");
       return [
         bounds.width,
         bounds.height,
         element.scrollWidth,
         element.scrollHeight,
         checklistSections,
+        fittedText,
       ].join(":");
     })
     .join("|");
@@ -185,6 +199,7 @@ async function renderExactPng(element, width, height) {
   await waitForFonts();
   await waitForPreparedBrandMarks(element);
   await waitForRenderedImages(element);
+  await waitForStableLayout([element]);
   const bounds = element.getBoundingClientRect();
   if (!bounds.width || !bounds.height) {
     throw new Error("The Studio preview has no measurable export size.");

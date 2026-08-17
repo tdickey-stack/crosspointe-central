@@ -27,6 +27,7 @@ import {
   getEventCompositionOptions,
   getEventFontOptions,
   getEventPalette,
+  getTemplateById,
   getProjectWarnings,
   getSocialProjectSlides,
   isGraphicTemplateId,
@@ -57,6 +58,55 @@ test("Small Group Leader is a 16:9 document graphic with background support", ()
   assert.equal(payload.sourceType, "manual");
   assert.equal(payload.content.format, "screen");
   assert.equal(payload.content.heroMode, "text");
+});
+
+test("event templates share title fitting and custom hero logos", () => {
+  const eventTemplates = TEMPLATE_CATALOG.filter(
+    (template) => template.kind === "event",
+  );
+  assert.deepEqual(
+    eventTemplates.map((template) => template.id),
+    [
+      "event-signal-stack",
+      "event-rally-poster",
+      "event-future-block",
+      "event-center-stage",
+      "event-timeless-center",
+      "event-editorial-invitation",
+      "event-scripted-welcome",
+    ],
+  );
+
+  eventTemplates.forEach((template) => {
+    const project = createStudioProject(template.id);
+    project.id = `${template.id}-hero-project`;
+    Object.assign(project.content, {
+      heroMode: "logo",
+      heroLogoSource: "upload",
+      heroLogoStoragePath:
+        `studio-projects/${project.id}/logo-event.png`,
+      heroLogoName: "Event logo",
+    });
+    const payload = projectForCloud(project, "studio-admin");
+
+    assert.equal(template.titleFitLines, 2, template.id);
+    assert.equal(template.titleFitMinScale, 0.56, template.id);
+    assert.equal(supportsHeroLogoTemplate(template.id), true, template.id);
+    assert.equal(payload.content.heroMode, "logo", template.id);
+    assert.equal(payload.content.heroLogoSource, "upload", template.id);
+    assert.equal(
+      payload.content.heroLogoStoragePath,
+      project.content.heroLogoStoragePath,
+      template.id,
+    );
+  });
+
+  assert.equal(getTemplateById("event-promotion").titleFitLines, 2);
+  assert.equal(supportsHeroLogoTemplate("event-promotion"), true);
+  assert.equal(
+    createStudioProject("event-future-block").content.fontKey,
+    "unbounded",
+  );
 });
 
 function eventProject() {

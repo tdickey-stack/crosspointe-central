@@ -174,6 +174,8 @@ const eventTemplate = ({
   previewCopy,
   defaults = {},
   accent = "blue",
+  titleFitLines = 2,
+  titleFitMinScale = 0.56,
 }) => ({
   id,
   name,
@@ -191,6 +193,8 @@ const eventTemplate = ({
   defaultFont,
   previewCopy,
   defaults,
+  titleFitLines,
+  titleFitMinScale,
 });
 
 const socialTemplate = ({

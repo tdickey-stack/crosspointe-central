@@ -1050,6 +1050,62 @@ function VisibilityEyeIcon({hidden}) {
   );
 }
 
+function textFitsLineLimit(element, maximumLines) {
+  const style = window.getComputedStyle(element);
+  const lineHeight = Number.parseFloat(style.lineHeight);
+  if (!Number.isFinite(lineHeight) || lineHeight <= 0) return true;
+  return (
+    element.getBoundingClientRect().height <=
+    lineHeight * (maximumLines + 0.08)
+  );
+}
+
+function fitTextToLineLimit(element, maximumLines, minimumScale) {
+  element.style.removeProperty("font-size");
+  element.style.removeProperty("width");
+  element.style.removeProperty("max-width");
+  element.dataset.autoFitScale = "1";
+  if (!maximumLines || textFitsLineLimit(element, maximumLines)) return;
+
+  const baseStyle = window.getComputedStyle(element);
+  const baseSize = Number.parseFloat(baseStyle.fontSize);
+  const baseWidth = element.getBoundingClientRect().width;
+  if (
+    !Number.isFinite(baseSize) ||
+    baseSize <= 0 ||
+    !Number.isFinite(baseWidth) ||
+    baseWidth <= 0
+  ) {
+    return;
+  }
+
+  // Several templates size their title box in em. Freeze the box before
+  // scaling so reducing the type actually creates room for fewer lines.
+  element.style.width = `${baseWidth}px`;
+  element.style.maxWidth = `${baseWidth}px`;
+
+  const floor = Math.min(1, Math.max(0.4, Number(minimumScale) || 0.56));
+  const fitsAt = (scale) => {
+    element.style.fontSize = `${baseSize * scale}px`;
+    return textFitsLineLimit(element, maximumLines);
+  };
+  if (!fitsAt(floor)) {
+    element.dataset.autoFitScale = String(floor);
+    return;
+  }
+
+  let lower = floor;
+  let upper = 1;
+  for (let step = 0; step < 9; step += 1) {
+    const candidate = (lower + upper) / 2;
+    if (fitsAt(candidate)) lower = candidate;
+    else upper = candidate;
+  }
+  const fittedScale = Math.floor(lower * 1000) / 1000;
+  element.style.fontSize = `${baseSize * fittedScale}px`;
+  element.dataset.autoFitScale = String(fittedScale);
+}
+
 function EditableEventText({
   as: Tag,
   children,
@@ -1061,14 +1117,73 @@ function EditableEventText({
   className = "",
   fieldOptions = EVENT_EDITABLE_FIELDS,
   visible = true,
+  autoFitLines = 0,
+  autoFitMinScale = 0.56,
+  autoFitKey = "",
 }) {
+  const textRef = React.useRef(null);
   const isOptional = ["eyebrow", "subtitle"].includes(field);
   const isOptionalEmpty = isOptional && !hasText(children);
   const isOptionalHidden = isOptional && visible === false;
 
+  React.useLayoutEffect(() => {
+    const element = textRef.current;
+    if (!element || !autoFitLines) {
+      element?.style.removeProperty("font-size");
+      element?.style.removeProperty("width");
+      element?.style.removeProperty("max-width");
+      if (element) delete element.dataset.autoFitScale;
+      return undefined;
+    }
+
+    let frame = 0;
+    let disposed = false;
+    const fit = () => {
+      frame = 0;
+      if (!disposed) {
+        fitTextToLineLimit(element, autoFitLines, autoFitMinScale);
+      }
+    };
+    const scheduleFit = () => {
+      if (disposed) return;
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(fit);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(scheduleFit);
+    if (element.parentElement) observer?.observe(element.parentElement);
+    element.addEventListener("input", scheduleFit);
+    fit();
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(scheduleFit).catch(() => {});
+    }
+    return () => {
+      disposed = true;
+      if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      element.removeEventListener("input", scheduleFit);
+    };
+  }, [
+    autoFitKey,
+    autoFitLines,
+    autoFitMinScale,
+    children,
+    editorMode,
+  ]);
+
   if (!editorMode) {
     if (isOptionalEmpty || isOptionalHidden) return null;
-    return <Tag className={className || undefined}>{children}</Tag>;
+    return (
+      <Tag
+        ref={textRef}
+        className={className || undefined}
+        data-auto-fit-lines={autoFitLines || undefined}
+      >
+        {children}
+      </Tag>
+    );
   }
 
   const config = fieldOptions[field];
@@ -1159,6 +1274,7 @@ function EditableEventText({
 
   return (
     <Tag
+      ref={textRef}
       className={[
         className,
         "event-editable-field",
@@ -1174,6 +1290,7 @@ function EditableEventText({
       aria-multiline={config.multiline || undefined}
       data-event-field={field}
       data-placeholder={config.label}
+      data-auto-fit-lines={autoFitLines || undefined}
       onClick={(event) => {
         event.stopPropagation();
         onSelectField(field);
@@ -1529,6 +1646,15 @@ export function EventPreview({
             as="h2"
             editorMode={editorMode}
             field="title"
+            autoFitLines={template.titleFitLines}
+            autoFitMinScale={template.titleFitMinScale}
+            autoFitKey={[
+              content.fontKey,
+              content.fontWeight,
+              content.format,
+              composition,
+              content.textAlignment,
+            ].join("|")}
             onEditField={onEditField}
             onSelectField={onSelectField}
             selectedField={selectedField}

@@ -191,7 +191,12 @@ async function useHighResolutionBackground(element, content, width) {
   };
 }
 
-async function renderExactPng(element, width, height) {
+async function renderExactPng(
+  element,
+  width,
+  height,
+  {requireNativeSize = false} = {},
+) {
   if (!element) {
     throw new Error("The Studio preview is not available for export.");
   }
@@ -205,12 +210,42 @@ async function renderExactPng(element, width, height) {
     throw new Error("The Studio preview has no measurable export size.");
   }
 
+  if (
+    requireNativeSize &&
+    (Math.abs(bounds.width - width) > 0.5 ||
+      Math.abs(bounds.height - height) > 0.5)
+  ) {
+    throw new Error(
+      `Studio prepared a ${Math.round(bounds.width)} × ${Math.round(bounds.height)}px preview instead of ${width} × ${height}px. Please reload Studio and try again.`,
+    );
+  }
+
   const renderedCanvas = await toCanvas(element, {
     cacheBust: true,
     includeQueryParams: true,
-    pixelRatio: Math.max(width / bounds.width, height / bounds.height),
+    pixelRatio: requireNativeSize
+      ? 1
+      : Math.max(width / bounds.width, height / bounds.height),
     skipAutoScale: true,
   });
+
+  if (
+    requireNativeSize &&
+    (renderedCanvas.width !== width || renderedCanvas.height !== height)
+  ) {
+    throw new Error(
+      `Studio rendered ${renderedCanvas.width} × ${renderedCanvas.height}px instead of ${width} × ${height}px. Please reload Studio and try again.`,
+    );
+  }
+
+  if (
+    requireNativeSize &&
+    renderedCanvas.width === width &&
+    renderedCanvas.height === height
+  ) {
+    return renderedCanvas.toDataURL("image/png");
+  }
+
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -277,7 +312,9 @@ export async function exportEventPng(
     size.width,
   );
   try {
-    const png = await renderExactPng(element, size.width, size.height);
+    const png = await renderExactPng(element, size.width, size.height, {
+      requireNativeSize: true,
+    });
     const filename = filenameBase
       ? `${filenameBase}.png`
       : `${safeFilename(project?.name, "event-promotion")}-${size.label}.png`;
@@ -327,6 +364,7 @@ export async function exportCarouselPngs(
         slideElements[index],
         size.width,
         size.height,
+        {requireNativeSize: true},
       );
       const slideNumber = String(index + 1).padStart(2, "0");
       const base = filenameBase || safeFilename(project?.name, "social-carousel");

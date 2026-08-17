@@ -5391,8 +5391,7 @@ function EventStudioEditor({
     useCreativeFilenamePreference();
   const [exportState, setExportState] = useState({status: "", message: ""});
   const [activeSlideId, setActiveSlideId] = useState("primary");
-  const previewElementRef = useRef(null);
-  const carouselExportRefs = useRef(new Map());
+  const eventExportRefs = useRef(new Map());
   const latestProjectRef = useRef(project);
   latestProjectRef.current = project;
   const workspacePanelFrameRef = useRef(null);
@@ -5403,6 +5402,9 @@ function EventStudioEditor({
   const supportsBackground = template.variant !== "simple-statement";
   const isCarousel = isSocial && project.postMode === "carousel";
   const slides = getSocialProjectSlides(project);
+  const exportSlides = isCarousel
+    ? slides
+    : [{id: "primary", content: project.content}];
   const activeSlide = isCarousel
     ? slides.find((slide) => slide.id === activeSlideId) || slides[0]
     : slides[0];
@@ -5603,10 +5605,10 @@ function EventStudioEditor({
       const result = isCarousel
         ? await exportCarouselPngs(
             project,
-            slides.map((slide) => carouselExportRefs.current.get(slide.id)),
+            slides.map((slide) => eventExportRefs.current.get(slide.id)),
             {filenameBase},
           )
-        : await exportEventPng(project, previewElementRef.current, {
+        : await exportEventPng(project, eventExportRefs.current.get("primary"), {
             filenameBase,
           });
       setExportState({
@@ -5895,7 +5897,6 @@ function EventStudioEditor({
           >
             <EventPreview
               content={activeContent}
-              previewRef={previewElementRef}
               templateId={project.templateId}
               editorMode={exportState.status !== "working"}
               selectedField={selectedField}
@@ -5936,21 +5937,19 @@ function EventStudioEditor({
           }
         }}
       />
-      {isCarousel ? (
-        <div className="studio-carousel-export-slides" aria-hidden="true">
-          {slides.map((slide) => (
-            <EventPreview
-              key={slide.id}
-              content={slide.content}
-              previewRef={(element) => {
-                if (element) carouselExportRefs.current.set(slide.id, element);
-                else carouselExportRefs.current.delete(slide.id);
-              }}
-              templateId={project.templateId}
-            />
-          ))}
-        </div>
-      ) : null}
+      <div className="studio-event-export-previews" aria-hidden="true">
+        {exportSlides.map((slide) => (
+          <EventPreview
+            key={slide.id}
+            content={slide.content}
+            previewRef={(element) => {
+              if (element) eventExportRefs.current.set(slide.id, element);
+              else eventExportRefs.current.delete(slide.id);
+            }}
+            templateId={project.templateId}
+          />
+        ))}
+      </div>
       {showFilenameDialog ? (
         <CreativeFilenameDialog
           project={project}

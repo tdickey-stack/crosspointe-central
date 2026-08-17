@@ -3777,18 +3777,24 @@ a {
   opacity: 0.35;
 }
 
-.studio-carousel-export-slides {
+.studio-event-export-previews {
   position: fixed;
   top: 0;
   left: -12000px;
   z-index: -1;
   display: grid;
-  width: 1080px;
+  width: max-content;
   pointer-events: none;
 }
 
-.studio-carousel-export-slides > .studio-event-graphic {
+.studio-event-export-previews > .studio-event-graphic.is-square,
+.studio-event-export-previews > .studio-event-graphic.is-portrait {
   width: 1080px;
+  max-width: none;
+}
+
+.studio-event-export-previews > .studio-event-graphic.is-screen {
+  width: 1920px;
   max-width: none;
 }
 

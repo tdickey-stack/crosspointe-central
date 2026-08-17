@@ -460,18 +460,20 @@ export const studioDeleteProject = onRequest(
         sendJson(response, 404, {error: "Project not found."});
         return;
       }
-      const [memberships, shares, pages] = await Promise.all([
+      const [memberships, shares, pages, slides] = await Promise.all([
         db
           .collection("centralStudioMemberships")
           .where("projectId", "==", projectId)
           .get(),
         db.collection("centralStudioShares").where("projectId", "==", projectId).get(),
         projectRef.collection("pages").get(),
+        projectRef.collection("slides").get(),
       ]);
       const batch = db.batch();
       memberships.docs.forEach((document) => batch.delete(document.ref));
       shares.docs.forEach((document) => batch.delete(document.ref));
       pages.docs.forEach((document) => batch.delete(document.ref));
+      slides.docs.forEach((document) => batch.delete(document.ref));
       batch.delete(projectRef);
       await batch.commit();
       await getStorage()

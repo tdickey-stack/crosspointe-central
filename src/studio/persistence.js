@@ -1,11 +1,14 @@
 import {
   DOCUMENT_PROJECT_TEMPLATE_ID,
+  MAX_SOCIAL_CAROUSEL_SLIDES,
+  SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID,
   isEventTemplateId,
   isDocumentProject,
   isSocialTemplateId,
   linesToText,
   migrateLegacyStudioProject,
   normalizeEventComposition,
+  supportsHeroLogoTemplate,
   textToLines,
 } from "./templates.js";
 import {planningCenterEventsFromCentralData} from "./planning-center-events.js";
@@ -281,10 +284,11 @@ function documentPageForCloud(page) {
 
 function eventContentForCloud(content, templateId, projectId) {
   const isSocial = isSocialTemplateId(templateId);
-  const supportsHero = isEventTemplateId(templateId);
+  const isSimpleStatement = templateId === SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID;
+  const supportsHero = supportsHeroLogoTemplate(templateId);
   const requestedBackgroundSource = ["upload", "unsplash"].includes(
     content.backgroundImageSource,
-  )
+  ) && !isSimpleStatement
     ? content.backgroundImageSource
     : "";
   const source =
@@ -310,8 +314,17 @@ function eventContentForCloud(content, templateId, projectId) {
         ? "library"
         : "";
   const legacyFocal = legacyFocalPoint(content);
+  const eyebrowVisible = content.eyebrowVisible !== false;
+  const subtitleVisible = content.subtitleVisible !== false;
   return {
     eyebrow: stringValue(content.eyebrow),
+    optionalTextVisibility: eyebrowVisible
+      ? subtitleVisible
+        ? "both"
+        : "eyebrow"
+      : subtitleVisible
+        ? "subtitle"
+        : "none",
     title: stringValue(content.title),
     subtitle: stringValue(content.subtitle),
     date: isSocial ? "" : stringValue(content.date),
@@ -331,7 +344,6 @@ function eventContentForCloud(content, templateId, projectId) {
     flatColor: stringValue(content.flatColor || "charcoal"),
     overlayColor: stringValue(content.overlayColor || "red"),
     overlayBlendMode: stringValue(content.overlayBlendMode || "multiply"),
-    imagePosition: stringValue(content.imagePosition || "center"),
     focalX: focalValue(content.focalX, legacyFocal.x),
     focalY: focalValue(content.focalY, legacyFocal.y),
     imageZoom: zoomValue(content.imageZoom),
@@ -392,6 +404,17 @@ function eventContentForCloud(content, templateId, projectId) {
   };
 }
 
+export function socialSlideForCloud(slide, templateId, projectId) {
+  return {
+    schemaVersion: 1,
+    content: eventContentForCloud(
+      slide?.content || {},
+      templateId,
+      projectId,
+    ),
+  };
+}
+
 export function projectForCloud(project, ownerUid) {
   if (isDocumentProject(project)) {
     return {
@@ -420,27 +443,91 @@ export function projectForCloud(project, ownerUid) {
     !Number.isNaN(requestedSourceDate.getTime())
       ? requestedSourceDate
       : null;
+  const isSocial = isSocialTemplateId(project.templateId);
   return {
-    schemaVersion: 1,
+    schemaVersion: isSocial ? 3 : 1,
     ownerUid,
     templateId: project.templateId,
     name: String(project.name || "").trim(),
     status: "draft",
     sourceType,
-    sourceId: sourceType === "planning-center" ? stringValue(project.sourceId) : "",
-    sourceEventId:
-      sourceType === "planning-center" ? stringValue(project.sourceEventId) : "",
-    sourceUrl:
-      sourceType === "planning-center" &&
-      /^https:\/\//iu.test(String(project.sourceUrl || ""))
-        ? stringValue(project.sourceUrl).slice(0, 500)
-        : "",
-    sourceUpdatedAt,
-    content: eventContentForCloud(
-      project.content || {},
-      project.templateId,
-      project.id,
-    ),
+    ...(!isSocial
+      ? {
+          sourceId:
+            sourceType === "planning-center" ? stringValue(project.sourceId) : "",
+          sourceEventId:
+            sourceType === "planning-center"
+              ? stringValue(project.sourceEventId)
+              : "",
+          sourceUrl:
+            sourceType === "planning-center" &&
+            /^https:\/\//iu.test(String(project.sourceUrl || ""))
+              ? stringValue(project.sourceUrl).slice(0, 500)
+              : "",
+          sourceUpdatedAt,
+        }
+      : {}),
+    ...(isSocial
+      ? {
+          postMode: project.postMode === "carousel" ? "carousel" : "single",
+          slideOrder: [
+            "primary",
+            ...(project.postMode === "carousel" &&
+            Array.isArray(project.carouselSlides)
+              ? project.carouselSlides
+                  .slice(0, MAX_SOCIAL_CAROUSEL_SLIDES - 1)
+                  .map((slide) => stringValue(slide?.id).slice(0, 128))
+                  .filter(Boolean)
+              : []),
+          ],
+        }
+      : {}),
+    ...(!isSocial
+      ? {
+          content: eventContentForCloud(
+            project.content || {},
+            project.templateId,
+            project.id,
+          ),
+        }
+      : {}),
+  };
+}
+
+async function hydrateGraphicContent(content, storage) {
+  const cloudContent = content || {};
+  let backgroundImage = stringValue(cloudContent.backgroundImageUrl);
+  let heroLogo = "";
+  if (
+    cloudContent.backgroundImageSource === "upload" &&
+    cloudContent.backgroundImageStoragePath
+  ) {
+    try {
+      backgroundImage = await storage
+        .ref(cloudContent.backgroundImageStoragePath)
+        .getDownloadURL();
+    } catch (error) {
+      backgroundImage = "";
+    }
+  }
+  if (
+    ["upload", "library"].includes(cloudContent.heroLogoSource) &&
+    cloudContent.heroLogoStoragePath
+  ) {
+    try {
+      heroLogo = await storage
+        .ref(cloudContent.heroLogoStoragePath)
+        .getDownloadURL();
+    } catch (error) {
+      heroLogo = "";
+    }
+  }
+  return {
+    ...cloudContent,
+    backgroundImage,
+    heroLogo,
+    focalX: focalValue(cloudContent.focalX, legacyFocalPoint(cloudContent).x),
+    focalY: focalValue(cloudContent.focalY, legacyFocalPoint(cloudContent).y),
   };
 }
 
@@ -533,56 +620,44 @@ async function hydrateProject(snapshot, storage, shared = false) {
   }
 
   const cloudContent = data.content || {};
-  let backgroundImage = stringValue(cloudContent.backgroundImageUrl);
-  let heroLogo = "";
+  let content;
+  const carouselSlides = [];
   if (
-    data.templateId !== "policy-document" &&
-    cloudContent.backgroundImageSource === "upload" &&
-    cloudContent.backgroundImageStoragePath
+    isSocialTemplateId(data.templateId) &&
+    data.schemaVersion === 3 &&
+    Array.isArray(data.slideOrder) &&
+    data.slideOrder.length
   ) {
-    try {
-      backgroundImage = await storage
-        .ref(cloudContent.backgroundImageStoragePath)
-        .getDownloadURL();
-    } catch (error) {
-      backgroundImage = "";
+    const slideSnapshot = await snapshot.ref.collection("slides").get();
+    const slidesById = new Map(
+      slideSnapshot.docs.map((slideDocument) => [
+        slideDocument.id,
+        slideDocument.data(),
+      ]),
+    );
+    for (const slideId of data.slideOrder.slice(0, MAX_SOCIAL_CAROUSEL_SLIDES)) {
+      const slideData = slidesById.get(slideId);
+      if (!slideData?.content) continue;
+      const hydratedSlide = {
+        id: slideId,
+        content: await hydrateGraphicContent(slideData.content, storage),
+      };
+      if (slideId === "primary") content = hydratedSlide.content;
+      else carouselSlides.push(hydratedSlide);
     }
   }
-  if (
-    data.templateId !== "policy-document" &&
-    ["upload", "library"].includes(cloudContent.heroLogoSource) &&
-    cloudContent.heroLogoStoragePath
-  ) {
-    try {
-      heroLogo = await storage
-        .ref(cloudContent.heroLogoStoragePath)
-        .getDownloadURL();
-    } catch (error) {
-      heroLogo = "";
-    }
+  if (!content) {
+    content =
+      data.templateId === "policy-document"
+        ? {
+            ...cloudContent,
+            primaryItems: textToLines(cloudContent.primaryItemsText, 7),
+            secondaryItems: textToLines(cloudContent.secondaryItemsText, 7),
+            ownerItems: textToLines(cloudContent.ownerItemsText, 3),
+            processSteps: textToLines(cloudContent.processStepsText, 8),
+          }
+        : await hydrateGraphicContent(cloudContent, storage);
   }
-  const content =
-    data.templateId === "policy-document"
-      ? {
-          ...cloudContent,
-          primaryItems: textToLines(cloudContent.primaryItemsText, 7),
-          secondaryItems: textToLines(cloudContent.secondaryItemsText, 7),
-          ownerItems: textToLines(cloudContent.ownerItemsText, 3),
-          processSteps: textToLines(cloudContent.processStepsText, 8),
-        }
-      : {
-          ...cloudContent,
-          backgroundImage,
-          heroLogo,
-          focalX: focalValue(
-            cloudContent.focalX,
-            legacyFocalPoint(cloudContent).x,
-          ),
-          focalY: focalValue(
-            cloudContent.focalY,
-            legacyFocalPoint(cloudContent).y,
-          ),
-        };
   return migrateLegacyStudioProject({
     id: snapshot.id,
     templateId: data.templateId,
@@ -602,6 +677,12 @@ async function hydrateProject(snapshot, storage, shared = false) {
     ownerUid: data.ownerUid,
     shared,
     cloudBacked: true,
+    ...(isSocialTemplateId(data.templateId)
+      ? {
+          postMode: data.postMode === "carousel" ? "carousel" : "single",
+          carouselSlides,
+        }
+      : {}),
     content,
   });
 }
@@ -894,6 +975,86 @@ export function createStudioCloud({
       return {
         ...project,
         schemaVersion: 2,
+        ownerUid: payload.ownerUid,
+        cloudBacked: true,
+      };
+    }
+
+    if (isSocialTemplateId(project.templateId)) {
+      const serverTimestamp =
+        window.firebase.firestore.FieldValue.serverTimestamp();
+      const previousData = projectExists ? snapshot.data() : null;
+      const previousSlideSnapshot = projectExists
+        ? await reference.collection("slides").get()
+        : null;
+      const previousSlideIds = new Set(
+        previousSlideSnapshot?.docs.map((slide) => slide.id) || [],
+      );
+      const nextSlides = [
+        {id: "primary", content: project.content},
+        ...(project.postMode === "carousel" &&
+        Array.isArray(project.carouselSlides)
+          ? project.carouselSlides.slice(0, MAX_SOCIAL_CAROUSEL_SLIDES - 1)
+          : []),
+      ];
+      const nextSlideIds = new Set(payload.slideOrder);
+      const batch = firestore.batch();
+
+      if (!projectExists) {
+        batch.set(reference, {
+          ...payload,
+          createdAt: serverTimestamp,
+          updatedAt: serverTimestamp,
+        });
+      } else if (previousData.schemaVersion === 3) {
+        batch.update(reference, {
+          schemaVersion: payload.schemaVersion,
+          name: payload.name,
+          status: payload.status,
+          sourceType: payload.sourceType,
+          postMode: payload.postMode,
+          slideOrder: payload.slideOrder,
+          updatedAt: serverTimestamp,
+        });
+      } else {
+        batch.set(reference, {
+          ...payload,
+          createdAt: previousData.createdAt,
+          updatedAt: serverTimestamp,
+        });
+      }
+
+      for (const slide of nextSlides) {
+        const slideId = stringValue(slide?.id).slice(0, 128);
+        if (!nextSlideIds.has(slideId)) continue;
+        const slideReference = reference.collection("slides").doc(slideId);
+        const slidePayload = socialSlideForCloud(
+          slide,
+          project.templateId,
+          project.id,
+        );
+        if (previousSlideIds.has(slideId)) {
+          batch.update(slideReference, {
+            content: slidePayload.content,
+            updatedAt: serverTimestamp,
+          });
+        } else {
+          batch.set(slideReference, {
+            ...slidePayload,
+            createdAt: serverTimestamp,
+            updatedAt: serverTimestamp,
+          });
+        }
+      }
+      for (const slideId of previousSlideIds) {
+        if (!nextSlideIds.has(slideId)) {
+          batch.delete(reference.collection("slides").doc(slideId));
+        }
+      }
+      await batch.commit();
+      return {
+        ...project,
+        schemaVersion: 3,
         ownerUid: payload.ownerUid,
         cloudBacked: true,
       };

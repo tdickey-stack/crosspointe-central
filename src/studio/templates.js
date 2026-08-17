@@ -1,6 +1,8 @@
 export const STUDIO_STORAGE_KEY = "crosspointeStudioProjectsV1";
 export const DOCUMENT_PROJECT_TEMPLATE_ID = "document-project";
 export const LEGACY_POLICY_TEMPLATE_ID = "policy-document";
+export const SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID = "social-simple-statement";
+export const MAX_SOCIAL_CAROUSEL_SLIDES = 6;
 
 export const BRAND_COLOR_OPTIONS = [
   {value: "red", label: "CrossPointe Red", hex: "#EF3E2D", ink: "light"},
@@ -12,6 +14,7 @@ export const BRAND_COLOR_OPTIONS = [
   {value: "mint", label: "Mint", hex: "#4BC3A7", ink: "dark"},
   {value: "burgundy", label: "Burgundy", hex: "#64242E", ink: "light"},
   {value: "blush", label: "Blush", hex: "#FAC8C3", ink: "dark"},
+  {value: "cream", label: "Warm Cream", hex: "#F7F3E7", ink: "dark"},
 ];
 
 export const EVENT_PALETTE_OPTIONS = [
@@ -406,8 +409,8 @@ export const TEMPLATE_CATALOG = [
   }),
   socialTemplate({
     id: "social-statement",
-    name: "Simple Statement",
-    shortName: "Statement",
+    name: "Bold Statement",
+    shortName: "Bold",
     description:
       "A bold, minimal post for reminders, campaign phrases, and short ministry messages.",
     variant: "social-statement",
@@ -431,6 +434,33 @@ export const TEMPLATE_CATALOG = [
       textAlignment: "center",
     },
     accent: "mint",
+  }),
+  socialTemplate({
+    id: SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID,
+    name: "Simple Statement",
+    shortName: "Simple",
+    description:
+      "Centered text or a custom hero logo on a clean color background with quiet CrossPointe branding.",
+    variant: "simple-statement",
+    fonts: ["montserrat", "league-spartan", "google-sans"],
+    compositions: ["flat"],
+    defaultFont: "montserrat",
+    previewCopy: {
+      eyebrow: "",
+      title: "being around people\nisn’t the same as being known",
+      subtitle: "",
+      footer: "",
+    },
+    defaults: {
+      composition: "flat",
+      flatColor: "cream",
+      palette: "warm-light",
+      textAlignment: "center",
+      fontWeight: "bold",
+      brandMark: "full",
+      brandColor: "charcoal",
+    },
+    accent: "red",
   }),
   eventTemplate({
     id: "event-signal-stack",
@@ -646,6 +676,32 @@ export function isSocialTemplateId(templateId) {
   return TEMPLATE_CATALOG.some(
     (template) => template.id === templateId && template.kind === "social",
   );
+}
+
+export function supportsHeroLogoTemplate(templateId) {
+  return (
+    isEventTemplateId(templateId) ||
+    templateId === SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID
+  );
+}
+
+export function createSocialCarouselSlide(content, slideId = "") {
+  return {
+    id: slideId || createId("studio-slide"),
+    content: structuredCloneSafe_(content || eventContent),
+  };
+}
+
+export function getSocialProjectSlides(project) {
+  if (!project?.content || !isSocialTemplateId(project.templateId)) return [];
+  const additionalSlides =
+    project.postMode === "carousel" && Array.isArray(project.carouselSlides)
+      ? project.carouselSlides.slice(0, MAX_SOCIAL_CAROUSEL_SLIDES - 1)
+      : [];
+  return [
+    {id: "primary", content: project.content},
+    ...additionalSlides,
+  ];
 }
 
 export function isGraphicTemplateId(templateId) {
@@ -880,8 +936,10 @@ const contentPageContent = {
 
 const eventContent = {
   eyebrow: "A PLACE TO CONNECT",
+  eyebrowVisible: true,
   title: "Community Night",
   subtitle: "Come as you are. Leave knowing someone new.",
+  subtitleVisible: true,
   date: "SEPTEMBER 18",
   time: "6:30 PM",
   location: "CROSSPOINTE CHURCH",
@@ -996,6 +1054,10 @@ export function migrateLegacyStudioProject(project) {
     project.content.composition,
   );
   const isSocial = isSocialTemplateId(project.templateId);
+  const supportsHero = supportsHeroLogoTemplate(project.templateId);
+  const optionalTextVisibility = String(
+    project.content.optionalTextVisibility || "",
+  );
   const hasFocalPoint =
     Number.isFinite(Number(project.content.focalX)) &&
     Number.isFinite(Number(project.content.focalY));
@@ -1004,11 +1066,19 @@ export function migrateLegacyStudioProject(project) {
     center: 50,
     "right center": 75,
   }[project.content.imagePosition] ?? 50;
-  return {
+  const migrated = {
     ...project,
     content: {
       ...project.content,
       composition: normalizedComposition,
+      eyebrowVisible:
+        typeof project.content.eyebrowVisible === "boolean"
+          ? project.content.eyebrowVisible
+          : !["subtitle", "none"].includes(optionalTextVisibility),
+      subtitleVisible:
+        typeof project.content.subtitleVisible === "boolean"
+          ? project.content.subtitleVisible
+          : !["eyebrow", "none"].includes(optionalTextVisibility),
       date: isSocial ? "" : String(project.content.date || ""),
       time: isSocial ? "" : String(project.content.time || ""),
       location: isSocial ? "" : String(project.content.location || ""),
@@ -1054,22 +1124,22 @@ export function migrateLegacyStudioProject(project) {
         ? project.content.brandColor
         : "auto",
       heroMode:
-        !isSocial && project.content.heroMode === "logo" ? "logo" : "text",
-      heroLogo: isSocial ? "" : String(project.content.heroLogo || ""),
-      heroLogoSource: !isSocial && ["upload", "library"].includes(
+        supportsHero && project.content.heroMode === "logo" ? "logo" : "text",
+      heroLogo: supportsHero ? String(project.content.heroLogo || "") : "",
+      heroLogoSource: supportsHero && ["upload", "library"].includes(
         project.content.heroLogoSource,
       )
         ? project.content.heroLogoSource
         : "",
-      heroLogoLibraryId: isSocial
-        ? ""
-        : String(project.content.heroLogoLibraryId || ""),
-      heroLogoStoragePath: isSocial
-        ? ""
-        : String(project.content.heroLogoStoragePath || ""),
-      heroLogoName: isSocial
-        ? ""
-        : String(project.content.heroLogoName || ""),
+      heroLogoLibraryId: supportsHero
+        ? String(project.content.heroLogoLibraryId || "")
+        : "",
+      heroLogoStoragePath: supportsHero
+        ? String(project.content.heroLogoStoragePath || "")
+        : "",
+      heroLogoName: supportsHero
+        ? String(project.content.heroLogoName || "")
+        : "",
       heroLogoScale: Number.isFinite(Number(project.content.heroLogoScale))
         ? Math.min(2, Math.max(0.5, Number(project.content.heroLogoScale)))
         : 1,
@@ -1082,6 +1152,31 @@ export function migrateLegacyStudioProject(project) {
           )
         : 4,
     },
+  };
+  if (!isSocial) return migrated;
+
+  const carouselSlides =
+    project.postMode === "carousel" && Array.isArray(project.carouselSlides)
+      ? project.carouselSlides
+          .slice(0, MAX_SOCIAL_CAROUSEL_SLIDES - 1)
+          .map((slide) => {
+            const normalized = migrateLegacyStudioProject({
+              ...project,
+              postMode: "single",
+              carouselSlides: [],
+              content: slide?.content || {},
+            });
+            return createSocialCarouselSlide(
+              normalized.content,
+              String(slide?.id || "").slice(0, 128),
+            );
+          })
+      : [];
+  return {
+    ...migrated,
+    schemaVersion: 3,
+    postMode: project.postMode === "carousel" ? "carousel" : "single",
+    carouselSlides,
   };
 }
 
@@ -1110,7 +1205,7 @@ export function createStudioProject(templateId) {
 
   return {
     id,
-    schemaVersion: 1,
+    schemaVersion: template.kind === "social" ? 3 : 1,
     projectKind: template.editorKind === "graphic" ? "graphic" : undefined,
     templateId: template.id,
     name: `Untitled ${template.name}`,
@@ -1122,6 +1217,9 @@ export function createStudioProject(templateId) {
     sourceUpdatedAt: "",
     createdAt,
     updatedAt: createdAt,
+    ...(template.kind === "social"
+      ? {postMode: "single", carouselSlides: []}
+      : {}),
     content: {
       ...structuredCloneSafe_(eventContent),
       ...(template.defaults || {}),
@@ -1299,48 +1397,58 @@ export function getProjectWarnings(project) {
     return warnings;
   }
 
-  const content = project.content || {};
   const isSocial = isSocialTemplateId(project.templateId);
   const isSmallGroupLeader =
     getTemplateById(project.templateId).variant === "small-group-leader";
-  if (
-    content.heroMode !== "logo" &&
-    !String(content.title || "").trim()
-  ) {
-    warnings.push("The title is required.");
-  }
-  if (
-    content.heroMode !== "logo" &&
-    String(content.title || "").length > (isSocial ? 180 : 44)
-  ) {
-    warnings.push(
-      isSocial
-        ? "The main text may be too long for every format."
-        : isSmallGroupLeader
-          ? "The group name may be too long for the leader card."
-          : "The event title may be too long for every format.",
-    );
-  }
-  if (
-    content.heroMode === "logo" &&
-    !String(content.heroLogo || content.heroLogoStoragePath || "").trim()
-  ) {
-    warnings.push("Choose or upload a hero logo.");
-  }
-  if (!isSocial && !String(content.date || "").trim()) {
-    warnings.push(
-      isSmallGroupLeader ? "Add the group meeting day." : "Add an event date.",
-    );
-  }
-  if (!isSocial && !String(content.cta || "").trim()) {
-    warnings.push("Add a clear next step.");
-  }
-  if (
-    content.composition === "color-overlay" &&
-    !String(content.backgroundImage || "").trim()
-  ) {
-    warnings.push("Color Overlay requires a background image.");
-  }
+  const graphicContents =
+    isSocial && project.postMode === "carousel"
+      ? getSocialProjectSlides(project).map((slide) => slide.content)
+      : [project.content || {}];
+  graphicContents.forEach((content, index) => {
+    const prefix = graphicContents.length > 1 ? `Slide ${index + 1}: ` : "";
+    if (
+      content.heroMode !== "logo" &&
+      !String(content.title || "").trim()
+    ) {
+      warnings.push(`${prefix}The title is required.`);
+    }
+    if (
+      content.heroMode !== "logo" &&
+      String(content.title || "").length > (isSocial ? 180 : 44)
+    ) {
+      warnings.push(
+        `${prefix}${
+          isSocial
+            ? "The main text may be too long for every format."
+            : isSmallGroupLeader
+              ? "The group name may be too long for the leader card."
+              : "The event title may be too long for every format."
+        }`,
+      );
+    }
+    if (
+      content.heroMode === "logo" &&
+      !String(content.heroLogo || content.heroLogoStoragePath || "").trim()
+    ) {
+      warnings.push(`${prefix}Choose or upload a hero logo.`);
+    }
+    if (!isSocial && !String(content.date || "").trim()) {
+      warnings.push(
+        `${prefix}${
+          isSmallGroupLeader ? "Add the group meeting day." : "Add an event date."
+        }`,
+      );
+    }
+    if (!isSocial && !String(content.cta || "").trim()) {
+      warnings.push(`${prefix}Add a clear next step.`);
+    }
+    if (
+      content.composition === "color-overlay" &&
+      !String(content.backgroundImage || "").trim()
+    ) {
+      warnings.push(`${prefix}Color Overlay requires a background image.`);
+    }
+  });
   return warnings;
 }
 

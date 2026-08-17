@@ -10,6 +10,7 @@ import {
 import {
   createStudioCloud,
   projectForCloud,
+  socialSlideForCloud,
 } from "../src/studio/persistence.js";
 import {
   planningCenterEventContentChanges,
@@ -21,13 +22,17 @@ import {
   GRAPHIC_BRAND_MARK_OPTIONS,
   GRAPHIC_FONT_WEIGHT_OPTIONS,
   TEMPLATE_CATALOG,
+  createSocialCarouselSlide,
   createStudioProject,
   getEventCompositionOptions,
   getEventFontOptions,
   getEventPalette,
   getProjectWarnings,
+  getSocialProjectSlides,
   isGraphicTemplateId,
   isSocialTemplateId,
+  migrateLegacyStudioProject,
+  supportsHeroLogoTemplate,
 } from "../src/studio/templates.js";
 
 test("Small Group Leader is a 16:9 document graphic with background support", () => {
@@ -105,21 +110,114 @@ test("new cloud projects create without reading a missing document first", async
   }
 });
 
-test("Social Posts expose three focused templates and mobile-first formats", () => {
+test("Social Posts expose focused templates and mobile-first formats", () => {
   const socialTemplates = TEMPLATE_CATALOG.filter(
     (template) => template.kind === "social",
   );
 
   assert.deepEqual(
     socialTemplates.map((template) => template.id),
-    ["social-scripture", "social-quote", "social-statement"],
+    [
+      "social-scripture",
+      "social-quote",
+      "social-statement",
+      "social-simple-statement",
+    ],
   );
   socialTemplates.forEach((template) => {
     assert.deepEqual(template.formats, ["1:1", "4:5"]);
     assert.equal(isSocialTemplateId(template.id), true);
     assert.ok(getEventFontOptions(template.id).length >= 3);
-    assert.ok(getEventCompositionOptions(template.id).length >= 4);
+    assert.ok(getEventCompositionOptions(template.id).length >= 1);
   });
+});
+
+test("Bold Statement keeps the existing ID while Simple Statement is flat and calm", () => {
+  const bold = TEMPLATE_CATALOG.find((template) => template.id === "social-statement");
+  const simple = TEMPLATE_CATALOG.find(
+    (template) => template.id === "social-simple-statement",
+  );
+  const project = createStudioProject(simple.id);
+
+  assert.equal(bold.name, "Bold Statement");
+  assert.equal(simple.name, "Simple Statement");
+  assert.deepEqual(
+    simple.fonts.map((font) => font.value),
+    ["montserrat", "league-spartan", "google-sans"],
+  );
+  assert.deepEqual(simple.compositions.map((item) => item.value), ["flat"]);
+  assert.equal(project.content.flatColor, "cream");
+  assert.equal(project.content.textAlignment, "center");
+  assert.equal(project.content.brandMark, "full");
+  assert.equal(project.content.brandColor, "charcoal");
+  assert.equal(project.postMode, "single");
+  assert.deepEqual(project.carouselSlides, []);
+  assert.equal(supportsHeroLogoTemplate(simple.id), true);
+  assert.equal(supportsHeroLogoTemplate(bold.id), false);
+  assert.deepEqual(getProjectWarnings(project), []);
+});
+
+test("Simple Statement keeps valid hero logos while other Social Posts strip them", () => {
+  const simple = createStudioProject("social-simple-statement");
+  simple.id = "simple-logo-project";
+  Object.assign(simple.content, {
+    heroMode: "logo",
+    heroLogoSource: "upload",
+    heroLogoStoragePath: "studio-projects/simple-logo-project/logo-mark.png",
+    heroLogoName: "Campaign mark",
+  });
+  const simplePayload = projectForCloud(simple, "studio-admin");
+  const simpleSlide = socialSlideForCloud(
+    {content: simple.content},
+    simple.templateId,
+    simple.id,
+  );
+  assert.equal(simplePayload.content, undefined);
+  assert.equal(simpleSlide.content.heroMode, "logo");
+  assert.equal(simpleSlide.content.heroLogoSource, "upload");
+
+  const bold = createStudioProject("social-statement");
+  bold.id = "bold-logo-project";
+  Object.assign(bold.content, {
+    heroMode: "logo",
+    heroLogoSource: "upload",
+    heroLogoStoragePath: "studio-projects/bold-logo-project/logo-mark.png",
+    heroLogoName: "Campaign mark",
+  });
+  const boldPayload = projectForCloud(bold, "studio-admin");
+  const boldSlide = socialSlideForCloud(
+    {content: bold.content},
+    bold.templateId,
+    bold.id,
+  );
+  assert.equal(boldPayload.content, undefined);
+  assert.equal(boldSlide.content.heroMode, "text");
+  assert.equal(boldSlide.content.heroLogoSource, "");
+});
+
+test("Social carousel projects preserve six ordered slides in one cloud project", () => {
+  const project = createStudioProject("social-simple-statement");
+  project.id = "carousel-project";
+  project.postMode = "carousel";
+  project.carouselSlides = Array.from({length: 7}, (_, index) =>
+    createSocialCarouselSlide(
+      {...project.content, title: `Slide ${index + 2}`},
+      `slide-${index + 2}`,
+    ),
+  );
+
+  const migrated = migrateLegacyStudioProject(project);
+  assert.equal(getSocialProjectSlides(migrated).length, 6);
+  const payload = projectForCloud(migrated, "studio-admin");
+  assert.equal(payload.postMode, "carousel");
+  assert.deepEqual(
+    payload.slideOrder,
+    ["primary", "slide-2", "slide-3", "slide-4", "slide-5", "slide-6"],
+  );
+  assert.deepEqual(
+    getSocialProjectSlides(migrated).slice(1).map((slide) => slide.content.title),
+    ["Slide 2", "Slide 3", "Slide 4", "Slide 5", "Slide 6"],
+  );
 });
 
 test("Social Posts use simple copy defaults and sanitize event-only data", () => {
@@ -144,13 +242,18 @@ test("Social Posts use simple copy defaults and sanitize event-only data", () =>
   project.content.heroLogoName = "Event logo";
 
   const payload = projectForCloud(project, "studio-admin");
+  const slidePayload = socialSlideForCloud(
+    {content: project.content},
+    project.templateId,
+    project.id,
+  );
   assert.equal(payload.sourceType, "manual");
-  assert.equal(payload.content.format, "square");
-  assert.equal(payload.content.date, "");
-  assert.equal(payload.content.heroMode, "text");
-  assert.equal(payload.content.heroLogoSource, "");
-  assert.equal(payload.content.heroLogoStoragePath, "");
-  assert.equal(payload.content.heroLogoName, "");
+  assert.equal(slidePayload.content.format, "square");
+  assert.equal(slidePayload.content.date, "");
+  assert.equal(slidePayload.content.heroMode, "text");
+  assert.equal(slidePayload.content.heroLogoSource, "");
+  assert.equal(slidePayload.content.heroLogoStoragePath, "");
+  assert.equal(slidePayload.content.heroLogoName, "");
 });
 
 test("graphics expose official brand marks, logo colors, and global font weights", () => {
@@ -171,11 +274,17 @@ test("graphics expose official brand marks, logo colors, and global font weights
   assert.equal(project.content.brandMark, "central");
   assert.equal(project.content.brandColor, "auto");
   assert.equal(project.content.fontWeight, "template");
+  assert.equal(project.content.eyebrowVisible, true);
+  assert.equal(project.content.subtitleVisible, true);
 
   project.content.brandMark = "heart";
   project.content.brandColor = "red";
   project.content.fontWeight = "black";
-  const payload = projectForCloud(project, "studio-admin");
+  const payload = socialSlideForCloud(
+    {content: project.content},
+    project.templateId,
+    project.id,
+  );
   assert.equal(payload.content.brandMark, "heart");
   assert.equal(payload.content.brandColor, "red");
   assert.equal(payload.content.fontWeight, "black");
@@ -183,10 +292,59 @@ test("graphics expose official brand marks, logo colors, and global font weights
   project.content.brandMark = "unknown";
   project.content.brandColor = "unknown";
   project.content.fontWeight = "unknown";
-  const normalized = projectForCloud(project, "studio-admin");
+  const normalized = socialSlideForCloud(
+    {content: project.content},
+    project.templateId,
+    project.id,
+  );
   assert.equal(normalized.content.brandMark, "central");
   assert.equal(normalized.content.brandColor, "auto");
   assert.equal(normalized.content.fontWeight, "template");
+});
+
+test("graphic eyebrow and subtitle visibility survive migration and cloud saves", () => {
+  const event = createStudioProject("event-signal-stack");
+  event.content.eyebrowVisible = false;
+  event.content.subtitleVisible = false;
+  const eventPayload = projectForCloud(event, "studio-admin");
+  assert.equal(eventPayload.content.optionalTextVisibility, "none");
+
+  const social = createStudioProject("social-simple-statement");
+  social.content.eyebrow = "Saved context";
+  social.content.subtitle = "Saved supporting line";
+  social.content.eyebrowVisible = false;
+  social.content.subtitleVisible = false;
+  const slidePayload = socialSlideForCloud(
+    {content: social.content},
+    social.templateId,
+    social.id,
+  );
+  assert.equal(slidePayload.content.eyebrow, "Saved context");
+  assert.equal(slidePayload.content.subtitle, "Saved supporting line");
+  assert.equal(slidePayload.content.optionalTextVisibility, "none");
+
+  const migratedLegacy = migrateLegacyStudioProject({
+    ...event,
+    content: {
+      ...event.content,
+      eyebrowVisible: undefined,
+      subtitleVisible: undefined,
+    },
+  });
+  assert.equal(migratedLegacy.content.eyebrowVisible, true);
+  assert.equal(migratedLegacy.content.subtitleVisible, true);
+
+  const migratedCloud = migrateLegacyStudioProject({
+    ...event,
+    content: {
+      ...event.content,
+      eyebrowVisible: undefined,
+      subtitleVisible: undefined,
+      optionalTextVisibility: "subtitle",
+    },
+  });
+  assert.equal(migratedCloud.content.eyebrowVisible, false);
+  assert.equal(migratedCloud.content.subtitleVisible, true);
 });
 
 test("event palette catalog exposes distinct light options with dark copy", () => {

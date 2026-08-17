@@ -250,11 +250,11 @@ function PreparedBrandImage({source, color}) {
 }
 
 function EventHeroLogo({source, name}) {
-  const [renderedSource, setRenderedSource] = useState(source);
+  const [renderedSource, setRenderedSource] = useState("");
 
   useEffect(() => {
     let isCurrent = true;
-    setRenderedSource(source);
+    setRenderedSource("");
     trimTransparentLogoSource(source).then((trimmedSource) => {
       if (isCurrent) setRenderedSource(trimmedSource || source);
     });
@@ -263,12 +263,17 @@ function EventHeroLogo({source, name}) {
     };
   }, [source]);
 
-  return (
+  return renderedSource ? (
     <img
       className="event-hero-logo"
       src={renderedSource}
-      alt={name || "Event logo"}
+      alt={name || "Hero logo"}
+      data-studio-hero-ready="true"
     />
+  ) : (
+    <span className="event-hero-logo-placeholder" data-studio-hero-pending="true">
+      Preparing logo…
+    </span>
   );
 }
 
@@ -1027,9 +1032,23 @@ const EVENT_EDITABLE_FIELDS = {
 const SOCIAL_EDITABLE_FIELDS = {
   eyebrow: {label: "Context label", maximum: 30},
   title: {label: "Main text", maximum: 220, multiline: true},
-  subtitle: {label: "Reference or attribution", maximum: 110},
+  subtitle: {
+    label: "Reference, attribution, or supporting text",
+    maximum: 110,
+    multiline: true,
+  },
   cta: {label: "Footer text", maximum: 44},
 };
+
+function VisibilityEyeIcon({hidden}) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.5 12s3.4-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.4 5.5-9.5 5.5S2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="2.6" />
+      {hidden ? <path d="m4 4 16 16" /> : null}
+    </svg>
+  );
+}
 
 function EditableEventText({
   as: Tag,
@@ -1041,8 +1060,14 @@ function EditableEventText({
   selectedField,
   className = "",
   fieldOptions = EVENT_EDITABLE_FIELDS,
+  visible = true,
 }) {
+  const isOptional = ["eyebrow", "subtitle"].includes(field);
+  const isOptionalEmpty = isOptional && !hasText(children);
+  const isOptionalHidden = isOptional && visible === false;
+
   if (!editorMode) {
+    if (isOptionalEmpty || isOptionalHidden) return null;
     return <Tag className={className || undefined}>{children}</Tag>;
   }
 
@@ -1057,6 +1082,80 @@ function EditableEventText({
       .slice(0, config.maximum);
     if (value !== children) onEditField(field, value);
   };
+
+  const editableText = (
+    <span
+      className={[
+        "event-editable-field",
+        selectedField === field ? "is-selected" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      contentEditable={!isOptionalHidden}
+      suppressContentEditableWarning
+      spellCheck={!isOptionalHidden}
+      role={isOptionalHidden ? undefined : "textbox"}
+      aria-hidden={isOptionalHidden || undefined}
+      aria-label={isOptionalHidden ? undefined : `Edit ${config.label}`}
+      aria-multiline={
+        !isOptionalHidden && config.multiline ? true : undefined
+      }
+      data-event-field={field}
+      data-placeholder={config.label}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (!isOptionalHidden) onSelectField(field);
+      }}
+      onFocus={() => {
+        if (!isOptionalHidden) onSelectField(field);
+      }}
+      onBlur={isOptionalHidden ? undefined : commitValue}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.currentTarget.blur();
+        }
+        if (event.key === "Enter" && !config.multiline) {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+      }}
+    >
+      {children}
+    </span>
+  );
+
+  if (isOptional) {
+    return (
+      <Tag
+        className={[
+          className,
+          "event-optional-field",
+          isOptionalEmpty ? "is-optional-empty" : "",
+          isOptionalHidden ? "is-optional-hidden" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-event-field={field}
+        data-field-visible={!isOptionalHidden ? "true" : "false"}
+      >
+        {editableText}
+        <button
+          className="event-field-visibility-toggle"
+          type="button"
+          aria-label={`${isOptionalHidden ? "Show" : "Hide"} ${config.label}`}
+          aria-pressed={!isOptionalHidden}
+          title={`${isOptionalHidden ? "Show" : "Hide"} ${config.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onEditField(`${field}Visible`, isOptionalHidden);
+            onSelectField(isOptionalHidden ? field : "");
+          }}
+        >
+          <VisibilityEyeIcon hidden={isOptionalHidden} />
+        </button>
+      </Tag>
+    );
+  }
 
   return (
     <Tag
@@ -1103,6 +1202,7 @@ function SocialPostContent({
   onSelectField,
   onEditField,
   usesDarkCopy,
+  usesLogoHero,
 }) {
   const editableProps = {
     editorMode,
@@ -1118,22 +1218,39 @@ function SocialPostContent({
           as="span"
           className="event-eyebrow social-post-eyebrow"
           field="eyebrow"
+          visible={content.eyebrowVisible !== false}
           {...editableProps}
         >
           {content.eyebrow}
         </EditableEventText>
-        <EditableEventText
-          as="h2"
-          className="social-post-title"
-          field="title"
-          {...editableProps}
-        >
-          {content.title}
-        </EditableEventText>
+        {usesLogoHero ? (
+          <div className="event-hero-logo-wrap social-post-hero-logo-wrap">
+            {content.heroLogo ? (
+              <EventHeroLogo
+                source={content.heroLogo}
+                name={content.heroLogoName}
+              />
+            ) : (
+              <span className="event-hero-logo-placeholder">
+                Choose a hero logo
+              </span>
+            )}
+          </div>
+        ) : (
+          <EditableEventText
+            as="h2"
+            className="social-post-title"
+            field="title"
+            {...editableProps}
+          >
+            {content.title}
+          </EditableEventText>
+        )}
         <EditableEventText
           as="p"
           className="social-post-attribution"
           field="subtitle"
+          visible={content.subtitleVisible !== false}
           {...editableProps}
         >
           {content.subtitle}
@@ -1208,6 +1325,7 @@ function SmallGroupLeaderContent({
           as="span"
           className="small-group-leader-eyebrow"
           field="eyebrow"
+          visible={content.eyebrowVisible !== false}
           {...editableProps}
         >
           {content.eyebrow}
@@ -1224,6 +1342,7 @@ function SmallGroupLeaderContent({
           as="p"
           className="small-group-leader-names"
           field="subtitle"
+          visible={content.subtitleVisible !== false}
           {...editableProps}
         >
           {content.subtitle}
@@ -1375,6 +1494,7 @@ export function EventPreview({
           onSelectField={onSelectField}
           onEditField={onEditField}
           usesDarkCopy={usesDarkCopy}
+          usesLogoHero={usesLogoHero}
         />
       ) : (
       <div className="event-graphic-layout">
@@ -1384,6 +1504,7 @@ export function EventPreview({
           className="event-eyebrow"
           editorMode={editorMode}
           field="eyebrow"
+          visible={content.eyebrowVisible !== false}
           onEditField={onEditField}
           onSelectField={onSelectField}
           selectedField={selectedField}
@@ -1419,6 +1540,7 @@ export function EventPreview({
           as="p"
           editorMode={editorMode}
           field="subtitle"
+          visible={content.subtitleVisible !== false}
           onEditField={onEditField}
           onSelectField={onSelectField}
           selectedField={selectedField}

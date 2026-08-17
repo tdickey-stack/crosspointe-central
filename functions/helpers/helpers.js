@@ -43,9 +43,7 @@ function isTruthyValue_(value) {
   if (typeof value === "boolean") return value;
 
   const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "true" ||
-    normalized === "1" ||
-    normalized === "yes";
+  return normalized === "true" || normalized === "1" || normalized === "yes";
 }
 
 function hasQuickLinksDraftBeenInitialized_(draftSnapshot, draftMetaSnapshot) {
@@ -1016,8 +1014,7 @@ function escapeCentralEmailAttribute_(value) {
 }
 
 function getServeNeedInterestNotificationErrorMessage_(error) {
-  return "Your interest was saved, but we could not email the ministry " +
-    "leader right now. Please try again in a minute.";
+  return "Your interest was saved, but we could not email the ministry leader right now. Please try again in a minute.";
 }
 
 function getCentralRequestHostname_(request) {
@@ -1045,6 +1042,11 @@ function copyTrimmedStringFieldIfPresent_(target, source, key) {
   }
 
   target[key] = String(source[key] || "").trim();
+}
+
+function normalizeCampaignDateValue_(value) {
+  const trimmed = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : "";
 }
 
 export {
@@ -1116,6 +1118,7 @@ export {
   mapServeNeedsComparisonItemsById_,
 
   normalizeAdminEmail_,
+  normalizeCampaignDateValue_,
   normalizeCampaignPublishDocId_,
   normalizeChangeRequestDecision_,
   normalizeNextStepPublishDocId_,

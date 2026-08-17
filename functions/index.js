@@ -69,6 +69,7 @@ import {
   mapServeNeedsComparisonItemsById_,
 
   normalizeAdminEmail_,
+  normalizeCampaignDateValue_,
   normalizeCampaignPublishDocId_,
   normalizeChangeRequestDecision_,
   normalizeNextStepPublishDocId_,
@@ -4600,11 +4601,6 @@ function normalizeCampaignPublicItem_(item) {
     end_date: ongoing ? "" : normalizeCampaignDateValue_(source.end_date),
     sort: normalizeSortValue_(source.sort, 50),
   };
-}
-
-function normalizeCampaignDateValue_(value) {
-  const trimmed = String(value || "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : "";
 }
 
 function getNormalizedCampaignOngoingValue_(item) {

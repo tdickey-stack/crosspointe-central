@@ -49,12 +49,26 @@ function getLayoutSignature(elements) {
             `${section.className}:${section.clientWidth}x${section.clientHeight}`,
         )
         .join(",");
+      const fittedText = Array.from(
+        element.querySelectorAll("[data-auto-fit-lines]"),
+      )
+        .map((textElement) => {
+          const textBounds = textElement.getBoundingClientRect();
+          return [
+            textElement.dataset.autoFitScale || "pending",
+            textBounds.width,
+            textBounds.height,
+            window.getComputedStyle(textElement).fontSize,
+          ].join(":");
+        })
+        .join(",");
       return [
         bounds.width,
         bounds.height,
         element.scrollWidth,
         element.scrollHeight,
         checklistSections,
+        fittedText,
       ].join(":");
     })
     .join("|");
@@ -79,11 +93,49 @@ async function waitForStableLayout(elements, maxFrames = 8) {
 
 async function waitForPreparedBrandMarks(element, maxFrames = 120) {
   for (let frame = 0; frame < maxFrames; frame += 1) {
-    if (!element.querySelector("[data-studio-brand-pending]")) return;
+    if (
+      !element.querySelector(
+        "[data-studio-brand-pending], [data-studio-hero-pending]",
+      )
+    ) return;
     await nextLayoutFrame();
   }
   throw new Error(
     "The selected CrossPointe logo is still preparing. Please try the export again.",
+  );
+}
+
+async function waitForRenderedImages(element, timeoutMs = 5000) {
+  const images = [...element.querySelectorAll("img")];
+  await Promise.all(
+    images.map((image) => {
+      if (image.complete) {
+        return image.naturalWidth
+          ? Promise.resolve()
+          : Promise.reject(new Error("A Studio image could not be prepared for export."));
+      }
+      return new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+          cleanup();
+          reject(new Error("A Studio image is still loading. Please try the export again."));
+        }, timeoutMs);
+        const cleanup = () => {
+          window.clearTimeout(timeout);
+          image.removeEventListener("load", handleLoad);
+          image.removeEventListener("error", handleError);
+        };
+        const handleLoad = () => {
+          cleanup();
+          resolve();
+        };
+        const handleError = () => {
+          cleanup();
+          reject(new Error("A Studio image could not be prepared for export."));
+        };
+        image.addEventListener("load", handleLoad, {once: true});
+        image.addEventListener("error", handleError, {once: true});
+      });
+    }),
   );
 }
 
@@ -146,6 +198,8 @@ async function renderExactPng(element, width, height) {
 
   await waitForFonts();
   await waitForPreparedBrandMarks(element);
+  await waitForRenderedImages(element);
+  await waitForStableLayout([element]);
   const bounds = element.getBoundingClientRect();
   if (!bounds.width || !bounds.height) {
     throw new Error("The Studio preview has no measurable export size.");
@@ -232,6 +286,58 @@ export async function exportEventPng(
   } finally {
     restoreBackground();
   }
+}
+
+export async function exportCarouselPngs(
+  project,
+  elements,
+  {filenameBase = ""} = {},
+) {
+  const slides = [
+    project?.content,
+    ...(Array.isArray(project?.carouselSlides)
+      ? project.carouselSlides.map((slide) => slide.content)
+      : []),
+  ].filter(Boolean);
+  const slideElements = Array.isArray(elements) ? elements : [];
+  if (
+    !slides.length ||
+    slideElements.length !== slides.length ||
+    slideElements.some((element) => !element)
+  ) {
+    throw new Error(
+      "Every carousel slide must finish rendering before Studio can export it.",
+    );
+  }
+
+  await waitForFonts();
+  await waitForStableLayout(slideElements);
+  const results = [];
+  for (let index = 0; index < slides.length; index += 1) {
+    const content = slides[index];
+    const format = content.format || "square";
+    const size = EVENT_EXPORT_SIZES[format] || EVENT_EXPORT_SIZES.square;
+    const restoreBackground = await useHighResolutionBackground(
+      slideElements[index],
+      content,
+      size.width,
+    );
+    try {
+      const png = await renderExactPng(
+        slideElements[index],
+        size.width,
+        size.height,
+      );
+      const slideNumber = String(index + 1).padStart(2, "0");
+      const base = filenameBase || safeFilename(project?.name, "social-carousel");
+      const filename = `${base}-s${slideNumber}-${size.label}.png`;
+      downloadDataUrl(png, filename);
+      results.push({filename, width: size.width, height: size.height});
+    } finally {
+      restoreBackground();
+    }
+  }
+  return {files: results, slides: results.length};
 }
 
 export async function exportPolicyPdf(

@@ -2,6 +2,7 @@ import React, {useEffect, useMemo, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
 import {
+  exportCarouselPngs,
   exportDocumentPdf,
   exportEventPng,
   openDocumentSystemPrint,
@@ -36,13 +37,16 @@ import {
   GRAPHIC_BRAND_COLOR_OPTIONS,
   GRAPHIC_BRAND_MARK_OPTIONS,
   GRAPHIC_FONT_WEIGHT_OPTIONS,
+  MAX_SOCIAL_CAROUSEL_SLIDES,
   STUDIO_STORAGE_KEY,
   TEMPLATE_CATALOG,
   createDocumentPage,
+  createSocialCarouselSlide,
   createStudioProject,
   getEventCompositionOptions,
   getEventFontOptions,
   getProjectWarnings,
+  getSocialProjectSlides,
   getTemplateById,
   isDocumentProject,
   isGraphicTemplateId,
@@ -50,6 +54,7 @@ import {
   linesToText,
   migrateLegacyStudioProject,
   normalizeEventComposition,
+  supportsHeroLogoTemplate,
   textToLines,
 } from "./templates.js";
 import "./studio.css";
@@ -300,12 +305,28 @@ function loadProjects() {
 
 function prepareProjectForStorage(project) {
   const stored = JSON.parse(JSON.stringify(project));
-  if (
-    isGraphicTemplateId(stored.templateId) &&
-    stored.content &&
-    String(stored.content.backgroundImage || "").startsWith("data:")
-  ) {
-    stored.content.backgroundImage = "";
+  const stripGraphicDataUrls = (content) => {
+    if (String(content?.backgroundImage || "").startsWith("data:")) {
+      content.backgroundImage = "";
+      if (!content.backgroundImageStoragePath) {
+        content.backgroundImageSource = "";
+      }
+    }
+    if (String(content?.heroLogo || "").startsWith("data:")) {
+      content.heroLogo = "";
+      if (!content.heroLogoStoragePath) {
+        content.heroMode = "text";
+        content.heroLogoSource = "";
+        content.heroLogoLibraryId = "";
+        content.heroLogoName = "";
+      }
+    }
+  };
+  if (isGraphicTemplateId(stored.templateId) && stored.content) {
+    stripGraphicDataUrls(stored.content);
+    (stored.carouselSlides || []).forEach((slide) =>
+      stripGraphicDataUrls(slide.content),
+    );
   }
   if (isDocumentProject(stored)) {
     (stored.pages || []).forEach((page) => {
@@ -499,7 +520,9 @@ function StudioProjectRow({
   const template = getTemplateById(project.templateId);
   const projectDetail = isDocumentProject(project)
     ? `${project.pages?.length || 0} page${project.pages?.length === 1 ? "" : "s"}`
-    : template.name;
+    : isSocialTemplateId(project.templateId) && project.postMode === "carousel"
+      ? `${getSocialProjectSlides(project).length} slides · ${template.name}`
+      : template.name;
 
   return (
     <div
@@ -1132,7 +1155,11 @@ const EVENT_TEXT_FIELD_OPTIONS = {
 const SOCIAL_TEXT_FIELD_OPTIONS = {
   eyebrow: {label: "Context label", maximum: 30},
   title: {label: "Main text", maximum: 220, multiline: true},
-  subtitle: {label: "Reference or attribution", maximum: 110},
+  subtitle: {
+    label: "Reference, attribution, or supporting text",
+    maximum: 110,
+    multiline: true,
+  },
   cta: {label: "Footer text", maximum: 44},
 };
 
@@ -1158,6 +1185,8 @@ function EventQuickToolbar({
   const isSocial = isSocialTemplateId(templateId);
   const template = getTemplateById(templateId);
   const isSmallGroupLeader = template.variant === "small-group-leader";
+  const supportsHeroLogo = supportsHeroLogoTemplate(templateId);
+  const supportsBackground = template.variant !== "simple-statement";
   const alignment = content.textAlignment || "left";
   const fontOptions = getEventFontOptions(templateId);
   const compositionOptions = getEventCompositionOptions(templateId);
@@ -1240,7 +1269,7 @@ function EventQuickToolbar({
           </strong>
         </div>
 
-        {!isSocial && !isSmallGroupLeader ? (
+        {supportsHeroLogo && !isSmallGroupLeader ? (
           <button
             className={[
               "studio-toolbar-tool",
@@ -1259,22 +1288,24 @@ function EventQuickToolbar({
           </button>
         ) : null}
 
-        <button
-          className={[
-            "studio-toolbar-tool",
-            activePanel === "background" ? "is-active" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          type="button"
-          aria-expanded={activePanel === "background"}
-          onClick={() =>
-            onPanelChange(activePanel === "background" ? "" : "background")
-          }
-        >
-          <span aria-hidden="true">▧</span>
-          Background
-        </button>
+        {supportsBackground ? (
+          <button
+            className={[
+              "studio-toolbar-tool",
+              activePanel === "background" ? "is-active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            type="button"
+            aria-expanded={activePanel === "background"}
+            onClick={() =>
+              onPanelChange(activePanel === "background" ? "" : "background")
+            }
+          >
+            <span aria-hidden="true">▧</span>
+            Background
+          </button>
+        ) : null}
 
         {!isSmallGroupLeader ? (
           <div className="studio-toolbar-divider" aria-hidden="true" />
@@ -1676,7 +1707,7 @@ function EventHeroControls({
           onClick={() => updateContent({heroMode: "logo"})}
         >
           <strong>Logo Hero</strong>
-          <span>Replace the event title with a prepared logo.</span>
+          <span>Replace the main text with a prepared logo.</span>
         </button>
       </div>
 
@@ -1790,7 +1821,7 @@ function EventHeroControls({
                 <strong>Add a reusable logo</strong>
                 <p>
                   Upload once so every Studio user can select it in future
-                  Event Graphics.
+                  graphics.
                 </p>
               </div>
               <label>
@@ -4195,6 +4226,11 @@ function CreativeFilenameDialog({
   onConfirm,
 }) {
   const defaults = getCreativeFilenameDefaults(project);
+  const carouselSlideCount =
+    isSocialTemplateId(project.templateId) && project.postMode === "carousel"
+      ? getSocialProjectSlides(project).length
+      : 0;
+  const carouselRatio = project.content?.format === "portrait" ? "4x5" : "1x1";
   const [contentId, setContentId] = useState("");
   const [workType, setWorkType] = useState(defaults.workType);
   const [description, setDescription] = useState(defaults.description);
@@ -4258,10 +4294,15 @@ function CreativeFilenameDialog({
         <div className="studio-page-dialog-heading">
           <div>
             <span className="studio-kicker">CREATIVE TEAM EXPORT</span>
-            <h2 id="studio-creative-filename-title">Name this file</h2>
+            <h2 id="studio-creative-filename-title">
+              {carouselSlideCount ? "Name these files" : "Name this file"}
+            </h2>
             <p>
               Studio formats the download as
               CONTENTID_WORKTYPE_DESCRIPTION_YYYYMMDD_VXXX.
+              {carouselSlideCount
+                ? " Each slide adds its slide number and ratio."
+                : ""}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close filename dialog">
@@ -4313,8 +4354,14 @@ function CreativeFilenameDialog({
             />
           </label>
           <div className="studio-creative-filename-preview">
-            <span>DOWNLOAD NAME</span>
-            <strong>{preview}.{extension}</strong>
+            <span>{carouselSlideCount ? "DOWNLOAD NAMES" : "DOWNLOAD NAME"}</span>
+            <strong>
+              {carouselSlideCount
+                ? `${preview}-s01-${carouselRatio}.${extension} … ${preview}-s${
+                    String(carouselSlideCount).padStart(2, "0")
+                  }-${carouselRatio}.${extension}`
+                : `${preview}.${extension}`}
+            </strong>
           </div>
           {error ? <p className="studio-creative-filename-error" role="alert">{error}</p> : null}
           <div className="studio-creative-filename-actions">
@@ -4322,7 +4369,9 @@ function CreativeFilenameDialog({
               Cancel
             </button>
             <button className="studio-button is-primary" type="submit">
-              Export {extension.toUpperCase()}
+              {carouselSlideCount
+                ? `Export ${carouselSlideCount} ${extension.toUpperCase()}s`
+                : `Export ${extension.toUpperCase()}`}
             </button>
           </div>
         </form>
@@ -4738,6 +4787,20 @@ function EventToolSideSheet({eyebrow, title, label, onClose, children}) {
 }
 
 function SocialProjectBriefSheet({project, updateProject, onClose}) {
+  const isCarousel = project.postMode === "carousel";
+  const setPostMode = (postMode) => {
+    if (
+      postMode === "single" &&
+      (project.carouselSlides || []).length &&
+      !window.confirm("Switch to a single post and remove the additional slides?")
+    ) {
+      return;
+    }
+    updateProject({
+      postMode,
+      carouselSlides: postMode === "carousel" ? project.carouselSlides || [] : [],
+    });
+  };
   return (
     <aside className="studio-event-side-sheet" aria-label="Project brief">
       <div className="studio-event-sheet-header">
@@ -4763,6 +4826,26 @@ function SocialProjectBriefSheet({project, updateProject, onClose}) {
           onChange={(name) => updateProject({name})}
           hint="This identifies the project in Studio and does not appear on the post."
         />
+        <div className="studio-hero-mode" role="group" aria-label="Social post type">
+          <button
+            className={!isCarousel ? "is-active" : ""}
+            type="button"
+            aria-pressed={!isCarousel}
+            onClick={() => setPostMode("single")}
+          >
+            <strong>Single Post</strong>
+            <span>Create and export one social graphic.</span>
+          </button>
+          <button
+            className={isCarousel ? "is-active" : ""}
+            type="button"
+            aria-pressed={isCarousel}
+            onClick={() => setPostMode("carousel")}
+          >
+            <strong>Carousel</strong>
+            <span>Keep up to six slides in this Studio project.</span>
+          </button>
+        </div>
         <div className="studio-event-brief-summary">
           <div>
             <span>Template</span>
@@ -5134,6 +5217,7 @@ function EventReviewSheet({
   onCreativeFilenameChange,
   onClose,
   onExport,
+  exportLabel = "Export High-Res PNG",
 }) {
   const isExporting = exportState.status === "working";
   return (
@@ -5202,7 +5286,7 @@ function EventReviewSheet({
           disabled={warnings.length > 0 || isExporting}
           onClick={onExport}
         >
-          {isExporting ? "Preparing High-Res PNG…" : "Export High-Res PNG"}
+          {isExporting ? "Preparing High-Res PNG…" : exportLabel}
         </button>
         {exportState.message ? (
           <p
@@ -5214,6 +5298,70 @@ function EventReviewSheet({
         ) : null}
       </div>
     </aside>
+  );
+}
+
+function SocialCarouselRail({
+  slides,
+  activeSlideId,
+  onSelect,
+  onAdd,
+  onDuplicate,
+  onMove,
+  onDelete,
+}) {
+  const activeIndex = slides.findIndex((slide) => slide.id === activeSlideId);
+  return (
+    <nav className="studio-social-slide-rail" aria-label="Carousel slides">
+      <div className="studio-social-slide-heading">
+        <span>CAROUSEL</span>
+        <strong>{slides.length}/{MAX_SOCIAL_CAROUSEL_SLIDES} slides</strong>
+      </div>
+      <div className="studio-social-slide-list">
+        {slides.map((slide, index) => (
+          <button
+            key={slide.id}
+            className={slide.id === activeSlideId ? "is-active" : ""}
+            type="button"
+            aria-label={`Edit slide ${index + 1}`}
+            aria-current={slide.id === activeSlideId ? "true" : undefined}
+            onClick={() => onSelect(slide.id)}
+          >
+            <span>{index + 1}</span>
+            <strong>{slide.content?.title || slide.content?.heroLogoName || "Untitled"}</strong>
+          </button>
+        ))}
+      </div>
+      <div className="studio-social-slide-actions">
+        <button type="button" disabled={activeIndex <= 0} onClick={() => onMove(-1)}>
+          ← <span>Move</span>
+        </button>
+        <button
+          type="button"
+          disabled={activeIndex < 0 || activeIndex >= slides.length - 1}
+          onClick={() => onMove(1)}
+        >
+          → <span>Move</span>
+        </button>
+        <button
+          type="button"
+          disabled={slides.length >= MAX_SOCIAL_CAROUSEL_SLIDES}
+          onClick={onDuplicate}
+        >
+          ⧉ <span>Duplicate</span>
+        </button>
+        <button
+          type="button"
+          disabled={slides.length >= MAX_SOCIAL_CAROUSEL_SLIDES}
+          onClick={onAdd}
+        >
+          + <span>Add</span>
+        </button>
+        <button type="button" disabled={slides.length <= 1} onClick={onDelete}>
+          × <span>Delete</span>
+        </button>
+      </div>
+    </nav>
   );
 }
 
@@ -5242,17 +5390,31 @@ function EventStudioEditor({
   const [creativeFilenameEnabled, setCreativeFilenameEnabled] =
     useCreativeFilenamePreference();
   const [exportState, setExportState] = useState({status: "", message: ""});
+  const [activeSlideId, setActiveSlideId] = useState("primary");
   const previewElementRef = useRef(null);
+  const carouselExportRefs = useRef(new Map());
+  const latestProjectRef = useRef(project);
+  latestProjectRef.current = project;
   const workspacePanelFrameRef = useRef(null);
   const workspacePanelTimerRef = useRef(null);
   const warnings = getProjectWarnings(project);
   const template = getTemplateById(project.templateId);
   const isSocial = template.kind === "social";
+  const supportsBackground = template.variant !== "simple-statement";
+  const isCarousel = isSocial && project.postMode === "carousel";
+  const slides = getSocialProjectSlides(project);
+  const activeSlide = isCarousel
+    ? slides.find((slide) => slide.id === activeSlideId) || slides[0]
+    : slides[0];
+  const activeContent = activeSlide?.content || project.content;
+  const activeSlideIndex = slides.findIndex(
+    (slide) => slide.id === activeSlide?.id,
+  );
   const isGraphicDocument = template.editorKind === "graphic";
   const formatLabel =
-    project.content.format === "screen"
+    activeContent.format === "screen"
       ? "16:9"
-      : project.content.format === "portrait"
+      : activeContent.format === "portrait"
         ? "4:5"
         : "1:1";
   const requestedWorkspacePanel = activePanel || sideSheet;
@@ -5260,8 +5422,108 @@ function EventStudioEditor({
   const updateProject = (changes) => {
     onChange({...project, ...changes, updatedAt: new Date().toISOString()});
   };
-  const updateContent = (changes) => {
-    updateProject({content: {...project.content, ...changes}});
+  const applySlides = (nextSlides) => {
+    if (!nextSlides.length) return [];
+    const normalizedSlides = nextSlides.map((slide, index) =>
+      index === 0
+        ? {...slide, id: "primary"}
+        : slide.id === "primary"
+          ? createSocialCarouselSlide(slide.content)
+          : slide,
+    );
+    updateProject({
+      postMode: "carousel",
+      content: normalizedSlides[0].content,
+      carouselSlides: normalizedSlides.slice(1),
+    });
+    return normalizedSlides;
+  };
+  const updateContentForSlide = (slideId, changes) => {
+    const latestProject = latestProjectRef.current;
+    const latestIsCarousel =
+      isSocialTemplateId(latestProject.templateId) &&
+      latestProject.postMode === "carousel";
+    const latestSlides = getSocialProjectSlides(latestProject);
+    if (!latestIsCarousel) {
+      onChange({
+        ...latestProject,
+        content: {...latestProject.content, ...changes},
+        updatedAt: new Date().toISOString(),
+      });
+      return;
+    }
+    if (!latestSlides.some((slide) => slide.id === slideId)) return;
+    const nextSlides = latestSlides.map((slide) => ({
+      ...slide,
+      content: {
+        ...slide.content,
+        ...(slide.id === slideId ? changes : {}),
+        ...(Object.hasOwn(changes, "format") ? {format: changes.format} : {}),
+      },
+    }));
+    const normalizedSlides = nextSlides.map((slide, index) =>
+      index === 0
+        ? {...slide, id: "primary"}
+        : slide.id === "primary"
+          ? createSocialCarouselSlide(slide.content)
+          : slide,
+    );
+    onChange({
+      ...latestProject,
+      postMode: "carousel",
+      content: normalizedSlides[0].content,
+      carouselSlides: normalizedSlides.slice(1),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+  const updateContent = (changes) =>
+    updateContentForSlide(activeSlide?.id || "primary", changes);
+  const addSlide = () => {
+    if (!activeSlide || slides.length >= MAX_SOCIAL_CAROUSEL_SLIDES) return;
+    const slide = createSocialCarouselSlide({
+      ...activeSlide.content,
+      title: "New slide",
+      heroMode: "text",
+      heroLogo: "",
+      heroLogoSource: "",
+      heroLogoLibraryId: "",
+      heroLogoStoragePath: "",
+      heroLogoName: "",
+    });
+    const nextSlides = [...slides];
+    nextSlides.splice(activeSlideIndex + 1, 0, slide);
+    applySlides(nextSlides);
+    setActiveSlideId(slide.id);
+  };
+  const duplicateSlide = () => {
+    if (!activeSlide || slides.length >= MAX_SOCIAL_CAROUSEL_SLIDES) return;
+    const slide = createSocialCarouselSlide(activeSlide.content);
+    const nextSlides = [...slides];
+    nextSlides.splice(activeSlideIndex + 1, 0, slide);
+    applySlides(nextSlides);
+    setActiveSlideId(slide.id);
+  };
+  const deleteSlide = () => {
+    if (!activeSlide || slides.length <= 1) return;
+    if (!window.confirm(`Delete slide ${activeSlideIndex + 1}?`)) return;
+    const nextSlides = slides.filter((slide) => slide.id !== activeSlide.id);
+    const normalizedSlides = applySlides(nextSlides);
+    setActiveSlideId(
+      normalizedSlides[Math.min(activeSlideIndex, normalizedSlides.length - 1)].id,
+    );
+  };
+  const moveSlide = (direction) => {
+    const targetIndex = activeSlideIndex + direction;
+    if (activeSlideIndex < 0 || targetIndex < 0 || targetIndex >= slides.length) {
+      return;
+    }
+    const nextSlides = [...slides];
+    [nextSlides[activeSlideIndex], nextSlides[targetIndex]] = [
+      nextSlides[targetIndex],
+      nextSlides[activeSlideIndex],
+    ];
+    const normalizedSlides = applySlides(nextSlides);
+    setActiveSlideId(normalizedSlides[targetIndex].id);
   };
   const openSideSheet = (sheet) => {
     setSideSheet(sheet);
@@ -5275,7 +5537,18 @@ function EventStudioEditor({
     setActivePanel("");
     setMenuOpen(false);
     setSideSheet(project.name.startsWith("Untitled ") ? "brief" : "");
+    setActiveSlideId("primary");
   }, [project.id]);
+
+  useEffect(() => {
+    if (!isCarousel) {
+      setActiveSlideId("primary");
+      return;
+    }
+    if (!slides.some((slide) => slide.id === activeSlideId)) {
+      setActiveSlideId(slides[0]?.id || "primary");
+    }
+  }, [activeSlideId, isCarousel, slides]);
 
   useEffect(() => {
     window.cancelAnimationFrame(workspacePanelFrameRef.current);
@@ -5327,12 +5600,20 @@ function EventStudioEditor({
           window.requestAnimationFrame(resolve),
         ),
       );
-      const result = await exportEventPng(project, previewElementRef.current, {
-        filenameBase,
-      });
+      const result = isCarousel
+        ? await exportCarouselPngs(
+            project,
+            slides.map((slide) => carouselExportRefs.current.get(slide.id)),
+            {filenameBase},
+          )
+        : await exportEventPng(project, previewElementRef.current, {
+            filenameBase,
+          });
       setExportState({
         status: "success",
-        message: `${result.filename} was downloaded at ${result.width} × ${result.height}px.`,
+        message: isCarousel
+          ? `Studio prepared ${result.slides} slide PNG downloads. Allow multiple downloads if your browser asks.`
+          : `${result.filename} was downloaded at ${result.width} × ${result.height}px.`,
       });
     } catch (error) {
       setExportState({
@@ -5415,7 +5696,7 @@ function EventStudioEditor({
                   onClick={requestExport}
                 >
                   <span aria-hidden="true">↓</span>
-                  Export PNG
+                  {isCarousel ? "Export Carousel" : "Export PNG"}
                 </button>
                 <button type="button" role="menuitem" onClick={onBack}>
                   <span aria-hidden="true">←</span>
@@ -5479,11 +5760,17 @@ function EventStudioEditor({
             title={
               warnings.length
                 ? "Open Review checks to resolve export warnings."
-                : "Export a high-resolution PNG."
+                : isCarousel
+                  ? "Export every carousel slide as a high-resolution PNG."
+                  : "Export a high-resolution PNG."
             }
             onClick={requestExport}
           >
-            {exportState.status === "working" ? "Exporting…" : "Export PNG"}
+            {exportState.status === "working"
+              ? "Exporting…"
+              : isCarousel
+                ? "Export Carousel"
+                : "Export PNG"}
           </button>
         </div>
       </header>
@@ -5504,23 +5791,27 @@ function EventStudioEditor({
             .filter(Boolean)
             .join(" ")}
         >
-          {renderedWorkspacePanel === "hero" && !isSocial && !isGraphicDocument ? (
+          {renderedWorkspacePanel === "hero" &&
+          supportsHeroLogoTemplate(project.templateId) &&
+          !isGraphicDocument ? (
             <EventToolSideSheet
               eyebrow="HERO"
-              title="Text or event logo"
+              title="Text or hero logo"
               label="hero controls"
               onClose={() => setActivePanel("")}
             >
               <EventHeroControls
-                content={project.content}
-                updateContent={updateContent}
+                content={activeContent}
+                updateContent={(changes) =>
+                  updateContentForSlide(activeSlide?.id || "primary", changes)
+                }
                 cloud={cloud}
                 project={project}
                 canManageLogoLibrary={canManageLogoLibrary}
               />
             </EventToolSideSheet>
           ) : null}
-          {renderedWorkspacePanel === "background" ? (
+          {renderedWorkspacePanel === "background" && supportsBackground ? (
             <EventToolSideSheet
               eyebrow="BACKGROUND"
               title="Image and focal point"
@@ -5528,7 +5819,7 @@ function EventStudioEditor({
               onClose={() => setActivePanel("")}
             >
               <EventBackgroundControls
-                content={project.content}
+                content={activeContent}
                 updateContent={updateContent}
                 cloud={cloud}
                 unsplash={unsplash}
@@ -5567,25 +5858,43 @@ function EventStudioEditor({
               onCreativeFilenameChange={setCreativeFilenameEnabled}
               onClose={() => setSideSheet("")}
               onExport={requestExport}
+              exportLabel={isCarousel ? "Export Carousel PNGs" : "Export High-Res PNG"}
             />
           ) : null}
         </div>
 
         <section
-          className="studio-event-canvas-region"
+          className={`studio-event-canvas-region${isCarousel ? " has-carousel-rail" : ""}`}
           onPointerDownCapture={() => setMenuOpen(false)}
         >
           <div className="studio-event-canvas-meta">
             <span>LIVE CANVAS</span>
             <strong>{formatLabel}</strong>
+            {isCarousel ? (
+              <strong>SLIDE {activeSlideIndex + 1}/{slides.length}</strong>
+            ) : null}
             <p>Click any text to edit it. Template positions remain fixed.</p>
           </div>
+          {isCarousel ? (
+            <SocialCarouselRail
+              slides={slides}
+              activeSlideId={activeSlide?.id || "primary"}
+              onSelect={(slideId) => {
+                setActiveSlideId(slideId);
+                setSelectedField("");
+              }}
+              onAdd={addSlide}
+              onDuplicate={duplicateSlide}
+              onMove={moveSlide}
+              onDelete={deleteSlide}
+            />
+          ) : null}
           <div
-            className={`studio-event-canvas-stage is-${project.content.format || "square"}`}
+            className={`studio-event-canvas-stage is-${activeContent.format || "square"}`}
             data-studio-print-preview
           >
             <EventPreview
-              content={project.content}
+              content={activeContent}
               previewRef={previewElementRef}
               templateId={project.templateId}
               editorMode={exportState.status !== "working"}
@@ -5613,7 +5922,7 @@ function EventStudioEditor({
       </div>
 
       <EventQuickToolbar
-        content={project.content}
+        content={activeContent}
         updateContent={updateContent}
         templateId={project.templateId}
         selectedField={selectedField}
@@ -5627,6 +5936,21 @@ function EventStudioEditor({
           }
         }}
       />
+      {isCarousel ? (
+        <div className="studio-carousel-export-slides" aria-hidden="true">
+          {slides.map((slide) => (
+            <EventPreview
+              key={slide.id}
+              content={slide.content}
+              previewRef={(element) => {
+                if (element) carouselExportRefs.current.set(slide.id, element);
+                else carouselExportRefs.current.delete(slide.id);
+              }}
+              templateId={project.templateId}
+            />
+          ))}
+        </div>
+      ) : null}
       {showFilenameDialog ? (
         <CreativeFilenameDialog
           project={project}
@@ -5812,9 +6136,12 @@ function StudioApp() {
         setProjects((current) => {
           const next = current.map((item) =>
             item.id === savedProject.id
-              ? isDocumentProject(item)
-                ? {...item, ...savedProject, pages: item.pages}
-                : {...item, ...savedProject, content: item.content}
+              ? {
+                  ...item,
+                  schemaVersion: savedProject.schemaVersion,
+                  ownerUid: savedProject.ownerUid,
+                  cloudBacked: savedProject.cloudBacked,
+                }
               : item,
           );
           persistProjects(next);

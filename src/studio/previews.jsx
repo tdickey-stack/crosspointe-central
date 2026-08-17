@@ -250,11 +250,11 @@ function PreparedBrandImage({source, color}) {
 }
 
 function EventHeroLogo({source, name}) {
-  const [renderedSource, setRenderedSource] = useState(source);
+  const [renderedSource, setRenderedSource] = useState("");
 
   useEffect(() => {
     let isCurrent = true;
-    setRenderedSource(source);
+    setRenderedSource("");
     trimTransparentLogoSource(source).then((trimmedSource) => {
       if (isCurrent) setRenderedSource(trimmedSource || source);
     });
@@ -263,12 +263,17 @@ function EventHeroLogo({source, name}) {
     };
   }, [source]);
 
-  return (
+  return renderedSource ? (
     <img
       className="event-hero-logo"
       src={renderedSource}
-      alt={name || "Event logo"}
+      alt={name || "Hero logo"}
+      data-studio-hero-ready="true"
     />
+  ) : (
+    <span className="event-hero-logo-placeholder" data-studio-hero-pending="true">
+      Preparing logo…
+    </span>
   );
 }
 
@@ -1027,9 +1032,79 @@ const EVENT_EDITABLE_FIELDS = {
 const SOCIAL_EDITABLE_FIELDS = {
   eyebrow: {label: "Context label", maximum: 30},
   title: {label: "Main text", maximum: 220, multiline: true},
-  subtitle: {label: "Reference or attribution", maximum: 110},
+  subtitle: {
+    label: "Reference, attribution, or supporting text",
+    maximum: 110,
+    multiline: true,
+  },
   cta: {label: "Footer text", maximum: 44},
 };
+
+function VisibilityEyeIcon({hidden}) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.5 12s3.4-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.4 5.5-9.5 5.5S2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="2.6" />
+      {hidden ? <path d="m4 4 16 16" /> : null}
+    </svg>
+  );
+}
+
+function textFitsLineLimit(element, maximumLines) {
+  const style = window.getComputedStyle(element);
+  const lineHeight = Number.parseFloat(style.lineHeight);
+  if (!Number.isFinite(lineHeight) || lineHeight <= 0) return true;
+  return (
+    element.getBoundingClientRect().height <=
+    lineHeight * (maximumLines + 0.08)
+  );
+}
+
+function fitTextToLineLimit(element, maximumLines, minimumScale) {
+  element.style.removeProperty("font-size");
+  element.style.removeProperty("width");
+  element.style.removeProperty("max-width");
+  element.dataset.autoFitScale = "1";
+  if (!maximumLines || textFitsLineLimit(element, maximumLines)) return;
+
+  const baseStyle = window.getComputedStyle(element);
+  const baseSize = Number.parseFloat(baseStyle.fontSize);
+  const baseWidth = element.getBoundingClientRect().width;
+  if (
+    !Number.isFinite(baseSize) ||
+    baseSize <= 0 ||
+    !Number.isFinite(baseWidth) ||
+    baseWidth <= 0
+  ) {
+    return;
+  }
+
+  // Several templates size their title box in em. Freeze the box before
+  // scaling so reducing the type actually creates room for fewer lines.
+  element.style.width = `${baseWidth}px`;
+  element.style.maxWidth = `${baseWidth}px`;
+
+  const floor = Math.min(1, Math.max(0.4, Number(minimumScale) || 0.56));
+  const fitsAt = (scale) => {
+    element.style.fontSize = `${baseSize * scale}px`;
+    return textFitsLineLimit(element, maximumLines);
+  };
+  if (!fitsAt(floor)) {
+    element.dataset.autoFitScale = String(floor);
+    return;
+  }
+
+  let lower = floor;
+  let upper = 1;
+  for (let step = 0; step < 9; step += 1) {
+    const candidate = (lower + upper) / 2;
+    if (fitsAt(candidate)) lower = candidate;
+    else upper = candidate;
+  }
+  const fittedScale = Math.floor(lower * 1000) / 1000;
+  element.style.fontSize = `${baseSize * fittedScale}px`;
+  element.dataset.autoFitScale = String(fittedScale);
+}
 
 function EditableEventText({
   as: Tag,
@@ -1041,9 +1116,74 @@ function EditableEventText({
   selectedField,
   className = "",
   fieldOptions = EVENT_EDITABLE_FIELDS,
+  visible = true,
+  autoFitLines = 0,
+  autoFitMinScale = 0.56,
+  autoFitKey = "",
 }) {
+  const textRef = React.useRef(null);
+  const isOptional = ["eyebrow", "subtitle"].includes(field);
+  const isOptionalEmpty = isOptional && !hasText(children);
+  const isOptionalHidden = isOptional && visible === false;
+
+  React.useLayoutEffect(() => {
+    const element = textRef.current;
+    if (!element || !autoFitLines) {
+      element?.style.removeProperty("font-size");
+      element?.style.removeProperty("width");
+      element?.style.removeProperty("max-width");
+      if (element) delete element.dataset.autoFitScale;
+      return undefined;
+    }
+
+    let frame = 0;
+    let disposed = false;
+    const fit = () => {
+      frame = 0;
+      if (!disposed) {
+        fitTextToLineLimit(element, autoFitLines, autoFitMinScale);
+      }
+    };
+    const scheduleFit = () => {
+      if (disposed) return;
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(fit);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(scheduleFit);
+    if (element.parentElement) observer?.observe(element.parentElement);
+    element.addEventListener("input", scheduleFit);
+    fit();
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(scheduleFit).catch(() => {});
+    }
+    return () => {
+      disposed = true;
+      if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      element.removeEventListener("input", scheduleFit);
+    };
+  }, [
+    autoFitKey,
+    autoFitLines,
+    autoFitMinScale,
+    children,
+    editorMode,
+  ]);
+
   if (!editorMode) {
-    return <Tag className={className || undefined}>{children}</Tag>;
+    if (isOptionalEmpty || isOptionalHidden) return null;
+    return (
+      <Tag
+        ref={textRef}
+        className={className || undefined}
+        data-auto-fit-lines={autoFitLines || undefined}
+      >
+        {children}
+      </Tag>
+    );
   }
 
   const config = fieldOptions[field];
@@ -1058,8 +1198,83 @@ function EditableEventText({
     if (value !== children) onEditField(field, value);
   };
 
+  const editableText = (
+    <span
+      className={[
+        "event-editable-field",
+        selectedField === field ? "is-selected" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      contentEditable={!isOptionalHidden}
+      suppressContentEditableWarning
+      spellCheck={!isOptionalHidden}
+      role={isOptionalHidden ? undefined : "textbox"}
+      aria-hidden={isOptionalHidden || undefined}
+      aria-label={isOptionalHidden ? undefined : `Edit ${config.label}`}
+      aria-multiline={
+        !isOptionalHidden && config.multiline ? true : undefined
+      }
+      data-event-field={field}
+      data-placeholder={config.label}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (!isOptionalHidden) onSelectField(field);
+      }}
+      onFocus={() => {
+        if (!isOptionalHidden) onSelectField(field);
+      }}
+      onBlur={isOptionalHidden ? undefined : commitValue}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.currentTarget.blur();
+        }
+        if (event.key === "Enter" && !config.multiline) {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+      }}
+    >
+      {children}
+    </span>
+  );
+
+  if (isOptional) {
+    return (
+      <Tag
+        className={[
+          className,
+          "event-optional-field",
+          isOptionalEmpty ? "is-optional-empty" : "",
+          isOptionalHidden ? "is-optional-hidden" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-event-field={field}
+        data-field-visible={!isOptionalHidden ? "true" : "false"}
+      >
+        {editableText}
+        <button
+          className="event-field-visibility-toggle"
+          type="button"
+          aria-label={`${isOptionalHidden ? "Show" : "Hide"} ${config.label}`}
+          aria-pressed={!isOptionalHidden}
+          title={`${isOptionalHidden ? "Show" : "Hide"} ${config.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onEditField(`${field}Visible`, isOptionalHidden);
+            onSelectField(isOptionalHidden ? field : "");
+          }}
+        >
+          <VisibilityEyeIcon hidden={isOptionalHidden} />
+        </button>
+      </Tag>
+    );
+  }
+
   return (
     <Tag
+      ref={textRef}
       className={[
         className,
         "event-editable-field",
@@ -1075,6 +1290,7 @@ function EditableEventText({
       aria-multiline={config.multiline || undefined}
       data-event-field={field}
       data-placeholder={config.label}
+      data-auto-fit-lines={autoFitLines || undefined}
       onClick={(event) => {
         event.stopPropagation();
         onSelectField(field);
@@ -1103,6 +1319,7 @@ function SocialPostContent({
   onSelectField,
   onEditField,
   usesDarkCopy,
+  usesLogoHero,
 }) {
   const editableProps = {
     editorMode,
@@ -1118,22 +1335,39 @@ function SocialPostContent({
           as="span"
           className="event-eyebrow social-post-eyebrow"
           field="eyebrow"
+          visible={content.eyebrowVisible !== false}
           {...editableProps}
         >
           {content.eyebrow}
         </EditableEventText>
-        <EditableEventText
-          as="h2"
-          className="social-post-title"
-          field="title"
-          {...editableProps}
-        >
-          {content.title}
-        </EditableEventText>
+        {usesLogoHero ? (
+          <div className="event-hero-logo-wrap social-post-hero-logo-wrap">
+            {content.heroLogo ? (
+              <EventHeroLogo
+                source={content.heroLogo}
+                name={content.heroLogoName}
+              />
+            ) : (
+              <span className="event-hero-logo-placeholder">
+                Choose a hero logo
+              </span>
+            )}
+          </div>
+        ) : (
+          <EditableEventText
+            as="h2"
+            className="social-post-title"
+            field="title"
+            {...editableProps}
+          >
+            {content.title}
+          </EditableEventText>
+        )}
         <EditableEventText
           as="p"
           className="social-post-attribution"
           field="subtitle"
+          visible={content.subtitleVisible !== false}
           {...editableProps}
         >
           {content.subtitle}
@@ -1208,6 +1442,7 @@ function SmallGroupLeaderContent({
           as="span"
           className="small-group-leader-eyebrow"
           field="eyebrow"
+          visible={content.eyebrowVisible !== false}
           {...editableProps}
         >
           {content.eyebrow}
@@ -1224,6 +1459,7 @@ function SmallGroupLeaderContent({
           as="p"
           className="small-group-leader-names"
           field="subtitle"
+          visible={content.subtitleVisible !== false}
           {...editableProps}
         >
           {content.subtitle}
@@ -1375,6 +1611,7 @@ export function EventPreview({
           onSelectField={onSelectField}
           onEditField={onEditField}
           usesDarkCopy={usesDarkCopy}
+          usesLogoHero={usesLogoHero}
         />
       ) : (
       <div className="event-graphic-layout">
@@ -1384,6 +1621,7 @@ export function EventPreview({
           className="event-eyebrow"
           editorMode={editorMode}
           field="eyebrow"
+          visible={content.eyebrowVisible !== false}
           onEditField={onEditField}
           onSelectField={onSelectField}
           selectedField={selectedField}
@@ -1408,6 +1646,15 @@ export function EventPreview({
             as="h2"
             editorMode={editorMode}
             field="title"
+            autoFitLines={template.titleFitLines}
+            autoFitMinScale={template.titleFitMinScale}
+            autoFitKey={[
+              content.fontKey,
+              content.fontWeight,
+              content.format,
+              composition,
+              content.textAlignment,
+            ].join("|")}
             onEditField={onEditField}
             onSelectField={onSelectField}
             selectedField={selectedField}
@@ -1419,6 +1666,7 @@ export function EventPreview({
           as="p"
           editorMode={editorMode}
           field="subtitle"
+          visible={content.subtitleVisible !== false}
           onEditField={onEditField}
           onSelectField={onSelectField}
           selectedField={selectedField}

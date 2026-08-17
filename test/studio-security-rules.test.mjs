@@ -70,6 +70,7 @@ function eventProjectPayload(ownerUid = "owner") {
     sourceType: "manual",
     content: {
       eyebrow: "A PLACE TO CONNECT",
+      optionalTextVisibility: "both",
       title: "Community Night",
       subtitle: "Come as you are.",
       date: "SEPTEMBER 18",
@@ -82,7 +83,6 @@ function eventProjectPayload(ownerUid = "owner") {
       flatColor: "charcoal",
       overlayColor: "red",
       overlayBlendMode: "multiply",
-      imagePosition: "center",
       focalX: 50,
       focalY: 50,
       imageZoom: 1,
@@ -123,9 +123,17 @@ function socialProjectPayload(
     "social-scripture": {composition: "serif-lines", fontKey: "eb-garamond"},
     "social-quote": {composition: "editorial-frame", fontKey: "bodoni-moda"},
     "social-statement": {composition: "center-frame", fontKey: "league-spartan"},
+    "social-simple-statement": {composition: "flat", fontKey: "montserrat"},
   }[templateId];
+  payload.schemaVersion = 3;
+  delete payload.sourceId;
+  delete payload.sourceEventId;
+  delete payload.sourceUrl;
+  delete payload.sourceUpdatedAt;
   payload.templateId = templateId;
   payload.name = "Social Post";
+  payload.postMode = "single";
+  payload.slideOrder = ["primary"];
   payload.content.eyebrow = "SCRIPTURE";
   payload.content.title = "Be still, and know that I am God.";
   payload.content.subtitle = "PSALM 46:10";
@@ -136,6 +144,24 @@ function socialProjectPayload(
   payload.content.composition = templateConfig.composition;
   payload.content.fontKey = templateConfig.fontKey;
   return payload;
+}
+
+function socialSlidePayload(content) {
+  return {
+    schemaVersion: 1,
+    content,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+async function createSocialProject(db, projectId, payload) {
+  const reference = db.doc(`centralStudioProjects/${projectId}`);
+  const {content, ...rootPayload} = payload;
+  await assertSucceeds(reference.set(rootPayload));
+  const primaryReference = reference.collection("slides").doc("primary");
+  await assertSucceeds(primaryReference.set(socialSlidePayload(content)));
+  return {reference, primaryReference};
 }
 
 function logoLibraryPayload(
@@ -753,6 +779,24 @@ test("event projects accept valid sources and reject cross-project upload paths"
   );
   await assertSucceeds(
     reference.update({
+      "content.optionalTextVisibility": "none",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.optionalTextVisibility": "hidden",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      "content.optionalTextVisibility": 0,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    reference.update({
       "content.backgroundImageSource": "upload",
       "content.backgroundImageStoragePath":
         "studio-projects/event-a/background.png",
@@ -902,25 +946,105 @@ test("event projects accept valid sources and reject cross-project upload paths"
 
 test("Social Posts accept their strict layouts and reject event-only state", async () => {
   const db = environment.authenticatedContext("owner").firestore();
-  const scriptureReference = db.doc(
-    "centralStudioProjects/social-scripture",
+  const {primaryReference: scriptureReference} = await createSocialProject(
+    db,
+    "social-scripture",
+    socialProjectPayload(),
   );
+  await createSocialProject(db, "social-quote", socialProjectPayload("social-quote"));
+  await createSocialProject(
+    db,
+    "social-statement",
+    socialProjectPayload("social-statement"),
+  );
+  const simpleStatement = socialProjectPayload("social-simple-statement");
+  simpleStatement.content.flatColor = "cream";
+  await createSocialProject(
+    db,
+    "social-simple-statement",
+    simpleStatement,
+  );
+  const simpleLogoPayload = socialProjectPayload("social-simple-statement");
+  simpleLogoPayload.content.flatColor = "cream";
+  simpleLogoPayload.content.heroMode = "logo";
+  simpleLogoPayload.content.heroLogoSource = "upload";
+  simpleLogoPayload.content.heroLogoStoragePath =
+    "studio-projects/social-simple-logo/logo-campaign.png";
+  simpleLogoPayload.content.heroLogoName = "Campaign logo";
+  await createSocialProject(db, "social-simple-logo", simpleLogoPayload);
 
-  await assertSucceeds(scriptureReference.set(socialProjectPayload()));
-  await assertSucceeds(
-    db.doc("centralStudioProjects/social-quote").set(
-      socialProjectPayload("social-quote"),
+  const carouselPayload = socialProjectPayload("social-simple-statement");
+  carouselPayload.content.flatColor = "cream";
+  carouselPayload.postMode = "carousel";
+  carouselPayload.slideOrder = [
+    "primary",
+    "slide-2",
+    "slide-3",
+    "slide-4",
+    "slide-5",
+    "slide-6",
+  ];
+  const {reference: carouselReference} = await createSocialProject(
+    db,
+    "social-carousel",
+    carouselPayload,
+  );
+  for (let index = 2; index <= 6; index += 1) {
+    await assertSucceeds(
+      carouselReference.collection("slides").doc(`slide-${index}`).set(
+        socialSlidePayload({
+          ...carouselPayload.content,
+          title: `Slide ${index}`,
+        }),
+      ),
+    );
+  }
+  await assertFails(
+    carouselReference.collection("slides").doc("not-listed").set(
+      socialSlidePayload({...carouselPayload.content, title: "Not listed"}),
     ),
   );
-  await assertSucceeds(
-    db.doc("centralStudioProjects/social-statement").set(
-      socialProjectPayload("social-statement"),
+  await assertFails(
+    carouselReference.collection("slides").doc("slide-2").update({
+      "content.backgroundImageSource": "upload",
+      "content.backgroundImageStoragePath":
+        "studio-projects/another-project/background.png",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    carouselReference.collection("slides").doc("slide-2").update({
+      unexpected: "schema pollution",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    carouselReference.collection("slides").doc("slide-2").update({
+      "content.format": "portrait",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  const oversizedCarousel = {
+    ...carouselPayload,
+    slideOrder: [...carouselPayload.slideOrder, "slide-7"],
+  };
+  delete oversizedCarousel.content;
+  await assertFails(
+    db.doc("centralStudioProjects/social-carousel-too-large").set(
+      oversizedCarousel,
     ),
   );
   await assertSucceeds(
     scriptureReference.update({
       "content.title": "A".repeat(220),
       "content.format": "portrait",
+      "content.optionalTextVisibility": "none",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    scriptureReference.update({
+      "content.optionalTextVisibility": {hidden: true},
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -955,10 +1079,16 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
 
   const mismatchedComposition = socialProjectPayload("social-quote");
   mismatchedComposition.content.composition = "center-frame";
+  const mismatchedReference = db.doc(
+    "centralStudioProjects/social-mismatched",
+  );
+  const {content: mismatchedContent, ...mismatchedRoot} = mismatchedComposition;
+  await assertSucceeds(mismatchedReference.set(mismatchedRoot));
   await assertFails(
-    db.doc("centralStudioProjects/social-mismatched").set(
-      mismatchedComposition,
-    ),
+    mismatchedReference
+      .collection("slides")
+      .doc("primary")
+      .set(socialSlidePayload(mismatchedContent)),
   );
 
   const planningCenterSource = socialProjectPayload("social-statement");
@@ -968,6 +1098,7 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
   planningCenterSource.sourceUrl = "https://example.com/event/100";
   planningCenterSource.sourceUpdatedAt =
     firebase.firestore.FieldValue.serverTimestamp();
+  delete planningCenterSource.content;
   await assertFails(
     db.doc("centralStudioProjects/social-planning-center").set(
       planningCenterSource,

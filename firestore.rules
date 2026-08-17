@@ -485,7 +485,8 @@ service cloud.firestore {
 
     function isSocialTemplateId(templateId) {
       return templateId.matches(
-        "^(social-scripture|social-quote|social-statement)$"
+        "^(social-scripture|social-quote|social-statement|" +
+        "social-simple-statement)$"
       );
     }
 
@@ -513,8 +514,37 @@ service cloud.firestore {
         "social-quote:" +
         "(editorial-frame|editorial-flow|color-overlay|flat)|" +
         "social-statement:" +
-        "(center-burst|center-frame|color-overlay|flat)" +
+        "(center-burst|center-frame|color-overlay|flat)|" +
+        "social-simple-statement:flat" +
         ")$"
+      );
+    }
+
+    function validHeroReference(content, projectId) {
+      return (
+        (
+          content.heroLogoSource == "" &&
+          content.heroLogoLibraryId == "" &&
+          content.heroLogoStoragePath == "" &&
+          content.heroLogoName == ""
+        ) ||
+        (
+          content.heroLogoSource == "upload" &&
+          content.heroLogoLibraryId == "" &&
+          content.heroLogoStoragePath.matches(
+            "^studio-projects/" + projectId + "/[^/]+$"
+          ) &&
+          content.heroLogoName.size() > 0
+        ) ||
+        (
+          content.heroLogoSource == "library" &&
+          validStudioLogoId(content.heroLogoLibraryId) &&
+          content.heroLogoStoragePath.matches(
+            "^studio-library/logos/" + content.heroLogoLibraryId +
+            "/source[.](jpg|png|webp)$"
+          ) &&
+          content.heroLogoName.size() > 0
+        )
       );
     }
 
@@ -535,49 +565,37 @@ service cloud.firestore {
         content.location == "" &&
         content.format.matches("^(square|portrait)$") &&
         validEventComposition(templateId, content.composition) &&
-        content.heroMode == "text" &&
-        content.heroLogoSource == "" &&
-        content.heroLogoLibraryId == "" &&
-        content.heroLogoStoragePath == "" &&
-        content.heroLogoName == ""
-      ) : (
-        content.title.matches("^.{0,52}$") &&
-        content.format.matches("^(square|portrait|screen)$") &&
-        validEventComposition(templateId, content.composition) &&
         (
-          (
+          templateId == "social-simple-statement" ?
+            validHeroReference(content, projectId) &&
+            content.backgroundImageSource == "" &&
+            content.backgroundImageUrl == "" &&
+            content.backgroundImageStoragePath == "" &&
+            content.unsplashPhotoId == "" &&
+            content.unsplashPhotographerName == "" &&
+            content.unsplashPhotographerUrl == "" &&
+            content.unsplashPhotoUrl == "" :
+            content.heroMode == "text" &&
             content.heroLogoSource == "" &&
             content.heroLogoLibraryId == "" &&
             content.heroLogoStoragePath == "" &&
             content.heroLogoName == ""
-          ) ||
-          (
-            content.heroLogoSource == "upload" &&
-            content.heroLogoLibraryId == "" &&
-            content.heroLogoStoragePath.matches(
-              "^studio-projects/" + projectId + "/[^/]+$"
-            ) &&
-            content.heroLogoName.size() > 0
-          ) ||
-          (
-            content.heroLogoSource == "library" &&
-            validStudioLogoId(content.heroLogoLibraryId) &&
-            content.heroLogoStoragePath.matches(
-              "^studio-library/logos/" + content.heroLogoLibraryId +
-              "/source[.](jpg|png|webp)$"
-            ) &&
-            content.heroLogoName.size() > 0
-          )
         )
+      ) : (
+        content.title.matches("^.{0,52}$") &&
+        content.format.matches("^(square|portrait|screen)$") &&
+        validEventComposition(templateId, content.composition) &&
+        validHeroReference(content, projectId)
       );
     }
 
     function validEventContent(content, projectId, templateId) {
       return content is map &&
         content.keys().hasOnly([
-          "eyebrow", "title", "subtitle", "date", "time", "location", "cta",
+          "eyebrow", "optionalTextVisibility", "title", "subtitle",
+          "date", "time", "location", "cta",
           "format", "composition", "palette", "flatColor", "overlayColor",
-          "overlayBlendMode", "imagePosition", "focalX", "focalY",
+          "overlayBlendMode", "focalX", "focalY",
           "imageZoom", "backgroundImageOpacity", "backgroundImageRotation",
           "backgroundImageSource", "backgroundImageUrl",
           "backgroundImageStoragePath", "unsplashPhotoId",
@@ -589,6 +607,9 @@ service cloud.firestore {
           "textAlignment", "textShadow"
         ]) &&
         content.eyebrow.matches("^.{0,30}$") &&
+        content.optionalTextVisibility.matches(
+          "^(both|eyebrow|subtitle|none)$"
+        ) &&
         validStudioString(content.subtitle, 110) &&
         content.date.matches("^.{0,28}$") &&
         content.time.matches("^.{0,24}$") &&
@@ -600,15 +621,14 @@ service cloud.firestore {
           "blush-burgundy)$"
         ) &&
         content.flatColor.matches(
-          "^(red|cyan|charcoal|white|sky|purple|mint|burgundy|blush)$"
+          "^(red|cyan|charcoal|white|sky|purple|mint|burgundy|blush|cream)$"
         ) &&
         content.overlayColor.matches(
-          "^(red|cyan|charcoal|white|sky|purple|mint|burgundy|blush)$"
+          "^(red|cyan|charcoal|white|sky|purple|mint|burgundy|blush|cream)$"
         ) &&
         content.overlayBlendMode.matches(
           "^(multiply|screen|overlay|soft-light)$"
         ) &&
-        content.imagePosition.matches("^(left center|center|right center)$") &&
         content.focalX >= 0 &&
         content.focalX <= 100 &&
         content.focalY >= 0 &&
@@ -680,6 +700,148 @@ service cloud.firestore {
         content.textShadow is bool;
     }
 
+    function validSocialContent(content, projectId, templateId) {
+      return content is map &&
+        content.keys().hasOnly([
+          "eyebrow", "optionalTextVisibility", "title", "subtitle",
+          "date", "time", "location", "cta",
+          "format", "composition", "palette", "flatColor", "overlayColor",
+          "overlayBlendMode", "focalX", "focalY",
+          "imageZoom", "backgroundImageOpacity", "backgroundImageRotation",
+          "backgroundImageSource", "backgroundImageUrl",
+          "backgroundImageStoragePath", "unsplashPhotoId",
+          "unsplashPhotographerName", "unsplashPhotographerUrl",
+          "unsplashPhotoUrl", "heroMode", "heroLogoSource",
+          "heroLogoLibraryId", "heroLogoStoragePath", "heroLogoName",
+          "heroLogoScale", "heroLogoClearSpace", "fontKey", "fontWeight",
+          "brandMark", "brandColor", "textAlignment", "textShadow"
+        ]) &&
+        content.eyebrow.matches("^.{0,30}$") &&
+        content.optionalTextVisibility.matches(
+          "^(both|eyebrow|subtitle|none)$"
+        ) &&
+        validStudioString(content.title, 220) &&
+        validStudioString(content.subtitle, 110) &&
+        content.date == "" && content.time == "" && content.location == "" &&
+        content.cta.matches("^.{0,44}$") &&
+        content.format.matches("^(square|portrait)$") &&
+        validEventComposition(templateId, content.composition) &&
+        content.palette.matches(
+          "^(charcoal-red|warm-light|blue-charcoal|paper-red|sky-mint|" +
+          "blush-burgundy)$"
+        ) &&
+        content.flatColor.matches(
+          "^(red|cyan|charcoal|white|sky|purple|mint|burgundy|blush|cream)$"
+        ) &&
+        content.overlayColor.matches(
+          "^(red|cyan|charcoal|white|sky|purple|mint|burgundy|blush|cream)$"
+        ) &&
+        content.overlayBlendMode.matches(
+          "^(multiply|screen|overlay|soft-light)$"
+        ) &&
+        content.focalX >= 0 && content.focalX <= 100 &&
+        content.focalY >= 0 && content.focalY <= 100 &&
+        content.imageZoom >= 1 && content.imageZoom <= 2 &&
+        content.backgroundImageOpacity >= 0 &&
+        content.backgroundImageOpacity <= 1 &&
+        content.backgroundImageRotation >= 0 &&
+        content.backgroundImageRotation <= 360 &&
+        content.backgroundImageSource.matches("^(|upload|unsplash)$") &&
+        validStudioString(content.backgroundImageUrl, 1600) &&
+        validStudioString(content.backgroundImageStoragePath, 240) &&
+        validStudioString(content.unsplashPhotoId, 80) &&
+        validStudioString(content.unsplashPhotographerName, 120) &&
+        validStudioString(content.unsplashPhotographerUrl, 800) &&
+        validStudioString(content.unsplashPhotoUrl, 800) &&
+        (
+          (
+            content.backgroundImageSource == "" &&
+            content.backgroundImageUrl == "" &&
+            content.backgroundImageStoragePath == "" &&
+            content.unsplashPhotoId == "" &&
+            content.unsplashPhotographerName == "" &&
+            content.unsplashPhotographerUrl == "" &&
+            content.unsplashPhotoUrl == ""
+          ) ||
+          (
+            templateId != "social-simple-statement" &&
+            content.backgroundImageSource == "upload" &&
+            content.backgroundImageUrl == "" &&
+            content.backgroundImageStoragePath.matches(
+              "^studio-projects/" + projectId + "/[^/]+$"
+            ) &&
+            content.unsplashPhotoId == "" &&
+            content.unsplashPhotographerName == "" &&
+            content.unsplashPhotographerUrl == "" &&
+            content.unsplashPhotoUrl == ""
+          ) ||
+          (
+            templateId != "social-simple-statement" &&
+            content.backgroundImageSource == "unsplash" &&
+            content.backgroundImageUrl.matches("^https://.*") &&
+            content.backgroundImageStoragePath == "" &&
+            content.unsplashPhotoId.size() > 0 &&
+            content.unsplashPhotographerName.size() > 0 &&
+            content.unsplashPhotographerUrl.matches("^https://.*") &&
+            content.unsplashPhotoUrl.matches("^https://.*")
+          )
+        ) &&
+        content.heroMode.matches("^(text|logo)$") &&
+        content.heroLogoSource.matches("^(|upload|library)$") &&
+        validStudioString(content.heroLogoLibraryId, 80) &&
+        validStudioString(content.heroLogoStoragePath, 240) &&
+        validStudioString(content.heroLogoName, 80) &&
+        (
+          templateId == "social-simple-statement" ?
+            validHeroReference(content, projectId) :
+            content.heroMode == "text" &&
+            content.heroLogoSource == "" &&
+            content.heroLogoLibraryId == "" &&
+            content.heroLogoStoragePath == "" &&
+            content.heroLogoName == ""
+        ) &&
+        content.heroLogoScale >= 0.5 && content.heroLogoScale <= 2 &&
+        content.heroLogoClearSpace >= 0 && content.heroLogoClearSpace <= 12 &&
+        content.fontKey.matches(
+          "^(montserrat|league-spartan|google-sans|bodoni-moda|forum|" +
+          "eb-garamond)$"
+        ) &&
+        content.fontWeight.matches(
+          "^(template|thin|light|medium|bold|black)$"
+        ) &&
+        content.brandMark.matches("^(central|heart|full)$") &&
+        content.brandColor.matches("^(auto|white|charcoal|red)$") &&
+        content.textAlignment.matches("^(left|center|right)$") &&
+        content.textShadow is bool;
+    }
+
+    function validSocialSlideOrder(slideOrder) {
+      return slideOrder is list &&
+        slideOrder.size() >= 1 &&
+        slideOrder.size() <= 6 &&
+        slideOrder[0] == "primary" &&
+        slideOrder.toSet().size() == slideOrder.size() &&
+        (slideOrder.size() < 2 || validPageId(slideOrder[1])) &&
+        (slideOrder.size() < 3 || validPageId(slideOrder[2])) &&
+        (slideOrder.size() < 4 || validPageId(slideOrder[3])) &&
+        (slideOrder.size() < 5 || validPageId(slideOrder[4])) &&
+        (slideOrder.size() < 6 || validPageId(slideOrder[5]));
+    }
+
+    function validSocialSlide(data, projectId, templateId) {
+      return data is map &&
+        data.keys().hasAll([
+          "schemaVersion", "content", "createdAt", "updatedAt"
+        ]) &&
+        data.keys().hasOnly([
+          "schemaVersion", "content", "createdAt", "updatedAt"
+        ]) &&
+        data.schemaVersion == 1 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        validEventContent(data.content, projectId, templateId);
+    }
+
     function validLegacyStudioProject(data, projectId) {
       return data.keys().hasAll([
           "schemaVersion", "ownerUid", "templateId", "name", "status",
@@ -697,7 +859,8 @@ service cloud.firestore {
           "event-rally-poster|event-future-block|event-center-stage|" +
           "event-timeless-center|event-editorial-invitation|" +
           "event-scripted-welcome|social-scripture|social-quote|" +
-          "social-statement|document-small-group-leader)$"
+          "social-statement|" +
+          "document-small-group-leader)$"
         ) &&
         data.name.matches("^.{1,80}$") &&
         data.status == "draft" &&
@@ -718,6 +881,30 @@ service cloud.firestore {
             validPolicyContent(data.content) :
             validEventContent(data.content, projectId, data.templateId)
         );
+    }
+
+    function validSocialProject(data, projectId) {
+      return data.keys().hasAll([
+          "schemaVersion", "ownerUid", "templateId", "name", "status",
+          "sourceType", "postMode", "slideOrder",
+          "createdAt", "updatedAt"
+        ]) &&
+        data.keys().hasOnly([
+          "schemaVersion", "ownerUid", "templateId", "name", "status",
+          "sourceType", "postMode", "slideOrder",
+          "createdAt", "updatedAt"
+        ]) &&
+        data.schemaVersion == 3 &&
+        validStudioString(data.ownerUid, 128) &&
+        isSocialTemplateId(data.templateId) &&
+        validStudioString(data.name, 80) && data.name.size() > 0 &&
+        data.status == "draft" &&
+        data.sourceType == "manual" &&
+        data.postMode.matches("^(single|carousel)$") &&
+        validSocialSlideOrder(data.slideOrder) &&
+        (data.postMode == "carousel" || data.slideOrder.size() == 1) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
     }
 
     function validDocumentProject(data) {
@@ -745,7 +932,8 @@ service cloud.firestore {
       return data is map &&
         validStudioProjectId(projectId) && (
         (data.schemaVersion == 1 && validLegacyStudioProject(data, projectId)) ||
-        (data.schemaVersion == 2 && validDocumentProject(data))
+        (data.schemaVersion == 2 && validDocumentProject(data)) ||
+        (data.schemaVersion == 3 && validSocialProject(data, projectId))
       );
     }
 
@@ -1356,8 +1544,8 @@ service cloud.firestore {
             resource.data.schemaVersion == request.resource.data.schemaVersion &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               "name", "status", "sourceType", "sourceId", "sourceEventId",
-              "sourceUrl", "sourceUpdatedAt", "content", "pageOrder",
-              "documentSettings", "updatedAt"
+              "sourceUrl", "sourceUpdatedAt", "postMode", "slideOrder",
+              "content", "pageOrder", "documentSettings", "updatedAt"
             ])
           ) ||
           (
@@ -1369,12 +1557,93 @@ service cloud.firestore {
               "schemaVersion", "templateId", "name", "status", "sourceType",
               "content", "pageOrder", "documentSettings", "updatedAt"
             ])
+          ) ||
+          (
+            resource.data.schemaVersion == 1 &&
+            isSocialTemplateId(resource.data.templateId) &&
+            request.resource.data.schemaVersion == 3 &&
+            request.resource.data.templateId == resource.data.templateId &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "schemaVersion", "name", "status", "sourceType", "sourceId",
+              "sourceEventId", "sourceUrl", "sourceUpdatedAt", "postMode",
+              "slideOrder", "content", "updatedAt"
+            ])
           )
         ) &&
         request.resource.data.updatedAt == request.time &&
         validStudioProject(request.resource.data, projectId);
       allow delete: if canEditStudio() &&
         resource.data.ownerUid == request.auth.uid;
+
+      match /slides/{slideId} {
+        function parentProjectPath() {
+          return /databases/$(database)/documents/centralStudioProjects/$(projectId);
+        }
+
+        function parentProject() {
+          return get(parentProjectPath()).data;
+        }
+
+        function parentProjectAfterWrite() {
+          return getAfter(parentProjectPath()).data;
+        }
+
+        function primarySlideAfterWrite() {
+          return getAfter(
+            /databases/$(database)/documents/centralStudioProjects/$(projectId)/slides/primary
+          ).data;
+        }
+
+        function canReadParentProject() {
+          return exists(parentProjectPath()) &&
+            canReadStudioProject(projectId, parentProject());
+        }
+
+        function canEditParentProject() {
+          return exists(parentProjectPath()) &&
+            canEditStudioProject(projectId, parentProject());
+        }
+
+        function canEditParentProjectAfterWrite() {
+          return existsAfter(parentProjectPath()) &&
+            canEditStudioProject(projectId, parentProjectAfterWrite());
+        }
+
+        allow read: if canReadParentProject();
+        allow create: if canEditParentProjectAfterWrite() &&
+          parentProjectAfterWrite().schemaVersion == 3 &&
+          slideId in parentProjectAfterWrite().slideOrder &&
+          request.resource.data.content.format ==
+            primarySlideAfterWrite().content.format &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.updatedAt == request.time &&
+          validSocialSlide(
+            request.resource.data,
+            projectId,
+            parentProjectAfterWrite().templateId
+          );
+        allow update: if canEditParentProject() &&
+          existsAfter(parentProjectPath()) &&
+          parentProjectAfterWrite().schemaVersion == 3 &&
+          slideId in parentProjectAfterWrite().slideOrder &&
+          request.resource.data.content.format ==
+            primarySlideAfterWrite().content.format &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.updatedAt == request.time &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "content", "updatedAt"
+          ]) &&
+          validSocialSlide(
+            request.resource.data,
+            projectId,
+            parentProjectAfterWrite().templateId
+          );
+        allow delete: if canEditParentProject() &&
+          (
+            !existsAfter(parentProjectPath()) ||
+            !(slideId in parentProjectAfterWrite().slideOrder)
+          );
+      }
 
       match /pages/{pageId} {
         function parentProjectPath() {

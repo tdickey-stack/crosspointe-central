@@ -1186,7 +1186,6 @@ function EventQuickToolbar({
   const template = getTemplateById(templateId);
   const isSmallGroupLeader = template.variant === "small-group-leader";
   const supportsHeroLogo = supportsHeroLogoTemplate(templateId);
-  const supportsBackground = template.variant !== "simple-statement";
   const alignment = content.textAlignment || "left";
   const fontOptions = getEventFontOptions(templateId);
   const compositionOptions = getEventCompositionOptions(templateId);
@@ -1288,24 +1287,22 @@ function EventQuickToolbar({
           </button>
         ) : null}
 
-        {supportsBackground ? (
-          <button
-            className={[
-              "studio-toolbar-tool",
-              activePanel === "background" ? "is-active" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            type="button"
-            aria-expanded={activePanel === "background"}
-            onClick={() =>
-              onPanelChange(activePanel === "background" ? "" : "background")
-            }
-          >
-            <span aria-hidden="true">▧</span>
-            Background
-          </button>
-        ) : null}
+        <button
+          className={[
+            "studio-toolbar-tool",
+            activePanel === "background" ? "is-active" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          type="button"
+          aria-expanded={activePanel === "background"}
+          onClick={() =>
+            onPanelChange(activePanel === "background" ? "" : "background")
+          }
+        >
+          <span aria-hidden="true">▧</span>
+          Background
+        </button>
 
         {!isSmallGroupLeader ? (
           <div className="studio-toolbar-divider" aria-hidden="true" />
@@ -5399,7 +5396,6 @@ function EventStudioEditor({
   const warnings = getProjectWarnings(project);
   const template = getTemplateById(project.templateId);
   const isSocial = template.kind === "social";
-  const supportsBackground = template.variant !== "simple-statement";
   const isCarousel = isSocial && project.postMode === "carousel";
   const slides = getSocialProjectSlides(project);
   const exportSlides = isCarousel
@@ -5813,7 +5809,7 @@ function EventStudioEditor({
               />
             </EventToolSideSheet>
           ) : null}
-          {renderedWorkspacePanel === "background" && supportsBackground ? (
+          {renderedWorkspacePanel === "background" ? (
             <EventToolSideSheet
               eyebrow="BACKGROUND"
               title="Image and focal point"

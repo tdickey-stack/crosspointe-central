@@ -6884,6 +6884,10 @@ a {
   padding: 4.8cqw 7.8cqw 2.4cqw;
 }
 
+.studio-event-graphic.is-template-simple-statement:not(.has-dark-copy) {
+  color: #fff;
+}
+
 .studio-event-graphic.is-template-simple-statement .social-post-copy {
   display: grid;
   position: relative;

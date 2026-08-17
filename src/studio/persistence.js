@@ -1,7 +1,6 @@
 import {
   DOCUMENT_PROJECT_TEMPLATE_ID,
   MAX_SOCIAL_CAROUSEL_SLIDES,
-  SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID,
   isEventTemplateId,
   isDocumentProject,
   isSocialTemplateId,
@@ -284,11 +283,10 @@ function documentPageForCloud(page) {
 
 function eventContentForCloud(content, templateId, projectId) {
   const isSocial = isSocialTemplateId(templateId);
-  const isSimpleStatement = templateId === SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID;
   const supportsHero = supportsHeroLogoTemplate(templateId);
   const requestedBackgroundSource = ["upload", "unsplash"].includes(
     content.backgroundImageSource,
-  ) && !isSimpleStatement
+  )
     ? content.backgroundImageSource
     : "";
   const source =

@@ -959,10 +959,41 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
   );
   const simpleStatement = socialProjectPayload("social-simple-statement");
   simpleStatement.content.flatColor = "cream";
-  await createSocialProject(
+  simpleStatement.content.backgroundImageSource = "upload";
+  simpleStatement.content.backgroundImageStoragePath =
+    "studio-projects/social-simple-statement/background.png";
+  const {primaryReference: simpleStatementReference} = await createSocialProject(
     db,
     "social-simple-statement",
     simpleStatement,
+  );
+  await assertFails(
+    simpleStatementReference.update({
+      "content.backgroundImageStoragePath":
+        "studio-projects/another-project/background.png",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    simpleStatementReference.update({
+      "content.backgroundImageSource": "unsplash",
+      "content.backgroundImageUrl":
+        "https://images.unsplash.com/photo-simple-statement",
+      "content.backgroundImageStoragePath": "",
+      "content.unsplashPhotoId": "photo-simple-statement",
+      "content.unsplashPhotographerName": "Studio Photographer",
+      "content.unsplashPhotographerUrl":
+        "https://unsplash.com/@studio-photographer",
+      "content.unsplashPhotoUrl":
+        "https://unsplash.com/photos/photo-simple-statement",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    simpleStatementReference.update({
+      "content.unsplashPhotographerName": "",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
   );
   const simpleLogoPayload = socialProjectPayload("social-simple-statement");
   simpleLogoPayload.content.flatColor = "cream";

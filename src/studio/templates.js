@@ -444,7 +444,7 @@ export const TEMPLATE_CATALOG = [
     name: "Simple Statement",
     shortName: "Simple",
     description:
-      "Centered text or a custom hero logo on a clean color background with quiet CrossPointe branding.",
+      "Centered text or a custom hero logo on a clean color or image background with quiet CrossPointe branding.",
     variant: "simple-statement",
     fonts: ["montserrat", "league-spartan", "google-sans"],
     compositions: ["flat"],
@@ -462,7 +462,7 @@ export const TEMPLATE_CATALOG = [
       textAlignment: "center",
       fontWeight: "bold",
       brandMark: "full",
-      brandColor: "charcoal",
+      brandColor: "auto",
     },
     accent: "red",
   }),

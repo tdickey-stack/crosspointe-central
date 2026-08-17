@@ -182,7 +182,7 @@ test("Social Posts expose focused templates and mobile-first formats", () => {
   });
 });
 
-test("Bold Statement keeps the existing ID while Simple Statement is flat and calm", () => {
+test("Simple Statement keeps its ID, auto contrast, and background support", () => {
   const bold = TEMPLATE_CATALOG.find((template) => template.id === "social-statement");
   const simple = TEMPLATE_CATALOG.find(
     (template) => template.id === "social-simple-statement",
@@ -199,12 +199,27 @@ test("Bold Statement keeps the existing ID while Simple Statement is flat and ca
   assert.equal(project.content.flatColor, "cream");
   assert.equal(project.content.textAlignment, "center");
   assert.equal(project.content.brandMark, "full");
-  assert.equal(project.content.brandColor, "charcoal");
+  assert.equal(project.content.brandColor, "auto");
   assert.equal(project.postMode, "single");
   assert.deepEqual(project.carouselSlides, []);
   assert.equal(supportsHeroLogoTemplate(simple.id), true);
   assert.equal(supportsHeroLogoTemplate(bold.id), false);
   assert.deepEqual(getProjectWarnings(project), []);
+
+  project.id = "simple-background-project";
+  project.content.backgroundImageSource = "upload";
+  project.content.backgroundImageStoragePath =
+    "studio-projects/simple-background-project/background.png";
+  const backgroundSlide = socialSlideForCloud(
+    {content: project.content},
+    project.templateId,
+    project.id,
+  );
+  assert.equal(backgroundSlide.content.backgroundImageSource, "upload");
+  assert.equal(
+    backgroundSlide.content.backgroundImageStoragePath,
+    "studio-projects/simple-background-project/background.png",
+  );
 });
 
 test("Simple Statement keeps valid hero logos while other Social Posts strip them", () => {

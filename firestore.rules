@@ -567,14 +567,7 @@ service cloud.firestore {
         validEventComposition(templateId, content.composition) &&
         (
           templateId == "social-simple-statement" ?
-            validHeroReference(content, projectId) &&
-            content.backgroundImageSource == "" &&
-            content.backgroundImageUrl == "" &&
-            content.backgroundImageStoragePath == "" &&
-            content.unsplashPhotoId == "" &&
-            content.unsplashPhotographerName == "" &&
-            content.unsplashPhotographerUrl == "" &&
-            content.unsplashPhotoUrl == "" :
+            validHeroReference(content, projectId) :
             content.heroMode == "text" &&
             content.heroLogoSource == "" &&
             content.heroLogoLibraryId == "" &&
@@ -764,7 +757,6 @@ service cloud.firestore {
             content.unsplashPhotoUrl == ""
           ) ||
           (
-            templateId != "social-simple-statement" &&
             content.backgroundImageSource == "upload" &&
             content.backgroundImageUrl == "" &&
             content.backgroundImageStoragePath.matches(
@@ -776,7 +768,6 @@ service cloud.firestore {
             content.unsplashPhotoUrl == ""
           ) ||
           (
-            templateId != "social-simple-statement" &&
             content.backgroundImageSource == "unsplash" &&
             content.backgroundImageUrl.matches("^https://.*") &&
             content.backgroundImageStoragePath == "" &&

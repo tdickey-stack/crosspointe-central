@@ -151,7 +151,7 @@ jobs:
         run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only firestore:rules --non-interactive
 
       - name: Deploy unpinned Dev endpoints
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief,functions:planningCenterPlannerWebhook --non-interactive
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:bulletinMode,functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief,functions:planningCenterPlannerWebhook --non-interactive
 
       - name: Deploy Firebase preview channel
         run: ./node_modules/.bin/firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive

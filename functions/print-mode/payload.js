@@ -6,6 +6,7 @@ const PRINT_MODE_EVENT_OVERRIDE_LIMIT = 200;
 const PRINT_MODE_MAX_CAMPAIGNS = 3;
 const PRINT_MODE_MAX_SERVE_NEEDS = 3;
 const PRINT_MODE_MAX_FRONT_CONTENT_ITEMS = 4;
+const PRINT_MODE_MAX_CUSTOM_BLOCKS = 8;
 const PRINT_MODE_CAMPAIGN_ICON_IDS = new Set([
   "general",
   "gift",
@@ -38,7 +39,10 @@ export function getDefaultPrintModeFallbackBlocks() {
       imageUrl: "",
       imageStoragePath: "",
       imageSide: "right",
-      enabled: true,
+      size: 2,
+      includeOnFront: false,
+      includeOnBack: false,
+      enabled: false,
     },
     {
       id: "stay-connected",
@@ -51,7 +55,10 @@ export function getDefaultPrintModeFallbackBlocks() {
       imageUrl: "",
       imageStoragePath: "",
       imageSide: "left",
-      enabled: true,
+      size: 2,
+      includeOnFront: false,
+      includeOnBack: false,
+      enabled: false,
     },
   ];
 }
@@ -76,6 +83,66 @@ export function normalizePrintModePayload(sourceData) {
   const fallbackBlockSource = Array.isArray(source.fallbackBlocks) ?
     source.fallbackBlocks :
     getDefaultPrintModeFallbackBlocks();
+  const legacyCustomOnly = source.frontContentSource === "fallback";
+  const normalizedFallbackBlocks = fallbackBlockSource
+      .slice(0, PRINT_MODE_MAX_CUSTOM_BLOCKS)
+      .map((blockItem, index) => {
+        const block = blockItem && typeof blockItem === "object" ?
+          blockItem :
+          {};
+        const size = normalizePrintModeBlockSize_(block.size);
+        const includeOnFront = (
+          Object.prototype.hasOwnProperty.call(block, "includeOnFront") ?
+            block.includeOnFront === true :
+            legacyCustomOnly
+        );
+        const includeOnBack = block.includeOnBack === true;
+        return {
+          id: normalizePrintModeText(
+              block.id || "fallback-" + String(index + 1),
+              160,
+          ),
+          eyebrow: normalizePrintModeText(block.eyebrow, 80),
+          title: normalizePrintModeText(block.title, 180),
+          description: normalizePrintModeLongText_(
+              block.description,
+              800,
+          ),
+          imageUrl: normalizePrintModeImageUrl_(block.imageUrl),
+          imageStoragePath: normalizePrintModeStoragePath_(
+              block.imageStoragePath,
+          ),
+          imageSide: block.imageSide === "left" ? "left" : "right",
+          size: size,
+          includeOnFront: includeOnFront,
+          includeOnBack: includeOnBack,
+          enabled: block.enabled !== false &&
+            (includeOnFront || includeOnBack),
+        };
+      })
+      .filter((block) => block.id && block.title);
+  let remainingCustomFrontUnits = PRINT_MODE_MAX_FRONT_CONTENT_ITEMS;
+  normalizedFallbackBlocks.forEach((block) => {
+    if (block.enabled === false || !block.includeOnFront) {
+      return;
+    }
+    if (block.size > remainingCustomFrontUnits) {
+      block.includeOnFront = false;
+      block.enabled = block.includeOnBack;
+      return;
+    }
+    remainingCustomFrontUnits -= block.size;
+  });
+  const customFrontUnits = normalizedFallbackBlocks.reduce(
+      (total, block) => total + (
+        block.enabled !== false && block.includeOnFront ? block.size : 0
+      ),
+      0,
+  );
+  const availableCentralUnits = Math.max(
+      0,
+      PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - customFrontUnits,
+  );
   const rawEvents = Array.isArray(source.events) ? source.events : [];
   const campaignIds = Array.isArray(source.campaignIds) ?
     source.campaignIds :
@@ -100,7 +167,10 @@ export function normalizePrintModePayload(sourceData) {
   const normalizedCampaignIds = campaignIds
       .map((id) => normalizePrintModeText(id, 160))
       .filter((id, index, ids) => id && ids.indexOf(id) === index)
-      .slice(0, PRINT_MODE_MAX_CAMPAIGNS);
+      .slice(
+          0,
+          Math.min(PRINT_MODE_MAX_CAMPAIGNS, availableCentralUnits),
+      );
   const rawServeNeedIds = Array.isArray(source.serveNeedIds) ?
     source.serveNeedIds :
     (source.serveNeedId ? [source.serveNeedId] : []);
@@ -113,19 +183,27 @@ export function normalizePrintModePayload(sourceData) {
               PRINT_MODE_MAX_SERVE_NEEDS,
               Math.max(
                   0,
-                  PRINT_MODE_MAX_FRONT_CONTENT_ITEMS -
+                  availableCentralUnits -
                     normalizedCampaignIds.length,
               ),
           ),
       );
+  const normalizedFrontContentOrder = normalizePrintModeFrontContentOrder_(
+      source.frontContentOrder,
+      normalizedFallbackBlocks,
+  );
+  const normalizedBackContentOrder = normalizePrintModeBackContentOrder_(
+      source.backContentOrder,
+      normalizedFallbackBlocks,
+  );
 
   return {
     serviceDate: normalizePrintModeDate_(source.serviceDate),
     printFormat: source.printFormat === "full-page" ?
       "full-page" : "half-letter",
+    printColorMode: source.printColorMode === "bw" ? "bw" : "color",
     heroSource: source.heroSource === "manual" ? "manual" : "featured",
-    frontContentSource: source.frontContentSource === "fallback" ?
-      "fallback" : "live",
+    frontContentSource: "mixed",
     headings: {
       frontHeading: normalizePrintModeHeading_(
           headingsSource.frontHeading,
@@ -168,6 +246,12 @@ export function normalizePrintModePayload(sourceData) {
           1200,
       ),
       includeDescription: featuredSource.includeDescription !== false,
+      blackAndWhiteImageUrl: normalizePrintModeImageUrl_(
+          featuredSource.blackAndWhiteImageUrl,
+      ),
+      blackAndWhiteImageStoragePath: normalizePrintModeStoragePath_(
+          featuredSource.blackAndWhiteImageStoragePath,
+      ),
     },
     fallbackHero: {
       eyebrow: normalizePrintModeText(
@@ -191,31 +275,11 @@ export function normalizePrintModePayload(sourceData) {
           fallbackSource.imageStoragePath,
       ),
     },
-    fallbackBlocks: fallbackBlockSource.slice(0, 4)
-        .map((blockItem, index) => {
-          const block = blockItem && typeof blockItem === "object" ?
-            blockItem :
-            {};
-          return {
-            id: normalizePrintModeText(
-                block.id || "fallback-" + String(index + 1),
-                160,
-            ),
-            eyebrow: normalizePrintModeText(block.eyebrow, 80),
-            title: normalizePrintModeText(block.title, 180),
-            description: normalizePrintModeLongText_(
-                block.description,
-                800,
-            ),
-            imageUrl: normalizePrintModeImageUrl_(block.imageUrl),
-            imageStoragePath: normalizePrintModeStoragePath_(
-                block.imageStoragePath,
-            ),
-            imageSide: block.imageSide === "left" ? "left" : "right",
-            enabled: block.enabled !== false,
-          };
-        })
-        .filter((block) => block.id && block.title),
+    fallbackBlocks: normalizedFallbackBlocks,
+    frontContentOrder: normalizedFrontContentOrder,
+    backContentOrder: normalizedBackContentOrder,
+    backCustomPlacement: source.backCustomPlacement === "before-events" ?
+      "before-events" : "after-events",
     events: rawEvents
         .slice(0, PRINT_MODE_EVENT_OVERRIDE_LIMIT)
         .map((eventItem) => {
@@ -239,6 +303,58 @@ export function normalizePrintModePayload(sourceData) {
     serveNeedIds: normalizedServeNeedIds,
     serveNeedId: normalizedServeNeedIds[0] || "",
   };
+}
+
+function normalizePrintModeBlockSize_(value) {
+  const size = Math.round(Number(value));
+  return size >= 1 && size <= 3 ? size : 2;
+}
+
+function normalizePrintModeFrontContentOrder_(sourceOrder, fallbackBlocks) {
+  const candidates = fallbackBlocks
+      .map((block) => "custom:" + block.id)
+      .concat(["campaigns", "serveNeeds"]);
+  const allowed = new Set(candidates);
+  const normalized = [];
+
+  (Array.isArray(sourceOrder) ? sourceOrder : []).forEach((value) => {
+    const token = String(value || "").trim();
+    if (
+      allowed.has(token) &&
+      !normalized.includes(token)
+    ) {
+      normalized.push(token);
+    }
+  });
+
+  candidates.forEach((token) => {
+    if (!normalized.includes(token)) {
+      normalized.push(token);
+    }
+  });
+
+  return normalized;
+}
+
+function normalizePrintModeBackContentOrder_(sourceOrder, fallbackBlocks) {
+  const candidates = fallbackBlocks.map((block) => "custom:" + block.id);
+  const allowed = new Set(candidates);
+  const normalized = [];
+
+  (Array.isArray(sourceOrder) ? sourceOrder : []).forEach((value) => {
+    const token = String(value || "").trim();
+    if (allowed.has(token) && !normalized.includes(token)) {
+      normalized.push(token);
+    }
+  });
+
+  candidates.forEach((token) => {
+    if (!normalized.includes(token)) {
+      normalized.push(token);
+    }
+  });
+
+  return normalized;
 }
 
 export function normalizePrintModeText(value, maxLength) {

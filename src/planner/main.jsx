@@ -95,6 +95,24 @@ function needsPromotionReview(play) {
     (play.conflictState && play.conflictState !== "none");
 }
 
+function phaseBrief(phase) {
+  const normalized = String(phase || "").trim().toLowerCase();
+  if (normalized === "awareness") return "Build recognition and make the event easy to discover.";
+  if (normalized === "interest") return "Help people understand why this matters and move them toward a response.";
+  if (["urgency", "sprint"].includes(normalized)) return "Create a clear final invitation before the event or registration deadline.";
+  return "Keep the campaign moving with the promotion planned for this point in the timeline.";
+}
+
+function campaignTimingLabel(scheduledDate, eventDate) {
+  if (!scheduledDate || !eventDate) return "Date context unavailable";
+  const days = Math.round((utcDateFromKey(eventDate).getTime() - utcDateFromKey(scheduledDate).getTime()) / 86400000);
+  if (days === 0) return "Event day";
+  if (days === 1) return "1 day before the event";
+  if (days > 1) return `${days} days before the event`;
+  if (days === -1) return "1 day after the event";
+  return `${Math.abs(days)} days after the event`;
+}
+
 function groupSmuggleOpportunities(opportunities) {
   const grouped = new Map();
   (opportunities || []).forEach((opportunity) => {
@@ -654,10 +672,98 @@ function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, can
   );
 }
 
+function CalendarPromotionBriefDialog({group, workspace, onClose, onOpenPlay, onOpenCampaign}) {
+  const campaign = workspace.campaigns.find((item) => item.id === group.campaignId);
+  const campaignPlays = workspace.scheduledPlays.filter((play) => play.campaignId === group.campaignId);
+  const playbook = workspace.playbooks.find((item) => item.id === campaign?.playbookId);
+  const smuggleRelationships = buildSmuggleRelationships({
+    plays: workspace.scheduledPlays,
+    campaigns: workspace.campaigns,
+  });
+  const smuggleByHostPlay = new Map(smuggleRelationships.map((relationship) => [relationship.hostPlayId, relationship]));
+  const dayPlays = [...group.plays].sort((left, right) => String(left.playType).localeCompare(String(right.playType)));
+  const weekNumbers = [...new Set(dayPlays.map((play) => Number(play.weekNumber)).filter(Boolean))].sort((left, right) => left - right);
+  const phases = [...new Set(dayPlays.map((play) => String(play.phase || "").trim()).filter(Boolean))];
+  const primaryWeek = weekNumbers[0] || Number(campaign?.currentWeek) || 1;
+  const phase = phases[0] || playbook?.weeks?.find((week) => Number(week.weekNumber) === primaryWeek)?.phase || "Campaign";
+  const weekLabel = playbook?.weeks?.find((week) => Number(week.weekNumber) === primaryWeek)?.label || "Planned promotion week";
+  const durationWeeks = Number(campaign?.durationWeeks || playbook?.durationWeeks || Math.max(...weekNumbers, 1));
+  const attention = dayPlays.filter(needsPromotionReview);
+  const futureDates = [...new Set(visiblePromotions(campaignPlays)
+    .map((play) => play.scheduledDate)
+    .filter((scheduledDate) => scheduledDate > group.scheduledDate))].sort();
+  const nextDate = futureDates[0] || "";
+  const nextPlays = nextDate ? visiblePromotions(campaignPlays).filter((play) => play.scheduledDate === nextDate) : [];
+  const arc = playbook?.weeks?.length ? playbook.weeks : [...new Map(campaignPlays
+    .filter((play) => Number(play.weekNumber))
+    .sort((left, right) => Number(left.weekNumber) - Number(right.weekNumber))
+    .map((play) => [Number(play.weekNumber), {
+      weekNumber: Number(play.weekNumber),
+      phase: play.phase || "Campaign",
+      label: `Week ${play.weekNumber}`,
+    }])).values()];
+
+  if (!campaign) return null;
+  return (
+    <Modal title={campaign.name} eyebrow={`Level ${campaign.level} · ${formatDate(group.scheduledDate)}`} onClose={onClose} size="wide">
+      <section className="planner-calendar-brief-hero" style={{"--planner-brief-accent": LEVEL_COLORS[campaign.level] || LEVEL_COLORS[5]}}>
+        <div className="planner-calendar-phase-card">
+          <span className="planner-kicker">Current phase</span>
+          <h3>{phase}</h3>
+          <strong>{weekLabel}</strong>
+          <p>{phaseBrief(phase)}</p>
+        </div>
+        <dl className="planner-calendar-brief-facts">
+          <div><dt>Campaign position</dt><dd>{weekNumbers.length > 1 ? `Weeks ${weekNumbers.join(" & ")}` : `Week ${primaryWeek}`} of {durationWeeks}</dd></div>
+          <div><dt>Promotion date</dt><dd>{campaignTimingLabel(group.scheduledDate, campaign.eventDate)}</dd></div>
+          <div><dt>Event</dt><dd>{formatDate(campaign.eventDate)}</dd></div>
+        </dl>
+      </section>
+
+      {arc.length > 0 && (
+        <section className="planner-campaign-arc" aria-label="Campaign progression">
+          <div className="planner-section-heading"><div><span className="planner-kicker">Campaign arc</span><h3>Where this promotion sits</h3></div></div>
+          <ol>
+            {arc.map((week) => {
+              const active = weekNumbers.includes(Number(week.weekNumber));
+              const past = Number(week.weekNumber) < primaryWeek;
+              return <li key={week.weekNumber} className={active ? "is-current" : past ? "is-past" : ""}><span>Week {week.weekNumber}</span><strong>{week.phase || "Campaign"}</strong><small>{week.label || "Planned week"}</small></li>;
+            })}
+          </ol>
+        </section>
+      )}
+
+      <section className="planner-calendar-day-brief">
+        <div className="planner-section-heading"><div><span className="planner-kicker">This date</span><h3>{dayPlays.length} planned promotion{dayPlays.length === 1 ? "" : "s"}</h3></div>{attention.length > 0 && <StatusBadge status="conflict">{attention.length} need attention</StatusBadge>}</div>
+        <div className="planner-calendar-brief-play-list">
+          {dayPlays.map((play) => {
+            const relationship = smuggleByHostPlay.get(play.id);
+            return (
+              <button key={play.id} className={`planner-calendar-brief-play ${needsPromotionReview(play) ? "has-alert" : ""}`} onClick={() => onOpenPlay(play)}>
+                <span><strong>{play.playType}</strong><small>{play.channel} · {play.requirement === "as-available" ? "If available" : play.requirement === "optional" ? "Optional" : "Planned"}</small>{relationship && <em>Contains L{relationship.beneficiaryLevel} {relationship.beneficiaryName} as a Smuggle</em>}</span>
+                {needsPromotionReview(play) ? <StatusBadge status="conflict">Review</StatusBadge> : <span className="planner-calendar-brief-open">Details ›</span>}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {attention.length > 0 && <div className="planner-detail-note is-alert"><strong>This date needs a decision</strong><p>{attention.map((play) => `${play.playType}: ${play.conflictReason || play.lateReason || "Review this promotion."}`).join(" ")}</p></div>}
+      {campaign.notes && <div className="planner-detail-note"><strong>Campaign notes</strong><p>{campaign.notes}</p></div>}
+      <div className="planner-calendar-next-step">
+        <span className="planner-kicker">Next in the plan</span>
+        {nextDate ? <><strong>{formatDate(nextDate)} · {nextPlays.map((play) => play.playType).join(", ")}</strong><p>The campaign continues with {nextPlays.length} planned promotion{nextPlays.length === 1 ? "" : "s"} on its next active date.</p></> : <><strong>{group.scheduledDate === campaign.eventDate ? "This is the event-day promotion" : "No later promotions are planned"}</strong><p>This is the final active promotion date currently on the campaign.</p></>}
+      </div>
+      <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button><button className="planner-button is-primary" onClick={() => onOpenCampaign(campaign)}>Open full campaign</button></div>
+    </Modal>
+  );
+}
+
 function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePlay}) {
   const calendarRef = useRef(null);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_STORAGE_KEY) || "dayGridMonth");
   const [filters, setFilters] = useState({campaign: "", level: "", channel: "", playType: ""});
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const smuggleRelationships = useMemo(() => buildSmuggleRelationships({
     plays: workspace.scheduledPlays,
     campaigns: workspace.campaigns,
@@ -769,7 +875,9 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
             const group = info.event.extendedProps.campaignDayGroup;
             if (!group) return onOpenPlay(info.event.extendedProps.play);
             const campaign = workspace.campaigns.find((item) => item.id === group.campaignId);
-            return campaign ? onOpenCampaign(campaign) : onOpenPlay(group.plays[0]);
+            if (!campaign) return onOpenPlay(group.plays[0]);
+            if (isStandaloneContent(group)) return onOpenCampaign(campaign);
+            setSelectedGroup(group);
           }}
           eventDrop={(info) => {
             const play = info.event.extendedProps.play;
@@ -793,6 +901,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
           }}
         />
       </section>
+      {selectedGroup && <CalendarPromotionBriefDialog group={selectedGroup} workspace={workspace} onClose={() => setSelectedGroup(null)} onOpenPlay={(play) => { setSelectedGroup(null); onOpenPlay(play); }} onOpenCampaign={(campaign) => { setSelectedGroup(null); onOpenCampaign(campaign); }} />}
     </>
   );
 }

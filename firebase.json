@@ -243,6 +243,15 @@
         ]
       },
       {
+        "source": "/planner.@(html|js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/wayfinder-chat.js",
         "headers": [
           {
@@ -324,6 +333,14 @@
       {
         "source": "/studio/**",
         "destination": "/studio.html"
+      },
+      {
+        "source": "/planner",
+        "destination": "/planner.html"
+      },
+      {
+        "source": "/planner/**",
+        "destination": "/planner.html"
       },
       {
         "source": "/embeds",
@@ -613,6 +630,21 @@
         "source": "/api/admin/claim-invite",
         "function": {
           "functionId": "claimAdminInvite",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/planner/send-brief",
+        "function": {
+          "functionId": "sendPlannerBrief",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/webhooks/planning-center/forms",
+        "function": {
+          "functionId": "planningCenterPlannerWebhook",
+          "region": "us-central1",
           "pinTag": false
         }
       },

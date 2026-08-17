@@ -118,6 +118,17 @@ import {
   normalizeCampaignContactSubmission,
 } from "./campaigns/contact.js";
 import {
+  buildPlannerBriefEmailHtml,
+  buildPlannerBriefEmailText,
+  normalizePlannerBriefEmailPayload,
+} from "./planner/brief-email.js";
+import {
+  buildPlannerRequestDocument,
+  buildPlanningCenterFormSubmissionUrl,
+  extractPlanningCenterFormSubmissionRefs,
+  verifyPlanningCenterWebhookSignature,
+} from "./planner/pco-form-webhook.js";
+import {
   applyEventOverrides,
   buildEventOverrideId,
   createEventOverridesHash,
@@ -474,6 +485,8 @@ const CENTRAL_GMAIL_REFRESH_TOKEN =
   defineSecret("CENTRAL_GMAIL_REFRESH_TOKEN");
 const PCO_APP_ID = defineSecret("PCO_APP_ID");
 const PCO_SECRET = defineSecret("PCO_SECRET");
+const PCO_WEBHOOK_AUTHENTICITY_SECRET =
+  defineSecret("PCO_WEBHOOK_AUTHENTICITY_SECRET");
 const CENTRAL_CALENDAR_SIGNING_KEY =
   defineSecret("CENTRAL_CALENDAR_SIGNING_KEY");
 const GMAIL_SECRETS = [
@@ -481,6 +494,11 @@ const GMAIL_SECRETS = [
   CENTRAL_GMAIL_REFRESH_TOKEN,
 ];
 const PLANNING_CENTER_SECRETS = [PCO_APP_ID, PCO_SECRET];
+const PLANNER_PCO_WEBHOOK_SECRETS = [
+  PCO_APP_ID,
+  PCO_SECRET,
+  PCO_WEBHOOK_AUTHENTICITY_SECRET,
+];
 const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
 const PCO_CENTRAL_TAG_NAME = process.env.PCO_CENTRAL_TAG_NAME || "Central";
 const PCO_CENTRAL_FEATURED_TAG_NAME =
@@ -546,6 +564,7 @@ const MANAGED_ADMIN_PAGE_CONFIGS = [
   {key: "bulletin", label: "Print Mode"},
   {key: "embeds", label: "Central Embeds"},
   {key: "studio", label: "Studio"},
+  {key: "planner", label: "Promotion Planner"},
   {key: "settings", label: "Settings"},
   {key: "integrations", label: "Integrations"},
   {key: "wayfinder", label: "Wayfinder"},
@@ -1627,6 +1646,251 @@ export const upsertAdminUser = onRequest(
           code: error && error.code ? error.code : "",
         });
       }
+    },
+);
+
+export const sendPlannerBrief = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      secrets: GMAIL_SECRETS,
+    },
+    async (request, response) => {
+      if (request.method !== "POST") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      const idToken = getBearerToken_(request.headers.authorization);
+      if (!idToken) {
+        response.status(401).json({
+          error: "Sign in to Promotion Planner before sending a brief.",
+        });
+        return;
+      }
+
+      let decodedToken = null;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+      } catch (error) {
+        response.status(401).json({
+          error: "Your Planner session expired. Sign in again and retry.",
+        });
+        return;
+      }
+
+      try {
+        const sender = await verifyPlannerBriefSenderAccess_(decodedToken);
+        const payload = normalizePlannerBriefEmailPayload(
+            request.body && typeof request.body === "object" ?
+              request.body :
+              {},
+        );
+        const emailText = buildPlannerBriefEmailText(payload);
+        const emailHtml = buildPlannerBriefEmailHtml(payload);
+        const deliveries = await Promise.all(payload.recipients.map((to) => {
+          return sendCentralEmail_({
+            to,
+            replyTo: sender.email,
+            subject: payload.subject,
+            text: emailText,
+            html: emailHtml,
+            attachments: [payload.attachment],
+          });
+        }));
+
+        response.set("Cache-Control", "no-store");
+        response.status(200).json({
+          ok: true,
+          recipientCount: payload.recipients.length,
+          messageIds: deliveries
+              .map((delivery) => delivery.id)
+              .filter(Boolean),
+          message: payload.recipients.length === 1 ?
+            "Promotion brief sent." :
+            `Promotion brief sent to ${payload.recipients.length} recipients.`,
+        });
+      } catch (error) {
+        response.status(Number(error && error.statusCode) || 500).json({
+          error: error && error.message ?
+            error.message :
+            "Central could not send the promotion brief.",
+        });
+      }
+    },
+);
+
+/**
+ * Converts a normalized date-only value into a stable Firestore timestamp.
+ * Noon UTC avoids a local-time rollover when Planner renders the date.
+ *
+ * @param {string|null} value ISO date-only value.
+ * @return {FirebaseFirestore.Timestamp|null} Firestore timestamp or null.
+ */
+function plannerDateTimestamp_(value) {
+  const normalized = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+  const parsed = new Date(`${normalized}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== normalized) {
+    return null;
+  }
+  return admin.firestore.Timestamp.fromDate(parsed);
+}
+
+/**
+ * Converts the pure webhook normalizer output to the private Firestore shape.
+ * The mapping is explicit so new upstream fields cannot be persisted by
+ * accident.
+ *
+ * @param {Object} source Normalized campaign request.
+ * @return {Object} Firestore-safe request document.
+ */
+function plannerRequestForFirestore_(source) {
+  const submittedAt = new Date(source.submittedAt);
+  const receivedAt = new Date(source.receivedAt);
+  const timestamp = admin.firestore.FieldValue.serverTimestamp();
+  return {
+    schemaVersion: 1,
+    source: "planning-center-form",
+    sourceFormId: String(source.sourceFormId || ""),
+    sourceFormName: String(source.sourceFormName || "").slice(0, 120),
+    sourceSubmissionId: String(source.sourceSubmissionId || ""),
+    submittedAt: admin.firestore.Timestamp.fromDate(submittedAt),
+    receivedAt: admin.firestore.Timestamp.fromDate(receivedAt),
+    status: "pending-review",
+    proposedName: String(source.proposedName || "Untitled promotion request")
+        .trim().slice(0, 140) || "Untitled promotion request",
+    ministry: String(source.ministry || "").slice(0, 140),
+    description: String(source.description || "").slice(0, 3000),
+    notes: String(source.notes || "").slice(0, 3000),
+    requestedPlatforms: Array.isArray(source.requestedPlatforms) ?
+      source.requestedPlatforms.map((value) => String(value).slice(0, 120))
+          .filter(Boolean).slice(0, 12) : [],
+    requestedPromotionStart:
+      plannerDateTimestamp_(source.requestedPromotionStart),
+    requestedPromotionEnd:
+      plannerDateTimestamp_(source.requestedPromotionEnd),
+    rawEventDateText: String(source.rawEventDateText || "").slice(0, 500),
+    eventDate: plannerDateTimestamp_(source.eventDate),
+    eventDates: Array.isArray(source.eventDates) ?
+      source.eventDates.map(plannerDateTimestamp_).filter(Boolean).slice(0, 8) :
+      [],
+    eventDateEnd: plannerDateTimestamp_(source.eventDateEnd),
+    dateParseStatus: source.dateParseStatus,
+    dateParseKind: source.dateParseKind || null,
+    dateSource: source.dateSource,
+    eligibility: {qualified: true},
+    campaignId: "",
+    reviewedByUid: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+/**
+ * Checks whether an Admin SDK create failed because the document exists.
+ *
+ * @param {Error|Object} error Firestore error.
+ * @return {boolean} Whether this is an idempotent duplicate delivery.
+ */
+function isAlreadyExistsError_(error) {
+  const code = String(error && error.code || "").toLowerCase();
+  return code === "6" || code === "already-exists" ||
+    code === "already_exists";
+}
+
+export const planningCenterPlannerWebhook = onRequest(
+    {
+      region: "us-central1",
+      secrets: PLANNER_PCO_WEBHOOK_SECRETS,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      if (request.method !== "POST") {
+        response.set("Allow", "POST");
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      const authenticitySecret = String(
+          PCO_WEBHOOK_AUTHENTICITY_SECRET.value() || "",
+      ).trim();
+      if (!authenticitySecret) {
+        response.set("Retry-After", "60");
+        response.status(503).json({error: "Webhook is not configured."});
+        return;
+      }
+
+      const rawBody = Buffer.isBuffer(request.rawBody) ?
+        request.rawBody : null;
+      const signature = request.get("X-PCO-Webhooks-Authenticity") || "";
+      if (!rawBody || !verifyPlanningCenterWebhookSignature(
+          rawBody,
+          signature,
+          authenticitySecret,
+      )) {
+        response.status(401).json({error: "Invalid webhook signature."});
+        return;
+      }
+
+      let payload = null;
+      try {
+        payload = JSON.parse(rawBody.toString("utf8"));
+      } catch (_error) {
+        response.status(400).json({error: "Invalid webhook payload."});
+        return;
+      }
+
+      const supportedFormIds = new Set(["930568", "1229879"]);
+      const refs = extractPlanningCenterFormSubmissionRefs(payload)
+          .filter((ref) => supportedFormIds.has(ref.formId));
+      const result = {
+        ok: true,
+        received: refs.length,
+        created: 0,
+        duplicates: 0,
+        ignored: 0,
+      };
+
+      try {
+        for (const ref of refs) {
+          const apiDocument = await fetchPcoJson_(
+              buildPlanningCenterFormSubmissionUrl(
+                  ref.formId,
+                  ref.submissionId,
+              ),
+          );
+          const normalized = buildPlannerRequestDocument(apiDocument, {
+            formId: ref.formId,
+            receivedAt: new Date().toISOString(),
+          });
+          if (normalized.action !== "upsert") {
+            result.ignored += 1;
+            continue;
+          }
+          try {
+            await firestore.collection("centralPromotionRequests")
+                .doc(normalized.docId)
+                .create(plannerRequestForFirestore_(normalized.request));
+            result.created += 1;
+          } catch (error) {
+            if (!isAlreadyExistsError_(error)) throw error;
+            result.duplicates += 1;
+          }
+        }
+      } catch (error) {
+        console.error("Planning Center Planner webhook failed.", {
+          code: error && error.code ? String(error.code) : "",
+          message: error && error.message ? String(error.message) :
+            "Unknown error",
+        });
+        response.set("Retry-After", "60");
+        response.status(503).json({error: "Webhook processing failed."});
+        return;
+      }
+
+      response.status(200).json(result);
     },
 );
 
@@ -2843,6 +3107,9 @@ async function sendCentralEmail_(options) {
   const text = String(config.text || "").trim();
   const html = String(config.html || "").trim();
   const replyTo = String(config.replyTo || "").trim();
+  const attachments = Array.isArray(config.attachments) ?
+    config.attachments :
+    [];
   const gmailConfig = getCentralGmailConfig_();
 
   if (!looksLikeEmailAddress_(to)) {
@@ -2866,6 +3133,7 @@ async function sendCentralEmail_(options) {
     subject: subject,
     text: text,
     html: html,
+    attachments: attachments,
   });
   const gmailResponse = await fetch(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
@@ -2992,7 +3260,20 @@ async function fetchCentralGmailAccessToken_(gmailConfig) {
 
 function buildCentralGmailRawMessage_(options) {
   const config = options && typeof options === "object" ? options : {};
-  const boundary = "central-" + crypto.randomBytes(12).toString("hex");
+  const attachments = Array.isArray(config.attachments) ?
+    config.attachments.filter((attachment) => {
+      return attachment && attachment.base64 && attachment.filename;
+    }) :
+    [];
+  const alternativeBoundary =
+    "central-alt-" + crypto.randomBytes(12).toString("hex");
+  const mixedBoundary = attachments.length ?
+    "central-mixed-" + crypto.randomBytes(12).toString("hex") :
+    "";
+  const messageSubtype = attachments.length ? "mixed" : "alternative";
+  const messageBoundary = attachments.length ?
+    mixedBoundary :
+    alternativeBoundary;
   const headers = [
     "From: " + buildCentralMailboxHeader_(
         config.fromName,
@@ -3004,24 +3285,50 @@ function buildCentralGmailRawMessage_(options) {
       "",
     "Subject: " + encodeMimeHeaderValue_(String(config.subject || "").trim()),
     "MIME-Version: 1.0",
-    "Content-Type: multipart/alternative; boundary=\"" + boundary + "\"",
+    "Content-Type: multipart/" + messageSubtype +
+      "; boundary=\"" + messageBoundary + "\"",
   ].filter(Boolean);
-  const parts = [
-    "--" + boundary,
+  const alternativeParts = [
+    "--" + alternativeBoundary,
     "Content-Type: text/plain; charset=\"UTF-8\"",
     "Content-Transfer-Encoding: base64",
     "",
     splitMimeBase64Lines_(Buffer.from(String(config.text || ""), "utf8")
         .toString("base64")),
-    "--" + boundary,
+    "--" + alternativeBoundary,
     "Content-Type: text/html; charset=\"UTF-8\"",
     "Content-Transfer-Encoding: base64",
     "",
     splitMimeBase64Lines_(Buffer.from(String(config.html || ""), "utf8")
         .toString("base64")),
-    "--" + boundary + "--",
+    "--" + alternativeBoundary + "--",
     "",
   ];
+  const parts = attachments.length ? [
+    "--" + mixedBoundary,
+    "Content-Type: multipart/alternative; boundary=\"" +
+      alternativeBoundary + "\"",
+    "",
+    ...alternativeParts,
+    ...attachments.flatMap((attachment) => {
+      const filename = String(attachment.filename || "attachment")
+          .replace(/[\r\n"]+/g, "-")
+          .slice(0, 140);
+      const contentType = String(
+          attachment.contentType || "application/octet-stream",
+      ).replace(/[\r\n;]+/g, "").slice(0, 100);
+      return [
+        "--" + mixedBoundary,
+        "Content-Type: " + contentType + "; name=\"" + filename + "\"",
+        "Content-Disposition: attachment; filename=\"" + filename + "\"",
+        "Content-Transfer-Encoding: base64",
+        "",
+        splitMimeBase64Lines_(String(attachment.base64 || "")),
+      ];
+    }),
+    "--" + mixedBoundary + "--",
+    "",
+  ] : alternativeParts;
   const mimeMessage = headers.concat([""], parts).join("\r\n");
 
   return Buffer.from(mimeMessage, "utf8")
@@ -6365,6 +6672,56 @@ function getChangeRequestsPermission_(pageAccess) {
 }
 
 /**
+ * Verifies that an active Planner approver can send an external brief.
+ * @param {object} decodedToken Verified Firebase authentication token.
+ * @return {Promise<{uid: string, email: string, permission: string}>} Sender.
+ */
+async function verifyPlannerBriefSenderAccess_(decodedToken) {
+  const email = normalizeAdminEmail_(decodedToken && decodedToken.email);
+  if (!isAllowedCentralAdminEmail_(email)) {
+    const error = new Error(
+        "Use an approved Central admin account to email promotion briefs.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const userSnapshot = await firestore
+      .doc(getCentralAdminUserDocPath_(decodedToken.uid))
+      .get();
+  if (!userSnapshot.exists || userSnapshot.get("active") !== true) {
+    const error = new Error(
+        "Your Central admin access must be active to email promotion briefs.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const pageAccess = userSnapshot.get("pageAccess") || {};
+  let permission = "none";
+  if (hasManagedAdminPageAccessKey_(pageAccess, "planner")) {
+    permission = normalizePreviewPermissionValue_(pageAccess.planner);
+  } else if (hasManagedAdminPageAccessKey_(pageAccess, "studio")) {
+    permission = normalizePreviewPermissionValue_(pageAccess.studio);
+  } else {
+    permission = normalizePreviewPermissionValue_(pageAccess.settings);
+  }
+  if (!["approve", "admin"].includes(permission)) {
+    const error = new Error(
+        "Planner Approve or Admin permission is required to email a brief.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return {
+    uid: String(decodedToken.uid || "").trim(),
+    email,
+    permission,
+  };
+}
+
+/**
  * Verifies that a request comes from an active Settings Admin.
  * @param {object} request HTTP request.
  * @return {Promise<{uid: string, email: string}>} Sender identity.
@@ -7033,15 +7390,21 @@ function normalizeManagedAdminPageAccessForWrite_(pageAccess, existingPageAccess
       {};
 
   MANAGED_ADMIN_PAGE_KEYS.forEach((key) => {
-    const value = (
-      key === "integrations" ||
-      key === "bulletin" ||
-      key === "embeds" ||
-      key === "studio"
-    ) &&
-      !Object.prototype.hasOwnProperty.call(source, key) ?
-      source.settings :
-      source[key];
+    let value = source[key];
+    if (!Object.prototype.hasOwnProperty.call(source, key)) {
+      if (key === "planner") {
+        value = Object.prototype.hasOwnProperty.call(source, "studio") ?
+          source.studio :
+          source.settings;
+      } else if (
+        key === "integrations" ||
+        key === "bulletin" ||
+        key === "embeds" ||
+        key === "studio"
+      ) {
+        value = source.settings;
+      }
+    }
     nextPageAccess[key] = normalizePreviewPermissionValue_(value);
   });
 

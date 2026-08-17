@@ -613,6 +613,7 @@
     bulletin: "admin",
     embeds: "admin",
     studio: "admin",
+    planner: "admin",
     settings: "admin",
     integrations: "admin",
     wayfinder: "admin",
@@ -669,8 +670,8 @@
     },
     {
       label: "Creative",
-      description: "Controlled document and graphic creation tools.",
-      keys: ["studio"],
+      description: "Controlled document, graphic, and promotion planning tools.",
+      keys: ["studio", "planner"],
     },
     {
       label: "Operations",
@@ -24632,6 +24633,7 @@
       {key: "hub", label: "Hub"},
       {key: "bulletin", label: "Print Mode"},
       {key: "studio", label: "Studio"},
+      {key: "planner", label: "Promotion Planner"},
       {key: "settings", label: "Settings"},
       {key: "integrations", label: "Integrations"},
       {key: "wayfinder", label: "Wayfinder"},
@@ -24711,6 +24713,14 @@
       return normalizeAdminPermissionValue_(source[pageAccessKey]);
     }
 
+    if (pageAccessKey === "planner") {
+      return normalizeAdminPermissionValue_(
+          Object.prototype.hasOwnProperty.call(source, "studio") ?
+            source.studio :
+            source.settings,
+      );
+    }
+
     if (pageAccessKey === "hub" ||
       pageAccessKey === "bulletin" ||
       pageAccessKey === "embeds" ||
@@ -24754,6 +24764,14 @@
     if (!Object.prototype.hasOwnProperty.call(source, "studio")) {
       nextPageAccess.studio = normalizeAdminPermissionValue_(
           source.settings,
+      );
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(source, "planner")) {
+      nextPageAccess.planner = normalizeAdminPermissionValue_(
+          Object.prototype.hasOwnProperty.call(source, "studio") ?
+            source.studio :
+            source.settings,
       );
     }
 

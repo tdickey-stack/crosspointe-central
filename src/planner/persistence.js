@@ -811,6 +811,47 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     return next;
   }
 
+  async function regenerateCampaignSchedules(regeneration) {
+    const nextCampaigns = (regeneration?.campaigns || []).map(deepClone);
+    const nextPlays = (regeneration?.plays || []).map(deepClone);
+    const writePlayIds = new Set(regeneration?.writePlayIds || []);
+    const campaignIds = new Set(nextCampaigns.map((campaign) => campaign.id));
+    if (!nextCampaigns.length) {
+      return {campaigns: [], plays: [], writtenPlayIds: []};
+    }
+    if (preview) {
+      previewWorkspace.campaigns = previewWorkspace.campaigns.map((campaign) =>
+        nextCampaigns.find((item) => item.id === campaign.id) || campaign,
+      );
+      previewWorkspace.scheduledPlays = [
+        ...previewWorkspace.scheduledPlays.filter((play) => !campaignIds.has(play.campaignId)),
+        ...nextPlays,
+      ];
+      return {
+        campaigns: deepClone(nextCampaigns),
+        plays: deepClone(nextPlays),
+        writtenPlayIds: [...writePlayIds],
+      };
+    }
+    const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
+    const operations = nextCampaigns.map((campaign) => ({
+      reference: firestore.collection(PLANNER_COLLECTIONS.campaigns).doc(campaign.id),
+      payload: campaignForCloud(campaign, user.uid, timestamp),
+    }));
+    nextPlays.filter((play) => writePlayIds.has(play.id)).forEach((play) => {
+      operations.push({
+        reference: firestore.collection(PLANNER_COLLECTIONS.plays).doc(play.id),
+        payload: playForCloud(play, user.uid, timestamp),
+      });
+    });
+    await commitPlannerSetOperations(firestore, operations);
+    return {
+      campaigns: nextCampaigns,
+      plays: nextPlays,
+      writtenPlayIds: [...writePlayIds],
+    };
+  }
+
   async function deleteCampaign(campaignId) {
     const id = String(campaignId || "").trim();
     if (!id) throw new Error("A campaign ID is required for deletion.");
@@ -869,6 +910,7 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     saveCampaignSchedule,
     convertPromotionRequest,
     saveScheduledPlay,
+    regenerateCampaignSchedules,
     deleteCampaign,
     updatePromotionRequest,
   };

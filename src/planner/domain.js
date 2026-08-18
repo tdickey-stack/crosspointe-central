@@ -121,12 +121,11 @@ export function endOfSaturdayWeek(value) {
 
 export function campaignWindow(eventDate, durationWeeks) {
   const duration = Math.max(1, Number(durationWeeks) || 1);
-  const eventWeekStart = startOfSundayWeek(eventDate);
-  const recommendedStartDate = addDays(eventWeekStart, -(duration - 1) * 7);
+  const campaignEndDate = addDays(eventDate, -1);
+  const recommendedStartDate = addDays(eventDate, -duration * 7);
   return {
     recommendedStartDate,
-    eventWeekStart,
-    campaignEndDate: addDays(eventWeekStart, 6),
+    campaignEndDate,
   };
 }
 
@@ -177,7 +176,10 @@ function nextEligibleDate({fromDate, finalDate, eligibleWeekdays}) {
 }
 
 function templatePlayDate(recommendedStartDate, weekNumber, dayOfWeek) {
-  return addDays(recommendedStartDate, (Number(weekNumber) - 1) * 7 + Number(dayOfWeek));
+  const windowStart = addDays(recommendedStartDate, (Number(weekNumber) - 1) * 7);
+  const windowStartDay = utcDateFromKey(windowStart).getUTCDay();
+  const weekdayOffset = (Number(dayOfWeek) - windowStartDay + 7) % 7;
+  return addDays(windowStart, weekdayOffset);
 }
 
 export function priorityTuple(campaign) {
@@ -231,9 +233,10 @@ export function generateCampaignSchedule({
         week.weekNumber,
         primaryDay,
       );
-      // A playbook describes a Sunday-through-Saturday rhythm, but the event
-      // can happen on any day in that final week. Promotions after the event
-      // (or an earlier registration deadline) are not part of the plan.
+      // Each playbook week is a rolling seven-day phase window before the
+      // event. The requested weekday still controls the exact date inside that
+      // window, so every event receives the same weekly rhythm without any
+      // promotion landing on or after the event.
       if (originalScheduledDate > finalDate) return;
       let scheduledDate = originalScheduledDate;
       let status = "scheduled";
@@ -329,6 +332,177 @@ export function generateCampaignSchedule({
     },
     plays,
     summary: scheduleSummary(plays),
+  };
+}
+
+function regenerationProtected(play, today) {
+  return play?.locked === true || play?.manuallyAdjusted === true ||
+    play?.status === "completed" || String(play?.scheduledDate || "") < today;
+}
+
+function comparableScheduleRecord(record) {
+  const next = {...record};
+  delete next.createdAt;
+  delete next.createdByUid;
+  delete next.updatedAt;
+  delete next.updatedByUid;
+  return next;
+}
+
+function scheduleRecordChanged(previous, next) {
+  return JSON.stringify(comparableScheduleRecord(previous)) !==
+    JSON.stringify(comparableScheduleRecord(next));
+}
+
+export function buildCampaignRegeneration({
+  campaigns = [],
+  plays = [],
+  playbooks = [],
+  capacityRules = [],
+  generatedAt = new Date(),
+} = {}) {
+  const today = dateKey(generatedAt);
+  const playbookById = new Map(playbooks.map((playbook) => [playbook.id, playbook]));
+  const targetCampaigns = campaigns.filter((campaign) =>
+    campaign.status === "active" &&
+    campaign.campaignType !== "standalone-content" &&
+    playbookById.has(campaign.playbookId),
+  );
+  const targetIds = new Set(targetCampaigns.map((campaign) => campaign.id));
+  const existingByCampaign = new Map();
+  plays.filter((play) => targetIds.has(play.campaignId)).forEach((play) => {
+    if (!existingByCampaign.has(play.campaignId)) existingByCampaign.set(play.campaignId, []);
+    existingByCampaign.get(play.campaignId).push(play);
+  });
+  const relationships = buildSmuggleRelationships({plays, campaigns});
+  const clearedRelationships = relationships.filter((relationship) => {
+    const host = plays.find((play) => play.id === relationship.hostPlayId);
+    return host && host.scheduledDate >= today && host.status !== "completed" && host.locked !== true;
+  });
+  const smugglePlayIds = new Set(clearedRelationships.flatMap((relationship) =>
+    [relationship.hostPlayId, relationship.beneficiaryPlayId].filter(Boolean),
+  ));
+  const regeneratedCampaigns = [];
+  const candidatePlays = [];
+  const protectedPlayIds = new Set();
+  const itemByCampaignId = new Map();
+
+  targetCampaigns.forEach((campaign) => {
+    const playbook = playbookById.get(campaign.playbookId);
+    const generated = generateCampaignSchedule({campaign, playbook, generatedAt});
+    const existing = existingByCampaign.get(campaign.id) || [];
+    const existingById = new Map(existing.map((play) => [play.id, play]));
+    const generatedIds = new Set(generated.plays.map((play) => play.id));
+    const item = {
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      level: Number(campaign.level),
+      fromVersion: Number(campaign.playbookVersion || 1),
+      toVersion: Number(playbook.version || 1),
+      added: 0,
+      moved: 0,
+      removed: 0,
+      preserved: 0,
+      smugglesCleared: 0,
+      conflicts: 0,
+    };
+
+    generated.plays.forEach((nextPlay) => {
+      const previous = existingById.get(nextPlay.id);
+      if (!previous) {
+        item.added += 1;
+        candidatePlays.push(nextPlay);
+        return;
+      }
+      const clearsSmuggle = smugglePlayIds.has(previous.id);
+      if (regenerationProtected(previous, today) && !clearsSmuggle) {
+        item.preserved += 1;
+        protectedPlayIds.add(previous.id);
+        candidatePlays.push(previous);
+        return;
+      }
+      if (clearsSmuggle) item.smugglesCleared += 1;
+      if (previous.scheduledDate !== nextPlay.scheduledDate) item.moved += 1;
+      candidatePlays.push({
+        ...nextPlay,
+        createdAt: previous.createdAt,
+        createdByUid: previous.createdByUid,
+      });
+    });
+
+    existing.filter((play) => !generatedIds.has(play.id)).forEach((previous) => {
+      const clearsSmuggle = smugglePlayIds.has(previous.id);
+      if (regenerationProtected(previous, today) && !clearsSmuggle) {
+        item.preserved += 1;
+        protectedPlayIds.add(previous.id);
+        candidatePlays.push(previous);
+        return;
+      }
+      if (clearsSmuggle) item.smugglesCleared += 1;
+      const alreadyRemoved = previous.status === "skipped" &&
+        previous.lateReason === "Removed from the active plan by campaign regeneration." &&
+        previous.smuggle == null;
+      if (!alreadyRemoved) item.removed += 1;
+      candidatePlays.push({
+        ...previous,
+        status: "skipped",
+        conflictState: "none",
+        conflictReason: "",
+        lateReason: "Removed from the active plan by campaign regeneration.",
+        smuggle: null,
+      });
+    });
+
+    regeneratedCampaigns.push(generated.campaign);
+    itemByCampaignId.set(campaign.id, item);
+  });
+
+  const untouchedPlays = plays.filter((play) => !targetIds.has(play.campaignId));
+  const combinedCampaigns = campaigns.map((campaign) =>
+    regeneratedCampaigns.find((item) => item.id === campaign.id) || campaign,
+  );
+  const allocated = allocateLevel4SocialSlots({
+    plays: [...untouchedPlays, ...candidatePlays],
+    campaigns: combinedCampaigns,
+  });
+  const capacity = evaluateCapacity({
+    plays: allocated.plays,
+    capacityRules: capacityRules.filter((rule) => rule.id !== "level-4-social"),
+    campaigns: combinedCampaigns,
+  });
+  const originalById = new Map(plays.map((play) => [play.id, play]));
+  const finalPlays = capacity.plays.map((play) =>
+    protectedPlayIds.has(play.id) ? originalById.get(play.id) : play,
+  );
+  const targetPlays = finalPlays.filter((play) => targetIds.has(play.campaignId));
+  targetPlays.forEach((play) => {
+    if (play.status === "conflict" || (play.conflictState && play.conflictState !== "none")) {
+      const item = itemByCampaignId.get(play.campaignId);
+      if (item) item.conflicts += 1;
+    }
+  });
+  const writePlayIds = targetPlays.filter((play) => {
+    const previous = originalById.get(play.id);
+    return !previous || scheduleRecordChanged(previous, play);
+  }).map((play) => play.id);
+  const items = [...itemByCampaignId.values()].sort((left, right) =>
+    left.level - right.level || left.campaignName.localeCompare(right.campaignName),
+  );
+
+  return {
+    campaigns: regeneratedCampaigns,
+    plays: targetPlays,
+    writePlayIds,
+    items,
+    summary: {
+      campaigns: regeneratedCampaigns.length,
+      added: items.reduce((sum, item) => sum + item.added, 0),
+      moved: items.reduce((sum, item) => sum + item.moved, 0),
+      removed: items.reduce((sum, item) => sum + item.removed, 0),
+      preserved: items.reduce((sum, item) => sum + item.preserved, 0),
+      smugglesCleared: clearedRelationships.length,
+      conflicts: items.reduce((sum, item) => sum + item.conflicts, 0),
+    },
   };
 }
 

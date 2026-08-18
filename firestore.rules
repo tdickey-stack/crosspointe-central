@@ -1793,9 +1793,14 @@ service cloud.firestore {
         request.resource.data.createdByUid == resource.data.createdByUid &&
         request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.playbookId == resource.data.playbookId &&
-        request.resource.data.playbookVersion == resource.data.playbookVersion &&
+        (
+          request.resource.data.playbookVersion == resource.data.playbookVersion ||
+          (
+            request.resource.data.playbookVersion > resource.data.playbookVersion &&
+            get(/databases/$(database)/documents/centralPromotionPlaybooks/$(resource.data.playbookId)).data.currentVersion == request.resource.data.playbookVersion
+          )
+        ) &&
         request.resource.data.submittedAt == resource.data.submittedAt &&
-        request.resource.data.recommendedStartDate == resource.data.recommendedStartDate &&
         request.resource.data.sourceEventId == resource.data.sourceEventId &&
         request.resource.data.updatedAt == request.time &&
         validPlannerCampaign(request.resource.data);
@@ -1813,9 +1818,23 @@ service cloud.firestore {
         request.resource.data.schemaVersion == resource.data.schemaVersion &&
         request.resource.data.campaignId == resource.data.campaignId &&
         request.resource.data.playbookId == resource.data.playbookId &&
-        request.resource.data.playbookVersion == resource.data.playbookVersion &&
         request.resource.data.templatePlayId == resource.data.templatePlayId &&
-        request.resource.data.originalScheduledDate == resource.data.originalScheduledDate &&
+        (
+          (
+            request.resource.data.playbookVersion == resource.data.playbookVersion &&
+            request.resource.data.originalScheduledDate == resource.data.originalScheduledDate
+          ) || (
+            resource.data.source == "campaign-generation" &&
+            request.resource.data.source == "campaign-generation" &&
+            resource.data.status != "completed" &&
+            resource.data.locked == false &&
+            (resource.data.manuallyAdjusted == false || resource.data.smuggle != null) &&
+            request.resource.data.locked == false &&
+            request.resource.data.manuallyAdjusted == false &&
+            request.resource.data.playbookVersion >= resource.data.playbookVersion &&
+            get(/databases/$(database)/documents/centralPromotionCampaigns/$(resource.data.campaignId)).data.playbookVersion == request.resource.data.playbookVersion
+          )
+        ) &&
         request.resource.data.createdByUid == resource.data.createdByUid &&
         request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.updatedAt == request.time &&

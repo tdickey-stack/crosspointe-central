@@ -6,6 +6,7 @@ import {
   createPlannerStore,
   plannerPersistenceInternals,
 } from "../src/planner/persistence.js";
+import {buildCampaignRegeneration} from "../src/planner/domain.js";
 import {cloneStarterData} from "../src/planner/seed-data.js";
 
 test("playbook persistence validates every week and promotion play", () => {
@@ -122,6 +123,34 @@ test("Planner set operations stay below the rules evaluation ceiling", async () 
 
   assert.equal(plannerPersistenceInternals.PLANNER_RULES_SAFE_BATCH_SIZE, 5);
   assert.deepEqual(committedBatchSizes, [5, 5, 5, 5, 3]);
+});
+
+test("preview regeneration replaces only active campaign schedules", async () => {
+  const store = createPlannerStore({preview: true, user: {uid: "planner-admin"}});
+  const workspace = await store.loadWorkspace();
+  const standaloneIds = new Set(workspace.campaigns
+    .filter((campaign) => campaign.campaignType === "standalone-content")
+    .map((campaign) => campaign.id));
+  const standaloneBefore = workspace.scheduledPlays
+    .filter((play) => standaloneIds.has(play.campaignId));
+  const regeneration = buildCampaignRegeneration({
+    campaigns: workspace.campaigns,
+    plays: workspace.scheduledPlays,
+    playbooks: workspace.playbooks,
+    capacityRules: workspace.capacityRules,
+    generatedAt: new Date(),
+  });
+  const result = await store.regenerateCampaignSchedules(regeneration);
+  const reloaded = await store.loadWorkspace();
+  assert.equal(result.campaigns.length, regeneration.summary.campaigns);
+  assert.deepEqual(
+    reloaded.scheduledPlays.filter((play) => standaloneIds.has(play.campaignId)),
+    standaloneBefore,
+  );
+  assert.equal(
+    reloaded.scheduledPlays.filter((play) => result.campaigns.some((campaign) => campaign.id === play.campaignId)).length,
+    result.plays.length,
+  );
 });
 
 test("starter publishing skips existing documents and is retry safe", async () => {

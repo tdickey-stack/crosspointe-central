@@ -13,6 +13,7 @@ import {
   addDays,
   allocateLevel4SocialSlots,
   applySmuggle,
+  buildCampaignRegeneration,
   buildSmuggleRelationships,
   businessLocalToIso,
   businessNowInputValue,
@@ -1495,12 +1496,57 @@ function NewPlaybookDialog({onClose, onCreate}) {
   );
 }
 
-function PlaybooksView({workspace, canEdit, onSave, onDelete}) {
+function RegenerationDialog({regeneration, onClose, onRegenerate}) {
+  const [saving, setSaving] = useState(false);
+  const summary = regeneration.summary;
+  return (
+    <Modal title="Regenerate campaign announcements" eyebrow="Apply current playbooks" onClose={onClose} size="wide">
+      <div className="planner-detail-note">
+        <strong>Rolling phase windows</strong>
+        <p>Each playbook week becomes a full seven-day window before the event. Fixed weekdays stay fixed, and no generated announcement lands on or after the event date.</p>
+      </div>
+      <div className="planner-regeneration-metrics">
+        <span><strong>{summary.campaigns}</strong> active campaigns</span>
+        <span><strong>{summary.added}</strong> added</span>
+        <span><strong>{summary.moved}</strong> moved</span>
+        <span><strong>{summary.removed}</strong> removed</span>
+        <span><strong>{summary.preserved}</strong> protected</span>
+        <span className={summary.conflicts ? "has-alert" : ""}><strong>{summary.conflicts}</strong> conflicts</span>
+      </div>
+      {summary.smugglesCleared > 0 && <div className="planner-detail-note is-smuggle"><strong>{summary.smugglesCleared} Smuggle decision{summary.smugglesCleared === 1 ? "" : "s"} will be cleared</strong><p>Dates and hosts may change during regeneration. The resulting same-day opportunities can be reviewed again from Overview.</p></div>}
+      <div className="planner-detail-note"><strong>Operational history stays safe</strong><p>Completed, past, locked, and manually adjusted announcements are preserved. Future automatic announcements removed from a playbook are hidden as skipped history rather than deleted.</p></div>
+      <div className="planner-regeneration-list">
+        {regeneration.items.map((item) => (
+          <div key={item.campaignId}>
+            <LevelBadge level={item.level} />
+            <span><strong>{item.campaignName}</strong><small>Playbook v{item.fromVersion} → v{item.toVersion}</small></span>
+            <small>{item.added} added · {item.moved} moved · {item.removed} removed · {item.preserved} protected</small>
+          </div>
+        ))}
+      </div>
+      <div className="planner-modal-actions">
+        <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button>
+        <button className="planner-button is-primary" disabled={saving || summary.campaigns === 0} onClick={async () => {
+          setSaving(true);
+          try {
+            await onRegenerate(regeneration);
+            onClose();
+          } catch (_error) {
+            setSaving(false);
+          }
+        }}>{saving ? "Regenerating…" : `Regenerate ${summary.campaigns} campaign${summary.campaigns === 1 ? "" : "s"}`}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function PlaybooksView({workspace, canEdit, onSave, onDelete, onRegenerate}) {
   const [selectedId, setSelectedId] = useState(workspace.playbooks[0]?.id || "");
   const selected = workspace.playbooks.find((item) => item.id === selectedId) || workspace.playbooks[0];
   const [draft, setDraft] = useState(() => selected ? structuredClone(selected) : null);
   const [expandedWeeks, setExpandedWeeks] = useState(() => new Set(selected?.weeks?.[0] ? [selected.weeks[0].weekNumber] : []));
   const [newPlaybookOpen, setNewPlaybookOpen] = useState(false);
+  const [regenerationOpen, setRegenerationOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   useEffect(() => {
@@ -1510,6 +1556,13 @@ function PlaybooksView({workspace, canEdit, onSave, onDelete}) {
       setConfirmDelete(false);
     }
   }, [selectedId, selected?.version]);
+  const regeneration = useMemo(() => buildCampaignRegeneration({
+    campaigns: workspace.campaigns,
+    plays: workspace.scheduledPlays,
+    playbooks: workspace.playbooks,
+    capacityRules: workspace.capacityRules,
+    generatedAt: new Date(),
+  }), [workspace]);
   if (!draft) return <EmptyState title="No playbooks" copy="Publish the starter configuration to begin." />;
   const isStarter = isStarterPlaybookId(draft.id);
   const campaignReferences = workspace.campaigns.filter((item) => item.playbookId === draft.id);
@@ -1552,8 +1605,8 @@ function PlaybooksView({workspace, canEdit, onSave, onDelete}) {
       <PageHeading
         eyebrow="Playbook Definitions"
         title="Editable promotion rhythms"
-        copy="Saving creates a new immutable version. Existing campaign schedules stay exactly as generated."
-        actions={canEdit && <div className="planner-heading-action-group"><button className="planner-button is-secondary" onClick={() => setNewPlaybookOpen(true)}>＋ New playbook</button><button className="planner-button is-primary" onClick={() => onSave(draft)}>Save as version {Number(draft.version || 0) + 1}</button></div>}
+        copy="Saving creates a new immutable version. Regenerate active campaigns when you are ready to apply the latest playbooks and scheduling rules."
+        actions={canEdit && <div className="planner-heading-action-group"><button className="planner-button is-secondary" onClick={() => setRegenerationOpen(true)}>↻ Regenerate campaigns</button><button className="planner-button is-secondary" onClick={() => setNewPlaybookOpen(true)}>＋ New playbook</button><button className="planner-button is-primary" onClick={() => onSave(draft)}>Save as version {Number(draft.version || 0) + 1}</button></div>}
       />
       <section className="planner-playbook-layout">
         <aside className="planner-panel planner-playbook-list">
@@ -1623,6 +1676,7 @@ function PlaybooksView({workspace, canEdit, onSave, onDelete}) {
         </div>
       </section>
       {newPlaybookOpen && <NewPlaybookDialog onClose={() => setNewPlaybookOpen(false)} onCreate={async (playbook) => { const saved = await onSave(playbook); setSelectedId(saved.id); setNewPlaybookOpen(false); }} />}
+      {regenerationOpen && <RegenerationDialog regeneration={regeneration} onClose={() => setRegenerationOpen(false)} onRegenerate={onRegenerate} />}
     </>
   );
 }
@@ -2046,6 +2100,23 @@ function PlannerApp({authState}) {
   }} onDelete={async (playbook) => {
     const result = await perform(() => store.deletePlaybook(playbook.id), `${playbook.name} was deleted. Its version history was preserved.`);
     setWorkspace((current) => ({...current, playbooks: current.playbooks.filter((item) => item.id !== playbook.id)}));
+    return result;
+  }} onRegenerate={async (regeneration) => {
+    const result = await perform(
+      () => store.regenerateCampaignSchedules(regeneration),
+      `${regeneration.summary.campaigns} campaign${regeneration.summary.campaigns === 1 ? "" : "s"} regenerated from the current playbooks.`,
+    );
+    const campaignIds = new Set(result.campaigns.map((campaign) => campaign.id));
+    setWorkspace((current) => ({
+      ...current,
+      campaigns: current.campaigns.map((campaign) =>
+        result.campaigns.find((item) => item.id === campaign.id) || campaign,
+      ),
+      scheduledPlays: [
+        ...current.scheduledPlays.filter((play) => !campaignIds.has(play.campaignId)),
+        ...result.plays,
+      ],
+    }));
     return result;
   }} />;
   else if (activeView === "rules") content = <RulesView workspace={workspace} canEdit={canEdit} onSaveRule={async (rule) => {

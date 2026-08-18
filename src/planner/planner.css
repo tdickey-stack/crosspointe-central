@@ -467,6 +467,15 @@ a { text-decoration: none; }
 .planner-preview-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; margin: 13px 0; }
 .planner-preview-metrics > span { display: grid; gap: 3px; padding: 10px; border: 1px solid var(--planner-line); border-radius: 10px; color: var(--planner-muted); font-size: .5rem; }
 .planner-preview-metrics strong { color: #fff; font-size: .92rem; }
+.planner-regeneration-metrics { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 8px; margin: 14px 0; }
+.planner-regeneration-metrics > span { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--planner-line); border-radius: 12px; background: rgba(17,17,19,.42); color: var(--planner-muted); font-size: .51rem; }
+.planner-regeneration-metrics > span.has-alert { border-color: rgba(239,62,45,.28); color: #ffb2aa; }
+.planner-regeneration-metrics strong { color: #fff; font-size: 1rem; }
+.planner-regeneration-list { display: grid; max-height: 310px; gap: 7px; margin-top: 14px; overflow-y: auto; }
+.planner-regeneration-list > div { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 11px 13px; border: 1px solid var(--planner-line); border-radius: 12px; background: rgba(17,17,19,.38); }
+.planner-regeneration-list > div > span { display: grid; min-width: 0; gap: 3px; }
+.planner-regeneration-list strong { overflow: hidden; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
+.planner-regeneration-list small { color: var(--planner-muted); font-size: .52rem; }
 .planner-preview-list, .planner-campaign-play-list { display: grid; max-height: 390px; gap: 6px; overflow-y: auto; padding-right: 4px; }
 .planner-detail-hero { display: flex; align-items: center; gap: 12px; padding: 16px; border: 1px solid var(--planner-line); border-radius: 14px; background: rgba(17,17,19,.45); }
 .planner-detail-hero > div { display: grid; flex: 1; gap: 4px; }
@@ -623,6 +632,9 @@ a { text-decoration: none; }
   .planner-calendar-brief-play-list { grid-template-columns: 1fr; }
   .planner-smuggle-note-heading { flex-direction: column; gap: 8px; }
   .planner-timeliness-card dl, .planner-preview-metrics, .planner-inventory-summary { grid-template-columns: 1fr 1fr; }
+  .planner-regeneration-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .planner-regeneration-list > div { grid-template-columns: auto minmax(0,1fr); }
+  .planner-regeneration-list > div > small { grid-column: 2; }
   .planner-inventory-row-header { grid-template-columns: auto minmax(0,1fr) auto; }
   .planner-inventory-row-header > .planner-text-button { grid-column: 2 / -1; justify-self: start; }
   .planner-inventory-row-controls { grid-template-columns: 1fr; }

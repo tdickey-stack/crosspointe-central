@@ -374,6 +374,53 @@ test("valid updates cannot bypass validators or mutate immutable history", async
   await assertFails(capacityRef.update({typicalCapacity: 4, injectedRole: "admin", updatedByUid: "editor", updatedAt: serverTime()}));
 });
 
+test("regeneration can advance generated schedules but cannot rewrite protected announcements", async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const playbookRef = db.doc("centralPromotionPlaybooks/level-4-standard");
+  const campaignRef = db.doc("centralPromotionCampaigns/campaign-a");
+  const generatedRef = db.doc("centralPromotionScheduledPlays/generated-play");
+  const manualRef = db.doc("centralPromotionScheduledPlays/manual-play");
+  const lockedRef = db.doc("centralPromotionScheduledPlays/locked-play");
+  const completedRef = db.doc("centralPromotionScheduledPlays/completed-play");
+  const smuggleRef = db.doc("centralPromotionScheduledPlays/smuggle-play");
+  await assertSucceeds(playbookRef.set({...playbookPayload(), currentVersion: 2}));
+  await assertSucceeds(campaignRef.set(campaignPayload()));
+  await assertSucceeds(generatedRef.set(scheduledPlayPayload()));
+  await assertSucceeds(manualRef.set({...scheduledPlayPayload(), manuallyAdjusted: true}));
+  await assertSucceeds(lockedRef.set({...scheduledPlayPayload(), locked: true}));
+  await assertSucceeds(completedRef.set({...scheduledPlayPayload(), status: "completed"}));
+  await assertSucceeds(smuggleRef.set({...scheduledPlayPayload(), manuallyAdjusted: true, smuggle: {
+    hostCampaignId: "campaign-a",
+    hostScheduledPlayId: "smuggle-play",
+    beneficiaryCampaignId: "campaign-b",
+    beneficiaryName: "Guest Campaign",
+    strategy: "SMUGGLE",
+  }}));
+  await assertSucceeds(campaignRef.update({
+    playbookVersion: 2,
+    recommendedStartDate: date("2026-10-03"),
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  const regeneratedFields = {
+    playbookVersion: 2,
+    originalScheduledDate: date("2026-10-09"),
+    scheduledDate: date("2026-10-09"),
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  };
+  await assertSucceeds(generatedRef.update(regeneratedFields));
+  await assertSucceeds(smuggleRef.update({...regeneratedFields, manuallyAdjusted: false, smuggle: null}));
+  await assertFails(manualRef.update({...regeneratedFields, manuallyAdjusted: false}));
+  await assertFails(lockedRef.update({...regeneratedFields, locked: false}));
+  await assertFails(completedRef.update({...regeneratedFields, status: "scheduled"}));
+  await assertFails(campaignRef.update({
+    playbookVersion: 1,
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+});
+
 test("playbook versions remain immutable while editors can atomically delete a campaign and its plays", async () => {
   const db = environment.authenticatedContext("editor").firestore();
   const versionRef = db.doc("centralPromotionPlaybookVersions/level-4-standard_v1");

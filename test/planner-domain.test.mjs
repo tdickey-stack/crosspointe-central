@@ -6,6 +6,7 @@ import {
   allocateLevel4SocialSlots,
   applySmuggle,
   buildSmuggleRelationships,
+  buildCampaignRegeneration,
   calculateTimeliness,
   cancelSmuggle,
   ensureLevel2StandingLane,
@@ -75,7 +76,7 @@ test("normal on-time campaign generates every play", () => {
   assert.equal(result.campaign.isOnTime, true);
 });
 
-test("event-week promotions stop at a midweek event deadline", () => {
+test("final phase is a complete seven-day window before a midweek event", () => {
   const definition = {
     id: "midweek-event",
     level: 3,
@@ -97,8 +98,47 @@ test("event-week promotions stop at a midweek event deadline", () => {
     playbook: definition,
     generatedAt: new Date("2026-08-01T12:00:00-05:00"),
   });
-  assert.deepEqual(result.plays.map((play) => play.templatePlayId), ["sunday", "monday"]);
-  assert.ok(result.plays.every((play) => play.scheduledDate <= "2026-08-17"));
+  assert.deepEqual(result.plays.map((play) => play.templatePlayId), ["sunday", "monday", "wednesday"]);
+  assert.deepEqual(result.plays.map((play) => play.scheduledDate), ["2026-08-16", "2026-08-10", "2026-08-12"]);
+  assert.ok(result.plays.every((play) => play.scheduledDate < "2026-08-17"));
+});
+
+test("every event weekday receives all seven fixed weekdays in its final phase", () => {
+  const definition = {
+    id: "weekday-matrix",
+    level: 1,
+    version: 1,
+    durationWeeks: 1,
+    campaignType: "standard",
+    weeks: [{
+      weekNumber: 1,
+      phase: "Sprint",
+      plays: Array.from({length: 7}, (_value, dayOfWeek) => ({
+        id: `day-${dayOfWeek}`,
+        playType: `Day ${dayOfWeek}`,
+        channel: "Test",
+        resourceId: `test-${dayOfWeek}`,
+        dayOfWeek,
+        eligibleWeekdays: [dayOfWeek],
+        lateBehavior: "SKIP",
+      })),
+    }],
+  };
+  Array.from({length: 7}, (_value, offset) => addDays("2026-08-16", offset))
+    .forEach((eventDate) => {
+      const result = generateCampaignSchedule({
+        campaign: campaign({eventDate}),
+        playbook: definition,
+        generatedAt: new Date("2026-07-01T12:00:00-05:00"),
+      });
+      assert.equal(result.plays.length, 7);
+      assert.deepEqual(
+        new Set(result.plays.map((play) => new Date(`${play.scheduledDate}T12:00:00Z`).getUTCDay())),
+        new Set([0, 1, 2, 3, 4, 5, 6]),
+      );
+      assert.ok(result.plays.every((play) => play.scheduledDate >= addDays(eventDate, -7)));
+      assert.ok(result.plays.every((play) => play.scheduledDate < eventDate));
+    });
 });
 
 test("two-week campaign submitted during week two does not compress week one", () => {
@@ -594,13 +634,97 @@ test("playbook revision and manual move do not mutate prior templates or schedul
   assert.notEqual(moved.scheduledDate, originalDate);
 });
 
-test("timeliness stores days and weeks late from the recommended Sunday", () => {
+test("regeneration applies the latest playbook while preserving protected history", () => {
+  const originalPlaybook = playbook("level-4-standard");
+  const original = generateCampaignSchedule({
+    campaign: campaign({eventDate: "2026-10-17"}),
+    playbook: originalPlaybook,
+    generatedAt: new Date("2026-09-01T12:00:00-05:00"),
+  });
+  const latest = structuredClone(originalPlaybook);
+  latest.version = 2;
+  latest.weeks[0].plays[0].playType = "Updated Promotion";
+  latest.weeks[1].plays.push({
+    id: "added-promotion",
+    playType: "Added Promotion",
+    channel: "Social",
+    resourceId: "social-content",
+    dayOfWeek: 4,
+    eligibleWeekdays: [4],
+    lateBehavior: "SKIP",
+    requirement: "required",
+    supportsSmuggle: false,
+  });
+  const protectedPlay = {...original.plays[0], manuallyAdjusted: true, scheduledDate: addDays(original.plays[0].scheduledDate, 1)};
+  const result = buildCampaignRegeneration({
+    campaigns: [original.campaign],
+    plays: [protectedPlay, ...original.plays.slice(1)],
+    playbooks: [latest],
+    capacityRules: [],
+    generatedAt: new Date("2026-09-02T12:00:00-05:00"),
+  });
+  assert.equal(result.campaigns[0].playbookVersion, 2);
+  assert.equal(result.plays.find((item) => item.id === protectedPlay.id).scheduledDate, protectedPlay.scheduledDate);
+  assert.ok(result.plays.some((item) => item.templatePlayId === "added-promotion"));
+  assert.equal(result.summary.preserved, 1);
+  assert.equal(result.summary.added, 1);
+  const retry = buildCampaignRegeneration({
+    campaigns: result.campaigns,
+    plays: result.plays,
+    playbooks: [latest],
+    capacityRules: [],
+    generatedAt: new Date("2026-09-02T12:00:00-05:00"),
+  });
+  assert.equal(retry.summary.added, 0);
+  assert.equal(retry.summary.moved, 0);
+  assert.equal(retry.summary.removed, 0);
+});
+
+test("regeneration clears future Smuggle decisions so new dates can be reviewed", () => {
+  const definition = playbook("level-4-standard");
+  const host = generateCampaignSchedule({
+    campaign: campaign({id: "host", name: "Host", level: 2}),
+    playbook: definition,
+    generatedAt: new Date("2026-09-01T12:00:00-05:00"),
+  });
+  const guest = generateCampaignSchedule({
+    campaign: campaign({id: "guest", name: "Guest", level: 4}),
+    playbook: definition,
+    generatedAt: new Date("2026-09-01T12:00:00-05:00"),
+  });
+  const hostPlay = host.plays[0];
+  const guestPlay = guest.plays[0];
+  const plays = [
+    {...hostPlay, manuallyAdjusted: true, smuggle: {
+      hostCampaignId: "host",
+      hostScheduledPlayId: hostPlay.id,
+      beneficiaryCampaignId: "guest",
+      beneficiaryName: "Guest",
+      strategy: "SMUGGLE",
+    }},
+    ...host.plays.slice(1),
+    ...guest.plays,
+  ];
+  const result = buildCampaignRegeneration({
+    campaigns: [host.campaign, guest.campaign],
+    plays,
+    playbooks: [definition],
+    capacityRules: [],
+    generatedAt: new Date("2026-09-02T12:00:00-05:00"),
+  });
+  assert.equal(result.summary.smugglesCleared, 1);
+  assert.equal(result.plays.find((item) => item.id === hostPlay.id).smuggle, null);
+  assert.equal(result.plays.find((item) => item.id === hostPlay.id).manuallyAdjusted, false);
+  assert.equal(result.plays.find((item) => item.id === guestPlay.id).status, "scheduled");
+});
+
+test("timeliness stores days and weeks late from the rolling campaign window", () => {
   const result = calculateTimeliness({
     eventDate: "2026-10-17",
     durationWeeks: 2,
     submittedAt: "2026-10-14T10:00:00-05:00",
   });
-  assert.equal(result.recommendedStartDate, "2026-10-04");
-  assert.equal(result.daysLate, 10);
+  assert.equal(result.recommendedStartDate, "2026-10-03");
+  assert.equal(result.daysLate, 11);
   assert.equal(result.weeksLate, 1);
 });

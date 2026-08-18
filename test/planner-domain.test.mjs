@@ -7,6 +7,7 @@ import {
   applySmuggle,
   buildSmuggleRelationships,
   calculateTimeliness,
+  cancelSmuggle,
   ensureLevel2StandingLane,
   evaluateCapacity,
   generateCampaignSchedule,
@@ -357,6 +358,55 @@ test("Smuggle recommends Level 4 before Level 5 and never applies automatically"
   const applied = applySmuggle(host, recommendations[0]);
   assert.equal(applied.smuggle.beneficiaryCampaignId, "l4");
   assert.equal(host.smuggle, null);
+});
+
+test("cancelling a Smuggle restores the lower-level announcement and host choices", () => {
+  const guest = {
+    id: "guest-stage",
+    campaignId: "guest",
+    campaignName: "Ladies Bunco Night",
+    campaignLevel: 4,
+    playType: "Stage Announcement",
+    resourceId: "stage-announcement",
+    scheduledDate: "2026-10-11",
+    status: "conflict",
+  };
+  const host = {
+    id: "host-stage",
+    campaignId: "host",
+    campaignName: "Big Small Group Relaunch",
+    campaignLevel: 1,
+    playType: "Stage Announcement",
+    resourceId: "stage-announcement",
+    scheduledDate: "2026-10-11",
+    supportsSmuggle: true,
+    status: "scheduled",
+    smuggle: {
+      hostCampaignId: "host",
+      hostScheduledPlayId: "host-stage",
+      beneficiaryCampaignId: "guest",
+      beneficiaryName: "Ladies Bunco Night",
+      strategy: "SMUGGLE",
+    },
+  };
+  const campaigns = [
+    campaign({id: "host", name: "Big Small Group Relaunch", level: 1, eventDate: "2026-10-25"}),
+    campaign({id: "guest", name: "Ladies Bunco Night", level: 4, eventDate: "2026-10-20"}),
+  ];
+
+  assert.equal(buildSmuggleRelationships({plays: [host, guest], campaigns}).length, 1);
+  const restoredHost = cancelSmuggle(host);
+  assert.equal(restoredHost.smuggle, null);
+  assert.notEqual(restoredHost, host);
+  assert.equal(host.smuggle.beneficiaryCampaignId, "guest");
+  assert.equal(buildSmuggleRelationships({plays: [restoredHost, guest], campaigns}).length, 0);
+  const opportunities = recommendSmuggleOpportunities({
+    hostPlays: [restoredHost, guest],
+    campaigns,
+    now: new Date("2026-10-01T12:00:00-05:00"),
+  });
+  assert.equal(opportunities.length, 1);
+  assert.equal(opportunities[0].beneficiaryScheduledPlayId, guest.id);
 });
 
 test("Smuggle offers every eligible Level 1 through Level 3 host promotion", () => {

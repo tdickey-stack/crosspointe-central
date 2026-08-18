@@ -739,6 +739,17 @@ export function applySmuggle(play, opportunity) {
   };
 }
 
+export function cancelSmuggle(play) {
+  if (!play?.id) throw new Error("A Smuggle host promotion is required.");
+  if (!play.smuggle?.beneficiaryCampaignId) {
+    throw new Error("This promotion does not have an active Smuggle.");
+  }
+  return {
+    ...play,
+    smuggle: null,
+  };
+}
+
 export function skipPromotion(play) {
   if (!play?.id) throw new Error("A scheduled promotion is required.");
   return {

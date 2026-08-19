@@ -87,6 +87,28 @@ function looksLikeEmailAddress_(value) {
   );
 }
 
+/**
+ * Confirms an invite is being claimed by its exact verified Google identity.
+ * @param {object} decodedToken Verified Firebase authentication token.
+ * @param {string} invitedEmail Email address stored on the invitation.
+ * @return {boolean} Whether the signed-in identity can claim the invitation.
+ */
+function isVerifiedGoogleInviteIdentity_(decodedToken, invitedEmail) {
+  const tokenEmail = normalizeAdminEmail_(decodedToken && decodedToken.email);
+  const expectedEmail = normalizeAdminEmail_(invitedEmail);
+  const signInProvider = String(
+      decodedToken && decodedToken.firebase &&
+      decodedToken.firebase.sign_in_provider || "",
+  ).trim();
+
+  return Boolean(
+      looksLikeEmailAddress_(tokenEmail) &&
+      tokenEmail === expectedEmail &&
+      decodedToken && decodedToken.email_verified === true &&
+      signInProvider === "google.com",
+  );
+}
+
 function normalizeOptionalBooleanConfigValue_(value) {
   if (value === true || value === false) {
     return value;
@@ -794,6 +816,7 @@ function getAdminUserManagementStatusCode_(error) {
   if (error.code === "missing-admin-user-target" ||
     error.code === "admin-user-resolve-failed" ||
     error.code === "invalid-admin-email" ||
+    error.code === "external-admin-invite-required" ||
     error.code === "invalid-admin-permissions" ||
     error.code === "self-disable-forbidden" ||
     error.code === "self-delete-forbidden" ||
@@ -803,7 +826,8 @@ function getAdminUserManagementStatusCode_(error) {
     return 400;
   }
 
-  if (error.code === "admin-invite-email-mismatch") {
+  if (error.code === "admin-invite-email-mismatch" ||
+    error.code === "admin-invite-google-account-required") {
     return 403;
   }
 
@@ -1078,6 +1102,7 @@ export {
 
   isLocalCentralHostname_,
   isTruthyValue_,
+  isVerifiedGoogleInviteIdentity_,
 
   looksLikeEmailAddress_,
   looksLikeHtml_,

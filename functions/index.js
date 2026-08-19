@@ -55,6 +55,7 @@ import {
 
   isLocalCentralHostname_,
   isTruthyValue_,
+  isVerifiedGoogleInviteIdentity_,
 
   looksLikeEmailAddress_,
   looksLikeHtml_,
@@ -6897,10 +6898,21 @@ async function upsertAdminUserRecord_(manager, requestBody, request) {
       existingData.email,
   );
 
-  if (nextEmail && !isAllowedCentralAdminEmail_(nextEmail)) {
+  if (nextEmail && !looksLikeEmailAddress_(nextEmail)) {
     throw createAdminUserManagementError_(
         "invalid-admin-email",
-        "This email address is not currently allowed to sign in to the admin dashboard.",
+        "Enter a valid email address for this Central user.",
+    );
+  }
+
+  if (nextEmail && !isAllowedCentralAdminEmail_(nextEmail) &&
+    !userSnapshot.exists) {
+    throw createAdminUserManagementError_(
+        "external-admin-invite-required",
+        [
+          "Outside accounts must be added by email invitation before",
+          "their access can be managed.",
+        ].join(" "),
     );
   }
 
@@ -6978,10 +6990,10 @@ async function upsertPendingAdminInvite_(
     );
   }
 
-  if (!isAllowedCentralAdminEmail_(requestedEmail)) {
+  if (!looksLikeEmailAddress_(requestedEmail)) {
     throw createAdminUserManagementError_(
         "invalid-admin-email",
-        "This email address is not currently allowed to sign in to the admin dashboard.",
+        "Enter a valid email address before sending this Central invitation.",
     );
   }
 
@@ -7188,13 +7200,6 @@ async function claimAdminInvite_(decodedToken, requestBody) {
     );
   }
 
-  if (!isAllowedCentralAdminEmail_(email)) {
-    throw createAdminUserManagementError_(
-        "admin-email-required",
-        "Use a CrossPointe account or an explicitly allowed tester account to claim this invite.",
-    );
-  }
-
   const inviteRef = firestore.doc(getCentralAdminInviteDocPath_(inviteId));
   const tokenHash = hashCentralOpaqueToken_(token);
 
@@ -7222,6 +7227,19 @@ async function claimAdminInvite_(decodedToken, requestBody) {
       throw createAdminUserManagementError_(
           "admin-invite-email-mismatch",
           "Sign in with the Google account that received this invite before confirming access.",
+      );
+    }
+
+    if (!isVerifiedGoogleInviteIdentity_(
+        decodedToken,
+        inviteData.invitedEmail,
+    )) {
+      throw createAdminUserManagementError_(
+          "admin-invite-google-account-required",
+          [
+            "Confirm this invite with a verified Google account using the",
+            "exact invited email address.",
+          ].join(" "),
       );
     }
 

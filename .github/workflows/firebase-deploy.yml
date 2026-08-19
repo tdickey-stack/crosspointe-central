@@ -62,6 +62,9 @@ jobs:
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
 
+      - name: Test admin access and invitations
+        run: pnpm run test:admin-access
+
       - name: Test analytics
         run: pnpm run test:analytics
 
@@ -124,6 +127,9 @@ jobs:
 
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
+
+      - name: Test admin access and invitations
+        run: pnpm run test:admin-access
 
       - name: Test analytics
         run: pnpm run test:analytics

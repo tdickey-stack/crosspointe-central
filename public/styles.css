@@ -178,6 +178,10 @@ a {
   box-shadow: var(--cp-overlay-shadow);
 }
 
+.central-app-navigation-panel[hidden] {
+  display: none;
+}
+
 .central-app-navigation-panel a {
   display: flex;
   align-items: center;

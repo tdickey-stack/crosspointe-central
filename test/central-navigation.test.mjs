@@ -8,6 +8,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const appSource = fs.readFileSync(path.join(projectRoot, "public/app.js"), "utf8");
 const adminSource = fs.readFileSync(path.join(projectRoot, "public/admin.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(projectRoot, "public/index.html"), "utf8");
+const stylesSource = fs.readFileSync(path.join(projectRoot, "public/styles.css"), "utf8");
 const plannerSource = fs.readFileSync(path.join(projectRoot, "src/planner/main.jsx"), "utf8");
 const studioSource = fs.readFileSync(path.join(projectRoot, "src/studio/main.jsx"), "utf8");
 
@@ -27,6 +28,14 @@ test("Central workspace menu limits Studio and Planner to usable access", () => 
   assert.match(appSource, /\{href: "\/planner", label: "Planner"\}/);
   assert.match(appSource, /\["view", "propose", "edit", "approve", "admin"\]/);
   assert.match(appSource, /pageAccessKey === "planner"/);
+});
+
+test("Central workspace menu visually honors its hidden state", () => {
+  assert.match(appSource, /panelEl\.hidden = !centralAppNavigationOpen/);
+  assert.match(
+      stylesSource,
+      /\.central-app-navigation-panel\[hidden\]\s*\{\s*display:\s*none;/,
+  );
 });
 
 test("Admin navigation provides a permission-aware Planner destination", () => {

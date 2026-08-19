@@ -431,10 +431,61 @@ function StatusPill({children, tone = ""}) {
   );
 }
 
+function StudioNavigationMenu() {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const closeMenu = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", closeMenu);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeMenu);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
+  return (
+    <div className="studio-navigation-menu" ref={menuRef}>
+      <button
+        className="studio-navigation-button"
+        type="button"
+        aria-label="Open Studio navigation"
+        aria-expanded={open}
+        aria-controls="studio-navigation-links"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span aria-hidden="true">☰</span>
+      </button>
+      {open ? (
+        <nav
+          className="studio-navigation-links"
+          id="studio-navigation-links"
+          aria-label="Central navigation"
+        >
+          <a href="/" onClick={() => setOpen(false)}>Central</a>
+          <a href="/admin" onClick={() => setOpen(false)}>Admin</a>
+          <a href="/planner" onClick={() => setOpen(false)}>Planner</a>
+        </nav>
+      ) : null}
+    </div>
+  );
+}
+
 function StudioHeader({authState, view, onHome, saveState}) {
   return (
     <header className="studio-app-header">
-      <StudioLogo />
+      <div className="studio-header-leading">
+        <StudioNavigationMenu />
+        <StudioLogo />
+      </div>
       <div className="studio-header-context">
         {view === "editor" ? (
           <button className="studio-back-button" onClick={onHome}>
@@ -5376,6 +5427,7 @@ function EventStudioEditor({
   const [selectedField, setSelectedField] = useState("");
   const [activePanel, setActivePanel] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const eventMenuRef = useRef(null);
   const [sideSheet, setSideSheet] = useState(
     project.name.startsWith("Untitled ") ? "brief" : "",
   );
@@ -5578,8 +5630,17 @@ function EventStudioEditor({
       setSideSheet("");
       setSelectedField("");
     };
+    const closeMenuOnOutsideClick = (event) => {
+      if (eventMenuRef.current && !eventMenuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    };
     window.addEventListener("keydown", closeTransientUi);
-    return () => window.removeEventListener("keydown", closeTransientUi);
+    document.addEventListener("mousedown", closeMenuOnOutsideClick);
+    return () => {
+      window.removeEventListener("keydown", closeTransientUi);
+      document.removeEventListener("mousedown", closeMenuOnOutsideClick);
+    };
   }, []);
 
   const runExport = async (filenameBase = "") => {
@@ -5637,7 +5698,7 @@ function EventStudioEditor({
     >
       <header className="studio-event-editor-topbar">
         <div className="studio-event-editor-menu-area">
-          <div className="studio-event-menu-wrap">
+          <div className="studio-event-menu-wrap" ref={eventMenuRef}>
             <button
               className="studio-event-menu-button"
               type="button"
@@ -5653,6 +5714,19 @@ function EventStudioEditor({
                   <span>{template.name}</span>
                   <strong>{project.name}</strong>
                 </div>
+                <a href="/" role="menuitem" onClick={() => setMenuOpen(false)}>
+                  <span aria-hidden="true">⌂</span>
+                  Central
+                </a>
+                <a href="/admin" role="menuitem" onClick={() => setMenuOpen(false)}>
+                  <span aria-hidden="true">⚙</span>
+                  Admin
+                </a>
+                <a href="/planner" role="menuitem" onClick={() => setMenuOpen(false)}>
+                  <span aria-hidden="true">□</span>
+                  Planner
+                </a>
+                <div className="studio-event-menu-divider" />
                 <button
                   type="button"
                   role="menuitem"

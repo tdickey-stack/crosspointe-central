@@ -3086,7 +3086,7 @@ async function queueCentralAdminInviteNotification_(inviteData) {
     throw new Error("Admin invite emails need a valid recipient.");
   }
 
-  const subject = "You're Invited: CrossPointe Central Admin";
+  const subject = "You're Invited: CrossPointe Central";
   const messageText = buildCentralAdminInviteEmailText_(inviteData);
   const messageHtml = buildCentralAdminInviteEmailHtml_(inviteData);
   const sendResult = await sendCentralEmail_({
@@ -3347,7 +3347,7 @@ function buildCentralAdminInviteEmailText_(inviteData) {
       });
   const expiresAt = formatCentralEmailDateTime_(invite.inviteExpiresAt);
   const lines = [
-    "You've been invited to be an admin in CrossPointe Central.",
+    "You've been invited to CrossPointe Central.",
     "",
     "Confirm your account",
     String(invite.inviteUrl || "").trim(),
@@ -3378,10 +3378,10 @@ function buildCentralAdminInviteEmailHtml_(inviteData) {
       });
 
   return buildCentralEmailHtml_({
-    preheader: "You've been invited to be an admin in CrossPointe Central.",
-    title: "You're Invited To Central Admin",
+    preheader: "You've been invited to CrossPointe Central.",
+    title: "You're Invited To Central",
     lead:
-      "Your team prepared admin access for you in CrossPointe Central. Confirm your account to finish connecting it to your Google sign-in.",
+      "Your team prepared workspace access for you in CrossPointe Central. Confirm your account to finish connecting it to your Google sign-in.",
     sections: [
       {
         title: "Granted Access",
@@ -7312,7 +7312,7 @@ async function claimAdminInvite_(decodedToken, requestBody) {
     return {
       uid: String(decodedToken.uid || "").trim(),
       inviteId: inviteId,
-      message: "Your Central Admin invite was confirmed.",
+      message: "Your CrossPointe Central workspace invite was confirmed.",
     };
   });
 }

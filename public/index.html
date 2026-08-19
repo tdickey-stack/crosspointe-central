@@ -138,7 +138,11 @@
               if (!isAdminRoute) {
                 return loadFirebaseScript_(
                     "/__/firebase/11.10.0/firebase-messaging-compat.js",
-                );
+                ).then(function() {
+                  return loadFirebaseScript_(
+                      "/__/firebase/11.10.0/firebase-firestore-compat.js",
+                  );
+                });
               }
 
               return loadFirebaseScript_(

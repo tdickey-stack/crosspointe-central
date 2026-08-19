@@ -436,7 +436,18 @@ function Sidebar({activeView, setActiveView, open, close}) {
             ))}
           </nav>
         </div>
-        <a href="/" className="planner-central-link">← Back to Central</a>
+        <div className="planner-sidebar-footer">
+          <span className="planner-sidebar-label">Central tools</span>
+          <nav className="planner-tool-links" aria-label="Central tools">
+            <a href="/admin" className="planner-tool-link">
+              <span aria-hidden="true">⚙</span>Admin
+            </a>
+            <a href="/studio" className="planner-tool-link">
+              <span aria-hidden="true">✦</span>Studio
+            </a>
+          </nav>
+          <a href="/" className="planner-central-link">← Back to Central</a>
+        </div>
       </aside>
     </>
   );

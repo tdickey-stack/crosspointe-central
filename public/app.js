@@ -115,6 +115,12 @@ var centralLoaderBootStartedAt = 0;
 var centralLoaderVisible = false;
 var centralHostedWhatsNewConfig = null;
 var centralHostedWhatsNewConfigPromise = null;
+var centralAppNavigationInitialized = false;
+var centralAppNavigationAuthGeneration = 0;
+var centralAppNavigationOpen = false;
+var CENTRAL_ADMIN_USER_COLLECTION_PATH = "centralAdmin/root/users";
+var CENTRAL_ADMIN_ALLOWED_EMAIL_DOMAINS = ["crosspointe.tv"];
+var CENTRAL_ADMIN_ALLOWED_EMAILS = ["tylerdickey17@gmail.com"];
 var CENTRAL_LOADER_COLLAPSE_MS = 680;
 var CENTRAL_LOADER_DOOR_MS = 1525;
 var SUNDAY_STREAM_MINI_DEFAULT_WIDTH = 420;
@@ -134,7 +140,200 @@ if (!CENTRAL_IS_ADMIN_ROUTE) {
   document.addEventListener("DOMContentLoaded", function() {
     initializeCentralTheme_();
     bindCalendarMenuListeners_();
+    initializeCentralAppNavigation_();
     bootCentral_();
+  });
+}
+
+function initializeCentralAppNavigation_() {
+  if (centralAppNavigationInitialized) return;
+  centralAppNavigationInitialized = true;
+
+  document.addEventListener("click", function(event) {
+    var navigationEl = document.getElementById("central-app-navigation");
+    if (navigationEl && !navigationEl.contains(event.target)) {
+      setCentralAppNavigationOpen_(false);
+    }
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+      setCentralAppNavigationOpen_(false);
+    }
+  });
+
+  var ready = window.CENTRAL_FIREBASE_AUTH_READY || Promise.resolve();
+  ready.then(function() {
+    if (!window.firebase || !window.firebase.auth || !window.firebase.firestore) {
+      return;
+    }
+
+    var auth = window.firebase.auth();
+    var firestore = window.firebase.firestore();
+    auth.onAuthStateChanged(function(user) {
+      var requestGeneration = ++centralAppNavigationAuthGeneration;
+      if (!user || !user.uid) {
+        renderCentralAppNavigation_(null, null);
+        return;
+      }
+
+      firestore.doc(CENTRAL_ADMIN_USER_COLLECTION_PATH + "/" + user.uid).get()
+          .then(function(snapshot) {
+            if (requestGeneration !== centralAppNavigationAuthGeneration) {
+              return;
+            }
+
+            renderCentralAppNavigation_(user, snapshot.exists ? snapshot.data() : null);
+          })
+          .catch(function() {
+            if (requestGeneration === centralAppNavigationAuthGeneration) {
+              renderCentralAppNavigation_(null, null);
+            }
+          });
+    });
+  }).catch(function() {
+    renderCentralAppNavigation_(null, null);
+  });
+}
+
+function renderCentralAppNavigation_(user, userRecord) {
+  var existingNavigationEl = document.getElementById("central-app-navigation");
+  var pageAccess = userRecord && userRecord.pageAccess;
+
+  if (!isActiveCentralAdminNavigationUser_(userRecord) ||
+    !hasAnyCentralNavigationPermission_(pageAccess)) {
+    centralAppNavigationOpen = false;
+    if (existingNavigationEl) {
+      existingNavigationEl.remove();
+    }
+    return;
+  }
+
+  var destinations = [];
+  if (canOpenCentralAdmin_(user)) {
+    destinations.push({href: "/admin", label: "Admin"});
+  }
+  if (getCentralNavigationPermission_(pageAccess, "studio") !== "none") {
+    destinations.push({href: "/studio", label: "Studio"});
+  }
+  if (getCentralNavigationPermission_(pageAccess, "planner") !== "none") {
+    destinations.push({href: "/planner", label: "Planner"});
+  }
+
+  if (!destinations.length) {
+    centralAppNavigationOpen = false;
+    if (existingNavigationEl) {
+      existingNavigationEl.remove();
+    }
+    return;
+  }
+
+  var navigationEl = existingNavigationEl || document.createElement("nav");
+  navigationEl.id = "central-app-navigation";
+  navigationEl.className = "central-app-navigation";
+  navigationEl.setAttribute("aria-label", "Central workspaces");
+  navigationEl.innerHTML = [
+    "<button type=\"button\" class=\"central-app-navigation-toggle\"",
+    " aria-label=\"Open workspace navigation\" aria-controls=\"central-app-navigation-panel\"",
+    " aria-expanded=\"false\">",
+    "<span></span><span></span><span></span>",
+    "</button>",
+    "<div id=\"central-app-navigation-panel\" class=\"central-app-navigation-panel\" hidden>",
+    destinations.map(function(destination) {
+      return "<a href=\"" + escapeAttr(destination.href) + "\">" +
+        escapeHtml(destination.label) + "</a>";
+    }).join(""),
+    "</div>",
+  ].join("");
+
+  if (!existingNavigationEl) {
+    document.body.appendChild(navigationEl);
+  }
+
+  navigationEl.querySelector(".central-app-navigation-toggle").addEventListener(
+      "click",
+      function() {
+        setCentralAppNavigationOpen_(!centralAppNavigationOpen);
+      },
+  );
+  setCentralAppNavigationOpen_(false);
+}
+
+function setCentralAppNavigationOpen_(isOpen) {
+  centralAppNavigationOpen = !!isOpen;
+  var navigationEl = document.getElementById("central-app-navigation");
+  if (!navigationEl) return;
+
+  var buttonEl = navigationEl.querySelector(".central-app-navigation-toggle");
+  var panelEl = navigationEl.querySelector(".central-app-navigation-panel");
+  if (!buttonEl || !panelEl) return;
+
+  navigationEl.classList.toggle("is-open", centralAppNavigationOpen);
+  buttonEl.setAttribute("aria-expanded", centralAppNavigationOpen ? "true" : "false");
+  buttonEl.setAttribute(
+      "aria-label",
+      centralAppNavigationOpen ? "Close workspace navigation" :
+        "Open workspace navigation",
+  );
+  panelEl.hidden = !centralAppNavigationOpen;
+}
+
+function isActiveCentralAdminNavigationUser_(userRecord) {
+  return !!(userRecord && userRecord.active === true);
+}
+
+function hasAnyCentralNavigationPermission_(pageAccess) {
+  if (!pageAccess || typeof pageAccess !== "object") return false;
+
+  return Object.keys(pageAccess).some(function(key) {
+    return isUsableCentralNavigationPermission_(pageAccess[key]);
+  });
+}
+
+function getCentralNavigationPermission_(pageAccess, pageAccessKey) {
+  if (!pageAccess || typeof pageAccess !== "object") return "none";
+
+  if (Object.prototype.hasOwnProperty.call(pageAccess, pageAccessKey)) {
+    return normalizeCentralNavigationPermission_(pageAccess[pageAccessKey]);
+  }
+
+  if (pageAccessKey === "studio") {
+    return normalizeCentralNavigationPermission_(pageAccess.settings);
+  }
+
+  if (pageAccessKey === "planner") {
+    if (Object.prototype.hasOwnProperty.call(pageAccess, "studio")) {
+      return normalizeCentralNavigationPermission_(pageAccess.studio);
+    }
+
+    return normalizeCentralNavigationPermission_(pageAccess.settings);
+  }
+
+  return "none";
+}
+
+function normalizeCentralNavigationPermission_(value) {
+  return isUsableCentralNavigationPermission_(value) ?
+    String(value).trim().toLowerCase() :
+    "none";
+}
+
+function isUsableCentralNavigationPermission_(value) {
+  return ["view", "propose", "edit", "approve", "admin"].indexOf(
+      String(value || "").trim().toLowerCase(),
+  ) !== -1;
+}
+
+function canOpenCentralAdmin_(user) {
+  var email = String(user && user.email || "").trim().toLowerCase();
+  if (!email) return false;
+
+  if (CENTRAL_ADMIN_ALLOWED_EMAILS.indexOf(email) !== -1) {
+    return true;
+  }
+
+  return CENTRAL_ADMIN_ALLOWED_EMAIL_DOMAINS.some(function(domain) {
+    return email.endsWith("@" + domain);
   });
 }
 

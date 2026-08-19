@@ -113,3 +113,34 @@ test("the admin flow accepts outside invitees without opening manager access", (
       /async function verifyAdminUserManagerAccess_\([\s\S]*?isAllowedCentralAdminEmail_\(email\)/,
   );
 });
+
+test("an invited external user reaches only their granted workspace overview", () => {
+  const adminSource = fs.readFileSync(
+      path.join(projectRoot, "public/admin.js"),
+      "utf8",
+  );
+  const backendSource = fs.readFileSync(
+      path.join(projectRoot, "functions/index.js"),
+      "utf8",
+  );
+  const authListenerSource = sourceBetween(
+      adminSource,
+      "adminAuth.onAuthStateChanged(function(user)",
+      "function connectEmulatorsIfNeeded_",
+  );
+  const overviewSource = sourceBetween(
+      adminSource,
+      "function renderOverviewPagePanel_",
+      "function renderOverviewAccessPanel_",
+  );
+
+  assert.match(authListenerSource, /adminState\.userDocPath = getAdminUserDocPath_\(user\.uid\);\s*loadAdminUserDoc_\(\);/);
+  assert.doesNotMatch(authListenerSource, /if \(!adminState\.userEmailAllowed\)/);
+  assert.match(overviewSource, /!isActiveAdminUserRecord_\(\)/);
+  assert.doesNotMatch(overviewSource, /!adminState\.userEmailAllowed/);
+  assert.match(adminSource, /Only the tools granted to you are shown\./);
+  assert.match(adminSource, /No workspace access found/);
+  assert.match(adminSource, /Confirming your Central workspace invitation\./);
+  assert.match(backendSource, /You've been invited to CrossPointe Central\./);
+  assert.doesNotMatch(backendSource, /You've been invited to be an admin in CrossPointe Central\./);
+});

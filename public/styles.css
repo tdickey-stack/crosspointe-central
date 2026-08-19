@@ -107,6 +107,94 @@ a {
   text-decoration: none;
 }
 
+.central-app-navigation {
+  position: fixed;
+  z-index: 1200;
+  left: max(18px, env(safe-area-inset-left));
+  bottom: max(18px, env(safe-area-inset-bottom));
+}
+
+.central-app-navigation-toggle {
+  appearance: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  gap: 4px;
+  border: 1px solid var(--cp-border);
+  border-radius: 50%;
+  color: var(--cp-text-strong);
+  background: var(--cp-surface-elevated);
+  box-shadow: var(--cp-shadow);
+  cursor: pointer;
+}
+
+.central-app-navigation-toggle:hover,
+.central-app-navigation-toggle:focus-visible {
+  border-color: var(--cp-chip-border-active);
+  background: var(--cp-surface);
+  outline: none;
+}
+
+.central-app-navigation-toggle:focus-visible,
+.central-app-navigation-panel a:focus-visible {
+  outline: 3px solid rgba(239, 59, 45, 0.38);
+  outline-offset: 3px;
+}
+
+.central-app-navigation-toggle span {
+  display: block;
+  width: 19px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.central-app-navigation.is-open .central-app-navigation-toggle span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.central-app-navigation.is-open .central-app-navigation-toggle span:nth-child(2) {
+  opacity: 0;
+}
+
+.central-app-navigation.is-open .central-app-navigation-toggle span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.central-app-navigation-panel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  display: grid;
+  min-width: 156px;
+  padding: 8px;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: var(--cp-surface-elevated);
+  box-shadow: var(--cp-overlay-shadow);
+}
+
+.central-app-navigation-panel a {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  color: var(--cp-text-strong);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.central-app-navigation-panel a:hover,
+.central-app-navigation-panel a:focus-visible {
+  background: var(--cp-chip-bg);
+  outline: none;
+}
+
 .central-loader {
   position: fixed;
   inset: 0;

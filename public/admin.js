@@ -211,6 +211,17 @@
       externalRoute: true,
     },
     {
+      id: "planner",
+      label: "Promotion Planner",
+      navLabel: "Planner",
+      route: "/planner",
+      pageAccessKey: "planner",
+      summary: "Plan promotion requests and coordinate the creative work that supports each ministry moment.",
+      collectionPath: "",
+      status: "Planning workspace",
+      externalRoute: true,
+    },
+    {
       id: "sunday",
       label: "Sunday",
       route: "/admin/sunday",
@@ -357,6 +368,7 @@
     {type: "page", id: "bulletin"},
     {type: "page", id: "embeds"},
     {type: "page", id: "studio"},
+    {type: "page", id: "planner"},
     {type: "group", id: "settings"},
     {type: "page", id: "integrations"},
     {type: "page", id: "wayfinder"},
@@ -1447,26 +1459,13 @@
 
         if (!user) {
           adminState.infoMessage = hasAdminInviteQueryParams_() ?
-            "You have a Central Admin invitation waiting. Sign in with the Google account that received the invite to continue." :
+            "You have a Central workspace invitation waiting. Sign in with the Google account that received the invite to continue." :
             "Sign in with your CrossPointe Google account to continue.";
           renderAdmin_();
           return;
         }
 
         adminState.userDocPath = getAdminUserDocPath_(user.uid);
-
-        if (!adminState.userEmailAllowed) {
-          adminState.errorMessage = [
-            "This Google account is signed in, but it is outside the current",
-            "admin allowlist for the admin shell.",
-          ].join(" ");
-          adminState.infoMessage = hasAdminInviteQueryParams_() ?
-            "Sign in with the same invited Google account to finish confirming this admin invite." :
-            "Sign in with a CrossPointe Workspace account or an allowed tester account to continue.";
-          renderAdmin_();
-          return;
-        }
-
         loadAdminUserDoc_();
       });
     } catch (error) {
@@ -1564,7 +1563,7 @@
     adminState.authLoading = true;
     adminState.errorMessage = "";
     adminState.infoMessage = hasAdminInviteQueryParams_() ?
-      "Switching to full-page Google sign-in for your admin invitation." :
+      "Switching to full-page Google sign-in for your workspace invitation." :
       "Switching to full-page Google sign-in.";
     writeAdminRedirectSignInPending_(true);
     renderAdmin_();
@@ -5720,11 +5719,8 @@
     var currentPage = getAdminPageById_(adminState.currentPageId) ||
       getAdminPageById_("overview");
     var visiblePages = getVisibleAdminPages_();
-    var accessIsResolved = !adminState.authLoading && (
-      !adminState.user ||
-      !adminState.userEmailAllowed ||
-      adminState.userDocLoaded
-    );
+    var accessIsResolved = !adminState.authLoading &&
+      adminState.userDocLoaded;
 
     if (accessIsResolved && !canAccessAdminPage_(currentPage)) {
       currentPage = getAdminPageById_("overview");
@@ -5794,7 +5790,7 @@
       hasError ?
         "Central Admin could not start" :
         hasInvite ?
-          "Your admin invitation is waiting" :
+          "Your Central invitation is waiting" :
           "Welcome to Central Admin";
     var message = hasError ?
       adminState.errorMessage :
@@ -6791,8 +6787,7 @@
       return page.id !== "overview" && !page.hideFromOverview;
     });
 
-    if (!adminState.user || !adminState.userEmailAllowed ||
-      !isActiveAdminUserRecord_()) {
+    if (!adminState.user || !isActiveAdminUserRecord_()) {
       return renderOverviewAccessPanel_(currentPage);
     }
 
@@ -6858,15 +6853,15 @@
       ].join("");
     }
 
-    if (!adminState.userEmailAllowed) {
+    if (adminState.inviteClaimPending) {
       return [
         "<div class=\"central-admin-item\">",
         "<div class=\"central-admin-item-header\">",
-        "<strong>Wrong account</strong>",
-        renderStatusPill_("Workspace required", "is-warn"),
+        "<strong>Confirming your workspace invitation</strong>",
+        renderStatusPill_("In progress", "is-warn"),
         "</div>",
         renderAdminNote_(
-            "You are signed in, but this Google account is not approved for Central Admin.",
+            "Central is connecting the Studio and Planner permissions from your invitation to this Google account.",
         ),
         "</div>",
       ].join("");
@@ -6886,6 +6881,20 @@
       ].join("");
     }
 
+    if (!adminState.userEmailAllowed) {
+      return [
+        "<div class=\"central-admin-item\">",
+        "<div class=\"central-admin-item-header\">",
+        "<strong>No workspace access found</strong>",
+        renderStatusPill_("Invite required", "is-warn"),
+        "</div>",
+        renderAdminNote_(
+            "This Google account does not have an active Central workspace invitation. Open the invite with the exact account that received it, or ask a Central administrator to resend access.",
+        ),
+        "</div>",
+      ].join("");
+    }
+
     if (adminState.userDocExists && !isActiveAdminUserRecord_()) {
       return [
         "<div class=\"central-admin-item\">",
@@ -6899,20 +6908,6 @@
         adminState.bootstrapMessage ?
           renderAdminNote_(adminState.bootstrapMessage) :
           "",
-        "</div>",
-      ].join("");
-    }
-
-    if (adminState.inviteClaimPending) {
-      return [
-        "<div class=\"central-admin-item\">",
-        "<div class=\"central-admin-item-header\">",
-        "<strong>Confirming your admin invitation</strong>",
-        renderStatusPill_("In progress", "is-warn"),
-        "</div>",
-        renderAdminNote_(
-            "Central is connecting the permissions from your invitation to this Google account.",
-        ),
         "</div>",
       ].join("");
     }
@@ -26983,13 +26978,13 @@
     }
 
     if (!adminState.user) {
-      adminState.errorMessage = "Sign in before confirming this admin invite.";
+      adminState.errorMessage = "Sign in before confirming this workspace invite.";
       renderAdmin_();
       return;
     }
 
     adminState.inviteClaimPending = true;
-    adminState.infoMessage = "Confirming your Central Admin invitation.";
+    adminState.infoMessage = "Confirming your Central workspace invitation.";
     adminState.errorMessage = "";
     renderAdmin_();
 
@@ -26999,17 +26994,17 @@
           clearAdminInviteQueryParamsFromUrl_();
           adminState.infoMessage = result && result.message ?
             result.message :
-            "Your Central Admin invite was confirmed.";
+            "Your CrossPointe Central workspace invite was confirmed.";
           adminState.errorMessage = "";
           loadAdminUserDoc_();
         })
         .catch(function(error) {
           adminState.inviteClaimPending = false;
           adminState.infoMessage =
-            "We could not confirm this admin invite yet.";
+            "We could not confirm this workspace invite yet.";
           adminState.errorMessage = error && error.message ?
             error.message :
-            "Unable to confirm your admin invite right now.";
+            "Unable to confirm your workspace invite right now.";
           renderAdmin_();
         });
   }
@@ -27584,6 +27579,14 @@
       return normalizeAdminPermissionValue_(pageAccess.settings);
     }
 
+    if (pageAccessKey === "planner") {
+      if (Object.prototype.hasOwnProperty.call(pageAccess, "studio")) {
+        return normalizeAdminPermissionValue_(pageAccess.studio);
+      }
+
+      return normalizeAdminPermissionValue_(pageAccess.settings);
+    }
+
     if (pageAccessKey === "resources" ||
       pageAccessKey === "nextSteps" ||
       pageAccessKey === "campaigns" ||
@@ -27791,12 +27794,14 @@
       return "Not signed in";
     }
 
-    if (!adminState.userEmailAllowed) {
-      return "Wrong account";
+    if (isActiveAdminUserRecord_()) {
+      return adminState.userEmailAllowed ?
+        "Admin access active" :
+        "Workspace access active";
     }
 
-    if (isActiveAdminUserRecord_()) {
-      return "Admin access active";
+    if (!adminState.userEmailAllowed) {
+      return "Invite required";
     }
 
     if (adminState.userDocExists) {
@@ -27827,12 +27832,14 @@
       return "Sign in first, then this panel will show the exact Firestore path for your admin record.";
     }
 
-    if (!adminState.userEmailAllowed) {
-      return "You are signed in with the wrong Google account for the dashboard.";
+    if (isActiveAdminUserRecord_()) {
+      return adminState.userEmailAllowed ?
+        "Your Firestore admin record is live and the dashboard can now start honoring permissions." :
+        "Your invited Central workspace access is active. Only the tools granted to you are shown.";
     }
 
-    if (isActiveAdminUserRecord_()) {
-      return "Your Firestore admin record is live and the dashboard can now start honoring permissions.";
+    if (!adminState.userEmailAllowed) {
+      return "This account needs an active Central workspace invitation.";
     }
 
     return "This panel can create your first admin record automatically and still shows the manual Firestore fallback.";

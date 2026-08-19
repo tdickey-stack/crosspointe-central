@@ -83,8 +83,15 @@ a { text-decoration: none; }
 .planner-sidebar nav button:hover { background: rgba(255,255,255,.045); color: #fff; }
 .planner-sidebar nav button.is-active { border-color: rgba(239,62,45,.28); background: linear-gradient(135deg, rgba(239,62,45,.18), rgba(239,62,45,.07)); box-shadow: inset 3px 0 var(--planner-red); color: #fff; }
 .planner-sidebar nav button.is-active > span { color: var(--planner-red); }
+.planner-sidebar-footer { display: grid; gap: 7px; }
+.planner-sidebar-footer .planner-sidebar-label { margin-bottom: 2px; }
+.planner-tool-links { display: grid; gap: 3px; }
+.planner-tool-link { display: flex; min-height: 40px; align-items: center; gap: 13px; padding: 0 12px; border: 1px solid transparent; border-radius: 12px; color: var(--planner-muted); font-size: .68rem; font-weight: 750; }
+.planner-tool-link > span { display: grid; width: 24px; place-items: center; color: var(--planner-soft); font-size: .96rem; }
+.planner-tool-link:hover, .planner-tool-link:focus-visible { border-color: var(--planner-line); background: rgba(255,255,255,.045); color: #fff; }
+.planner-tool-link:hover > span, .planner-tool-link:focus-visible > span { color: var(--planner-red); }
 .planner-central-link { display: flex; min-height: 42px; align-items: center; padding: 0 12px; color: var(--planner-muted); font-size: .68rem; font-weight: 750; }
-.planner-central-link:hover { color: #fff; }
+.planner-central-link:hover, .planner-central-link:focus-visible { color: #fff; }
 .planner-sidebar-scrim { display: none; }
 
 .planner-main { min-width: 0; margin-left: 248px; padding: 42px clamp(22px, 4vw, 62px) 80px; }

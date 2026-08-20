@@ -1,5 +1,5 @@
 import {jsPDF} from "jspdf";
-import {buildSmuggleRelationships} from "./domain.js";
+import {buildSmuggleRelationships, dateKey, nextPlanningWeekStart} from "./domain.js";
 import {briefMarkdownToPlainText} from "./markdown.js";
 
 const HIDDEN_PROMOTION_STATUSES = new Set(["missed", "skipped"]);
@@ -16,13 +16,12 @@ function safeText(value, maximum = 2000) {
   return String(value || "").trim().slice(0, maximum);
 }
 
-function safeFilename(value, fallback = "announcement-brief") {
-  const normalized = safeText(value, 100)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 72);
-  return normalized || fallback;
+export function promotionBriefFilename(brief = {}) {
+  const generatedAt = brief.generatedAt || new Date();
+  const creationDate = dateKey(generatedAt).replaceAll("-", "");
+  const upcomingSunday = nextPlanningWeekStart(generatedAt);
+  const sundayMonthDay = upcomingSunday.slice(5).replace("-", "");
+  return `SUN${sundayMonthDay}_ANN_${creationDate}.pdf`;
 }
 
 function formatBriefDate(value, {year = true} = {}) {
@@ -628,7 +627,7 @@ export function createPromotionBriefPdf(brief) {
   });
   return {
     pdf,
-    filename: `${safeFilename(brief.title)}-${brief.startDate || "report"}.pdf`,
+    filename: promotionBriefFilename(brief),
   };
 }
 

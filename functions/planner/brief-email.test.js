@@ -28,6 +28,8 @@ function payload(overrides = {}) {
         level: 4,
         eventDate: "2026-09-12",
         registrationDeadline: "2026-09-10",
+        eventDetails: "## At a glance\n- Doors open at **8:30 AM**\n<img src=x>",
+        sampleAnnouncement: "Invite a friend to *Women's Breakfast*.",
         notes: "Invite & welcome everyone.",
         announcements: [{
           playType: "Stage Announcement",
@@ -68,6 +70,8 @@ test("planner brief email validates recipients and PDF attachment", () => {
   assert.equal(result.brief.attentionCount, 1);
   assert.equal(result.brief.entries[0].announcements[0].smuggle.beneficiaryName, "Ladies Bunco Night");
   assert.equal(result.brief.entries[0].smuggledInto[0].hostCampaignLevel, 1);
+  assert.match(result.brief.entries[0].eventDetails, /Doors open/);
+  assert.match(result.brief.entries[0].sampleAnnouncement, /Women's Breakfast/);
   assert.equal(result.attachment.filename, "weekly-promotion-brief.pdf");
 });
 
@@ -78,12 +82,18 @@ test("planner brief email renders useful text and escaped HTML", () => {
   assert.match(plainText, /Stage Announcement \| Aug 23, 2026/);
   assert.match(plainText, /SMUGGLE CONTAINS: Level 4 Ladies Bunco Night/);
   assert.match(plainText, /SMUGGLED INTO: Level 1 Big Small Group Relaunch/);
+  assert.match(plainText, /Event details:\nAt a glance/);
+  assert.match(plainText, /Sample announcement:\nInvite a friend/);
   assert.match(plainText, /The complete promotion brief is attached as a PDF/);
   assert.match(html, /Women&#39;s &lt;Breakfast&gt;/);
   assert.match(html, /Invite &amp; welcome everyone/);
   assert.match(html, /Smuggle contains Level 4 Ladies Bunco Night/);
   assert.match(html, /Smuggled into Level 1 Big Small Group Relaunch/);
+  assert.match(html, /<strong>8:30 AM<\/strong>/);
+  assert.match(html, /<em>Women&#39;s Breakfast<\/em>/);
+  assert.match(html, /&lt;img src=x&gt;/);
   assert.doesNotMatch(html, /Women's <Breakfast>/);
+  assert.doesNotMatch(html, /<img src=x>/);
 });
 
 test("planner brief email rejects malformed recipients", () => {

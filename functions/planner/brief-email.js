@@ -38,6 +38,71 @@ function escapeHtml(value) {
       .replace(/'/g, "&#39;");
 }
 
+function markdownToPlainText(value) {
+  return text(value, 3000)
+      .replace(/^#{1,3}\s+/gmu, "")
+      .replace(/^\s*[-*]\s+/gmu, "- ")
+      .replace(/`([^`\n]+)`/gu, "$1")
+      .replace(/\*\*([^*\n]+)\*\*/gu, "$1")
+      .replace(/__([^_\n]+)__/gu, "$1")
+      .replace(/\*([^*\n]+)\*/gu, "$1")
+      .replace(/_([^_\n]+)_/gu, "$1");
+}
+
+function renderMarkdownInlineHtml(value) {
+  return escapeHtml(value)
+      .replace(/`([^`\n]+)`/gu, "<code style=\"padding:1px 4px;border-radius:4px;background:#e4e4e7;\">$1</code>")
+      .replace(/\*\*([^*\n]+)\*\*/gu, "<strong>$1</strong>")
+      .replace(/__([^_\n]+)__/gu, "<strong>$1</strong>")
+      .replace(/\*([^*\n]+)\*/gu, "<em>$1</em>")
+      .replace(/_([^_\n]+)_/gu, "<em>$1</em>");
+}
+
+function renderMarkdownHtml(value) {
+  const source = text(value, 3000).replace(/\r\n/gu, "\n");
+  if (!source) return "";
+  const html = [];
+  let paragraph = [];
+  let listType = "";
+  let listItems = [];
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p style="margin:0 0 8px;line-height:1.6;">${renderMarkdownInlineHtml(paragraph.join("\n")).replace(/\n/gu, "<br>")}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!listItems.length) return;
+    html.push(`<${listType} style="margin:0 0 8px;padding-left:20px;line-height:1.6;">${listItems.map((item) => `<li>${renderMarkdownInlineHtml(item)}</li>`).join("")}</${listType}>`);
+    listType = "";
+    listItems = [];
+  };
+  source.split("\n").forEach((rawLine) => {
+    const trimmed = rawLine.trim();
+    const heading = trimmed.match(/^(#{1,3})\s+(.*)$/u);
+    const list = rawLine.match(/^\s*([-*]|\d+\.)\s+(.*)$/u);
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+    } else if (heading) {
+      flushParagraph();
+      flushList();
+      html.push(`<h3 style="margin:0 0 7px;font-size:${16 - heading[1].length}px;line-height:1.3;color:#27272a;">${renderMarkdownInlineHtml(heading[2])}</h3>`);
+    } else if (list) {
+      flushParagraph();
+      const nextType = /^\d+\.$/u.test(list[1]) ? "ol" : "ul";
+      if (listType && listType !== nextType) flushList();
+      listType = nextType;
+      listItems.push(list[2]);
+    } else {
+      flushList();
+      paragraph.push(trimmed);
+    }
+  });
+  flushParagraph();
+  flushList();
+  return html.join("");
+}
+
 function normalizeRecipients(value) {
   const source = Array.isArray(value) ? value : String(value || "").split(/[,;\n]/u);
   const recipients = [...new Set(source.map((item) => text(item, 320).toLowerCase()).filter(Boolean))];
@@ -103,6 +168,8 @@ function normalizeEntry(value) {
     level: source.kind === "content" ? null : Math.min(5, Math.max(1, Number(source.level || 5))),
     eventDate: dateValue(source.eventDate),
     registrationDeadline: dateValue(source.registrationDeadline),
+    eventDetails: text(source.eventDetails, 3000),
+    sampleAnnouncement: text(source.sampleAnnouncement, 3000),
     notes: text(source.notes, 2400),
     announcements,
     smuggledInto,
@@ -179,6 +246,8 @@ export function buildPlannerBriefEmailText(payload) {
       lines.push(`- ${announcement.playType} | ${formatDate(announcement.scheduledDate)} | ${announcement.channel || "Channel not set"}${announcement.needsAttention ? " | NEEDS ATTENTION" : ""}`);
       if (announcement.smuggle) lines.push(`  SMUGGLE CONTAINS: Level ${announcement.smuggle.beneficiaryLevel} ${announcement.smuggle.beneficiaryName}`);
     });
+    if (entry.eventDetails) lines.push(`Event details:\n${markdownToPlainText(entry.eventDetails)}`);
+    if (entry.sampleAnnouncement) lines.push(`Sample announcement:\n${markdownToPlainText(entry.sampleAnnouncement)}`);
     if (entry.notes) lines.push(`Notes: ${entry.notes}`);
     lines.push("");
   });
@@ -207,6 +276,8 @@ export function buildPlannerBriefEmailHtml(payload) {
         ${entry.eventDate ? `<p style="margin:0 0 10px;color:#71717a;font-size:13px;">Event ${escapeHtml(formatDate(entry.eventDate))}${entry.registrationDeadline ? ` &nbsp;|&nbsp; Registration ${escapeHtml(formatDate(entry.registrationDeadline))}` : ""}</p>` : ""}
         ${smuggledInto}
         <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;">${announcements}</table>
+        ${entry.eventDetails ? `<div style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e5e7eb;color:#52525b;font-size:13px;"><strong style="display:block;margin-bottom:6px;color:#27272a;">Event details</strong>${renderMarkdownHtml(entry.eventDetails)}</div>` : ""}
+        ${entry.sampleAnnouncement ? `<div style="margin:12px 0 0;padding:12px;border-left:3px solid #ef3e2d;border-radius:0 8px 8px 0;background:#fafafa;color:#52525b;font-size:13px;"><strong style="display:block;margin-bottom:6px;color:#27272a;">Sample announcement</strong>${renderMarkdownHtml(entry.sampleAnnouncement)}</div>` : ""}
         ${entry.notes ? `<p style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e5e7eb;color:#52525b;font-size:13px;line-height:1.55;"><strong style="color:#27272a;">Notes:</strong> ${escapeHtml(entry.notes)}</p>` : ""}
       </div>`;
   }).join("");

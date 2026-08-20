@@ -93,6 +93,8 @@ function campaignPayload() {
     playbookVersion: 1,
     durationWeeks: 2,
     sourceEventId: "",
+    eventDetails: "Doors open at 8:30 AM.",
+    sampleAnnouncement: "Join us for **Women's Breakfast**.",
     notes: "",
     status: "active",
     createdByUid: "editor",
@@ -335,6 +337,11 @@ test("create rejects oversized, mistyped, and extra fields", async () => {
     durationWeeks: 3,
   }));
   await assertFails(db.doc("centralPromotionCampaigns/bad-notes").set({...campaignPayload(), notes: "x".repeat(3001)}));
+  await assertFails(db.doc("centralPromotionCampaigns/bad-event-details").set({...campaignPayload(), eventDetails: "x".repeat(3001)}));
+  await assertFails(db.doc("centralPromotionCampaigns/bad-sample-announcement").set({...campaignPayload(), sampleAnnouncement: 42}));
+  const missingBriefField = campaignPayload();
+  delete missingBriefField.eventDetails;
+  await assertFails(db.doc("centralPromotionCampaigns/missing-event-details").set(missingBriefField));
   await assertFails(db.doc("centralPromotionScheduledPlays/bad-status").set({...scheduledPlayPayload(), status: "published"}));
   await assertFails(db.doc("centralPromotionCapacityRules/bad-capacity").set({...capacityPayload(), capacity: "two"}));
   await assertFails(db.doc("centralPromotionCapacityRules/bad-typical-type").set({...capacityPayload(), typicalCapacity: "two"}));

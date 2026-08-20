@@ -228,6 +228,8 @@ function campaignForCloud(campaign, ownerUid, timestamp) {
     playbookVersion: Number(campaign.playbookVersion || 1),
     durationWeeks: Number(campaign.durationWeeks || 1),
     sourceEventId: String(campaign.sourceEventId || "").slice(0, 100),
+    eventDetails: String(campaign.eventDetails || "").slice(0, 3000),
+    sampleAnnouncement: String(campaign.sampleAnnouncement || "").slice(0, 3000),
     notes: String(campaign.notes || "").slice(0, 3000),
     status: ["draft", "active", "completed", "archived"].includes(campaign.status)
       ? campaign.status
@@ -792,6 +794,34 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     });
   }
 
+  async function saveCampaignDetails(campaign) {
+    const id = String(campaign?.id || "").trim();
+    if (!id) throw new Error("A campaign ID is required to save brief content.");
+    const briefFields = {
+      eventDetails: String(campaign.eventDetails || "").slice(0, 3000),
+      sampleAnnouncement: String(campaign.sampleAnnouncement || "").slice(0, 3000),
+    };
+    if (preview) {
+      const existing = previewWorkspace.campaigns.find((item) => item.id === id);
+      if (!existing) throw new Error("The campaign could not be found.");
+      const next = {...existing, ...briefFields, updatedAt: isoNow()};
+      previewWorkspace.campaigns = previewWorkspace.campaigns.map((item) =>
+        item.id === id ? next : item,
+      );
+      return deepClone(next);
+    }
+    const reference = firestore.collection(PLANNER_COLLECTIONS.campaigns).doc(id);
+    const snapshot = await reference.get();
+    if (!snapshot.exists) throw new Error("The campaign could not be found.");
+    const existing = normalizeCampaign(documentData(snapshot));
+    const next = {...existing, ...briefFields, id};
+    const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
+    const batch = firestore.batch();
+    batch.set(reference, campaignForCloud(next, user.uid, timestamp));
+    await batch.commit();
+    return {...next, updatedByUid: user.uid, updatedAt: isoNow()};
+  }
+
   async function saveScheduledPlay(play) {
     const next = {...deepClone(play), manuallyAdjusted: true};
     if (preview) {
@@ -908,6 +938,7 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     saveCapacityRule,
     saveStandingLane,
     saveCampaignSchedule,
+    saveCampaignDetails,
     convertPromotionRequest,
     saveScheduledPlay,
     regenerateCampaignSchedules,

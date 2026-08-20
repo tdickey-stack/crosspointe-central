@@ -1,5 +1,6 @@
 import {jsPDF} from "jspdf";
 import {buildSmuggleRelationships} from "./domain.js";
+import {briefMarkdownToPlainText} from "./markdown.js";
 
 const HIDDEN_PROMOTION_STATUSES = new Set(["missed", "skipped"]);
 const LEVEL_COLORS = {
@@ -57,6 +58,8 @@ export function buildPromotionBrief({
   startDate = "",
   endDate = "",
   title = "Promotion Brief",
+  includeEventDetails = false,
+  includeSampleAnnouncements = false,
   generatedAt = new Date(),
 } = {}) {
   const selected = new Set(selectedPlayTypes.map((item) => safeText(item, 100)).filter(Boolean));
@@ -88,6 +91,8 @@ export function buildPromotionBrief({
         eventDate: safeText(campaign.eventDate, 10),
         registrationDeadline: safeText(campaign.registrationDeadline, 10),
         notes: safeText(campaign.notes, 2400),
+        eventDetails: includeEventDetails ? safeText(campaign.eventDetails, 3000) : "",
+        sampleAnnouncement: includeSampleAnnouncements ? safeText(campaign.sampleAnnouncement, 3000) : "",
         announcements: [],
         smuggledInto: [],
       });
@@ -154,6 +159,8 @@ export function buildPromotionBrief({
     endDate: safeText(endDate, 10),
     generatedAt: generatedAt instanceof Date ? generatedAt.toISOString() : String(generatedAt || ""),
     announcementTypes: [...selected].sort((left, right) => left.localeCompare(right)),
+    includeEventDetails: includeEventDetails === true,
+    includeSampleAnnouncements: includeSampleAnnouncements === true,
     entries,
     campaignCount: entries.filter((entry) => entry.kind === "campaign").length,
     contentCount: entries.filter((entry) => entry.kind === "content").length,
@@ -203,7 +210,7 @@ function addPage(pdf, brief) {
 }
 
 function wrap(pdf, text, width) {
-  return pdf.splitTextToSize(safeText(text), width);
+  return pdf.splitTextToSize(safeText(text, 10000), width);
 }
 
 function entryHeaderLayout(pdf, entry, continued = false) {
@@ -269,16 +276,18 @@ function smuggledIntoLayout(pdf, relationship) {
   };
 }
 
-function noteLayouts(pdf, notes) {
-  if (!notes) return [];
+function textSectionLayouts(pdf, value, label, kind) {
+  const text = briefMarkdownToPlainText(value);
+  if (!text) return [];
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8);
-  const lines = wrap(pdf, notes, 6.45);
+  const lines = wrap(pdf, text, 6.45);
   const chunks = [];
   for (let index = 0; index < lines.length; index += 8) {
     const chunk = lines.slice(index, index + 8);
     chunks.push({
-      kind: "notes",
+      kind,
+      label,
       lines: chunk,
       continued: index > 0,
       height: 0.23 + chunk.length * 0.13 + 0.1,
@@ -362,7 +371,7 @@ function drawEntrySegment(pdf, entry, items, y, continued = false) {
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(7.3);
       pdf.setTextColor(95, 95, 103);
-      pdf.text(item.continued ? "NOTES (CONTINUED)" : "NOTES", 0.84, rowY + 0.16);
+      pdf.text(item.continued ? `${item.label} (CONTINUED)` : item.label, 0.84, rowY + 0.16);
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(8);
       pdf.setTextColor(72, 72, 78);
@@ -381,7 +390,9 @@ function drawEntry(pdf, brief, entry, startY) {
   const items = [
     ...entry.smuggledInto.map((relationship) => smuggledIntoLayout(pdf, relationship)),
     ...entry.announcements.map((announcement) => announcementLayout(pdf, announcement)),
-    ...noteLayouts(pdf, entry.notes),
+    ...textSectionLayouts(pdf, entry.eventDetails, "EVENT DETAILS", "event-details"),
+    ...textSectionLayouts(pdf, entry.sampleAnnouncement, "SAMPLE ANNOUNCEMENT", "sample-announcement"),
+    ...textSectionLayouts(pdf, entry.notes, "NOTES", "notes"),
   ];
   const freshPageHeight = PDF_LAYOUT.contentBottom - PDF_LAYOUT.contentTop;
   const fullHeader = entryHeaderLayout(pdf, entry, false);

@@ -8,7 +8,7 @@ import {
 } from "../src/planner/briefs.js";
 
 const campaigns = [
-  {id: "l4", name: "Women's Breakfast", level: 4, eventDate: "2026-09-12", notes: "Invite a friend."},
+  {id: "l4", name: "Women's Breakfast", level: 4, eventDate: "2026-09-12", notes: "Invite a friend.", eventDetails: "## At a glance\n- Doors open at **8:30 AM**", sampleAnnouncement: "Invite a friend to *Women's Breakfast*."},
   {id: "l1", name: "Stewardship Campaign", level: 1, eventDate: "2026-09-20"},
   {id: "content", name: "Weekly Podcast", campaignType: "standalone-content"},
 ];
@@ -48,6 +48,39 @@ test("promotion brief filters the planning window and sorts Level 1 through cont
   assert.equal(brief.entries[1].smuggledInto[0].hostCampaignName, "Stewardship Campaign");
   assert.equal(brief.entries[1].announcements.some((item) => item.id === "guest-paired"), false);
   assert.equal(brief.entries[1].notes, "Invite a friend.");
+  assert.equal(brief.entries[1].eventDetails, "");
+  assert.equal(brief.entries[1].sampleAnnouncement, "");
+});
+
+test("promotion brief independently opts into event details and sample announcements", () => {
+  const eventDetailsBrief = buildPromotionBrief({
+    campaigns,
+    scheduledPlays,
+    selectedPlayTypes: ["Stage Announcement"],
+    startDate: "2026-08-23",
+    endDate: "2026-08-29",
+    includeEventDetails: true,
+  });
+  const entry = eventDetailsBrief.entries.find((item) => item.id === "l4");
+  assert.match(entry.eventDetails, /Doors open/);
+  assert.equal(entry.sampleAnnouncement, "");
+
+  const fullBrief = buildPromotionBrief({
+    campaigns,
+    scheduledPlays,
+    selectedPlayTypes: ["Stage Announcement"],
+    startDate: "2026-08-23",
+    endDate: "2026-08-29",
+    includeEventDetails: true,
+    includeSampleAnnouncements: true,
+  });
+  const fullEntry = fullBrief.entries.find((item) => item.id === "l4");
+  assert.match(fullEntry.sampleAnnouncement, /\*Women's Breakfast\*/);
+  const {pdf} = createPromotionBriefPdf(fullBrief);
+  const pdfCommands = pdf.internal.pages.slice(1).flat().join("\n");
+  assert.match(pdfCommands, /EVENT DETAILS/);
+  assert.match(pdfCommands, /SAMPLE ANNOUNCEMENT/);
+  assert.doesNotMatch(pdfCommands, /\*\*8:30 AM\*\*/);
 });
 
 test("promotion brief includes a Smuggle beneficiary even without a direct selected promotion", () => {

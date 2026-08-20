@@ -11,8 +11,8 @@ service cloud.firestore {
     // centralPromotionPlaybookVersions/{playbookId}_v{version}: immutable
     // playbook snapshot with the editable week/play definition array.
     // centralPromotionCampaigns/{campaignId}: event and submission timestamps,
-    // stored timeliness, immutable playbook/version reference, notes, status,
-    // creator/updater UIDs, and timestamps.
+    // stored timeliness, immutable playbook/version reference, bounded brief
+    // content, notes, status, creator/updater UIDs, and timestamps.
     // centralPromotionScheduledPlays/{playId}: independent original/current
     // schedule timestamps, campaign/playbook references, status, late/conflict
     // handling, manual/lock flags, optional Smuggle relationship, UIDs, and
@@ -1077,13 +1077,15 @@ service cloud.firestore {
         "schemaVersion", "name", "eventDate", "registrationDeadline",
         "submittedAt", "recommendedStartDate", "isOnTime", "daysLate",
         "weeksLate", "level", "campaignType", "playbookId",
-        "playbookVersion", "durationWeeks", "sourceEventId", "notes",
+        "playbookVersion", "durationWeeks", "sourceEventId", "eventDetails",
+        "sampleAnnouncement", "notes",
         "status", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
       ]) && data.keys().hasOnly([
         "schemaVersion", "name", "eventDate", "registrationDeadline",
         "submittedAt", "recommendedStartDate", "isOnTime", "daysLate",
         "weeksLate", "level", "campaignType", "playbookId",
-        "playbookVersion", "durationWeeks", "sourceEventId", "notes",
+        "playbookVersion", "durationWeeks", "sourceEventId", "eventDetails",
+        "sampleAnnouncement", "notes",
         "status", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
       ]) && data.schemaVersion == 1 && validPlannerString(data.name, 140) &&
         data.name.size() > 0 && data.eventDate is timestamp &&
@@ -1096,6 +1098,8 @@ service cloud.firestore {
         data.playbookVersion >= 1 && data.durationWeeks is int &&
         data.durationWeeks >= 1 && data.durationWeeks <= 12 &&
         validPlannerString(data.sourceEventId, 100) &&
+        validPlannerString(data.eventDetails, 3000) &&
+        validPlannerString(data.sampleAnnouncement, 3000) &&
         validPlannerString(data.notes, 3000) &&
         data.status in ["draft", "active", "completed", "archived"] &&
         validPlannerString(data.createdByUid, 128) &&

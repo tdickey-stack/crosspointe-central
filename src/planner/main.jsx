@@ -38,6 +38,7 @@ import {
   formatBriefDate,
   sendPromotionBriefEmail,
 } from "./briefs.js";
+import {parseBriefMarkdown} from "./markdown.js";
 import {createPlannerStore} from "./persistence.js";
 import {isStarterPlaybookId} from "./seed-data.js";
 import "./planner.css";
@@ -1226,7 +1227,6 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
     const id = `pco-form-${request.sourceFormId}-${request.sourceSubmissionId}`
       .replace(/[^a-zA-Z0-9_-]/g, "-")
       .slice(0, 128);
-    const details = [request.description, request.notes].map((value) => String(value || "").trim()).filter(Boolean);
     const generated = generateCampaignSchedule({
       campaign: {
         id,
@@ -1238,7 +1238,9 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
         campaignType: playbook.campaignType,
         playbookId: playbook.id,
         sourceEventId: `pco-form:${request.sourceFormId}:${request.sourceSubmissionId}`,
-        notes: details.join("\n\n"),
+        eventDetails: String(request.description || "").trim(),
+        sampleAnnouncement: "",
+        notes: String(request.notes || "").trim(),
         status: "active",
       },
       playbook,
@@ -1311,7 +1313,7 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
   );
 }
 
-function BriefEntryPreview({entry}) {
+function BriefEntryPreview({entry, canEdit = false, onEditBriefContent}) {
   const color = entry.kind === "content" ? "#f472b6" : LEVEL_COLORS[entry.level] || LEVEL_COLORS[5];
   return (
     <article className="planner-brief-entry" style={{"--brief-accent": color}}>
@@ -1320,7 +1322,10 @@ function BriefEntryPreview({entry}) {
           <PromotionKindBadge item={entry.kind === "content" ? {campaignType: STANDALONE_CONTENT_TYPE} : {level: entry.level}} />
           <span><strong>{entry.name}</strong><small>{entry.kind === "content" ? `${formatDate(entry.firstPromotionDate)}–${formatDate(entry.lastPromotionDate)}` : `Event ${formatDate(entry.eventDate)}`}</small></span>
         </div>
-        <StatusBadge status={entry.smuggledInto.length && !entry.announcements.length ? "smuggle" : ""}>{entry.announcements.length ? `${entry.announcements.length} selected` : "Smuggle"}</StatusBadge>
+        <div className="planner-brief-entry-actions">
+          {canEdit && entry.kind === "campaign" && <button className="planner-text-button" onClick={() => onEditBriefContent(entry.id)}>Edit brief content</button>}
+          <StatusBadge status={entry.smuggledInto.length && !entry.announcements.length ? "smuggle" : ""}>{entry.announcements.length ? `${entry.announcements.length} selected` : "Smuggle"}</StatusBadge>
+        </div>
       </header>
       {entry.registrationDeadline && <p className="planner-brief-deadline">Registration deadline · {formatDate(entry.registrationDeadline)}</p>}
       {entry.smuggledInto.map((relationship) => (
@@ -1337,6 +1342,8 @@ function BriefEntryPreview({entry}) {
           </div>
         ))}
       </div>
+      {entry.eventDetails && <section className="planner-brief-copy"><strong>Event details</strong><PlannerMarkdown value={entry.eventDetails} /></section>}
+      {entry.sampleAnnouncement && <section className="planner-brief-copy is-sample"><strong>Sample announcement</strong><PlannerMarkdown value={entry.sampleAnnouncement} /></section>}
       {entry.notes && <p className="planner-brief-notes"><strong>Notes</strong>{entry.notes}</p>}
     </article>
   );
@@ -1375,12 +1382,14 @@ function ReportEmailDialog({brief, authState, onClose, onSent}) {
   );
 }
 
-function ReportsView({workspace, authState, canEmail, onNotice, onError}) {
+function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefContent, onNotice, onError}) {
   const initialRange = reportPresetDateRange("upcoming", new Date());
   const [datePreset, setDatePreset] = useState("upcoming");
   const [startDate, setStartDate] = useState(initialRange.startDate);
   const [endDate, setEndDate] = useState(initialRange.endDate);
   const [title, setTitle] = useState("Weekly Promotion Brief");
+  const [includeEventDetails, setIncludeEventDetails] = useState(false);
+  const [includeSampleAnnouncements, setIncludeSampleAnnouncements] = useState(false);
   const playTypes = useMemo(() => [...new Set(visiblePromotions(workspace.scheduledPlays).map((play) => play.playType).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [workspace.scheduledPlays]);
   const [selectedTypes, setSelectedTypes] = useState(() => new Set(playTypes));
   const [emailOpen, setEmailOpen] = useState(false);
@@ -1391,7 +1400,9 @@ function ReportsView({workspace, authState, canEmail, onNotice, onError}) {
     startDate,
     endDate,
     title,
-  }), [workspace.campaigns, workspace.scheduledPlays, selectedTypes, startDate, endDate, title]);
+    includeEventDetails,
+    includeSampleAnnouncements,
+  }), [workspace.campaigns, workspace.scheduledPlays, selectedTypes, startDate, endDate, title, includeEventDetails, includeSampleAnnouncements]);
   const dateRangeValid = startDate && endDate && startDate <= endDate;
   const ready = dateRangeValid && selectedTypes.size > 0 && brief.entries.length > 0;
   const toggleType = (playType) => setSelectedTypes((current) => {
@@ -1438,6 +1449,11 @@ function ReportsView({workspace, authState, canEmail, onNotice, onError}) {
             </>}
           </div>
           {!dateRangeValid && <div className="planner-detail-note is-alert"><strong>Check the date range</strong><p>The end date must be the same as or later than the start date.</p></div>}
+          <div className="planner-report-type-heading"><strong>Campaign content</strong><span>Optional</span></div>
+          <div className="planner-report-inclusions">
+            <label><input type="checkbox" checked={includeEventDetails} onChange={(event) => setIncludeEventDetails(event.target.checked)} /><span><strong>Event details</strong><small>Include brief-ready details saved with each event.</small></span></label>
+            <label><input type="checkbox" checked={includeSampleAnnouncements} onChange={(event) => setIncludeSampleAnnouncements(event.target.checked)} /><span><strong>Sample announcements</strong><small>Include example wording saved with each event.</small></span></label>
+          </div>
           <div className="planner-report-type-heading"><strong>Promotion types</strong><span>{selectedTypes.size} selected</span></div>
           <div className="planner-report-type-actions"><button className="planner-text-button" onClick={() => setSelectedTypes(new Set(playTypes))}>Select all</button><button className="planner-text-button" onClick={() => setSelectedTypes(new Set())}>Clear</button></div>
           <div className="planner-report-types">
@@ -1451,7 +1467,10 @@ function ReportsView({workspace, authState, canEmail, onNotice, onError}) {
             <div><span className="planner-kicker">Live preview</span><h2>{brief.title || "Promotion Brief"}</h2><p>{formatBriefDate(startDate)}–{formatBriefDate(endDate)}</p></div>
             <div><span><strong>{brief.announcementCount}</strong> promotions</span><span><strong>{brief.entries.length}</strong> campaigns + content</span><span className={brief.attentionCount ? "has-alert" : ""}><strong>{brief.attentionCount}</strong> need attention</span></div>
           </div>
-          {brief.entries.length ? <div className="planner-brief-entry-list">{brief.entries.map((entry) => <BriefEntryPreview key={entry.id} entry={entry} />)}</div> : <EmptyState title="No matching promotions" copy="Choose at least one promotion type and a date range containing planned promotions." />}
+          {brief.entries.length ? <div className="planner-brief-entry-list">{brief.entries.map((entry) => <BriefEntryPreview key={entry.id} entry={entry} canEdit={canEdit} onEditBriefContent={(campaignId) => {
+            const campaign = workspace.campaigns.find((item) => item.id === campaignId);
+            if (campaign) onEditBriefContent(campaign);
+          }} />)}</div> : <EmptyState title="No matching promotions" copy="Choose at least one promotion type and a date range containing planned promotions." />}
         </section>
       </section>
       {emailOpen && <ReportEmailDialog brief={brief} authState={authState} onClose={() => setEmailOpen(false)} onSent={(result) => { setEmailOpen(false); onNotice(result.message || "Promotion brief sent."); }} />}
@@ -1733,6 +1752,68 @@ function Field({label, children, wide = false, help = ""}) {
   return <label className={`planner-field ${wide ? "is-wide" : ""}`}><span>{label}</span>{children}{help && <small>{help}</small>}</label>;
 }
 
+function MarkdownInline({tokens}) {
+  return tokens.map((token, index) => {
+    const key = `${token.type}-${index}-${token.text}`;
+    if (token.type === "strong") return <strong key={key}>{token.text}</strong>;
+    if (token.type === "emphasis") return <em key={key}>{token.text}</em>;
+    if (token.type === "code") return <code key={key}>{token.text}</code>;
+    return <React.Fragment key={key}>{token.text}</React.Fragment>;
+  });
+}
+
+function PlannerMarkdown({value}) {
+  const blocks = parseBriefMarkdown(value);
+  return <div className="planner-markdown">{blocks.map((block, index) => {
+    const key = `${block.type}-${index}`;
+    if (block.type === "heading") {
+      const Heading = `h${Math.min(6, block.level + 3)}`;
+      return <Heading key={key}><MarkdownInline tokens={block.content} /></Heading>;
+    }
+    if (block.type === "paragraph") {
+      return <p key={key}>{block.lines.map((line, lineIndex) => <React.Fragment key={`${key}-${lineIndex}`}><MarkdownInline tokens={line} />{lineIndex < block.lines.length - 1 && <br />}</React.Fragment>)}</p>;
+    }
+    const List = block.type === "ordered-list" ? "ol" : "ul";
+    return <List key={key}>{block.items.map((item, itemIndex) => <li key={`${key}-${itemIndex}`}><MarkdownInline tokens={item} /></li>)}</List>;
+  })}</div>;
+}
+
+function MarkdownTextEditor({value, onChange, placeholder = "", rows = 6}) {
+  const textareaRef = useRef(null);
+  const replaceSelection = (prefix, suffix = prefix, fallback = "text") => {
+    const textarea = textareaRef.current;
+    const current = String(value || "");
+    const start = textarea?.selectionStart ?? current.length;
+    const end = textarea?.selectionEnd ?? current.length;
+    const selected = current.slice(start, end) || fallback;
+    onChange(`${current.slice(0, start)}${prefix}${selected}${suffix}${current.slice(end)}`);
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
+    });
+  };
+  const prefixLines = (prefix) => {
+    const textarea = textareaRef.current;
+    const current = String(value || "");
+    const start = textarea?.selectionStart ?? current.length;
+    const end = textarea?.selectionEnd ?? current.length;
+    const lineStart = current.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+    const selection = current.slice(lineStart, end) || "Item";
+    const replacement = selection.split("\n").map((line) => `${prefix}${line}`).join("\n");
+    onChange(`${current.slice(0, lineStart)}${replacement}${current.slice(end)}`);
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+  return <div className="planner-markdown-editor">
+    <div className="planner-markdown-toolbar" aria-label="Text formatting">
+      <button type="button" aria-label="Bold" onClick={() => replaceSelection("**")} title="Bold"><strong>B</strong></button>
+      <button type="button" aria-label="Italic" onClick={() => replaceSelection("*")} title="Italic"><em>I</em></button>
+      <button type="button" aria-label="Heading" onClick={() => prefixLines("## ")} title="Heading">Heading</button>
+      <button type="button" aria-label="Bulleted list" onClick={() => prefixLines("- ")} title="Bulleted list">List</button>
+    </div>
+    <textarea ref={textareaRef} value={value || ""} rows={rows} maxLength={3000} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+  </div>;
+}
+
 function Modal({title, eyebrow, onClose, children, size = "normal"}) {
   return (
     <div className="planner-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -1808,6 +1889,8 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
     submittedAt: businessNowInputValue(),
     playbookId: defaultPlaybook?.id || "",
     sourceEventId: "",
+    eventDetails: "",
+    sampleAnnouncement: "",
     notes: "",
   });
   const playbook = workspace.playbooks.find((item) => item.id === form.playbookId) || defaultPlaybook;
@@ -1850,6 +1933,8 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
             <Field label="Original request received"><input type="datetime-local" required value={form.submittedAt} onChange={(event) => update("submittedAt", event.target.value)} /></Field>
             <Field label="Promotion playbook"><select value={form.playbookId} onChange={(event) => update("playbookId", event.target.value)}>{campaignPlaybooks.map((item) => <option key={item.id} value={item.id}>Level {item.level} · {item.name}</option>)}</select></Field>
             <Field label="Source Event ID"><input value={form.sourceEventId} onChange={(event) => update("sourceEventId", event.target.value)} placeholder="Optional Central / PCO event ID" /></Field>
+            <Field label="Event details" wide help="Optional brief-ready copy. Supports headings, lists, bold, italics, and line breaks."><MarkdownTextEditor value={form.eventDetails} onChange={(value) => update("eventDetails", value)} placeholder="What should the team know about this event?" /></Field>
+            <Field label="Sample announcement" wide help="Optional example wording for stage, email, or social teams."><MarkdownTextEditor value={form.sampleAnnouncement} onChange={(value) => update("sampleAnnouncement", value)} placeholder="Join us for **Women’s Breakfast**…" /></Field>
             <Field label="Notes" wide><textarea value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Context Creative should keep with this campaign." /></Field>
           </div>
         </form>
@@ -1909,7 +1994,34 @@ function PlayDialog({play, campaign, smuggleRelationship, canEdit, onClose, onSa
   );
 }
 
-function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEditContent, onDelete, onCancelSmuggle}) {
+function CampaignBriefContentDialog({campaign, onClose, onSave}) {
+  const [draft, setDraft] = useState({
+    eventDetails: campaign.eventDetails || "",
+    sampleAnnouncement: campaign.sampleAnnouncement || "",
+  });
+  const [saving, setSaving] = useState(false);
+  return <Modal title="Edit weekly brief content" eyebrow={campaign.name} onClose={onClose} size="wide">
+    <div className="planner-form-grid">
+      <Field label="Event details" wide help="Use brief-ready wording. Supports headings, lists, bold, italics, and line breaks."><MarkdownTextEditor value={draft.eventDetails} onChange={(value) => setDraft((current) => ({...current, eventDetails: value}))} placeholder="Key event details, audience, location, or next step." /></Field>
+      <Field label="Sample announcement" wide help="Add optional example wording the communication team can adapt."><MarkdownTextEditor value={draft.sampleAnnouncement} onChange={(value) => setDraft((current) => ({...current, sampleAnnouncement: value}))} placeholder="Join us for **Event Name**…" /></Field>
+    </div>
+    {(draft.eventDetails || draft.sampleAnnouncement) && <div className="planner-brief-content-preview">
+      <span className="planner-kicker">Formatting preview</span>
+      {draft.eventDetails && <section><strong>Event details</strong><PlannerMarkdown value={draft.eventDetails} /></section>}
+      {draft.sampleAnnouncement && <section><strong>Sample announcement</strong><PlannerMarkdown value={draft.sampleAnnouncement} /></section>}
+    </div>}
+    <div className="planner-modal-actions">
+      <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button>
+      <button className="planner-button is-primary" disabled={saving} onClick={async () => {
+        setSaving(true);
+        try { await onSave({...campaign, ...draft}); }
+        catch (_error) { setSaving(false); }
+      }}>{saving ? "Saving…" : "Save brief content"}</button>
+    </div>
+  </Modal>;
+}
+
+function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEditContent, onEditBriefContent, onDelete, onCancelSmuggle}) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [cancellingSmuggleId, setCancellingSmuggleId] = useState("");
@@ -1936,6 +2048,8 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEd
         <div><span>{standalone ? "Schedule" : "Event date"}</span><strong>{standalone ? seriesSchedule : formatDate(campaign.eventDate)}</strong></div>{standalone ? <><div><span>Repeat</span><strong>{series?.label || "One time"}</strong></div><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div></>}
       </div>
       <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> {standalone ? "occurrences" : "promotions"}</span>{!standalone && <span><strong>{summary.conflicts}</strong> conflicts</span>}{intentionallySkipped.length > 0 && <span><strong>{intentionallySkipped.length}</strong> not running</span>}</div>
+      {campaign.eventDetails && <div className="planner-detail-note planner-campaign-brief-copy"><strong>Event details</strong><PlannerMarkdown value={campaign.eventDetails} /></div>}
+      {campaign.sampleAnnouncement && <div className="planner-detail-note planner-campaign-brief-copy"><strong>Sample announcement</strong><PlannerMarkdown value={campaign.sampleAnnouncement} /></div>}
       {campaign.notes && <div className="planner-detail-note"><strong>Notes</strong><p>{campaign.notes}</p></div>}
       {guestRelationships.map((relationship) => <div className="planner-detail-note is-smuggle" key={relationship.id}>
         <div className="planner-smuggle-note-heading"><strong>{relationship.beneficiaryPlayType} smuggled into Level {relationship.hostCampaignLevel} {relationship.hostCampaignName}</strong>{canEdit && <button className="planner-text-button" disabled={Boolean(cancellingSmuggleId)} onClick={async () => {
@@ -1956,6 +2070,7 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEd
       )}
       <div className="planner-modal-actions">
         {canEdit && !confirmDelete && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmDelete(true)}>Delete {standalone ? "content" : "campaign"}</button>}
+        {canEdit && !standalone && !confirmDelete && <button className="planner-button is-secondary" onClick={() => onEditBriefContent(campaign)}>Edit brief content</button>}
         {canEdit && standalone && !confirmDelete && <button className="planner-button is-primary" onClick={() => onEditContent(campaign)}>Edit content</button>}
         <button className="planner-button is-secondary" onClick={onClose}>Close</button>
       </div>
@@ -2008,6 +2123,7 @@ function PlannerApp({authState}) {
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [newContentOpen, setNewContentOpen] = useState(false);
   const [editingContent, setEditingContent] = useState(null);
+  const [editingBriefContent, setEditingBriefContent] = useState(null);
   const [selectedPlay, setSelectedPlay] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -2073,6 +2189,19 @@ function PlannerApp({authState}) {
     return result;
   };
 
+  const saveCampaignBriefContent = async (campaign) => {
+    const saved = await perform(
+      () => store.saveCampaignDetails(campaign),
+      `${campaign.name} brief content was updated.`,
+    );
+    setWorkspace((current) => ({
+      ...current,
+      campaigns: current.campaigns.map((item) => item.id === saved.id ? saved : item),
+    }));
+    setEditingBriefContent(null);
+    return saved;
+  };
+
   const useSmuggle = async (opportunity) => {
     const host = workspace.scheduledPlays.find((play) => play.id === opportunity.hostScheduledPlayId);
     if (!host) return;
@@ -2099,7 +2228,7 @@ function PlannerApp({authState}) {
   else if (activeView === "requests") content = <RequestsView workspace={workspace} canEdit={canEdit} onOpenRequest={setSelectedRequest} />;
   else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} />;
   else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
-  else if (activeView === "reports") content = <ReportsView workspace={workspace} authState={authState} canEmail={canEmail} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
+  else if (activeView === "reports") content = <ReportsView workspace={workspace} authState={authState} canEdit={canEdit} canEmail={canEmail} onEditBriefContent={setEditingBriefContent} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
   else if (activeView === "playbooks") content = <PlaybooksView workspace={workspace} canEdit={canEdit} onSave={async (playbook) => {
     const isNew = !workspace.playbooks.some((item) => item.id === playbook.id);
     const saved = await perform(() => store.savePlaybook(playbook), isNew ? `Added ${playbook.name}.` : `Saved ${playbook.name} as a new version.`);
@@ -2178,7 +2307,8 @@ function PlannerApp({authState}) {
         setEditingContent(null); setActiveView("content");
       }} />}
       {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} smuggleRelationship={smuggleByHostPlay.get(selectedPlay.id)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} onCancelSmuggle={removeSmuggle} />}
-      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onDelete={deleteCampaign} onCancelSmuggle={removeSmuggle} />}
+      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onEditBriefContent={(campaign) => { setSelectedCampaign(null); setEditingBriefContent(campaign); }} onDelete={deleteCampaign} onCancelSmuggle={removeSmuggle} />}
+      {editingBriefContent && <CampaignBriefContentDialog campaign={editingBriefContent} onClose={() => setEditingBriefContent(null)} onSave={saveCampaignBriefContent} />}
       {selectedRequest && <RequestReviewDialog request={selectedRequest} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedRequest(null)} onConvert={async (request, campaign, plays, eventDate) => {
         const dateWasChanged = eventDate !== request.eventDate || ["needs-review", "manual-required"].includes(request.dateParseStatus);
         const {result, savedRequest, updates} = await perform(async () => {

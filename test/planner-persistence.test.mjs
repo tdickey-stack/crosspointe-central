@@ -125,6 +125,65 @@ test("Planner set operations stay below the rules evaluation ceiling", async () 
   assert.deepEqual(committedBatchSizes, [5, 5, 5, 5, 3]);
 });
 
+test("campaign persistence bounds the two brief-ready Markdown fields", () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    firebase: {
+      firestore: {
+        Timestamp: {fromDate: (value) => value},
+      },
+    },
+  };
+  try {
+    const campaign = {
+      name: "Women's Breakfast",
+      eventDate: "2026-09-12",
+      registrationDeadline: "",
+      submittedAt: "2026-08-01T12:00:00.000Z",
+      recommendedStartDate: "2026-08-16",
+      isOnTime: true,
+      daysLate: 0,
+      weeksLate: 0,
+      level: 4,
+      campaignType: "featured",
+      playbookId: "level-4-featured",
+      playbookVersion: 1,
+      durationWeeks: 4,
+      sourceEventId: "",
+      notes: "",
+      status: "active",
+    };
+    const payload = plannerPersistenceInternals.campaignForCloud({
+      ...campaign,
+      eventDetails: "x".repeat(3200),
+      sampleAnnouncement: "Join us for **Sunday**.",
+    }, "planner-admin", "server-timestamp");
+    assert.equal(payload.eventDetails.length, 3000);
+    assert.equal(payload.sampleAnnouncement, "Join us for **Sunday**.");
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("preview campaign brief content saves independently from the promotion schedule", async () => {
+  const store = createPlannerStore({preview: true, user: {uid: "planner-admin"}});
+  const workspace = await store.loadWorkspace();
+  const campaign = workspace.campaigns[0];
+  const playsBefore = structuredClone(workspace.scheduledPlays);
+  const saved = await store.saveCampaignDetails({
+    ...campaign,
+    eventDetails: "## Sunday details\n- Doors open at 8:30",
+    sampleAnnouncement: "Join us for **Sunday**.",
+    name: "Attempted unrelated rename",
+  });
+  const reloaded = await store.loadWorkspace();
+  assert.equal(saved.name, campaign.name);
+  assert.match(saved.eventDetails, /Doors open/);
+  assert.match(saved.sampleAnnouncement, /\*\*Sunday\*\*/);
+  assert.deepEqual(reloaded.scheduledPlays, playsBefore);
+});
+
 test("preview regeneration replaces only active campaign schedules", async () => {
   const store = createPlannerStore({preview: true, user: {uid: "planner-admin"}});
   const workspace = await store.loadWorkspace();

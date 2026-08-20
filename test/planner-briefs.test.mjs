@@ -73,13 +73,23 @@ test("promotion brief independently opts into event details and sample announcem
     endDate: "2026-08-29",
     includeEventDetails: true,
     includeSampleAnnouncements: true,
+    closingScriptTitle: "One Next Step",
+    closingScript: "Everything is on **CrossPointe Central**.",
   });
   const fullEntry = fullBrief.entries.find((item) => item.id === "l4");
   assert.match(fullEntry.sampleAnnouncement, /\*Women's Breakfast\*/);
+  assert.equal(fullBrief.closingScriptTitle, "One Next Step");
+  assert.match(fullBrief.closingScript, /CrossPointe Central/);
   const {pdf} = createPromotionBriefPdf(fullBrief);
+  const overviewPage = pdf.internal.pages[1].join("\n");
+  const scriptPages = pdf.internal.pages.slice(2).flat().join("\n");
   const pdfCommands = pdf.internal.pages.slice(1).flat().join("\n");
-  assert.match(pdfCommands, /EVENT DETAILS/);
-  assert.match(pdfCommands, /SAMPLE ANNOUNCEMENT/);
+  assert.match(overviewPage, /EVENT DETAILS/);
+  assert.doesNotMatch(overviewPage, /Invite a friend to/);
+  assert.match(scriptPages, /SUNDAY ANNOUNCEMENT SCRIPT/);
+  assert.match(scriptPages, /One Next Step/);
+  assert.match(scriptPages, /Everything is on/);
+  assert.doesNotMatch(pdfCommands, /SAMPLE ANNOUNCEMENT \(CONTINUED\)/);
   assert.doesNotMatch(pdfCommands, /\*\*8:30 AM\*\*/);
 });
 

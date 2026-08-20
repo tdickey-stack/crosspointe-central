@@ -16,7 +16,7 @@ function safeText(value, maximum = 2000) {
   return String(value || "").trim().slice(0, maximum);
 }
 
-function safeFilename(value, fallback = "promotion-brief") {
+function safeFilename(value, fallback = "announcement-brief") {
   const normalized = safeText(value, 100)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -57,9 +57,11 @@ export function buildPromotionBrief({
   selectedPlayTypes = [],
   startDate = "",
   endDate = "",
-  title = "Promotion Brief",
+  title = "Announcement Brief",
   includeEventDetails = false,
   includeSampleAnnouncements = false,
+  closingScriptTitle = "One Next Step",
+  closingScript = "",
   generatedAt = new Date(),
 } = {}) {
   const selected = new Set(selectedPlayTypes.map((item) => safeText(item, 100)).filter(Boolean));
@@ -154,13 +156,16 @@ export function buildPromotionBrief({
   }).sort(campaignSort);
 
   return {
-    title: safeText(title, 120) || "Promotion Brief",
+    title: safeText(title, 120) || "Announcement Brief",
     startDate: safeText(startDate, 10),
     endDate: safeText(endDate, 10),
     generatedAt: generatedAt instanceof Date ? generatedAt.toISOString() : String(generatedAt || ""),
     announcementTypes: [...selected].sort((left, right) => left.localeCompare(right)),
     includeEventDetails: includeEventDetails === true,
     includeSampleAnnouncements: includeSampleAnnouncements === true,
+    closingScriptTitle: includeSampleAnnouncements && safeText(closingScript, 3000) ?
+      safeText(closingScriptTitle, 120) || "One Next Step" : "",
+    closingScript: includeSampleAnnouncements ? safeText(closingScript, 3000) : "",
     entries,
     campaignCount: entries.filter((entry) => entry.kind === "campaign").length,
     contentCount: entries.filter((entry) => entry.kind === "content").length,
@@ -391,7 +396,6 @@ function drawEntry(pdf, brief, entry, startY) {
     ...entry.smuggledInto.map((relationship) => smuggledIntoLayout(pdf, relationship)),
     ...entry.announcements.map((announcement) => announcementLayout(pdf, announcement)),
     ...textSectionLayouts(pdf, entry.eventDetails, "EVENT DETAILS", "event-details"),
-    ...textSectionLayouts(pdf, entry.sampleAnnouncement, "SAMPLE ANNOUNCEMENT", "sample-announcement"),
     ...textSectionLayouts(pdf, entry.notes, "NOTES", "notes"),
   ];
   const freshPageHeight = PDF_LAYOUT.contentBottom - PDF_LAYOUT.contentTop;
@@ -432,6 +436,117 @@ function drawEntry(pdf, brief, entry, startY) {
     }
   }
   return y;
+}
+
+function announcementScriptSections(brief) {
+  const sections = brief.entries
+    .filter((entry) => safeText(entry.sampleAnnouncement, 3000))
+    .map((entry) => ({
+      title: entry.name,
+      text: briefMarkdownToPlainText(entry.sampleAnnouncement),
+      accent: entry.kind === "content" ? CONTENT_COLOR : LEVEL_COLORS[entry.level] || LEVEL_COLORS[5],
+    }));
+  const closingText = briefMarkdownToPlainText(brief.closingScript);
+  if (closingText) {
+    sections.push({
+      title: safeText(brief.closingScriptTitle, 120) || "One Next Step",
+      text: closingText,
+      accent: LEVEL_COLORS[1],
+    });
+  }
+  return sections;
+}
+
+function scriptParagraphs(pdf, value, width, fontSize) {
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(fontSize);
+  return safeText(value, 10000).split(/\n{2,}/u).map((paragraph) =>
+    pdf.splitTextToSize(paragraph.replace(/\n/gu, " "), width),
+  ).filter((lines) => lines.length);
+}
+
+function measureScriptSection(pdf, section, fontSize) {
+  const headingSize = fontSize + 2.5;
+  const headingLineHeight = headingSize / 72 * 1.08;
+  const lineHeight = fontSize / 72 * 1.22;
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(headingSize);
+  const headingLines = pdf.splitTextToSize(section.title, 6.65);
+  const paragraphs = scriptParagraphs(pdf, section.text, 6.65, fontSize);
+  return {
+    headingLines,
+    paragraphs,
+    headingLineHeight,
+    lineHeight,
+    height: headingLines.length * headingLineHeight + 0.1 +
+      paragraphs.reduce((sum, lines) => sum + lines.length * lineHeight, 0) +
+      Math.max(0, paragraphs.length - 1) * 0.08 + 0.22,
+  };
+}
+
+function scriptFontSize(pdf, sections) {
+  const available = PDF_LAYOUT.contentBottom - PDF_LAYOUT.contentTop - 0.38;
+  return [9.5, 9, 8.5, 8].find((fontSize) =>
+    sections.reduce((sum, section) => sum + measureScriptSection(pdf, section, fontSize).height, 0) <= available,
+  ) || 8;
+}
+
+function addScriptPage(pdf, brief) {
+  let y = addPage(pdf, brief);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8);
+  pdf.setTextColor(239, 62, 45);
+  pdf.text("SUNDAY ANNOUNCEMENT SCRIPT", PDF_LAYOUT.left, y + 0.03);
+  pdf.setDrawColor(229, 229, 232);
+  pdf.line(PDF_LAYOUT.left, y + 0.18, PDF_LAYOUT.right, y + 0.18);
+  y += 0.38;
+  return y;
+}
+
+function drawAnnouncementScript(pdf, brief) {
+  const sections = announcementScriptSections(brief);
+  if (!brief.includeSampleAnnouncements || !sections.length) return;
+  const fontSize = scriptFontSize(pdf, sections);
+  let y = addScriptPage(pdf, brief);
+
+  sections.forEach((section) => {
+    let layout = measureScriptSection(pdf, section, fontSize);
+    if (y + layout.height > PDF_LAYOUT.contentBottom && layout.height <= PDF_LAYOUT.contentBottom - PDF_LAYOUT.contentTop - 0.38) {
+      y = addScriptPage(pdf, brief);
+    }
+
+    if (y + layout.headingLines.length * layout.headingLineHeight + layout.lineHeight * 2 > PDF_LAYOUT.contentBottom) {
+      y = addScriptPage(pdf, brief);
+      layout = measureScriptSection(pdf, section, fontSize);
+    }
+    pdf.setFillColor(...section.accent);
+    pdf.roundedRect(PDF_LAYOUT.left, y - 0.02, 0.06, layout.headingLines.length * layout.headingLineHeight + 0.06, 0.03, 0.03, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(fontSize + 2.5);
+    pdf.setTextColor(28, 28, 32);
+    pdf.text(layout.headingLines, PDF_LAYOUT.left + 0.18, y + layout.headingLineHeight - 0.03, {lineHeightFactor: 1.08});
+    y += layout.headingLines.length * layout.headingLineHeight + 0.1;
+
+    layout.paragraphs.forEach((paragraph, paragraphIndex) => {
+      let remaining = [...paragraph];
+      while (remaining.length) {
+        const availableLines = Math.max(0, Math.floor((PDF_LAYOUT.contentBottom - y) / layout.lineHeight));
+        if (!availableLines) {
+          y = addScriptPage(pdf, brief);
+          continue;
+        }
+        const pageLines = remaining.splice(0, availableLines);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(fontSize);
+        pdf.setTextColor(52, 52, 58);
+        pdf.text(pageLines, PDF_LAYOUT.left + 0.18, y + layout.lineHeight - 0.02, {lineHeightFactor: 1.22});
+        y += pageLines.length * layout.lineHeight;
+        if (remaining.length) y = addScriptPage(pdf, brief);
+      }
+      if (paragraphIndex < layout.paragraphs.length - 1) y += 0.08;
+    });
+    y += 0.22;
+  });
 }
 
 export function createPromotionBriefPdf(brief) {
@@ -492,6 +607,8 @@ export function createPromotionBriefPdf(brief) {
     y = drawEntry(pdf, brief, entry, y);
   });
 
+  drawAnnouncementScript(pdf, brief);
+
   const pageCount = pdf.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {
     pdf.setPage(page);
@@ -500,14 +617,14 @@ export function createPromotionBriefPdf(brief) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(125, 125, 132);
-    pdf.text("Generated by CrossPointe Central Promotion Planner", 0.62, 10.72);
+    pdf.text("Generated by CrossPointe Central Planner", 0.62, 10.72);
     pdf.text(`${page} / ${pageCount}`, 7.88, 10.72, {align: "right"});
   }
 
   pdf.setProperties({
     title: brief.title,
-    subject: "Promotion brief generated by CrossPointe Central",
-    creator: "CrossPointe Central Promotion Planner",
+    subject: "Announcement brief generated by CrossPointe Central",
+    creator: "CrossPointe Central Planner",
   });
   return {
     pdf,
@@ -542,7 +659,7 @@ export async function sendPromotionBriefEmail({user, recipients, subject, messag
     body: JSON.stringify({recipients, subject, message, brief, attachment}),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Central could not send the promotion brief.");
+  if (!response.ok) throw new Error(data.error || "Central could not send the announcement brief.");
   return data;
 }
 

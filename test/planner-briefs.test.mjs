@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildPromotionBrief,
   createPromotionBriefPdf,
+  promotionBriefFilename,
   sendPromotionBriefEmail,
 } from "../src/planner/briefs.js";
 
@@ -111,8 +112,18 @@ test("promotion brief PDF produces a readable PDF document", () => {
   const result = createPromotionBriefPdf(sampleBrief());
   const bytes = new Uint8Array(result.pdf.output("arraybuffer"));
   assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");
-  assert.match(result.filename, /weekly-promotion-brief-2026-08-23\.pdf$/);
+  assert.equal(result.filename, "SUN0823_ANN_20260816.pdf");
   assert.ok(result.pdf.getNumberOfPages() >= 1);
+});
+
+test("promotion brief filename uses the upcoming Sunday and Central creation date", () => {
+  assert.equal(
+    promotionBriefFilename({
+      startDate: "2026-09-01",
+      generatedAt: "2026-08-21T03:30:00.000Z",
+    }),
+    "SUN0823_ANN_20260820.pdf",
+  );
 });
 
 test("promotion brief PDF repeats headers and paginates a long campaign cleanly", () => {
@@ -168,6 +179,7 @@ test("email request authenticates and includes the generated PDF", async () => {
   assert.equal(request.options.headers.Authorization, "Bearer planner-token");
   assert.equal(body.recipients, "creative@crosspointe.tv");
   assert.equal(body.attachment.contentType, "application/pdf");
+  assert.equal(body.attachment.filename, "SUN0823_ANN_20260816.pdf");
   assert.ok(body.attachment.base64.length > 100);
   assert.equal(result.ok, true);
 });

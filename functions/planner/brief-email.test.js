@@ -22,6 +22,8 @@ function payload(overrides = {}) {
       startDate: "2026-08-23",
       endDate: "2026-08-29",
       announcementTypes: ["Stage Announcement"],
+      closingScriptTitle: "One Next Step",
+      closingScript: "Everything is on **CrossPointe Central**.",
       entries: [{
         name: "Women's <Breakfast>",
         kind: "campaign",
@@ -72,6 +74,8 @@ test("planner brief email validates recipients and PDF attachment", () => {
   assert.equal(result.brief.entries[0].smuggledInto[0].hostCampaignLevel, 1);
   assert.match(result.brief.entries[0].eventDetails, /Doors open/);
   assert.match(result.brief.entries[0].sampleAnnouncement, /Women's Breakfast/);
+  assert.equal(result.brief.closingScriptTitle, "One Next Step");
+  assert.match(result.brief.closingScript, /CrossPointe Central/);
   assert.equal(result.attachment.filename, "weekly-promotion-brief.pdf");
 });
 
@@ -83,14 +87,19 @@ test("planner brief email renders useful text and escaped HTML", () => {
   assert.match(plainText, /SMUGGLE CONTAINS: Level 4 Ladies Bunco Night/);
   assert.match(plainText, /SMUGGLED INTO: Level 1 Big Small Group Relaunch/);
   assert.match(plainText, /Event details:\nAt a glance/);
-  assert.match(plainText, /Sample announcement:\nInvite a friend/);
-  assert.match(plainText, /The complete promotion brief is attached as a PDF/);
+  assert.match(plainText, /SUNDAY ANNOUNCEMENT SCRIPT/);
+  assert.match(plainText, /Women's <Breakfast>\nInvite a friend/);
+  assert.match(plainText, /One Next Step\nEverything is on CrossPointe Central/);
+  assert.match(plainText, /The complete announcement brief is attached as a PDF/);
   assert.match(html, /Women&#39;s &lt;Breakfast&gt;/);
   assert.match(html, /Invite &amp; welcome everyone/);
   assert.match(html, /Smuggle contains Level 4 Ladies Bunco Night/);
   assert.match(html, /Smuggled into Level 1 Big Small Group Relaunch/);
   assert.match(html, /<strong>8:30 AM<\/strong>/);
   assert.match(html, /<em>Women&#39;s Breakfast<\/em>/);
+  assert.match(html, /SUNDAY ANNOUNCEMENT SCRIPT/);
+  assert.match(html, /One Next Step/);
+  assert.match(html, /Everything is on <strong>CrossPointe Central<\/strong>/);
   assert.match(html, /&lt;img src=x&gt;/);
   assert.doesNotMatch(html, /Women's <Breakfast>/);
   assert.doesNotMatch(html, /<img src=x>/);

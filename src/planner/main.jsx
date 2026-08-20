@@ -51,7 +51,7 @@ const NAV_ITEMS = [
   {id: "calendar", label: "Calendar", icon: "▦"},
   {id: "campaigns", label: "Campaigns", icon: "◆"},
   {id: "content", label: "Content", icon: "●"},
-  {id: "reports", label: "Reports", icon: "▧"},
+  {id: "reports", label: "Announcement Brief", icon: "▧"},
   {id: "playbooks", label: "Playbooks", icon: "▤"},
   {id: "rules", label: "Rules", icon: "⚙"},
 ];
@@ -1343,21 +1343,38 @@ function BriefEntryPreview({entry, canEdit = false, onEditBriefContent}) {
         ))}
       </div>
       {entry.eventDetails && <section className="planner-brief-copy"><strong>Event details</strong><PlannerMarkdown value={entry.eventDetails} /></section>}
-      {entry.sampleAnnouncement && <section className="planner-brief-copy is-sample"><strong>Sample announcement</strong><PlannerMarkdown value={entry.sampleAnnouncement} /></section>}
       {entry.notes && <p className="planner-brief-notes"><strong>Notes</strong>{entry.notes}</p>}
     </article>
+  );
+}
+
+function AnnouncementScriptPreview({brief}) {
+  const sections = brief.entries.filter((entry) => entry.sampleAnnouncement);
+  if (!sections.length && !brief.closingScript) return (
+    <section className="planner-announcement-script is-empty">
+      <span className="planner-kicker">Combined script</span>
+      <h3>Add sample announcements to build the script</h3>
+      <p>Use Edit brief content on an event, then its copy will appear here in event order.</p>
+    </section>
+  );
+  return (
+    <section className="planner-announcement-script">
+      <header><div><span className="planner-kicker">Combined script</span><h3>Sunday announcement script</h3></div><small>Starts on a fresh PDF page</small></header>
+      {sections.map((entry) => <article key={entry.id} style={{"--script-accent": entry.kind === "content" ? "#f472b6" : LEVEL_COLORS[entry.level] || LEVEL_COLORS[5]}}><h4>{entry.name}</h4><PlannerMarkdown value={entry.sampleAnnouncement} /></article>)}
+      {brief.closingScript && <article className="is-closing" style={{"--script-accent": LEVEL_COLORS[1]}}><h4>{brief.closingScriptTitle || "One Next Step"}</h4><PlannerMarkdown value={brief.closingScript} /></article>}
+    </section>
   );
 }
 
 function ReportEmailDialog({brief, authState, onClose, onSent}) {
   const [recipients, setRecipients] = useState("");
   const [subject, setSubject] = useState(`${brief.title} · ${formatBriefDate(brief.startDate, {year: false})}–${formatBriefDate(brief.endDate)}`);
-  const [message, setMessage] = useState("Here is the latest promotion brief from Central.");
+  const [message, setMessage] = useState("Here is the latest Sunday announcement brief from Central.");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const valid = recipients.trim() && subject.trim();
   return (
-    <Modal title="Email promotion brief" eyebrow="Sent by central@crosspointe.tv" onClose={onClose}>
+    <Modal title="Email announcement brief" eyebrow="Sent by central@crosspointe.tv" onClose={onClose}>
       <div className="planner-form-grid">
         <Field label="Recipients" wide help="Separate multiple email addresses with commas."><input autoFocus type="text" value={recipients} onChange={(event) => setRecipients(event.target.value)} placeholder="creative@crosspointe.tv, ministry@crosspointe.tv" /></Field>
         <Field label="Subject" wide><input value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
@@ -1387,11 +1404,13 @@ function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefConten
   const [datePreset, setDatePreset] = useState("upcoming");
   const [startDate, setStartDate] = useState(initialRange.startDate);
   const [endDate, setEndDate] = useState(initialRange.endDate);
-  const [title, setTitle] = useState("Weekly Promotion Brief");
+  const [title, setTitle] = useState("Sunday Announcement Brief");
   const [includeEventDetails, setIncludeEventDetails] = useState(false);
   const [includeSampleAnnouncements, setIncludeSampleAnnouncements] = useState(false);
+  const [closingScriptTitle, setClosingScriptTitle] = useState("One Next Step");
+  const [closingScript, setClosingScript] = useState("");
   const playTypes = useMemo(() => [...new Set(visiblePromotions(workspace.scheduledPlays).map((play) => play.playType).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [workspace.scheduledPlays]);
-  const [selectedTypes, setSelectedTypes] = useState(() => new Set(playTypes));
+  const [selectedTypes, setSelectedTypes] = useState(() => new Set(playTypes.includes("Stage Announcement") ? ["Stage Announcement"] : playTypes));
   const [emailOpen, setEmailOpen] = useState(false);
   const brief = useMemo(() => buildPromotionBrief({
     campaigns: workspace.campaigns,
@@ -1402,7 +1421,9 @@ function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefConten
     title,
     includeEventDetails,
     includeSampleAnnouncements,
-  }), [workspace.campaigns, workspace.scheduledPlays, selectedTypes, startDate, endDate, title, includeEventDetails, includeSampleAnnouncements]);
+    closingScriptTitle,
+    closingScript,
+  }), [workspace.campaigns, workspace.scheduledPlays, selectedTypes, startDate, endDate, title, includeEventDetails, includeSampleAnnouncements, closingScriptTitle, closingScript]);
   const dateRangeValid = startDate && endDate && startDate <= endDate;
   const ready = dateRangeValid && selectedTypes.size > 0 && brief.entries.length > 0;
   const toggleType = (playType) => setSelectedTypes((current) => {
@@ -1415,9 +1436,9 @@ function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefConten
   return (
     <>
       <PageHeading
-        eyebrow="Reports"
-        title="Build a promotion brief"
-        copy="Choose a planning window and promotion types, then download a PDF or send the same brief by email. Campaign details come from Planner until Planning Center Calendar is connected later."
+        eyebrow="Announcement Brief"
+        title="Build the Sunday announcement brief"
+        copy="Review the events on the first page, then combine their saved sample announcements into one speaker-ready script with an optional closing section."
         actions={<div className="planner-heading-action-group"><button className="planner-button is-secondary" disabled={!ready} onClick={() => {
           try {
             const result = downloadPromotionBriefPdf(brief);
@@ -1427,7 +1448,7 @@ function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefConten
       />
       <section className="planner-report-layout">
         <aside className="planner-panel planner-report-controls">
-          <div className="planner-panel-heading"><div><span className="planner-kicker">Brief setup</span><h2>What to include</h2></div></div>
+          <div className="planner-panel-heading"><div><span className="planner-kicker">Brief setup</span><h2>Sunday announcements</h2></div></div>
           <div className="planner-form-grid">
             <Field label="Brief title" wide><input value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
             <Field label="Date range" wide help={`${formatBriefDate(startDate)} through ${formatBriefDate(endDate)}`}>
@@ -1452,8 +1473,13 @@ function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefConten
           <div className="planner-report-type-heading"><strong>Campaign content</strong><span>Optional</span></div>
           <div className="planner-report-inclusions">
             <label><input type="checkbox" checked={includeEventDetails} onChange={(event) => setIncludeEventDetails(event.target.checked)} /><span><strong>Event details</strong><small>Include brief-ready details saved with each event.</small></span></label>
-            <label><input type="checkbox" checked={includeSampleAnnouncements} onChange={(event) => setIncludeSampleAnnouncements(event.target.checked)} /><span><strong>Sample announcements</strong><small>Include example wording saved with each event.</small></span></label>
+            <label><input type="checkbox" checked={includeSampleAnnouncements} onChange={(event) => setIncludeSampleAnnouncements(event.target.checked)} /><span><strong>Combined announcement script</strong><small>Start a fresh PDF page with every saved sample announcement in event order.</small></span></label>
           </div>
+          {includeSampleAnnouncements && <div className="planner-report-closing">
+            <div className="planner-report-type-heading"><strong>Closing section</strong><span>Optional</span></div>
+            <Field label="Section heading" wide><input value={closingScriptTitle} maxLength={120} onChange={(event) => setClosingScriptTitle(event.target.value)} placeholder="One Next Step" /></Field>
+            <Field label="Closing script" wide help="Tie the announcements together with a final next step or reminder."><MarkdownTextEditor value={closingScript} onChange={setClosingScript} placeholder="Everything is on **CrossPointe Central**…" /></Field>
+          </div>}
           <div className="planner-report-type-heading"><strong>Promotion types</strong><span>{selectedTypes.size} selected</span></div>
           <div className="planner-report-type-actions"><button className="planner-text-button" onClick={() => setSelectedTypes(new Set(playTypes))}>Select all</button><button className="planner-text-button" onClick={() => setSelectedTypes(new Set())}>Clear</button></div>
           <div className="planner-report-types">
@@ -1464,16 +1490,16 @@ function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefConten
         </aside>
         <section className="planner-panel planner-report-preview">
           <div className="planner-report-preview-header">
-            <div><span className="planner-kicker">Live preview</span><h2>{brief.title || "Promotion Brief"}</h2><p>{formatBriefDate(startDate)}–{formatBriefDate(endDate)}</p></div>
+            <div><span className="planner-kicker">Live preview</span><h2>{brief.title || "Announcement Brief"}</h2><p>{formatBriefDate(startDate)}–{formatBriefDate(endDate)}</p></div>
             <div><span><strong>{brief.announcementCount}</strong> promotions</span><span><strong>{brief.entries.length}</strong> campaigns + content</span><span className={brief.attentionCount ? "has-alert" : ""}><strong>{brief.attentionCount}</strong> need attention</span></div>
           </div>
-          {brief.entries.length ? <div className="planner-brief-entry-list">{brief.entries.map((entry) => <BriefEntryPreview key={entry.id} entry={entry} canEdit={canEdit} onEditBriefContent={(campaignId) => {
+          {brief.entries.length ? <><div className="planner-brief-entry-list">{brief.entries.map((entry) => <BriefEntryPreview key={entry.id} entry={entry} canEdit={canEdit} onEditBriefContent={(campaignId) => {
             const campaign = workspace.campaigns.find((item) => item.id === campaignId);
             if (campaign) onEditBriefContent(campaign);
-          }} />)}</div> : <EmptyState title="No matching promotions" copy="Choose at least one promotion type and a date range containing planned promotions." />}
+          }} />)}</div>{includeSampleAnnouncements && <AnnouncementScriptPreview brief={brief} />}</> : <EmptyState title="No matching promotions" copy="Choose at least one promotion type and a date range containing planned promotions." />}
         </section>
       </section>
-      {emailOpen && <ReportEmailDialog brief={brief} authState={authState} onClose={() => setEmailOpen(false)} onSent={(result) => { setEmailOpen(false); onNotice(result.message || "Promotion brief sent."); }} />}
+      {emailOpen && <ReportEmailDialog brief={brief} authState={authState} onClose={() => setEmailOpen(false)} onSent={(result) => { setEmailOpen(false); onNotice(result.message || "Announcement brief sent."); }} />}
     </>
   );
 }

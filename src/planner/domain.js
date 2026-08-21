@@ -20,6 +20,12 @@ export const LATE_BEHAVIORS = [
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const OVERVIEW_CAPACITY_RULE_ORDER = new Map([
+  "stage-announcement",
+  "newsletter-feature",
+  "newsletter-event-card",
+  "level-4-social",
+].map((id, index) => [id, index]));
 
 export function businessLocalToIso(value) {
   return Temporal.PlainDateTime.from(String(value))
@@ -954,5 +960,8 @@ export function utilizationForWeek({weekStart, plays, capacityRules}) {
       used > typicalCapacity ? "above-typical" :
       used === typicalCapacity ? "typical" : "available";
     return {...rule, capacity, typicalCapacity, used, capacityState};
-  });
+  }).sort((left, right) =>
+    (OVERVIEW_CAPACITY_RULE_ORDER.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+    (OVERVIEW_CAPACITY_RULE_ORDER.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+  );
 }

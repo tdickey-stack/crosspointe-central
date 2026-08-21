@@ -4,6 +4,7 @@ import {createRoot} from "react-dom/client";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin from "@fullcalendar/react/interaction";
+import listPlugin from "@fullcalendar/react/list";
 import classicThemePlugin from "@fullcalendar/react/themes/classic";
 import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
@@ -45,6 +46,18 @@ import "./planner.css";
 
 const EDIT_PERMISSIONS = new Set(["propose", "edit", "approve", "admin"]);
 const VIEW_STORAGE_KEY = "central-promotion-planner-calendar-view";
+const MOBILE_WEEK_CALENDAR_QUERY = "(max-width: 840px)";
+const COMPACT_CALENDAR_QUERY = "(max-width: 620px)";
+
+function PlannerGearIcon() {
+  return (
+    <svg className="planner-gear-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12" />
+    </svg>
+  );
+}
+
 const NAV_ITEMS = [
   {id: "overview", label: "Overview", icon: "◫"},
   {id: "requests", label: "Requests", icon: "◇"},
@@ -53,7 +66,7 @@ const NAV_ITEMS = [
   {id: "content", label: "Content", icon: "●"},
   {id: "reports", label: "Announcement Brief", icon: "▧"},
   {id: "playbooks", label: "Playbooks", icon: "▤"},
-  {id: "rules", label: "Rules", icon: "⚙"},
+  {id: "rules", label: "Rules", icon: <PlannerGearIcon />},
 ];
 
 const LEVEL_COLORS = {
@@ -432,7 +445,7 @@ function Sidebar({activeView, setActiveView, open, close}) {
                 className={activeView === item.id ? "is-active" : ""}
                 onClick={() => { setActiveView(item.id); close(); }}
               >
-                <span>{item.icon}</span>{item.label}
+                <span aria-hidden="true">{item.icon}</span>{item.label}
               </button>
             ))}
           </nav>
@@ -441,7 +454,7 @@ function Sidebar({activeView, setActiveView, open, close}) {
           <span className="planner-sidebar-label">Central tools</span>
           <nav className="planner-tool-links" aria-label="Central tools">
             <a href="/admin" className="planner-tool-link">
-              <span aria-hidden="true">⚙</span>Admin
+              <span aria-hidden="true"><PlannerGearIcon /></span>Admin
             </a>
             <a href="/studio" className="planner-tool-link">
               <span aria-hidden="true">✦</span>Studio
@@ -467,9 +480,10 @@ function PageHeading({eyebrow, title, copy, actions}) {
   );
 }
 
-function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggle, onSkipSmuggle, canEdit}) {
+function Overview({workspace, onNewCampaign, onOpenCampaign, onOpenPlay, onSavePlay, onUseSmuggle, onSkipSmuggle, onBuildReport, canEdit}) {
   const [selectedMetric, setSelectedMetric] = useState(null);
   const [selectedSmuggle, setSelectedSmuggle] = useState(null);
+  const [selectedScheduleGroup, setSelectedScheduleGroup] = useState(null);
   const weekStart = nextPlanningWeekStart(new Date());
   const weekEnd = addDays(weekStart, 6);
   const smuggleRelationships = buildSmuggleRelationships({
@@ -481,6 +495,7 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
   const weekPlays = visiblePromotions(visibleWorkspacePlays).filter((play) =>
     play.scheduledDate >= weekStart && play.scheduledDate <= weekEnd,
   );
+  const weekCampaignDays = groupCalendarCampaignDays(weekPlays);
   const utilization = utilizationForWeek({
     weekStart,
     plays: visibleWorkspacePlays,
@@ -527,12 +542,19 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
             <div className="planner-agenda-list">
               {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
                 const day = addDays(weekStart, offset);
-                const daily = weekPlays.filter((play) => play.scheduledDate === day);
+                const daily = weekCampaignDays.filter((group) => group.scheduledDate === day);
                 if (!daily.length) return null;
                 return (
                   <div className="planner-agenda-day" key={day}>
                     <time dateTime={day}><b>{formatDate(day, {year: false}).split(" ")[0]}</b><strong>{dateKey(day).slice(-2)}</strong></time>
-                    <div>{daily.map((play) => <PlayRow key={play.id} play={play} smuggleRelationship={smuggleByHostPlay.get(play.id)} onClick={() => onOpenPlay(play)} />)}</div>
+                    <div>{daily.map((group) => {
+                      const campaign = workspace.campaigns.find((item) => item.id === group.campaignId);
+                      return <OverviewCampaignDayCard key={group.id} group={group} smuggleByHostPlay={smuggleByHostPlay} onClick={() => {
+                        if (!campaign) return onOpenPlay(group.plays[0]);
+                        if (isStandaloneContent(group)) return onOpenCampaign(campaign);
+                        setSelectedScheduleGroup(group);
+                      }} />;
+                    })}</div>
                   </div>
                 );
               })}
@@ -581,6 +603,12 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
           canEdit={canEdit}
           onClose={() => setSelectedMetric(null)}
           onSavePlay={onSavePlay}
+          onBuildReport={(selectedPlayTypes) => onBuildReport({
+            datePreset: "custom",
+            startDate: weekStart,
+            endDate: weekEnd,
+            selectedPlayTypes,
+          })}
         />
       )}
       {selectedSmuggle && (
@@ -597,7 +625,26 @@ function Overview({workspace, onNewCampaign, onOpenPlay, onSavePlay, onUseSmuggl
           }}
         />
       )}
+      {selectedScheduleGroup && <CalendarPromotionBriefDialog group={selectedScheduleGroup} workspace={workspace} onClose={() => setSelectedScheduleGroup(null)} onOpenPlay={(play) => { setSelectedScheduleGroup(null); onOpenPlay(play); }} onOpenCampaign={(campaign) => { setSelectedScheduleGroup(null); onOpenCampaign(campaign); }} />}
     </>
+  );
+}
+
+function OverviewCampaignDayCard({group, smuggleByHostPlay, onClick}) {
+  const reviews = group.plays.filter(needsPromotionReview);
+  const promotionTypes = group.plays.map((play) => play.playType).join(", ");
+  return (
+    <button type="button" className="planner-overview-campaign-day" onClick={onClick} aria-label={`Open ${group.campaignName} details for ${formatDate(group.scheduledDate)}. Promotion types: ${promotionTypes}`}>
+      <span className="planner-play-level" style={{background: isStandaloneContent(group) ? "#f472b6" : LEVEL_COLORS[group.campaignLevel]}} />
+      <span className="planner-overview-campaign-day-content">
+        <span className="planner-overview-campaign-day-heading"><PromotionKindBadge item={group} /><strong>{group.campaignName}</strong><small>{group.plays.length} type{group.plays.length === 1 ? "" : "s"}</small></span>
+        <span className="planner-overview-campaign-day-types" role="list">{group.plays.map((play) => {
+          const relationship = smuggleByHostPlay.get(play.id);
+          return <span role="listitem" key={play.id} className={`planner-overview-campaign-day-type ${relationship ? "has-smuggle" : ""}`}><span>{play.playType}{needsPromotionReview(play) ? ` · ${play.status === "conflict" ? "Conflict" : "Review"}` : ""}</span>{relationship && <em>↳ Contains L{relationship.beneficiaryLevel} {relationship.beneficiaryName}</em>}</span>;
+        })}</span>
+      </span>
+      {reviews.length > 0 && <StatusBadge status="conflict">{reviews.length === 1 ? reviews[0].status === "conflict" ? "Conflict" : "Review" : `${reviews.length} reviews`}</StatusBadge>}
+    </button>
   );
 }
 
@@ -653,7 +700,7 @@ function WeeklyInventoryPlay({play, deadline, canEdit, onSave}) {
   );
 }
 
-function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, canEdit, onClose, onSavePlay}) {
+function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, canEdit, onClose, onSavePlay, onBuildReport}) {
   const matching = weeklyInventoryPlays({
     plays,
     weekStart,
@@ -663,6 +710,7 @@ function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, can
   });
   const attention = matching.filter(needsPromotionReview);
   const active = visiblePromotions(matching);
+  const reportPlayTypes = [...new Set(active.map((play) => play.playType).filter(Boolean))];
   return (
     <Modal title={metric.name} eyebrow={`${formatDate(weekStart, {year: false})}–${formatDate(weekEnd)}`} onClose={onClose} size="wide">
       <div className="planner-inventory-summary">
@@ -681,7 +729,10 @@ function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, can
           {active.map((play) => <WeeklyInventoryPlay key={play.id} play={play} deadline={campaignDeadline(campaigns.find((campaign) => campaign.id === play.campaignId))} canEdit={canEdit} onSave={onSavePlay} />)}
         </div>
       ) : <EmptyState title="Nothing scheduled" copy={`No ${metric.name.toLowerCase()} promotions are scheduled for this week.`} />}
-      <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button></div>
+      <div className="planner-modal-actions">
+        <button className="planner-button is-secondary" onClick={onClose}>Close</button>
+        {onBuildReport && <button className="planner-button is-primary" disabled={!reportPlayTypes.length} onClick={() => onBuildReport(reportPlayTypes)}>Generate report</button>}
+      </div>
     </Modal>
   );
 }
@@ -773,9 +824,35 @@ function CalendarPromotionBriefDialog({group, workspace, onClose, onOpenPlay, on
   );
 }
 
+function normalizeCalendarView(value) {
+  return ["dayGridWeek", "listWeek"].includes(value) ? "dayGridWeek" : "dayGridMonth";
+}
+
+function renderedCalendarView(logicalView, useListWeek) {
+  return logicalView === "dayGridWeek" && useListWeek ? "listWeek" : logicalView;
+}
+
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => window.matchMedia?.(query).matches || false);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = (event) => setMatches(event.matches);
+    setMatches(media.matches);
+    if (media.addEventListener) media.addEventListener("change", update);
+    else media.addListener?.(update);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", update);
+      else media.removeListener?.(update);
+    };
+  }, [query]);
+  return matches;
+}
+
 function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePlay}) {
   const calendarRef = useRef(null);
-  const [view, setView] = useState(() => localStorage.getItem(VIEW_STORAGE_KEY) || "dayGridMonth");
+  const [view, setView] = useState(() => normalizeCalendarView(localStorage.getItem(VIEW_STORAGE_KEY)));
+  const useListWeek = useMediaQuery(MOBILE_WEEK_CALENDAR_QUERY);
+  const useCompactMonth = useMediaQuery(COMPACT_CALENDAR_QUERY);
   const [filters, setFilters] = useState({campaign: "", level: "", channel: "", playType: ""});
   const [selectedGroup, setSelectedGroup] = useState(null);
   const smuggleRelationships = useMemo(() => buildSmuggleRelationships({
@@ -811,19 +888,29 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
       extendedProps: {campaignDayGroup: group, sortLevel: content ? 6 : Number(group.campaignLevel)},
     };
   });
-  const changeView = (next) => {
+  const changeView = (next, date) => {
+    const logicalView = normalizeCalendarView(next);
     calendarRef.current?.getApi?.().changeView(
-      next,
-      next === "dayGridWeek" ? nextPlanningWeekStart(new Date()) : undefined,
+      renderedCalendarView(logicalView, useListWeek),
+      date || (logicalView === "dayGridWeek" ? nextPlanningWeekStart(new Date()) : undefined),
     );
-    setView(next);
-    localStorage.setItem(VIEW_STORAGE_KEY, next);
+    setView(logicalView);
+    localStorage.setItem(VIEW_STORAGE_KEY, logicalView);
   };
+  useEffect(() => {
+    const api = calendarRef.current?.getApi?.();
+    const nextRenderedView = renderedCalendarView(view, useListWeek);
+    if (api && api.view.type !== nextRenderedView) api.changeView(nextRenderedView, api.getDate());
+  }, [useListWeek, view]);
   const eventContent = (info) => {
     const campaignDayGroup = info.event.extendedProps.campaignDayGroup;
     if (campaignDayGroup) {
+      const colorClass = isStandaloneContent(campaignDayGroup) ? "is-content" : `is-level-${campaignDayGroup.campaignLevel}`;
+      if (useCompactMonth && view === "dayGridMonth") {
+        return <div className={`planner-calendar-event is-campaign-day is-mobile-month ${colorClass}`}><strong>{campaignDayGroup.campaignName}</strong></div>;
+      }
       return (
-        <div className={`planner-calendar-event is-campaign-day ${isStandaloneContent(campaignDayGroup) ? "is-content" : `is-level-${campaignDayGroup.campaignLevel}`} ${view === "dayGridWeek" ? "is-week" : "is-month"}`}>
+        <div className={`planner-calendar-event is-campaign-day ${colorClass} ${view === "dayGridWeek" ? "is-week" : "is-month"}`}>
           <div><PromotionKindBadge item={campaignDayGroup} /><strong>{campaignDayGroup.campaignName}</strong><small>{campaignDayGroup.plays.length} type{campaignDayGroup.plays.length === 1 ? "" : "s"}</small></div>
           <ul>{campaignDayGroup.plays.map((play) => {
             const relationship = smuggleByHostPlay.get(play.id);
@@ -853,8 +940,8 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
         copy="Month and Week combine same-day promotion types into one card per campaign."
         actions={
           <div className="planner-segmented">
-            <button className={view === "dayGridMonth" ? "is-active" : ""} onClick={() => changeView("dayGridMonth")}>Month</button>
-            <button className={view === "dayGridWeek" ? "is-active" : ""} onClick={() => changeView("dayGridWeek")}>Week</button>
+            <button className={view === "dayGridMonth" ? "is-active" : ""} aria-pressed={view === "dayGridMonth"} onClick={() => changeView("dayGridMonth")}>Month</button>
+            <button className={view === "dayGridWeek" ? "is-active" : ""} aria-pressed={view === "dayGridWeek"} onClick={() => changeView("dayGridWeek")}>Week</button>
           </div>
         }
       />
@@ -868,8 +955,8 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
         </div>
         <FullCalendar
           ref={calendarRef}
-          plugins={[dayGridPlugin, interactionPlugin, classicThemePlugin]}
-          initialView={view}
+          plugins={[dayGridPlugin, listPlugin, interactionPlugin, classicThemePlugin]}
+          initialView={renderedCalendarView(view, useListWeek)}
           initialDate={view === "dayGridWeek" ? nextPlanningWeekStart(new Date()) : new Date()}
           firstDay={0}
           headerToolbar={{left: "prev,next today", center: "title", right: ""}}
@@ -877,7 +964,20 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
           views={{
             dayGridMonth: {dayMaxEventRows: 3},
             dayGridWeek: {dayMaxEventRows: 5},
+            listWeek: {buttonText: "Week"},
           }}
+          headerToolbarClass="planner-calendar-toolbar"
+          toolbarTitleClass="planner-calendar-toolbar-title"
+          buttonClass="planner-calendar-button"
+          viewClass={(info) => `planner-calendar-view planner-calendar-view-${info.view.type}`}
+          listDaysClass="planner-calendar-list-days"
+          listDayClass={(info) => `planner-calendar-list-day ${info.isToday ? "is-today" : ""}`}
+          listDayHeaderClass="planner-calendar-list-day-header"
+          listDayHeaderInnerClass="planner-calendar-list-day-header-part"
+          listDayBodyClass="planner-calendar-list-day-body"
+          listItemEventClass="planner-calendar-list-event"
+          listItemEventInnerClass="planner-calendar-list-event-inner"
+          moreLinkClass="planner-calendar-more-link"
           events={events}
           eventOrder={(left, right) =>
             Number(left.extendedProps.sortLevel) - Number(right.extendedProps.sortLevel) ||
@@ -906,12 +1006,12 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
           nowIndicator
           navLinks
           navLinkDayClick={(date) => {
-            changeView("dayGridWeek");
-            calendarRef.current?.getApi?.().gotoDate(date);
+            changeView("dayGridWeek", date);
           }}
           viewDidMount={(info) => {
-            setView(info.view.type);
-            localStorage.setItem(VIEW_STORAGE_KEY, info.view.type);
+            const logicalView = normalizeCalendarView(info.view.type);
+            setView(logicalView);
+            localStorage.setItem(VIEW_STORAGE_KEY, logicalView);
           }}
         />
       </section>
@@ -1399,9 +1499,10 @@ function ReportEmailDialog({brief, authState, onClose, onSent}) {
   );
 }
 
-function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefContent, onNotice, onError}) {
-  const initialRange = reportPresetDateRange("upcoming", new Date());
-  const [datePreset, setDatePreset] = useState("upcoming");
+function ReportsView({workspace, authState, canEdit, canEmail, initialSetup, onEditBriefContent, onNotice, onError}) {
+  const defaultRange = reportPresetDateRange("upcoming", new Date());
+  const initialRange = initialSetup?.startDate && initialSetup?.endDate ? initialSetup : defaultRange;
+  const [datePreset, setDatePreset] = useState(initialSetup?.datePreset || "upcoming");
   const [startDate, setStartDate] = useState(initialRange.startDate);
   const [endDate, setEndDate] = useState(initialRange.endDate);
   const [title, setTitle] = useState("Sunday Announcement Brief");
@@ -1410,7 +1511,10 @@ function ReportsView({workspace, authState, canEdit, canEmail, onEditBriefConten
   const [closingScriptTitle, setClosingScriptTitle] = useState("One Next Step");
   const [closingScript, setClosingScript] = useState("");
   const playTypes = useMemo(() => [...new Set(visiblePromotions(workspace.scheduledPlays).map((play) => play.playType).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [workspace.scheduledPlays]);
-  const [selectedTypes, setSelectedTypes] = useState(() => new Set(playTypes.includes("Stage Announcement") ? ["Stage Announcement"] : playTypes));
+  const [selectedTypes, setSelectedTypes] = useState(() => {
+    const requestedTypes = (initialSetup?.selectedPlayTypes || []).filter((playType) => playTypes.includes(playType));
+    return new Set(requestedTypes.length ? requestedTypes : playTypes.includes("Stage Announcement") ? ["Stage Announcement"] : playTypes);
+  });
   const [emailOpen, setEmailOpen] = useState(false);
   const brief = useMemo(() => buildPromotionBrief({
     campaigns: workspace.campaigns,
@@ -2153,6 +2257,7 @@ function PlannerApp({authState}) {
   const [selectedPlay, setSelectedPlay] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [reportSetup, setReportSetup] = useState(null);
   const store = useMemo(() => createPlannerStore({
     firestore: authState.firestore,
     user: authState.user,
@@ -2254,7 +2359,7 @@ function PlannerApp({authState}) {
   else if (activeView === "requests") content = <RequestsView workspace={workspace} canEdit={canEdit} onOpenRequest={setSelectedRequest} />;
   else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} />;
   else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
-  else if (activeView === "reports") content = <ReportsView workspace={workspace} authState={authState} canEdit={canEdit} canEmail={canEmail} onEditBriefContent={setEditingBriefContent} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
+  else if (activeView === "reports") content = <ReportsView workspace={workspace} authState={authState} canEdit={canEdit} canEmail={canEmail} initialSetup={reportSetup} onEditBriefContent={setEditingBriefContent} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
   else if (activeView === "playbooks") content = <PlaybooksView workspace={workspace} canEdit={canEdit} onSave={async (playbook) => {
     const isNew = !workspace.playbooks.some((item) => item.id === playbook.id);
     const saved = await perform(() => store.savePlaybook(playbook), isNew ? `Added ${playbook.name}.` : `Saved ${playbook.name} as a new version.`);
@@ -2292,7 +2397,7 @@ function PlannerApp({authState}) {
     const saved = await perform(() => store.saveStandingLane(lane), `${lane.name} standing lane saved.`);
     setWorkspace((current) => ({...current, standingLanes: current.standingLanes.map((item) => item.id === saved.id ? saved : item)}));
   }} />;
-  else content = <Overview workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenPlay={setSelectedPlay} onSavePlay={updatePlay} onUseSmuggle={useSmuggle} onSkipSmuggle={skipSmuggle} />;
+  else content = <Overview workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onSavePlay={updatePlay} onUseSmuggle={useSmuggle} onSkipSmuggle={skipSmuggle} onBuildReport={(setup) => { setReportSetup(setup); setActiveView("reports"); }} />;
 
   return (
     <div className="planner-app">

@@ -1,8 +1,14 @@
 # Central Studio backend
 
-Central Studio has an isolated Firebase Functions codebase in
-`studio-functions/`. It does not import or modify the existing
-`functions/index.js`.
+Central Studio keeps project, sharing, Unsplash, Groups, and image-proxy
+operations in the isolated `studio-functions/` codebase. Its authenticated
+Planning Center event lookup lives in the default Functions codebase at
+`functions/studio/planning-center-events.js` so it can reuse Central's calendar
+mapper, presentation rules, and shared cache without duplicating them.
+
+The public Central calendar remains on its normal 14-day window. Studio's event
+picker requests a separate Central-tagged 60-day catalog through
+`/api/studio/pco/events`.
 
 ## Unsplash access key
 
@@ -51,10 +57,11 @@ event graphic deletion remains a single-record operation.
 
 ## Deployment boundary
 
-Deploy only the isolated Studio backend:
+Deploy the isolated Studio backend and Studio's shared-calendar endpoint:
 
 ```sh
-firebase deploy --project crosspointe-central --only functions:studio
+firebase deploy --project crosspointe-central \
+  --only functions:studio,functions:studioPlanningCenterEvents
 ```
 
 A normal full release deploy includes both Functions codebases, Hosting,

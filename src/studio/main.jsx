@@ -4985,7 +4985,8 @@ function EventProjectBriefSheet({
     setEventState((current) => ({
       ...current,
       status: "loading",
-      message: "Loading current Central events from Planning Center…",
+      message:
+        "Loading the next 60 days of Central events from Planning Center…",
     }));
     try {
       const events = await services.loadPlanningCenterEvents();
@@ -4993,8 +4994,11 @@ function EventProjectBriefSheet({
         status: "ready",
         events,
         message: events.length
-          ? `${events.length} current event${events.length === 1 ? "" : "s"} available.`
-          : "No current Central-tagged Planning Center events were found.",
+          ? `${events.length} Central event${
+            events.length === 1 ? "" : "s"
+          } available in the next 60 days.`
+          : "No Central-tagged Planning Center events were found " +
+            "in the next 60 days.",
       });
       return events;
     } catch (error) {
@@ -5042,7 +5046,8 @@ function EventProjectBriefSheet({
         ...current,
         status: "error",
         message:
-          "The linked occurrence is no longer in Central’s current Planning Center event feed.",
+          "The linked occurrence is no longer in Studio’s 60-day " +
+          "Planning Center event feed.",
       }));
       return;
     }
@@ -5086,7 +5091,8 @@ function EventProjectBriefSheet({
       </div>
       <div className="studio-event-sheet-content">
         <p className="studio-event-sheet-intro">
-          Choose a current Central event to import its Planning Center facts.
+          Choose a Central event in the next 60 days to import its Planning
+          Center facts.
           Refreshing replaces event copy, while the template, palette, format,
           font, imagery, and composition stay under Studio’s control.
         </p>

@@ -719,15 +719,6 @@ async function localPreviewJson(url, options = {}) {
   return data;
 }
 
-async function publicJson(url) {
-  const response = await fetch(url, {cache: "no-store"});
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || "Central could not load Planning Center events.");
-  }
-  return data;
-}
-
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -809,7 +800,7 @@ export function createStudioPreviewUnsplash() {
     },
     async loadPlanningCenterEvents() {
       return planningCenterEventsFromCentralData(
-        await publicJson("/api/central-data"),
+        await localPreviewJson("/api/studio/pco/events"),
       );
     },
   };
@@ -1306,7 +1297,7 @@ export function createStudioCloud({
     },
     async loadPlanningCenterEvents() {
       return planningCenterEventsFromCentralData(
-        await publicJson("/api/central-data"),
+        await authorizedJson(auth, "/api/studio/pco/events"),
       );
     },
     createShare(projectId) {

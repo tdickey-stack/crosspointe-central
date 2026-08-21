@@ -477,6 +477,74 @@ test("Central data maps to a deduplicated Planning Center event catalog", () => 
   assert.match(events[1].registrationUrl, /registrations/);
 });
 
+test("Studio maps the nested 60-day Planning Center event response", () => {
+  const events = planningCenterEventsFromCentralData({
+    lookaheadDays: 60,
+    events: {
+      today: [],
+      upcoming: [
+        {
+          id: "600",
+          planning_center_instance_id: "600",
+          planning_center_event_id: "60",
+          title: "Fall Preview",
+          date: "Oct 10, 2026",
+          starts_at: "2026-10-10T15:00:00.000Z",
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(events.map((event) => event.id), ["600"]);
+  assert.equal(events[0].title, "Fall Preview");
+});
+
+test("signed-in Studio loads events from its authenticated endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "/api/studio/pco/events");
+    assert.equal(options.headers.Authorization, "Bearer studio-token");
+    return {
+      ok: true,
+      async json() {
+        return {
+          events: {
+            today: [],
+            upcoming: [
+              {
+                id: "601",
+                planning_center_instance_id: "601",
+                planning_center_event_id: "61",
+                title: "Studio Event",
+                starts_at: "2026-10-11T15:00:00.000Z",
+              },
+            ],
+          },
+        };
+      },
+    };
+  };
+
+  try {
+    const cloud = createStudioCloud({
+      auth: {
+        currentUser: {
+          async getIdToken() {
+            return "studio-token";
+          },
+        },
+      },
+      firestore: {},
+      storage: {},
+      user: {uid: "studio-user"},
+    });
+    const events = await cloud.loadPlanningCenterEvents();
+    assert.deepEqual(events.map((event) => event.id), ["601"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Planning Center event facts fit the deterministic event fields", () => {
   const changes = planningCenterEventContentChanges(
     {

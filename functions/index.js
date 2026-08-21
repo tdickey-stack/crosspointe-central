@@ -210,6 +210,8 @@ import {createCentralEmbedsPlanningCenterService} from
 import {createPrintModeFunction} from "./print-mode/function.js";
 import {createPrintModePlanningCenterService} from
   "./print-mode/planning-center.js";
+import {createStudioPlanningCenterEventsFunction} from
+  "./studio/planning-center-events.js";
 import {
   createWayfinderNoticeCommandHandler,
   createWayfinderNoticeDraftGenerator,
@@ -2062,6 +2064,18 @@ export const centralEmbedsAdmin = createCentralEmbedsAdminFunction(
 export const centralEmbedPublic = createCentralEmbedPublicFunction(
     centralEmbedsOptions,
 );
+
+export const studioPlanningCenterEvents =
+  createStudioPlanningCenterEventsFunction({
+    admin,
+    firestore,
+    planningCenterSecrets: PLANNING_CENTER_SECRETS,
+    allowLocalPreview: true,
+    getCentralCalendarEvents: getCentralCalendarEvents_,
+    getFirestoreRoomRulesOverride: getFirestoreRoomRulesOverride_,
+    getFirestoreEventOverrides: getFirestoreEventOverrides_,
+    getDefaultRoomRules: getDefaultCentralRoomRules_,
+  });
 
 export const publishPreviewContent = onRequest(
     {

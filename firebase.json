@@ -367,6 +367,14 @@
         }
       },
       {
+        "source": "/api/studio/pco/events",
+        "function": {
+          "functionId": "studioPlanningCenterEvents",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/studio/pco/image",
         "function": {
           "functionId": "studioPlanningCenterImage",

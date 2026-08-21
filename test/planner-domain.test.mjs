@@ -309,6 +309,18 @@ test("weekly inventory includes every matching status and excludes other weeks a
   );
 });
 
+test("planning overview capacity cards use the intended dashboard order", () => {
+  const utilization = utilizationForWeek({
+    weekStart: "2026-10-11",
+    plays: [],
+    capacityRules: [...STARTER_CAPACITY_RULES].reverse(),
+  });
+  assert.deepEqual(
+    utilization.map((item) => item.id),
+    ["stage-announcement", "newsletter-feature", "newsletter-event-card", "level-4-social"],
+  );
+});
+
 test("planning overview always starts on the next Sunday", () => {
   assert.equal(nextPlanningWeekStart("2026-08-15"), "2026-08-16");
   assert.equal(nextPlanningWeekStart("2026-08-16"), "2026-08-23");

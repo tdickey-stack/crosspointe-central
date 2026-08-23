@@ -75,6 +75,8 @@
   var PRINT_MODE_MAX_SERVE_NEEDS = 3;
   var PRINT_MODE_MAX_FRONT_CONTENT_ITEMS = 4;
   var PRINT_MODE_MAX_CUSTOM_BLOCKS = 8;
+  var PRINT_MODE_EVENT_WINDOW_DAYS = 28;
+  var PRINT_MODE_EVENT_WEEK_COUNT = 4;
   var PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS = 45;
   var PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS = 70;
   var PRINT_MODE_EVENT_CONTINUATION_TRIGGER_WEIGHT = 6;
@@ -7741,8 +7743,7 @@
       (includeOnFront || includeOnBack);
     var blockSizeChanged = !!existingBlock &&
       normalizeBulletinBlockSize_(existingBlock.size) !== size;
-    var centralItemCount = getSelectedBulletinCampaigns_().length +
-      getSelectedBulletinServeNeeds_().length;
+    var centralItemCount = getBulletinCentralFrontUnits_();
     var otherFrontUnits = getBulletinCustomBlockFrontUnits_(
         blocks.filter(function(block) {
           return block.id !== editingId;
@@ -7996,8 +7997,7 @@
   }
 
   function getBulletinAvailableFrontUnitsForBlock_(blockId) {
-    var centralItemCount = getSelectedBulletinCampaigns_().length +
-      getSelectedBulletinServeNeeds_().length;
+    var centralItemCount = getBulletinCentralFrontUnits_();
     var otherCustomUnits = getBulletinCustomBlockFrontUnits_(
         (adminState.bulletinDraft.fallbackBlocks || [])
             .filter(function(block) {
@@ -8271,7 +8271,10 @@
         ) !== -1;
         var disableUnchecked = !checked && (
           selectionState.campaignCount >= PRINT_MODE_MAX_CAMPAIGNS ||
-          selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+          (
+            selectionState.campaignCount === 0 &&
+            selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+          )
         );
         return renderBulletinCampaignChoice_(
             item,
@@ -8292,7 +8295,10 @@
         ) !== -1;
         var disableUnchecked = !checked && (
           selectionState.serveNeedCount >= PRINT_MODE_MAX_SERVE_NEEDS ||
-          selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+          (
+            selectionState.serveNeedCount === 0 &&
+            selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+          )
         );
         return renderBulletinServeNeedChoice_(
             item,
@@ -8599,10 +8605,7 @@
     var selectedEventCount = events.filter(function(item) {
       return item.included;
     }).length;
-    var weekOneCount = events.filter(function(item) {
-      return getBulletinEventWeek_(item) === "week1";
-    }).length;
-    var weekTwoCount = events.length - weekOneCount;
+    var weekCounts = getBulletinEventWeekCounts_(events);
 
     return [
       "<div class=\"central-admin-item central-admin-print-mode-event-heading\">",
@@ -8623,13 +8626,12 @@
       }),
       "</div></div>",
       "<div class=\"central-admin-item central-admin-print-mode-event-list\">",
-      "<div class=\"central-admin-item-header\"><strong>Next Two Weeks</strong></div>",
+      "<div class=\"central-admin-item-header\"><strong>Next Four Weeks</strong></div>",
       "<p class=\"central-admin-note\">Choose the events that should appear on the back. Featured Event is excluded automatically.</p>",
       events.length ?
         renderBulletinEventFilterBar_(
             events.length,
-            weekOneCount,
-            weekTwoCount,
+            weekCounts,
             selectedEventCount,
         ) +
         (visibleEvents.length ?
@@ -8837,10 +8839,7 @@
     var selectedEventCount = events.filter(function(item) {
       return item.included;
     }).length;
-    var weekOneCount = events.filter(function(item) {
-      return getBulletinEventWeek_(item) === "week1";
-    }).length;
-    var weekTwoCount = events.length - weekOneCount;
+    var weekCounts = getBulletinEventWeekCounts_(events);
     var campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
     var serveNeeds = Array.isArray(data.serveNeeds) ? data.serveNeeds : [];
     var selectionState = getBulletinFrontContentSelectionState_();
@@ -8862,7 +8861,7 @@
       "<div class=\"central-admin-item central-admin-bulletin-front-content\">",
       "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong>",
       renderStatusPill_("Live sources", "is-live"), "</div>",
-      "<p class=\"central-admin-note\">Choose up to four combined Campaigns and Serve Opportunities. Each list allows up to three selections.</p>",
+      "<p class=\"central-admin-note\">Campaigns and Serve Opportunities each use one front-page space. Each card allows up to three selections.</p>",
       "<div class=\"central-admin-bulletin-choice-list\">",
       campaigns.length ? campaigns.map(function(item) {
         var checked = adminState.bulletinDraft.campaignIds.indexOf(String(item.id || "")) !== -1;
@@ -8880,7 +8879,11 @@
             canSave,
             !checked && (
               selectionState.serveNeedCount >= PRINT_MODE_MAX_SERVE_NEEDS ||
-              selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+              (
+                selectionState.serveNeedCount === 0 &&
+                selectionState.totalCount >=
+                  PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+              )
             ),
         );
       }).join(""),
@@ -8888,7 +8891,7 @@
       "</div>",
       "</div>",
       "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\"><strong>Next Two Weeks</strong>",
+      "<div class=\"central-admin-item-header\"><strong>Next Four Weeks</strong>",
       renderStatusPill_(
           String(selectedEventCount) + " selected · " +
           String(events.length) + " available",
@@ -8896,13 +8899,12 @@
       ),
       "</div>",
       renderAdminNote_(
-          "Week 1 is the default print selection for new bulletins. Week 2 stays available for events that need more advance notice. Featured Event is excluded automatically.",
+          "Week 1 is the default print selection for new bulletins. Weeks 2–4 stay available for events that need more advance notice. Featured Event is excluded automatically.",
       ),
       events.length ?
         renderBulletinEventFilterBar_(
             events.length,
-            weekOneCount,
-            weekTwoCount,
+            weekCounts,
             selectedEventCount,
         ) +
         (visibleEvents.length ?
@@ -9088,16 +9090,23 @@
 
   function renderBulletinEventFilterBar_(
       totalCount,
-      weekOneCount,
-      weekTwoCount,
+      weekCounts,
       includedCount,
   ) {
-    var filters = [
-      {id: "week1", label: "Week 1", count: weekOneCount},
-      {id: "week2", label: "Week 2", count: weekTwoCount},
+    var filters = Array.from(
+        {length: PRINT_MODE_EVENT_WEEK_COUNT},
+        function(_unused, index) {
+          var weekNumber = index + 1;
+          return {
+            id: "week" + String(weekNumber),
+            label: "Week " + String(weekNumber),
+            count: Number(weekCounts && weekCounts[index]) || 0,
+          };
+        },
+    ).concat([
       {id: "included", label: "Included", count: includedCount},
-      {id: "all", label: "All 14 Days", count: totalCount},
-    ];
+      {id: "all", label: "All 28 Days", count: totalCount},
+    ]);
 
     return [
       "<div class=\"central-admin-bulletin-event-toolbar\">",
@@ -9292,7 +9301,9 @@
   }
 
   function renderBulletinFullPagePanel_(preview) {
-    var className = "central-bulletin-panel central-bulletin-panel-front is-full-page";
+    var className =
+      "central-bulletin-panel central-bulletin-panel-front is-full-page " +
+      getBulletinFrontDensityClass_();
     if (adminState.bulletinDraft.printColorMode === "bw") {
       className += " is-black-and-white";
     }
@@ -9309,6 +9320,9 @@
 
   function renderBulletinPanel_(side, preview) {
     var className = "central-bulletin-panel central-bulletin-panel-" + side;
+    if (side === "front") {
+      className += " " + getBulletinFrontDensityClass_();
+    }
     if (adminState.bulletinDraft.printColorMode === "bw") {
       className += " is-black-and-white";
     }
@@ -9413,7 +9427,9 @@
       return "";
     }
     return [
-      "<section class=\"central-bulletin-card central-bulletin-campaigns\" data-bulletin-preview-item=\"campaigns\"><span class=\"central-bulletin-label\">Current Campaigns</span>",
+      "<section class=\"central-bulletin-card central-bulletin-campaigns is-count-",
+      String(Math.min(campaigns.length, PRINT_MODE_MAX_CAMPAIGNS)),
+      "\" data-bulletin-preview-item=\"campaigns\"><span class=\"central-bulletin-label\">Current Campaigns</span>",
       campaigns.map(function(item) {
         var iconId = getBulletinCampaignIconId_(item);
         return "<div class=\"central-bulletin-campaign\" data-bulletin-preview-item=\"campaign:" +
@@ -9435,7 +9451,9 @@
       return "";
     }
     return [
-      "<section class=\"central-bulletin-card central-bulletin-serve\" data-bulletin-preview-item=\"serveNeeds\"><div>",
+      "<section class=\"central-bulletin-card central-bulletin-serve is-count-",
+      String(Math.min(serveNeeds.length, PRINT_MODE_MAX_SERVE_NEEDS)),
+      "\" data-bulletin-preview-item=\"serveNeeds\"><div>",
       "<span class=\"central-bulletin-label\">Serve Opportunit",
       serveNeeds.length === 1 ? "y" : "ies", "</span>",
       "<div class=\"central-bulletin-serve-list\">",
@@ -18491,7 +18509,7 @@
       headings: {
         frontHeading: "This Week at\nCrossPointe",
         backEyebrow: "See You There",
-        backHeading: "The Next Two Weeks",
+        backHeading: "The Next Four Weeks",
       },
       giving: {
         monthlyBudget: 0,
@@ -18574,12 +18592,7 @@
           50,
           1,
       ),
-      backHeading: normalizeBulletinHeadingText_(
-          savedHeadings.backHeading,
-          "The Next Two Weeks",
-          80,
-          2,
-      ),
+      backHeading: normalizeBulletinBackHeading_(savedHeadings.backHeading),
     };
     draft.giving = {
       monthlyBudget: normalizeBulletinMoney_(savedGiving.monthlyBudget),
@@ -18725,9 +18738,14 @@
             getSuggestedBulletinCampaignIconId_(item);
         });
 
-    var campaignIds = Array.isArray(source.campaignIds) ?
+    var savedCampaignIds = Array.isArray(source.campaignIds) ?
       source.campaignIds.map(String) :
       [];
+    var campaignIds = getBulletinActiveSelectionIds_(
+        savedCampaignIds,
+        data.campaigns,
+        PRINT_MODE_MAX_CAMPAIGNS,
+    );
     var customFrontUnits = getBulletinCustomBlockFrontUnits_(
         draft.fallbackBlocks,
     );
@@ -18735,7 +18753,7 @@
         0,
         PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - customFrontUnits,
     );
-    draft.campaignIds = (campaignIds.length ? campaignIds :
+    draft.campaignIds = (savedCampaignIds.length ? campaignIds :
       (Array.isArray(data.campaigns) ? data.campaigns : [])
           .slice(0, PRINT_MODE_MAX_CAMPAIGNS)
           .map(function(item) {
@@ -18744,7 +18762,7 @@
           .filter(Boolean))
         .slice(
             0,
-            Math.min(PRINT_MODE_MAX_CAMPAIGNS, remainingCentralSlots),
+            remainingCentralSlots > 0 ? PRINT_MODE_MAX_CAMPAIGNS : 0,
         );
     var hasSavedServeNeedIds = Array.isArray(source.serveNeedIds);
     var savedServeNeedIds = hasSavedServeNeedIds ?
@@ -18758,15 +18776,16 @@
     }
     var remainingFrontItemSlots = Math.max(
         0,
-        remainingCentralSlots - draft.campaignIds.length,
+        remainingCentralSlots - (draft.campaignIds.length ? 1 : 0),
     );
-    draft.serveNeedIds = savedServeNeedIds
-        .filter(function(id, index, ids) {
-          return id && ids.indexOf(id) === index;
-        })
+    draft.serveNeedIds = getBulletinActiveSelectionIds_(
+        savedServeNeedIds,
+        data.serveNeeds,
+        PRINT_MODE_MAX_SERVE_NEEDS,
+    )
         .slice(
             0,
-            Math.min(PRINT_MODE_MAX_SERVE_NEEDS, remainingFrontItemSlots),
+            remainingFrontItemSlots > 0 ? PRINT_MODE_MAX_SERVE_NEEDS : 0,
         );
 
     return draft;
@@ -18931,7 +18950,7 @@
   function getBulletinEventDraftsInWindow_() {
     var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
     var end = new Date(start.getTime());
-    end.setUTCDate(end.getUTCDate() + 13);
+    end.setUTCDate(end.getUTCDate() + PRINT_MODE_EVENT_WINDOW_DAYS - 1);
 
     return (adminState.bulletinDraft.events || []).filter(function(item) {
       var date = parseBulletinDate_(item.date);
@@ -18942,10 +18961,26 @@
 
   function getBulletinEventWeek_(item) {
     var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
-    var weekTwoStart = new Date(start.getTime());
-    weekTwoStart.setUTCDate(weekTwoStart.getUTCDate() + 7);
-    return parseBulletinDate_(item && item.date).getTime() <
-      weekTwoStart.getTime() ? "week1" : "week2";
+    var eventDate = parseBulletinDate_(item && item.date);
+    var elapsedDays = Math.floor(
+        (eventDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000),
+    );
+    var weekNumber = Math.min(
+        PRINT_MODE_EVENT_WEEK_COUNT,
+        Math.max(1, Math.floor(elapsedDays / 7) + 1),
+    );
+    return "week" + String(weekNumber);
+  }
+
+  function getBulletinEventWeekCounts_(events) {
+    var counts = Array(PRINT_MODE_EVENT_WEEK_COUNT).fill(0);
+    (Array.isArray(events) ? events : []).forEach(function(item) {
+      var weekIndex = Number(getBulletinEventWeek_(item).replace("week", "")) - 1;
+      if (weekIndex >= 0 && weekIndex < counts.length) {
+        counts[weekIndex] += 1;
+      }
+    });
+    return counts;
   }
 
   function getFilteredBulletinEventDrafts_(events) {
@@ -18960,7 +18995,7 @@
       });
     }
 
-    if (filter === "week1" || filter === "week2") {
+    if (/^week[1-4]$/.test(filter)) {
       return source.filter(function(item) {
         return getBulletinEventWeek_(item) === filter;
       });
@@ -19100,6 +19135,24 @@
         .slice(0, PRINT_MODE_MAX_SERVE_NEEDS);
   }
 
+  function getBulletinActiveSelectionIds_(selectedIds, availableItems, max) {
+    var availableIds = {};
+    (Array.isArray(availableItems) ? availableItems : [])
+        .forEach(function(item) {
+          var id = String(item && item.id || "");
+          if (id) {
+            availableIds[id] = true;
+          }
+        });
+
+    return (Array.isArray(selectedIds) ? selectedIds : [])
+        .map(String)
+        .filter(function(id, index, ids) {
+          return id && availableIds[id] && ids.indexOf(id) === index;
+        })
+        .slice(0, Math.max(0, Number(max) || 0));
+  }
+
   function getBulletinFrontContentSelectionState_() {
     var campaignCount = getSelectedBulletinCampaigns_().length;
     var serveNeedCount = getSelectedBulletinServeNeeds_().length;
@@ -19110,9 +19163,31 @@
       campaignCount: campaignCount,
       serveNeedCount: serveNeedCount,
       customBlockUnits: customBlockUnits,
-      totalCount: campaignCount + serveNeedCount + customBlockUnits,
+      totalCount: (campaignCount ? 1 : 0) +
+        (serveNeedCount ? 1 : 0) + customBlockUnits,
       maxCount: PRINT_MODE_MAX_FRONT_CONTENT_ITEMS,
     };
+  }
+
+  function getBulletinCentralFrontUnits_() {
+    return (getSelectedBulletinCampaigns_().length ? 1 : 0) +
+      (getSelectedBulletinServeNeeds_().length ? 1 : 0);
+  }
+
+  function getBulletinFrontDensityClass_() {
+    var selectionState = getBulletinFrontContentSelectionState_();
+    var classNames = [];
+    if (selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS) {
+      classNames.push("is-front-density-4");
+    } else if (
+      selectionState.totalCount === PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - 1
+    ) {
+      classNames.push("is-front-density-3");
+    }
+    if (selectionState.campaignCount + selectionState.serveNeedCount >= 5) {
+      classNames.push("is-front-live-dense");
+    }
+    return classNames.join(" ");
   }
 
   function normalizeBulletinBlockSize_(value) {
@@ -19318,13 +19393,21 @@
     var selectionState = getBulletinFrontContentSelectionState_();
 
     if (choiceType === "campaign") {
-      var ids = adminState.bulletinDraft.campaignIds.slice();
+      var centralData = adminState.bulletinCentralData || {};
+      var ids = getBulletinActiveSelectionIds_(
+          adminState.bulletinDraft.campaignIds,
+          centralData.campaigns,
+          PRINT_MODE_MAX_CAMPAIGNS,
+      );
       var index = ids.indexOf(id);
       if (
         input.checked &&
         index === -1 &&
         ids.length < PRINT_MODE_MAX_CAMPAIGNS &&
-        selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        (
+          selectionState.campaignCount > 0 ||
+          selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        )
       ) {
         ids.push(id);
       } else if (!input.checked && index !== -1) {
@@ -19342,14 +19425,21 @@
     }
 
     if (choiceType === "serve-need") {
-      var serveNeedIds =
-        (adminState.bulletinDraft.serveNeedIds || []).slice();
+      var serveData = adminState.bulletinCentralData || {};
+      var serveNeedIds = getBulletinActiveSelectionIds_(
+          adminState.bulletinDraft.serveNeedIds,
+          serveData.serveNeeds,
+          PRINT_MODE_MAX_SERVE_NEEDS,
+      );
       var serveNeedIndex = serveNeedIds.indexOf(id);
       if (
         input.checked &&
         serveNeedIndex === -1 &&
         serveNeedIds.length < PRINT_MODE_MAX_SERVE_NEEDS &&
-        selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        (
+          selectionState.serveNeedCount > 0 ||
+          selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        )
       ) {
         serveNeedIds.push(id);
       } else if (!input.checked && serveNeedIndex !== -1) {
@@ -19377,6 +19467,7 @@
 
   function buildBulletinModePayload_() {
     var draft = adminState.bulletinDraft;
+    var centralData = adminState.bulletinCentralData || {};
     var customFrontUnits = getBulletinCustomBlockFrontUnits_(
         draft.fallbackBlocks,
     );
@@ -19384,19 +19475,23 @@
         0,
         PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - customFrontUnits,
     );
-    var campaignIds = (draft.campaignIds || []).slice(
+    var campaignIds = getBulletinActiveSelectionIds_(
+        draft.campaignIds,
+        centralData.campaigns,
+        PRINT_MODE_MAX_CAMPAIGNS,
+    ).slice(
         0,
-        Math.min(PRINT_MODE_MAX_CAMPAIGNS, remainingCentralSlots),
+        remainingCentralSlots > 0 ? PRINT_MODE_MAX_CAMPAIGNS : 0,
     );
-    var serveNeedIds = (draft.serveNeedIds || []).slice(
+    var campaignUnits = campaignIds.length ? 1 : 0;
+    var serveNeedIds = getBulletinActiveSelectionIds_(
+        draft.serveNeedIds,
+        centralData.serveNeeds,
+        PRINT_MODE_MAX_SERVE_NEEDS,
+    ).slice(
         0,
-        Math.min(
-            PRINT_MODE_MAX_SERVE_NEEDS,
-            Math.max(
-                0,
-                remainingCentralSlots - campaignIds.length,
-            ),
-        ),
+        remainingCentralSlots - campaignUnits > 0 ?
+          PRINT_MODE_MAX_SERVE_NEEDS : 0,
     );
     return {
       serviceDate: normalizeSundayDateInputValue_(draft.serviceDate),
@@ -19418,12 +19513,7 @@
             50,
             1,
         ),
-        backHeading: normalizeBulletinHeadingText_(
-            draft.headings.backHeading,
-            "The Next Two Weeks",
-            80,
-            2,
-        ),
+        backHeading: normalizeBulletinBackHeading_(draft.headings.backHeading),
       },
       giving: {
         monthlyBudget: normalizeBulletinMoney_(draft.giving.monthlyBudget),
@@ -19863,6 +19953,17 @@
         .trim();
     var fallback = String(fallbackValue || "").trim();
     return (normalized || fallback).slice(0, Number(maxLength) || 80);
+  }
+
+  function normalizeBulletinBackHeading_(value) {
+    var heading = normalizeBulletinHeadingText_(
+        value,
+        "The Next Four Weeks",
+        80,
+        2,
+    );
+    return heading === "The Next Two Weeks" ?
+      "The Next Four Weeks" : heading;
   }
 
   function renderBulletinHeadingText_(value) {

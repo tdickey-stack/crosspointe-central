@@ -36,7 +36,7 @@ test("Print Mode falls back to the shared calendar cache", async () => {
     upcoming: [],
   };
   const firestore = createFirestore_({
-    "centralCache/planningCenter/calendar/v3-21": {
+    "centralCache/planningCenter/calendar/v3-35": {
       value: calendarValue,
       fetchedAtMs: 789,
     },
@@ -53,7 +53,7 @@ test("Print Mode falls back to the shared calendar cache", async () => {
   assert.deepEqual(result.data.featuredEvent, {id: "featured-1"});
   assert.deepEqual(paths, [
     "centralCache/planningCenter/bulletin/v1-room-hash",
-    "centralCache/planningCenter/calendar/v3-21",
+    "centralCache/planningCenter/calendar/v3-35",
   ]);
 });
 
@@ -64,7 +64,7 @@ test("Print Mode applies presentation after reading the source cache", async () 
     upcoming: [],
   };
   const firestore = createFirestore_({
-    "centralCache/planningCenter/calendar/v3-21": {
+    "centralCache/planningCenter/calendar/v3-35": {
       value: sourceValue,
       fetchedAtMs: 900,
     },
@@ -91,7 +91,7 @@ test("Print Mode applies presentation after reading the source cache", async () 
   }]);
   assert.deepEqual(paths, [
     "centralCache/planningCenter/bulletin/v1-room-hash",
-    "centralCache/planningCenter/calendar/v3-21",
+    "centralCache/planningCenter/calendar/v3-35",
   ]);
 });
 

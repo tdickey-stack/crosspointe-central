@@ -169,8 +169,9 @@ export function normalizePrintModePayload(sourceData) {
       .filter((id, index, ids) => id && ids.indexOf(id) === index)
       .slice(
           0,
-          Math.min(PRINT_MODE_MAX_CAMPAIGNS, availableCentralUnits),
+          availableCentralUnits > 0 ? PRINT_MODE_MAX_CAMPAIGNS : 0,
       );
+  const campaignUnits = normalizedCampaignIds.length ? 1 : 0;
   const rawServeNeedIds = Array.isArray(source.serveNeedIds) ?
     source.serveNeedIds :
     (source.serveNeedId ? [source.serveNeedId] : []);
@@ -181,11 +182,8 @@ export function normalizePrintModePayload(sourceData) {
           0,
           Math.min(
               PRINT_MODE_MAX_SERVE_NEEDS,
-              Math.max(
-                  0,
-                  availableCentralUnits -
-                    normalizedCampaignIds.length,
-              ),
+              availableCentralUnits - campaignUnits > 0 ?
+                PRINT_MODE_MAX_SERVE_NEEDS : 0,
           ),
       );
   const normalizedFrontContentOrder = normalizePrintModeFrontContentOrder_(
@@ -217,12 +215,7 @@ export function normalizePrintModePayload(sourceData) {
           50,
           1,
       ),
-      backHeading: normalizePrintModeHeading_(
-          headingsSource.backHeading,
-          "The Next Two Weeks",
-          80,
-          2,
-      ),
+      backHeading: normalizePrintModeBackHeading_(headingsSource.backHeading),
     },
     giving: {
       monthlyBudget: normalizePrintModeDollarValue_(
@@ -308,6 +301,17 @@ export function normalizePrintModePayload(sourceData) {
 function normalizePrintModeBlockSize_(value) {
   const size = Math.round(Number(value));
   return size >= 1 && size <= 3 ? size : 2;
+}
+
+function normalizePrintModeBackHeading_(value) {
+  const heading = normalizePrintModeHeading_(
+      value,
+      "The Next Four Weeks",
+      80,
+      2,
+  );
+  return heading === "The Next Two Weeks" ?
+    "The Next Four Weeks" : heading;
 }
 
 function normalizePrintModeFrontContentOrder_(sourceOrder, fallbackBlocks) {

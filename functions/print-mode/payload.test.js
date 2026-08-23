@@ -16,6 +16,7 @@ test("Print Mode payload defaults preserve the public contract", () => {
   assert.equal(payload.heroSource, "featured");
   assert.equal(payload.frontContentSource, "mixed");
   assert.equal(payload.headings.frontHeading, "This Week at\nCrossPointe");
+  assert.equal(payload.headings.backHeading, "The Next Four Weeks");
   assert.equal(payload.fallbackHero.title, "We're Glad You're Here");
   assert.deepEqual(
       payload.fallbackBlocks,
@@ -36,6 +37,14 @@ test("Print Mode payload defaults preserve the public contract", () => {
   assert.deepEqual(payload.campaignIds, []);
   assert.deepEqual(payload.serveNeedIds, []);
   assert.equal(payload.serveNeedId, "");
+});
+
+test("Print Mode migrates the legacy two-week heading", () => {
+  const payload = normalizePrintModePayload({
+    headings: {backHeading: "The Next Two Weeks"},
+  });
+
+  assert.equal(payload.headings.backHeading, "The Next Four Weeks");
 });
 
 test("Print Mode payload normalizes settings within existing limits", () => {
@@ -85,7 +94,7 @@ test("Print Mode payload normalizes settings within existing limits", () => {
   assert.equal(payload.headings.frontHeading, "First line\nSecond line");
   assert.equal(payload.giving.monthlyBudget, 12346);
   assert.equal(payload.giving.monthToDateGiving, 0);
-  assert.deepEqual(payload.campaignIds, ["a"]);
+  assert.deepEqual(payload.campaignIds, ["a", "b", "c"]);
   assert.deepEqual(payload.campaignIcons, [
     {id: "a", icon: "heart"},
     {id: "b", icon: "general"},
@@ -173,6 +182,61 @@ test(
       });
     },
 );
+
+test(
+    "Campaign and Serve selections each use one grouped front-page space",
+    () => {
+      const payload = normalizePrintModePayload({
+        campaignIds: ["campaign-1", "campaign-2", "campaign-3"],
+        serveNeedIds: ["serve-1", "serve-2", "serve-3"],
+        fallbackBlocks: [
+          {
+            id: "compact-1",
+            title: "Compact One",
+            size: 1,
+            includeOnFront: true,
+          },
+          {
+            id: "compact-2",
+            title: "Compact Two",
+            size: 1,
+            includeOnFront: true,
+          },
+        ],
+      });
+
+      assert.deepEqual(payload.campaignIds, [
+        "campaign-1",
+        "campaign-2",
+        "campaign-3",
+      ]);
+      assert.deepEqual(payload.serveNeedIds, [
+        "serve-1",
+        "serve-2",
+        "serve-3",
+      ]);
+    },
+);
+
+test("Grouped live content still respects the four-space budget", () => {
+  const payload = normalizePrintModePayload({
+    campaignIds: ["campaign-1", "campaign-2", "campaign-3"],
+    serveNeedIds: ["serve-1", "serve-2"],
+    fallbackBlocks: [{
+      id: "large",
+      title: "Large Block",
+      size: 3,
+      includeOnFront: true,
+    }],
+  });
+
+  assert.deepEqual(payload.campaignIds, [
+    "campaign-1",
+    "campaign-2",
+    "campaign-3",
+  ]);
+  assert.deepEqual(payload.serveNeedIds, []);
+});
 
 test("Print Mode preserves a safe mixed front-page card order", () => {
   const payload = normalizePrintModePayload({

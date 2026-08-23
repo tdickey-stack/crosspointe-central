@@ -6128,6 +6128,7 @@ button:disabled {
 .central-bulletin-campaigns {
   margin-top: 0.1in;
   padding: 0.11in 0.13in 0.07in;
+  overflow: hidden;
 }
 
 .central-bulletin-fallback-blocks {
@@ -6143,6 +6144,7 @@ button:disabled {
   align-items: stretch;
   min-height: 0.83in;
   padding: 0.1in 0.12in;
+  overflow: hidden;
 }
 
 .central-bulletin-fallback-block.is-size-1 {
@@ -6203,10 +6205,15 @@ button:disabled {
 }
 
 .central-bulletin-fallback-copy h3 {
+  display: -webkit-box;
   margin: 0.035in 0 0;
+  overflow: hidden;
   color: var(--bulletin-ink) !important;
   font-size: 0.16in;
   line-height: 1.08;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .central-bulletin-fallback-copy p {
@@ -6298,6 +6305,189 @@ button:disabled {
   min-height: 0.76in;
   margin-top: 0.1in;
   padding: 0.11in 0.13in;
+  overflow: hidden;
+}
+
+.central-bulletin-panel-front.is-front-density-3:not(.is-full-page)
+.central-bulletin-featured,
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-featured {
+  max-height: 1.76in;
+  min-height: 1.76in;
+  overflow: hidden;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page) > * {
+  flex-shrink: 0;
+}
+
+.central-bulletin-panel-front.is-front-density-3:not(.is-full-page)
+.central-bulletin-description,
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-heading {
+  padding: 0.12in 0 0.11in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-heading h1 {
+  font-size: 0.34in;
+  line-height: 0.94;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-featured {
+  max-height: 1.58in;
+  min-height: 1.58in;
+  padding: 0.105in 0.12in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-featured-media {
+  width: 1.74in;
+  margin-left: 0.1in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-description {
+  margin-top: 0.04in;
+  -webkit-line-clamp: 4;
+}
+
+.central-bulletin-panel-front.is-front-density-4.is-front-live-dense:not(.is-full-page)
+.central-bulletin-featured {
+  max-height: 1.18in;
+  min-height: 1.18in;
+}
+
+.central-bulletin-panel-front.is-front-density-4.is-front-live-dense:not(.is-full-page)
+.central-bulletin-featured h2 {
+  margin-top: 0.045in;
+  font-size: 0.2in;
+}
+
+.central-bulletin-panel-front.is-front-density-4.is-front-live-dense:not(.is-full-page)
+.central-bulletin-featured-media {
+  width: 1.5in;
+}
+
+.central-bulletin-panel-front.is-front-density-4.is-front-live-dense:not(.is-full-page)
+.central-bulletin-featured-time {
+  margin: 0.01in 0;
+}
+
+.central-bulletin-panel-front.is-front-density-4.is-front-live-dense:not(.is-full-page)
+.central-bulletin-description {
+  margin-top: 0.025in;
+  -webkit-line-clamp: 2;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaigns,
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve,
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-fallback-blocks,
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-giving {
+  margin-top: 0.065in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaigns {
+  padding: 0.075in 0.105in 0.055in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaign {
+  grid-template-columns: 0.24in minmax(0, 1fr);
+  gap: 0.055in;
+  min-height: 0.31in;
+  padding: 0.035in 0;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaign-icon {
+  width: 0.23in;
+  height: 0.23in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaign-icon img {
+  width: 0.15in;
+  height: 0.15in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaign p,
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve p {
+  -webkit-line-clamp: 1;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaigns.is-count-3 p,
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve.is-count-3 p {
+  display: none;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve {
+  grid-template-columns: minmax(0, 1fr) 1.25in;
+  gap: 0.08in;
+  min-height: 0.58in;
+  padding: 0.075in 0.1in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve-list {
+  gap: 0.03in;
+  margin-top: 0.025in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve-item + .central-bulletin-serve-item {
+  padding-top: 0.03in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-fallback-block.is-size-1 {
+  min-height: 0.52in;
+  padding: 0.055in 0.095in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-fallback-block.is-size-1 .central-bulletin-fallback-copy p {
+  margin-top: 0.025in;
+  -webkit-line-clamp: 1;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-giving {
+  padding: 0.075in 0.1in 0.055in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-giving-grid {
+  margin-top: 0.035in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-giving-grid > div {
+  padding: 0.05in;
+}
+
+.central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
+.central-bulletin-giving-link {
+  margin-top: 0.03in;
 }
 
 .central-bulletin-serve h3 {

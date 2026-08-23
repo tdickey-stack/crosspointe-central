@@ -18742,9 +18742,14 @@
             getSuggestedBulletinCampaignIconId_(item);
         });
 
-    var campaignIds = Array.isArray(source.campaignIds) ?
+    var savedCampaignIds = Array.isArray(source.campaignIds) ?
       source.campaignIds.map(String) :
       [];
+    var campaignIds = getBulletinActiveSelectionIds_(
+        savedCampaignIds,
+        data.campaigns,
+        PRINT_MODE_MAX_CAMPAIGNS,
+    );
     var customFrontUnits = getBulletinCustomBlockFrontUnits_(
         draft.fallbackBlocks,
     );
@@ -18752,7 +18757,7 @@
         0,
         PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - customFrontUnits,
     );
-    draft.campaignIds = (campaignIds.length ? campaignIds :
+    draft.campaignIds = (savedCampaignIds.length ? campaignIds :
       (Array.isArray(data.campaigns) ? data.campaigns : [])
           .slice(0, PRINT_MODE_MAX_CAMPAIGNS)
           .map(function(item) {
@@ -18777,10 +18782,11 @@
         0,
         remainingCentralSlots - (draft.campaignIds.length ? 1 : 0),
     );
-    draft.serveNeedIds = savedServeNeedIds
-        .filter(function(id, index, ids) {
-          return id && ids.indexOf(id) === index;
-        })
+    draft.serveNeedIds = getBulletinActiveSelectionIds_(
+        savedServeNeedIds,
+        data.serveNeeds,
+        PRINT_MODE_MAX_SERVE_NEEDS,
+    )
         .slice(
             0,
             remainingFrontItemSlots > 0 ? PRINT_MODE_MAX_SERVE_NEEDS : 0,
@@ -19117,6 +19123,24 @@
         .slice(0, PRINT_MODE_MAX_SERVE_NEEDS);
   }
 
+  function getBulletinActiveSelectionIds_(selectedIds, availableItems, max) {
+    var availableIds = {};
+    (Array.isArray(availableItems) ? availableItems : [])
+        .forEach(function(item) {
+          var id = String(item && item.id || "");
+          if (id) {
+            availableIds[id] = true;
+          }
+        });
+
+    return (Array.isArray(selectedIds) ? selectedIds : [])
+        .map(String)
+        .filter(function(id, index, ids) {
+          return id && availableIds[id] && ids.indexOf(id) === index;
+        })
+        .slice(0, Math.max(0, Number(max) || 0));
+  }
+
   function getBulletinFrontContentSelectionState_() {
     var campaignCount = getSelectedBulletinCampaigns_().length;
     var serveNeedCount = getSelectedBulletinServeNeeds_().length;
@@ -19357,7 +19381,12 @@
     var selectionState = getBulletinFrontContentSelectionState_();
 
     if (choiceType === "campaign") {
-      var ids = adminState.bulletinDraft.campaignIds.slice();
+      var centralData = adminState.bulletinCentralData || {};
+      var ids = getBulletinActiveSelectionIds_(
+          adminState.bulletinDraft.campaignIds,
+          centralData.campaigns,
+          PRINT_MODE_MAX_CAMPAIGNS,
+      );
       var index = ids.indexOf(id);
       if (
         input.checked &&
@@ -19384,8 +19413,12 @@
     }
 
     if (choiceType === "serve-need") {
-      var serveNeedIds =
-        (adminState.bulletinDraft.serveNeedIds || []).slice();
+      var serveData = adminState.bulletinCentralData || {};
+      var serveNeedIds = getBulletinActiveSelectionIds_(
+          adminState.bulletinDraft.serveNeedIds,
+          serveData.serveNeeds,
+          PRINT_MODE_MAX_SERVE_NEEDS,
+      );
       var serveNeedIndex = serveNeedIds.indexOf(id);
       if (
         input.checked &&
@@ -19422,6 +19455,7 @@
 
   function buildBulletinModePayload_() {
     var draft = adminState.bulletinDraft;
+    var centralData = adminState.bulletinCentralData || {};
     var customFrontUnits = getBulletinCustomBlockFrontUnits_(
         draft.fallbackBlocks,
     );
@@ -19429,12 +19463,20 @@
         0,
         PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - customFrontUnits,
     );
-    var campaignIds = (draft.campaignIds || []).slice(
+    var campaignIds = getBulletinActiveSelectionIds_(
+        draft.campaignIds,
+        centralData.campaigns,
+        PRINT_MODE_MAX_CAMPAIGNS,
+    ).slice(
         0,
         remainingCentralSlots > 0 ? PRINT_MODE_MAX_CAMPAIGNS : 0,
     );
     var campaignUnits = campaignIds.length ? 1 : 0;
-    var serveNeedIds = (draft.serveNeedIds || []).slice(
+    var serveNeedIds = getBulletinActiveSelectionIds_(
+        draft.serveNeedIds,
+        centralData.serveNeeds,
+        PRINT_MODE_MAX_SERVE_NEEDS,
+    ).slice(
         0,
         remainingCentralSlots - campaignUnits > 0 ?
           PRINT_MODE_MAX_SERVE_NEEDS : 0,

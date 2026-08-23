@@ -70,6 +70,7 @@ test("event templates share title fitting and custom hero logos", () => {
       "event-signal-stack",
       "event-rally-poster",
       "event-future-block",
+      "event-pointe-glass",
       "event-center-stage",
       "event-timeless-center",
       "event-editorial-invitation",
@@ -172,6 +173,7 @@ test("Social Posts expose focused templates and mobile-first formats", () => {
       "social-quote",
       "social-statement",
       "social-simple-statement",
+      "social-pointe-glass",
     ],
   );
   socialTemplates.forEach((template) => {
@@ -180,6 +182,54 @@ test("Social Posts expose focused templates and mobile-first formats", () => {
     assert.ok(getEventFontOptions(template.id).length >= 3);
     assert.ok(getEventCompositionOptions(template.id).length >= 1);
   });
+});
+
+test("Pointe Glass templates keep their controlled material defaults", () => {
+  const eventTemplate = getTemplateById("event-pointe-glass");
+  const socialTemplate = getTemplateById("social-pointe-glass");
+  const eventProject = createStudioProject(eventTemplate.id);
+  const socialProject = createStudioProject(socialTemplate.id);
+
+  assert.equal(eventTemplate.variant, "pointe-glass-event");
+  assert.deepEqual(
+    eventTemplate.compositions.map((option) => option.value),
+    ["pointe-glass"],
+  );
+  assert.deepEqual(eventTemplate.formats, ["1:1", "4:5", "16:9"]);
+  assert.equal(eventProject.content.composition, "pointe-glass");
+  assert.equal(eventProject.content.palette, "blue-charcoal");
+  assert.equal(eventProject.content.fontKey, "google-sans");
+  assert.equal(eventProject.content.textAlignment, "left");
+  assert.equal(eventProject.content.brandColor, "auto");
+  assert.equal(supportsHeroLogoTemplate(eventTemplate.id), true);
+  assert.equal(
+    projectForCloud(eventProject, "studio-admin").content.composition,
+    "pointe-glass",
+  );
+
+  assert.equal(socialTemplate.variant, "pointe-glass-social");
+  assert.deepEqual(
+    socialTemplate.compositions.map((option) => option.value),
+    ["pointe-glass"],
+  );
+  assert.deepEqual(socialTemplate.formats, ["1:1", "4:5"]);
+  assert.equal(socialProject.content.composition, "pointe-glass");
+  assert.equal(socialProject.content.palette, "blue-charcoal");
+  assert.equal(socialProject.content.fontKey, "google-sans");
+  assert.equal(socialProject.content.textAlignment, "center");
+  assert.equal(socialProject.content.fontWeight, "medium");
+  assert.equal(socialProject.content.brandColor, "auto");
+  assert.equal(supportsHeroLogoTemplate(socialTemplate.id), false);
+  assert.equal(
+    socialSlideForCloud(
+      {content: socialProject.content},
+      socialTemplate.id,
+      socialProject.id,
+    ).content.composition,
+    "pointe-glass",
+  );
+  assert.deepEqual(getProjectWarnings(eventProject), []);
+  assert.deepEqual(getProjectWarnings(socialProject), []);
 });
 
 test("Simple Statement keeps its ID, auto contrast, and background support", () => {

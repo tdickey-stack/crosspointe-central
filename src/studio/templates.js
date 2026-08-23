@@ -141,6 +141,10 @@ const EVENT_COMPOSITION_LIBRARY = {
     value: "groups-gradient",
     label: "Pointe Groups Gradient",
   },
+  "pointe-glass": {
+    value: "pointe-glass",
+    label: "Pointe Glass",
+  },
 };
 
 const documentTemplate = ({
@@ -466,6 +470,32 @@ export const TEMPLATE_CATALOG = [
     },
     accent: "red",
   }),
+  socialTemplate({
+    id: "social-pointe-glass",
+    name: "Pointe Glass Post",
+    shortName: "Glass",
+    description:
+      "A luminous, layered social post with the main message held in a translucent CrossPointe glass panel.",
+    variant: "pointe-glass-social",
+    fonts: ["google-sans", "montserrat", "league-spartan"],
+    compositions: ["pointe-glass"],
+    defaultFont: "google-sans",
+    previewCopy: {
+      eyebrow: "YOU’RE INVITED",
+      title: "A place to breathe.\nA place to belong.",
+      subtitle: "SUNDAYS AT CROSSPOINTE",
+      footer: "",
+    },
+    defaults: {
+      composition: "pointe-glass",
+      palette: "blue-charcoal",
+      textAlignment: "center",
+      fontWeight: "medium",
+      brandMark: "central",
+      brandColor: "auto",
+    },
+    accent: "mint",
+  }),
   eventTemplate({
     id: "event-signal-stack",
     name: "Signal Stack",
@@ -545,6 +575,34 @@ export const TEMPLATE_CATALOG = [
       textAlignment: "left",
     },
     accent: "mint",
+  }),
+  eventTemplate({
+    id: "event-pointe-glass",
+    name: "Pointe Glass Event",
+    shortName: "Glass",
+    description:
+      "A cinematic event system with luminous color, crisp details, and the hero message set inside a dimensional glass panel.",
+    variant: "pointe-glass-event",
+    fonts: ["google-sans", "montserrat", "league-spartan"],
+    compositions: ["pointe-glass"],
+    defaultFont: "google-sans",
+    previewCopy: {
+      eyebrow: "A NIGHT TO GATHER",
+      title: "Open House",
+      subtitle: "Good people. Honest conversation. Room for you.",
+      date: "SEPTEMBER 18",
+      footer: "SAVE YOUR PLACE",
+    },
+    defaults: {
+      composition: "pointe-glass",
+      palette: "blue-charcoal",
+      textAlignment: "left",
+      brandMark: "central",
+      brandColor: "auto",
+    },
+    accent: "mint",
+    titleFitLines: 2,
+    titleFitMinScale: 0.56,
   }),
   eventTemplate({
     id: "event-center-stage",

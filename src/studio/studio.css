@@ -726,6 +726,14 @@ a {
   background: linear-gradient(145deg, #fbf8ef, #e9e2d2);
 }
 
+.studio-template-art.is-pointe-glass-event,
+.studio-template-art.is-pointe-glass-social {
+  background:
+    radial-gradient(circle at 16% 8%, rgba(75, 184, 233, 0.34), transparent 34%),
+    radial-gradient(circle at 88% 86%, rgba(239, 62, 45, 0.25), transparent 35%),
+    linear-gradient(145deg, #dfe6e9, #bdc8cd);
+}
+
 .studio-template-preview-frame {
   position: relative;
   z-index: 2;
@@ -7882,6 +7890,487 @@ a {
   border-color: var(--studio-red);
   opacity: 0.27;
   transform: rotate(8deg);
+}
+
+/* Pointe Glass: a clipped background lens plus deterministic face and edge layers. */
+.studio-event-graphic.is-template-pointe-glass-event,
+.studio-event-graphic.is-template-pointe-glass-social {
+  --pointe-glass-face: rgba(255, 255, 255, 0.055);
+  --pointe-glass-copy: #fff;
+  --pointe-glass-copy-muted: rgba(255, 255, 255, 0.82);
+  background:
+    radial-gradient(circle at 16% 15%, rgba(75, 184, 233, 0.66), transparent 32%),
+    radial-gradient(circle at 86% 83%, rgba(239, 62, 45, 0.54), transparent 34%),
+    radial-gradient(circle at 74% 12%, rgba(75, 195, 167, 0.32), transparent 25%),
+    linear-gradient(145deg, #162129 0%, #23343c 48%, #2f252a 100%);
+  color: #fff;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.has-dark-copy,
+.studio-event-graphic.is-template-pointe-glass-social.has-dark-copy {
+  --pointe-glass-face: rgba(255, 255, 255, 0.14);
+  --pointe-glass-copy: #252529;
+  --pointe-glass-copy-muted: rgba(37, 37, 41, 0.78);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-charcoal-red,
+.studio-event-graphic.is-template-pointe-glass-social.is-charcoal-red {
+  background:
+    radial-gradient(circle at 84% 82%, rgba(239, 62, 45, 0.68), transparent 36%),
+    radial-gradient(circle at 14% 15%, rgba(250, 200, 195, 0.18), transparent 28%),
+    linear-gradient(145deg, #18191d 0%, #2b2528 52%, #42272a 100%);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-blue-charcoal,
+.studio-event-graphic.is-template-pointe-glass-social.is-blue-charcoal {
+  background:
+    radial-gradient(circle at 15% 14%, rgba(75, 184, 233, 0.74), transparent 34%),
+    radial-gradient(circle at 82% 80%, rgba(75, 195, 167, 0.28), transparent 34%),
+    linear-gradient(145deg, #162129 0%, #23343c 52%, #20272d 100%);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-warm-light,
+.studio-event-graphic.is-template-pointe-glass-social.is-warm-light {
+  background:
+    radial-gradient(circle at 18% 16%, rgba(250, 200, 195, 0.68), transparent 34%),
+    radial-gradient(circle at 82% 80%, rgba(215, 164, 105, 0.32), transparent 36%),
+    linear-gradient(145deg, #fffaf5 0%, #f4e9dc 54%, #e8d1bd 100%);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-paper-red,
+.studio-event-graphic.is-template-pointe-glass-social.is-paper-red {
+  background:
+    radial-gradient(circle at 86% 84%, rgba(239, 62, 45, 0.52), transparent 36%),
+    radial-gradient(circle at 15% 14%, rgba(255, 255, 255, 0.96), transparent 36%),
+    linear-gradient(145deg, #fff 0%, #f6f2ee 54%, #ead6d1 100%);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-sky-mint,
+.studio-event-graphic.is-template-pointe-glass-social.is-sky-mint {
+  background:
+    radial-gradient(circle at 16% 12%, rgba(75, 184, 233, 0.58), transparent 33%),
+    radial-gradient(circle at 84% 84%, rgba(75, 195, 167, 0.5), transparent 36%),
+    linear-gradient(145deg, #f4fcff 0%, #d9f1f4 52%, #d8eee7 100%);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-blush-burgundy,
+.studio-event-graphic.is-template-pointe-glass-social.is-blush-burgundy {
+  background:
+    radial-gradient(circle at 15% 14%, rgba(250, 200, 195, 0.82), transparent 34%),
+    radial-gradient(circle at 85% 82%, rgba(100, 36, 46, 0.4), transparent 36%),
+    linear-gradient(145deg, #fff6f4 0%, #f2d9d8 52%, #d4b7bd 100%);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.has-background-image
+  .event-background-media::after,
+.studio-event-graphic.is-template-pointe-glass-social.has-background-image
+  .event-background-media::after {
+  display: block;
+  background:
+    linear-gradient(110deg, rgba(10, 15, 20, 0.34), rgba(10, 15, 20, 0.03) 58%),
+    linear-gradient(180deg, rgba(10, 15, 20, 0.02), rgba(10, 15, 20, 0.34));
+}
+
+.event-template-composition-art.is-pointe-glass {
+  overflow: hidden;
+}
+
+.pointe-glass-clip-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.pointe-glass-refraction {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.pointe-glass-refraction-lens,
+.pointe-glass-refraction-scale {
+  position: absolute;
+  inset: 0;
+}
+
+.pointe-glass-refraction-lens.is-edge {
+  mask-position: 0 0;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  -webkit-mask-position: 0 0;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+}
+
+.pointe-glass-refraction-lens.is-core .pointe-glass-refraction-scale {
+  transform: scale(1.022);
+}
+
+.pointe-glass-refraction-lens.is-edge .pointe-glass-refraction-scale {
+  transform: scale(1.085);
+}
+
+.pointe-glass-refraction-media {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: blur(0.42cqw) saturate(1.2) contrast(1.04);
+  transform-origin: center;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  will-change: opacity, transform;
+}
+
+.pointe-glass-refraction-lens.is-edge .pointe-glass-refraction-media {
+  filter: blur(0.22cqw) saturate(1.28) contrast(1.06);
+}
+
+.event-template-composition-art.is-pointe-glass span {
+  display: none;
+}
+
+.event-template-composition-art.is-pointe-glass span:nth-child(3) {
+  display: block;
+  inset: 3.4%;
+  border: 0.08cqw solid rgba(255, 255, 255, 0.18);
+  border-radius: 5.2cqw;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-layout {
+  padding: 6.2cqw;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy,
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-details,
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  .studio-preview-brand,
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  > span,
+.studio-event-graphic.is-template-pointe-glass-social .social-post-copy {
+  --pointe-glass-radius: 7.7cqw;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  clip-path: inset(0 round var(--pointe-glass-radius));
+  border-radius: var(--pointe-glass-radius);
+  border: 0;
+  background: var(--pointe-glass-face);
+  box-shadow:
+    0 0.45cqw 0.45cqw rgba(0, 0, 0, 0.15),
+    0 0 1.35cqw rgba(0, 0, 0, 0.08);
+  color: var(--pointe-glass-copy);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy::before,
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-details::before,
+.studio-event-graphic.is-template-pointe-glass-social .social-post-copy::before,
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy::after,
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-details::after,
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  .studio-preview-brand::after,
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  > span::after,
+.studio-event-graphic.is-template-pointe-glass-social .social-post-copy::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy::before,
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-details::before,
+.studio-event-graphic.is-template-pointe-glass-social .social-post-copy::before {
+  background:
+    radial-gradient(
+      circle at 17% 10%,
+      rgba(255, 255, 255, 0.22),
+      transparent 38%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.018) 48%,
+      rgba(129, 226, 255, 0.035) 73%,
+      rgba(255, 132, 203, 0.05)
+    );
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy::after,
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-details::after,
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  .studio-preview-brand::after,
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  > span::after,
+.studio-event-graphic.is-template-pointe-glass-social .social-post-copy::after {
+  z-index: 1;
+  border: 0.1cqw solid rgba(255, 255, 255, 0.28);
+  box-sizing: border-box;
+  box-shadow:
+    inset 0.32cqw 0.32cqw 0.32cqw rgba(166, 234, 255, 0.52),
+    inset -0.32cqw -0.32cqw 0.32cqw rgba(255, 164, 214, 0.38),
+    inset 0 0 0.8cqw rgba(255, 255, 255, 0.11);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy > *,
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-details > *,
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  .studio-preview-brand
+  > *,
+.studio-event-graphic.is-template-pointe-glass-social .social-post-copy > * {
+  position: relative;
+  z-index: 2;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy {
+  width: min(82%, 42em);
+  max-width: 82%;
+  padding: 5.2cqw 5.4cqw 5.6cqw;
+  --pointe-glass-radius: 7.7cqw;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-text-center
+  .event-graphic-copy {
+  align-self: center;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-text-right
+  .event-graphic-copy {
+  align-self: flex-end;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-eyebrow,
+.studio-event-graphic.is-template-pointe-glass-social .social-post-eyebrow {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pointe-glass-copy-muted);
+  letter-spacing: 0.18em;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy h2 {
+  max-width: 8.4em;
+  margin: 3.4cqw 0 2.2cqw;
+  font-size: 9.2cqw;
+  font-weight: 650;
+  letter-spacing: -0.055em;
+  line-height: 0.92;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-copy p {
+  max-width: 27em;
+  color: var(--pointe-glass-copy-muted);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-details {
+  --pointe-glass-radius: 3.2cqw;
+  width: min(82%, 42em);
+  max-width: 82%;
+  margin-top: 2.7cqw;
+  padding: 2.2cqw 2.8cqw 2.4cqw;
+  color: var(--pointe-glass-copy);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-text-center
+  .event-graphic-details {
+  align-self: center;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.is-text-right
+  .event-graphic-details {
+  align-self: flex-end;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.has-dark-copy
+  .event-graphic-details {
+  color: var(--pointe-glass-copy);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event.has-dark-copy
+  .event-graphic-footer,
+.studio-event-graphic.is-template-pointe-glass-social.has-dark-copy
+  .social-post-footer {
+  color: var(--event-copy-color, #252529);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event .event-graphic-footer {
+  align-items: center;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  .studio-preview-brand,
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  > span {
+  --pointe-glass-radius: 3.4cqw;
+  min-height: 6.8cqw;
+  padding: 1.2cqw 1.8cqw;
+  color: var(--pointe-glass-copy);
+}
+
+.studio-event-graphic.is-template-pointe-glass-event
+  .event-graphic-footer
+  > span {
+  display: flex;
+  max-width: 54%;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.studio-event-graphic.is-template-pointe-glass-social .social-post-layout {
+  padding: 7.4cqw 7.4cqw 5.4cqw;
+}
+
+.studio-event-graphic.is-template-pointe-glass-social .social-post-copy {
+  --pointe-glass-radius: 8.8cqw;
+  width: 100%;
+  min-height: 66cqw;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  margin: auto 0;
+  padding: 8.2cqw 6.4cqw;
+  border-radius: var(--pointe-glass-radius);
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.studio-event-graphic.is-template-pointe-glass-social.is-text-left
+  .social-post-copy {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.studio-event-graphic.is-template-pointe-glass-social.is-text-right
+  .social-post-copy {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.studio-event-graphic.is-template-pointe-glass-social .social-post-title {
+  max-width: 11em;
+  margin: 4.8cqw 0 3.4cqw;
+  font-size: 8.4cqw;
+  font-weight: 650;
+  letter-spacing: -0.05em;
+  line-height: 0.98;
+  text-align: inherit;
+}
+
+.studio-event-graphic.is-template-pointe-glass-social
+  .social-post-attribution {
+  color: var(--pointe-glass-copy-muted);
+  font-size: 1.7cqw;
+  letter-spacing: 0.17em;
+}
+
+.studio-event-graphic.is-template-pointe-glass-social .social-post-footer {
+  padding-top: 2.2cqw;
+  border-top-color: rgba(255, 255, 255, 0.32);
+}
+
+.studio-event-graphic.is-template-pointe-glass-social.is-portrait
+  .social-post-copy {
+  min-height: 86cqw;
+  padding: 10cqw 7cqw;
+}
+
+.studio-event-graphic.is-template-pointe-glass-social.is-portrait
+  .social-post-title {
+  font-size: 9.2cqw;
+}
+
+.studio-event-graphic.is-screen.is-template-pointe-glass-event
+  .event-graphic-layout {
+  padding: 6.2cqw;
+}
+
+.studio-event-graphic.is-screen.is-template-pointe-glass-event
+  .event-graphic-copy {
+  --pointe-glass-radius: 5.6cqw;
+  width: 48%;
+  max-width: 48%;
+  padding: 3.4cqw 3.7cqw 3.6cqw;
+  border-radius: var(--pointe-glass-radius);
+}
+
+.studio-event-graphic.is-screen.is-template-pointe-glass-event
+  .event-graphic-copy
+  h2 {
+  max-width: 8.5em;
+  margin-top: 2.1cqw;
+  font-size: 6.4cqw;
+}
+
+.studio-event-graphic.is-screen.is-template-pointe-glass-event
+  .event-graphic-details {
+  --pointe-glass-radius: 2.4cqw;
+  position: absolute;
+  right: auto;
+  bottom: 21.5%;
+  left: 6.2%;
+  width: 42%;
+  max-width: 42%;
+  margin: 0;
+  gap: 0.45cqw;
+  padding: 0.7cqw 1.6cqw 0.8cqw;
+  text-align: left;
+  transform: none;
+}
+
+.studio-event-graphic.is-screen.is-template-pointe-glass-event
+  .event-graphic-footer
+  .studio-preview-brand,
+.studio-event-graphic.is-screen.is-template-pointe-glass-event
+  .event-graphic-footer
+  > span {
+  --pointe-glass-radius: 2.4cqw;
+  min-height: 4.8cqw;
+  padding: 0.75cqw 1.2cqw;
+}
+
+.studio-event-graphic.is-screen.is-template-pointe-glass-event.is-text-left
+  .event-graphic-details {
+  right: auto;
+  left: 6.2%;
+  text-align: left;
+}
+
+.studio-event-graphic.is-screen.is-template-pointe-glass-event.is-text-center
+  .event-graphic-details {
+  right: auto;
+  left: 50%;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.studio-event-graphic.is-screen.is-template-pointe-glass-event.is-text-right
+  .event-graphic-details {
+  right: 6.2%;
+  left: auto;
+  text-align: right;
 }
 
 @media (max-width: 1280px) {

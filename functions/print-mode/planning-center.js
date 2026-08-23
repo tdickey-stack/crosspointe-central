@@ -6,6 +6,7 @@ import {buildCalendarSourceCacheId} from
 const PRINT_MODE_PCO_CACHE_COLLECTION_PATH =
   "centralCache/planningCenter/bulletin";
 const PRINT_MODE_PLANNING_CENTER_CACHE_TTL_MS = 60 * 1000;
+const PRINT_MODE_EVENT_LOOKAHEAD_DAYS = 35;
 
 export function createPrintModePlanningCenterService(options) {
   const firestore = options.firestore;
@@ -94,7 +95,7 @@ export function createPrintModePlanningCenterService(options) {
 
     const calendarCache = await getCachedCalendarEvents_(
         roomRules,
-        21,
+        PRINT_MODE_EVENT_LOOKAHEAD_DAYS,
         eventOverrides,
     );
     if (calendarCache) {
@@ -137,7 +138,7 @@ export function createPrintModePlanningCenterService(options) {
         const results = await Promise.allSettled([
           getCentralCalendarEvents(
               roomRules,
-              21,
+              PRINT_MODE_EVENT_LOOKAHEAD_DAYS,
               {forceRefresh: true},
               eventOverrides,
           ),

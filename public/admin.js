@@ -75,6 +75,8 @@
   var PRINT_MODE_MAX_SERVE_NEEDS = 3;
   var PRINT_MODE_MAX_FRONT_CONTENT_ITEMS = 4;
   var PRINT_MODE_MAX_CUSTOM_BLOCKS = 8;
+  var PRINT_MODE_EVENT_WINDOW_DAYS = 28;
+  var PRINT_MODE_EVENT_WEEK_COUNT = 4;
   var PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS = 45;
   var PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS = 70;
   var PRINT_MODE_EVENT_CONTINUATION_TRIGGER_WEIGHT = 6;
@@ -8603,10 +8605,7 @@
     var selectedEventCount = events.filter(function(item) {
       return item.included;
     }).length;
-    var weekOneCount = events.filter(function(item) {
-      return getBulletinEventWeek_(item) === "week1";
-    }).length;
-    var weekTwoCount = events.length - weekOneCount;
+    var weekCounts = getBulletinEventWeekCounts_(events);
 
     return [
       "<div class=\"central-admin-item central-admin-print-mode-event-heading\">",
@@ -8627,13 +8626,12 @@
       }),
       "</div></div>",
       "<div class=\"central-admin-item central-admin-print-mode-event-list\">",
-      "<div class=\"central-admin-item-header\"><strong>Next Two Weeks</strong></div>",
+      "<div class=\"central-admin-item-header\"><strong>Next Four Weeks</strong></div>",
       "<p class=\"central-admin-note\">Choose the events that should appear on the back. Featured Event is excluded automatically.</p>",
       events.length ?
         renderBulletinEventFilterBar_(
             events.length,
-            weekOneCount,
-            weekTwoCount,
+            weekCounts,
             selectedEventCount,
         ) +
         (visibleEvents.length ?
@@ -8841,10 +8839,7 @@
     var selectedEventCount = events.filter(function(item) {
       return item.included;
     }).length;
-    var weekOneCount = events.filter(function(item) {
-      return getBulletinEventWeek_(item) === "week1";
-    }).length;
-    var weekTwoCount = events.length - weekOneCount;
+    var weekCounts = getBulletinEventWeekCounts_(events);
     var campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
     var serveNeeds = Array.isArray(data.serveNeeds) ? data.serveNeeds : [];
     var selectionState = getBulletinFrontContentSelectionState_();
@@ -8896,7 +8891,7 @@
       "</div>",
       "</div>",
       "<div class=\"central-admin-item\">",
-      "<div class=\"central-admin-item-header\"><strong>Next Two Weeks</strong>",
+      "<div class=\"central-admin-item-header\"><strong>Next Four Weeks</strong>",
       renderStatusPill_(
           String(selectedEventCount) + " selected · " +
           String(events.length) + " available",
@@ -8904,13 +8899,12 @@
       ),
       "</div>",
       renderAdminNote_(
-          "Week 1 is the default print selection for new bulletins. Week 2 stays available for events that need more advance notice. Featured Event is excluded automatically.",
+          "Week 1 is the default print selection for new bulletins. Weeks 2–4 stay available for events that need more advance notice. Featured Event is excluded automatically.",
       ),
       events.length ?
         renderBulletinEventFilterBar_(
             events.length,
-            weekOneCount,
-            weekTwoCount,
+            weekCounts,
             selectedEventCount,
         ) +
         (visibleEvents.length ?
@@ -9096,16 +9090,23 @@
 
   function renderBulletinEventFilterBar_(
       totalCount,
-      weekOneCount,
-      weekTwoCount,
+      weekCounts,
       includedCount,
   ) {
-    var filters = [
-      {id: "week1", label: "Week 1", count: weekOneCount},
-      {id: "week2", label: "Week 2", count: weekTwoCount},
+    var filters = Array.from(
+        {length: PRINT_MODE_EVENT_WEEK_COUNT},
+        function(_unused, index) {
+          var weekNumber = index + 1;
+          return {
+            id: "week" + String(weekNumber),
+            label: "Week " + String(weekNumber),
+            count: Number(weekCounts && weekCounts[index]) || 0,
+          };
+        },
+    ).concat([
       {id: "included", label: "Included", count: includedCount},
-      {id: "all", label: "All 14 Days", count: totalCount},
-    ];
+      {id: "all", label: "All 28 Days", count: totalCount},
+    ]);
 
     return [
       "<div class=\"central-admin-bulletin-event-toolbar\">",
@@ -18508,7 +18509,7 @@
       headings: {
         frontHeading: "This Week at\nCrossPointe",
         backEyebrow: "See You There",
-        backHeading: "The Next Two Weeks",
+        backHeading: "The Next Four Weeks",
       },
       giving: {
         monthlyBudget: 0,
@@ -18591,12 +18592,7 @@
           50,
           1,
       ),
-      backHeading: normalizeBulletinHeadingText_(
-          savedHeadings.backHeading,
-          "The Next Two Weeks",
-          80,
-          2,
-      ),
+      backHeading: normalizeBulletinBackHeading_(savedHeadings.backHeading),
     };
     draft.giving = {
       monthlyBudget: normalizeBulletinMoney_(savedGiving.monthlyBudget),
@@ -18954,7 +18950,7 @@
   function getBulletinEventDraftsInWindow_() {
     var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
     var end = new Date(start.getTime());
-    end.setUTCDate(end.getUTCDate() + 13);
+    end.setUTCDate(end.getUTCDate() + PRINT_MODE_EVENT_WINDOW_DAYS - 1);
 
     return (adminState.bulletinDraft.events || []).filter(function(item) {
       var date = parseBulletinDate_(item.date);
@@ -18965,10 +18961,26 @@
 
   function getBulletinEventWeek_(item) {
     var start = parseBulletinDate_(adminState.bulletinDraft.serviceDate);
-    var weekTwoStart = new Date(start.getTime());
-    weekTwoStart.setUTCDate(weekTwoStart.getUTCDate() + 7);
-    return parseBulletinDate_(item && item.date).getTime() <
-      weekTwoStart.getTime() ? "week1" : "week2";
+    var eventDate = parseBulletinDate_(item && item.date);
+    var elapsedDays = Math.floor(
+        (eventDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000),
+    );
+    var weekNumber = Math.min(
+        PRINT_MODE_EVENT_WEEK_COUNT,
+        Math.max(1, Math.floor(elapsedDays / 7) + 1),
+    );
+    return "week" + String(weekNumber);
+  }
+
+  function getBulletinEventWeekCounts_(events) {
+    var counts = Array(PRINT_MODE_EVENT_WEEK_COUNT).fill(0);
+    (Array.isArray(events) ? events : []).forEach(function(item) {
+      var weekIndex = Number(getBulletinEventWeek_(item).replace("week", "")) - 1;
+      if (weekIndex >= 0 && weekIndex < counts.length) {
+        counts[weekIndex] += 1;
+      }
+    });
+    return counts;
   }
 
   function getFilteredBulletinEventDrafts_(events) {
@@ -18983,7 +18995,7 @@
       });
     }
 
-    if (filter === "week1" || filter === "week2") {
+    if (/^week[1-4]$/.test(filter)) {
       return source.filter(function(item) {
         return getBulletinEventWeek_(item) === filter;
       });
@@ -19501,12 +19513,7 @@
             50,
             1,
         ),
-        backHeading: normalizeBulletinHeadingText_(
-            draft.headings.backHeading,
-            "The Next Two Weeks",
-            80,
-            2,
-        ),
+        backHeading: normalizeBulletinBackHeading_(draft.headings.backHeading),
       },
       giving: {
         monthlyBudget: normalizeBulletinMoney_(draft.giving.monthlyBudget),
@@ -19946,6 +19953,17 @@
         .trim();
     var fallback = String(fallbackValue || "").trim();
     return (normalized || fallback).slice(0, Number(maxLength) || 80);
+  }
+
+  function normalizeBulletinBackHeading_(value) {
+    var heading = normalizeBulletinHeadingText_(
+        value,
+        "The Next Four Weeks",
+        80,
+        2,
+    );
+    return heading === "The Next Two Weeks" ?
+      "The Next Four Weeks" : heading;
   }
 
   function renderBulletinHeadingText_(value) {

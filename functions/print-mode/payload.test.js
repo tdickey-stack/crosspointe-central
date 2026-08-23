@@ -16,6 +16,7 @@ test("Print Mode payload defaults preserve the public contract", () => {
   assert.equal(payload.heroSource, "featured");
   assert.equal(payload.frontContentSource, "mixed");
   assert.equal(payload.headings.frontHeading, "This Week at\nCrossPointe");
+  assert.equal(payload.headings.backHeading, "The Next Four Weeks");
   assert.equal(payload.fallbackHero.title, "We're Glad You're Here");
   assert.deepEqual(
       payload.fallbackBlocks,
@@ -36,6 +37,14 @@ test("Print Mode payload defaults preserve the public contract", () => {
   assert.deepEqual(payload.campaignIds, []);
   assert.deepEqual(payload.serveNeedIds, []);
   assert.equal(payload.serveNeedId, "");
+});
+
+test("Print Mode migrates the legacy two-week heading", () => {
+  const payload = normalizePrintModePayload({
+    headings: {backHeading: "The Next Two Weeks"},
+  });
+
+  assert.equal(payload.headings.backHeading, "The Next Four Weeks");
 });
 
 test("Print Mode payload normalizes settings within existing limits", () => {

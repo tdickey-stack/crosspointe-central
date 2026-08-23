@@ -215,12 +215,7 @@ export function normalizePrintModePayload(sourceData) {
           50,
           1,
       ),
-      backHeading: normalizePrintModeHeading_(
-          headingsSource.backHeading,
-          "The Next Two Weeks",
-          80,
-          2,
-      ),
+      backHeading: normalizePrintModeBackHeading_(headingsSource.backHeading),
     },
     giving: {
       monthlyBudget: normalizePrintModeDollarValue_(
@@ -306,6 +301,17 @@ export function normalizePrintModePayload(sourceData) {
 function normalizePrintModeBlockSize_(value) {
   const size = Math.round(Number(value));
   return size >= 1 && size <= 3 ? size : 2;
+}
+
+function normalizePrintModeBackHeading_(value) {
+  const heading = normalizePrintModeHeading_(
+      value,
+      "The Next Four Weeks",
+      80,
+      2,
+  );
+  return heading === "The Next Two Weeks" ?
+    "The Next Four Weeks" : heading;
 }
 
 function normalizePrintModeFrontContentOrder_(sourceOrder, fallbackBlocks) {

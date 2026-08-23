@@ -478,7 +478,8 @@ service cloud.firestore {
     function isEventTemplateId(templateId) {
       return templateId.matches(
         "^(event-promotion|event-signal-stack|event-rally-poster|" +
-        "event-future-block|event-center-stage|event-timeless-center|" +
+        "event-future-block|event-pointe-glass|event-center-stage|" +
+        "event-timeless-center|" +
         "event-editorial-invitation|event-scripted-welcome)$"
       );
     }
@@ -486,7 +487,7 @@ service cloud.firestore {
     function isSocialTemplateId(templateId) {
       return templateId.matches(
         "^(social-scripture|social-quote|social-statement|" +
-        "social-simple-statement)$"
+        "social-simple-statement|social-pointe-glass)$"
       );
     }
 
@@ -499,6 +500,7 @@ service cloud.firestore {
         "(rally-stripes|rally-frame|editorial|color-overlay|flat)|" +
         "event-future-block:" +
         "(future-grid|future-cut|editorial|color-overlay|flat)|" +
+        "event-pointe-glass:pointe-glass|" +
         "event-center-stage:" +
         "(center-burst|center-frame|color-overlay|flat)|" +
         "event-timeless-center:" +
@@ -515,7 +517,8 @@ service cloud.firestore {
         "(editorial-frame|editorial-flow|color-overlay|flat)|" +
         "social-statement:" +
         "(center-burst|center-frame|color-overlay|flat)|" +
-        "social-simple-statement:flat" +
+        "social-simple-statement:flat|" +
+        "social-pointe-glass:pointe-glass" +
         ")$"
       );
     }
@@ -847,7 +850,8 @@ service cloud.firestore {
         validStudioString(data.ownerUid, 128) &&
         data.templateId.matches(
           "^(policy-document|event-promotion|event-signal-stack|" +
-          "event-rally-poster|event-future-block|event-center-stage|" +
+          "event-rally-poster|event-future-block|event-pointe-glass|" +
+          "event-center-stage|" +
           "event-timeless-center|event-editorial-invitation|" +
           "event-scripted-welcome|social-scripture|social-quote|" +
           "social-statement|" +

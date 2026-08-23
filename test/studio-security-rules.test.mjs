@@ -124,6 +124,7 @@ function socialProjectPayload(
     "social-quote": {composition: "editorial-frame", fontKey: "bodoni-moda"},
     "social-statement": {composition: "center-frame", fontKey: "league-spartan"},
     "social-simple-statement": {composition: "flat", fontKey: "montserrat"},
+    "social-pointe-glass": {composition: "pointe-glass", fontKey: "google-sans"},
   }[templateId];
   payload.schemaVersion = 3;
   delete payload.sourceId;
@@ -689,6 +690,13 @@ test("event projects accept valid sources and reject cross-project upload paths"
   await assertSucceeds(
     db.doc("centralStudioProjects/event-future").set(futurePayload),
   );
+  const pointeGlassPayload = eventProjectPayload();
+  pointeGlassPayload.templateId = "event-pointe-glass";
+  pointeGlassPayload.content.fontKey = "google-sans";
+  pointeGlassPayload.content.composition = "pointe-glass";
+  await assertSucceeds(
+    db.doc("centralStudioProjects/event-pointe-glass").set(pointeGlassPayload),
+  );
   const centerStagePayload = eventProjectPayload();
   centerStagePayload.templateId = "event-center-stage";
   centerStagePayload.content.fontKey = "league-spartan";
@@ -775,6 +783,24 @@ test("event projects accept valid sources and reject cross-project upload paths"
   await assertFails(
     db.doc("centralStudioProjects/event-mismatched-centered").set(
       mismatchedCenteredPayload,
+    ),
+  );
+  const borrowedGlassPayload = eventProjectPayload();
+  borrowedGlassPayload.templateId = "event-center-stage";
+  borrowedGlassPayload.content.fontKey = "google-sans";
+  borrowedGlassPayload.content.composition = "pointe-glass";
+  await assertFails(
+    db.doc("centralStudioProjects/event-borrowed-glass").set(
+      borrowedGlassPayload,
+    ),
+  );
+  const mismatchedGlassPayload = eventProjectPayload();
+  mismatchedGlassPayload.templateId = "event-pointe-glass";
+  mismatchedGlassPayload.content.fontKey = "google-sans";
+  mismatchedGlassPayload.content.composition = "center-frame";
+  await assertFails(
+    db.doc("centralStudioProjects/event-mismatched-glass").set(
+      mismatchedGlassPayload,
     ),
   );
   await assertSucceeds(
@@ -956,6 +982,39 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
     db,
     "social-statement",
     socialProjectPayload("social-statement"),
+  );
+  await createSocialProject(
+    db,
+    "social-pointe-glass",
+    socialProjectPayload("social-pointe-glass"),
+  );
+  const borrowedSocialGlass = socialProjectPayload("social-statement");
+  borrowedSocialGlass.content.composition = "pointe-glass";
+  const {content: borrowedSocialContent, ...borrowedSocialRoot} =
+    borrowedSocialGlass;
+  const borrowedSocialReference = db.doc(
+    "centralStudioProjects/social-borrowed-glass",
+  );
+  await assertSucceeds(borrowedSocialReference.set(borrowedSocialRoot));
+  await assertFails(
+    borrowedSocialReference
+      .collection("slides")
+      .doc("primary")
+      .set(socialSlidePayload(borrowedSocialContent)),
+  );
+  const mismatchedSocialGlass = socialProjectPayload("social-pointe-glass");
+  mismatchedSocialGlass.content.composition = "center-frame";
+  const {content: mismatchedSocialContent, ...mismatchedSocialRoot} =
+    mismatchedSocialGlass;
+  const mismatchedSocialReference = db.doc(
+    "centralStudioProjects/social-mismatched-glass",
+  );
+  await assertSucceeds(mismatchedSocialReference.set(mismatchedSocialRoot));
+  await assertFails(
+    mismatchedSocialReference
+      .collection("slides")
+      .doc("primary")
+      .set(socialSlidePayload(mismatchedSocialContent)),
   );
   const simpleStatement = socialProjectPayload("social-simple-statement");
   simpleStatement.content.flatColor = "cream";

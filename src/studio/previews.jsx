@@ -1,4 +1,11 @@
-import React, {useEffect, useState} from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {focalMediaStyle, normalizeImageOpacity} from "./focal.js";
 import {
   GRAPHIC_FONT_WEIGHT_OPTIONS,
@@ -1019,6 +1026,193 @@ function EventGraphicDecoration({composition}) {
   );
 }
 
+function pointeGlassEdgeMask(clipRects) {
+  const rectMarkup = clipRects
+    .map(
+      (rect) => `
+        <rect x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" rx="${rect.rx}" ry="${rect.ry}" fill="#fff" />
+        <rect x="${rect.x + rect.edgeInsetX}" y="${rect.y + rect.edgeInsetY}" width="${Math.max(0, rect.width - rect.edgeInsetX * 2)}" height="${Math.max(0, rect.height - rect.edgeInsetY * 2)}" rx="${Math.max(0, rect.rx - rect.edgeInsetX)}" ry="${Math.max(0, rect.ry - rect.edgeInsetY)}" fill="#000" filter="url(#edge-soft)" />`,
+    )
+    .join("");
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" preserveAspectRatio="none">
+      <defs>
+        <filter id="edge-soft" x="-20%" y="-20%" width="140%" height="140%" primitiveUnits="objectBoundingBox">
+          <feGaussianBlur stdDeviation="0.014" />
+        </filter>
+        <mask id="edge-mask" x="0" y="0" width="1" height="1" maskContentUnits="objectBoundingBox" maskUnits="objectBoundingBox" style="mask-type:luminance">
+          <rect x="0" y="0" width="1" height="1" fill="#000" />
+          ${rectMarkup}
+        </mask>
+      </defs>
+      <rect x="0" y="0" width="1" height="1" fill="#fff" mask="url(#edge-mask)" />
+    </svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+function PointeGlassRefraction({clipId, clipRects, content}) {
+  if (!content.backgroundImage || !clipRects.length) return null;
+  const edgeMask = pointeGlassEdgeMask(clipRects);
+  const primaryRect = clipRects[0];
+  const lensOrigin = `${(primaryRect.x + primaryRect.width / 2) * 100}% ${
+    (primaryRect.y + primaryRect.height / 2) * 100
+  }%`;
+
+  return (
+    <>
+      <svg
+        className="pointe-glass-clip-defs"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <defs>
+          <clipPath id={clipId} clipPathUnits="objectBoundingBox">
+            {clipRects.map((rect, index) => (
+              <rect
+                key={`${index}-${rect.x}-${rect.y}`}
+                x={rect.x}
+                y={rect.y}
+                width={rect.width}
+                height={rect.height}
+                rx={rect.rx}
+                ry={rect.ry}
+              />
+            ))}
+          </clipPath>
+        </defs>
+      </svg>
+      <div
+        className="pointe-glass-refraction"
+        style={{
+          clipPath: `url(#${clipId})`,
+          WebkitClipPath: `url(#${clipId})`,
+        }}
+        aria-hidden="true"
+      >
+        <div
+          className="pointe-glass-refraction-lens is-core"
+        >
+          <div
+            className="pointe-glass-refraction-scale"
+            style={{transformOrigin: lensOrigin}}
+          >
+            <div
+              className="pointe-glass-refraction-media"
+              data-studio-background-surface
+              style={focalMediaStyle(content)}
+            />
+          </div>
+        </div>
+        <div
+          className="pointe-glass-refraction-lens is-edge"
+          style={{
+            maskImage: edgeMask,
+            WebkitMaskImage: edgeMask,
+          }}
+        >
+          <div
+            className="pointe-glass-refraction-scale"
+            style={{transformOrigin: lensOrigin}}
+          >
+            <div
+              className="pointe-glass-refraction-media"
+              data-studio-background-surface
+              style={focalMediaStyle(content)}
+            />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function measuredGlassRects(root, isSocial) {
+  if (!root) return [];
+  const rootRect = root.getBoundingClientRect();
+  if (!rootRect.width || !rootRect.height) return [];
+  const selectors = isSocial
+    ? [".social-post-copy"]
+    : [
+        ".event-graphic-copy",
+        ".event-graphic-details",
+        ".event-graphic-footer .studio-preview-brand",
+        ".event-graphic-footer > span",
+      ];
+
+  return selectors
+    .map((selector) => root.querySelector(selector))
+    .filter(Boolean)
+    .map((element) => {
+      const rect = element.getBoundingClientRect();
+      const edgeInset = Math.min(rect.width, rect.height) * 0.115;
+      const radius = Number.parseFloat(
+        window.getComputedStyle(element).borderTopLeftRadius,
+      );
+      const round = (value) => Math.round(value * 1000000) / 1000000;
+      return {
+        x: round((rect.left - rootRect.left) / rootRect.width),
+        y: round((rect.top - rootRect.top) / rootRect.height),
+        width: round(rect.width / rootRect.width),
+        height: round(rect.height / rootRect.height),
+        rx: round(Math.min(rect.width / 2, radius || 0) / rootRect.width),
+        ry: round(Math.min(rect.height / 2, radius || 0) / rootRect.height),
+        edgeInsetX: round(edgeInset / rootRect.width),
+        edgeInsetY: round(edgeInset / rootRect.height),
+      };
+    })
+    .filter(
+      (rect) =>
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.x >= 0 &&
+        rect.y >= 0 &&
+        rect.x + rect.width <= 1.001 &&
+        rect.y + rect.height <= 1.001,
+    );
+}
+
+function usePointeGlassRefraction({
+  enabled,
+  isSocial,
+  rootRef,
+  measurementKey,
+}) {
+  const [clipRects, setClipRects] = useState([]);
+
+  useLayoutEffect(() => {
+    if (!enabled || !rootRef.current) {
+      setClipRects([]);
+      return undefined;
+    }
+    const root = rootRef.current;
+    let animationFrame = 0;
+    const measure = () => {
+      const nextRects = measuredGlassRects(root, isSocial);
+      setClipRects((currentRects) =>
+        JSON.stringify(currentRects) === JSON.stringify(nextRects)
+          ? currentRects
+          : nextRects,
+      );
+    };
+    animationFrame = window.requestAnimationFrame(measure);
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(root);
+    root
+      .querySelectorAll(
+        isSocial
+          ? ".social-post-copy"
+          : ".event-graphic-copy, .event-graphic-details, .event-graphic-footer .studio-preview-brand, .event-graphic-footer > span",
+      )
+      .forEach((element) => resizeObserver.observe(element));
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      resizeObserver.disconnect();
+    };
+  }, [enabled, isSocial, measurementKey, rootRef]);
+
+  return clipRects;
+}
+
 const EVENT_EDITABLE_FIELDS = {
   eyebrow: {label: "Utility label", maximum: 30},
   title: {label: "Event title", maximum: 52},
@@ -1527,6 +1721,40 @@ export function EventPreview({
     (option) => option.value === content.fontWeight,
   );
   let backgroundStyle;
+  const localPreviewRef = useRef(null);
+  const refractionClipId = `pointe-glass-${useId().replace(
+    /[^a-zA-Z0-9_-]/g,
+    "",
+  )}`;
+  const isPointeGlass = composition === "pointe-glass";
+  const combinedPreviewRef = useCallback(
+    (node) => {
+      localPreviewRef.current = node;
+      if (typeof previewRef === "function") {
+        previewRef(node);
+      } else if (previewRef) {
+        previewRef.current = node;
+      }
+    },
+    [previewRef],
+  );
+  const refractionClipRects = usePointeGlassRefraction({
+    enabled: isPointeGlass && Boolean(content.backgroundImage),
+    isSocial,
+    rootRef: localPreviewRef,
+    measurementKey: [
+      content.format,
+      content.textAlignment,
+      content.title,
+      content.subtitle,
+      content.date,
+      content.time,
+      content.location,
+      content.cta,
+      content.brandMark,
+      content.heroMode,
+    ].join("|"),
+  });
 
   if (isFlat) {
     backgroundStyle = {background: brandColor.hex};
@@ -1534,7 +1762,7 @@ export function EventPreview({
 
   return (
     <article
-      ref={previewRef}
+      ref={combinedPreviewRef}
       className={[
         "studio-event-graphic",
         isSocial ? "is-social-post" : "",
@@ -1578,6 +1806,7 @@ export function EventPreview({
             .filter(Boolean)
             .join(" ")}
           style={focalMediaStyle(content)}
+          data-studio-background-surface
           aria-hidden="true"
         />
       ) : null}
@@ -1593,6 +1822,13 @@ export function EventPreview({
       ) : null}
       {!isSmallGroupLeader ? (
         <EventGraphicDecoration composition={composition} />
+      ) : null}
+      {isPointeGlass ? (
+        <PointeGlassRefraction
+          clipId={refractionClipId}
+          clipRects={refractionClipRects}
+          content={content}
+        />
       ) : null}
       {isSmallGroupLeader ? (
         <SmallGroupLeaderContent

@@ -169,8 +169,9 @@ export function normalizePrintModePayload(sourceData) {
       .filter((id, index, ids) => id && ids.indexOf(id) === index)
       .slice(
           0,
-          Math.min(PRINT_MODE_MAX_CAMPAIGNS, availableCentralUnits),
+          availableCentralUnits > 0 ? PRINT_MODE_MAX_CAMPAIGNS : 0,
       );
+  const campaignUnits = normalizedCampaignIds.length ? 1 : 0;
   const rawServeNeedIds = Array.isArray(source.serveNeedIds) ?
     source.serveNeedIds :
     (source.serveNeedId ? [source.serveNeedId] : []);
@@ -181,11 +182,8 @@ export function normalizePrintModePayload(sourceData) {
           0,
           Math.min(
               PRINT_MODE_MAX_SERVE_NEEDS,
-              Math.max(
-                  0,
-                  availableCentralUnits -
-                    normalizedCampaignIds.length,
-              ),
+              availableCentralUnits - campaignUnits > 0 ?
+                PRINT_MODE_MAX_SERVE_NEEDS : 0,
           ),
       );
   const normalizedFrontContentOrder = normalizePrintModeFrontContentOrder_(

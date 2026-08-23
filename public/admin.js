@@ -7741,8 +7741,7 @@
       (includeOnFront || includeOnBack);
     var blockSizeChanged = !!existingBlock &&
       normalizeBulletinBlockSize_(existingBlock.size) !== size;
-    var centralItemCount = getSelectedBulletinCampaigns_().length +
-      getSelectedBulletinServeNeeds_().length;
+    var centralItemCount = getBulletinCentralFrontUnits_();
     var otherFrontUnits = getBulletinCustomBlockFrontUnits_(
         blocks.filter(function(block) {
           return block.id !== editingId;
@@ -7996,8 +7995,7 @@
   }
 
   function getBulletinAvailableFrontUnitsForBlock_(blockId) {
-    var centralItemCount = getSelectedBulletinCampaigns_().length +
-      getSelectedBulletinServeNeeds_().length;
+    var centralItemCount = getBulletinCentralFrontUnits_();
     var otherCustomUnits = getBulletinCustomBlockFrontUnits_(
         (adminState.bulletinDraft.fallbackBlocks || [])
             .filter(function(block) {
@@ -8271,7 +8269,10 @@
         ) !== -1;
         var disableUnchecked = !checked && (
           selectionState.campaignCount >= PRINT_MODE_MAX_CAMPAIGNS ||
-          selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+          (
+            selectionState.campaignCount === 0 &&
+            selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+          )
         );
         return renderBulletinCampaignChoice_(
             item,
@@ -8292,7 +8293,10 @@
         ) !== -1;
         var disableUnchecked = !checked && (
           selectionState.serveNeedCount >= PRINT_MODE_MAX_SERVE_NEEDS ||
-          selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+          (
+            selectionState.serveNeedCount === 0 &&
+            selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+          )
         );
         return renderBulletinServeNeedChoice_(
             item,
@@ -8862,7 +8866,7 @@
       "<div class=\"central-admin-item central-admin-bulletin-front-content\">",
       "<div class=\"central-admin-item-header\"><strong>Front Page Content</strong>",
       renderStatusPill_("Live sources", "is-live"), "</div>",
-      "<p class=\"central-admin-note\">Choose up to four combined Campaigns and Serve Opportunities. Each list allows up to three selections.</p>",
+      "<p class=\"central-admin-note\">Campaigns and Serve Opportunities each use one front-page space. Each card allows up to three selections.</p>",
       "<div class=\"central-admin-bulletin-choice-list\">",
       campaigns.length ? campaigns.map(function(item) {
         var checked = adminState.bulletinDraft.campaignIds.indexOf(String(item.id || "")) !== -1;
@@ -8880,7 +8884,11 @@
             canSave,
             !checked && (
               selectionState.serveNeedCount >= PRINT_MODE_MAX_SERVE_NEEDS ||
-              selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+              (
+                selectionState.serveNeedCount === 0 &&
+                selectionState.totalCount >=
+                  PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+              )
             ),
         );
       }).join(""),
@@ -9292,7 +9300,9 @@
   }
 
   function renderBulletinFullPagePanel_(preview) {
-    var className = "central-bulletin-panel central-bulletin-panel-front is-full-page";
+    var className =
+      "central-bulletin-panel central-bulletin-panel-front is-full-page " +
+      getBulletinFrontDensityClass_();
     if (adminState.bulletinDraft.printColorMode === "bw") {
       className += " is-black-and-white";
     }
@@ -9309,6 +9319,9 @@
 
   function renderBulletinPanel_(side, preview) {
     var className = "central-bulletin-panel central-bulletin-panel-" + side;
+    if (side === "front") {
+      className += " " + getBulletinFrontDensityClass_();
+    }
     if (adminState.bulletinDraft.printColorMode === "bw") {
       className += " is-black-and-white";
     }
@@ -9413,7 +9426,9 @@
       return "";
     }
     return [
-      "<section class=\"central-bulletin-card central-bulletin-campaigns\" data-bulletin-preview-item=\"campaigns\"><span class=\"central-bulletin-label\">Current Campaigns</span>",
+      "<section class=\"central-bulletin-card central-bulletin-campaigns is-count-",
+      String(Math.min(campaigns.length, PRINT_MODE_MAX_CAMPAIGNS)),
+      "\" data-bulletin-preview-item=\"campaigns\"><span class=\"central-bulletin-label\">Current Campaigns</span>",
       campaigns.map(function(item) {
         var iconId = getBulletinCampaignIconId_(item);
         return "<div class=\"central-bulletin-campaign\" data-bulletin-preview-item=\"campaign:" +
@@ -9435,7 +9450,9 @@
       return "";
     }
     return [
-      "<section class=\"central-bulletin-card central-bulletin-serve\" data-bulletin-preview-item=\"serveNeeds\"><div>",
+      "<section class=\"central-bulletin-card central-bulletin-serve is-count-",
+      String(Math.min(serveNeeds.length, PRINT_MODE_MAX_SERVE_NEEDS)),
+      "\" data-bulletin-preview-item=\"serveNeeds\"><div>",
       "<span class=\"central-bulletin-label\">Serve Opportunit",
       serveNeeds.length === 1 ? "y" : "ies", "</span>",
       "<div class=\"central-bulletin-serve-list\">",
@@ -18744,7 +18761,7 @@
           .filter(Boolean))
         .slice(
             0,
-            Math.min(PRINT_MODE_MAX_CAMPAIGNS, remainingCentralSlots),
+            remainingCentralSlots > 0 ? PRINT_MODE_MAX_CAMPAIGNS : 0,
         );
     var hasSavedServeNeedIds = Array.isArray(source.serveNeedIds);
     var savedServeNeedIds = hasSavedServeNeedIds ?
@@ -18758,7 +18775,7 @@
     }
     var remainingFrontItemSlots = Math.max(
         0,
-        remainingCentralSlots - draft.campaignIds.length,
+        remainingCentralSlots - (draft.campaignIds.length ? 1 : 0),
     );
     draft.serveNeedIds = savedServeNeedIds
         .filter(function(id, index, ids) {
@@ -18766,7 +18783,7 @@
         })
         .slice(
             0,
-            Math.min(PRINT_MODE_MAX_SERVE_NEEDS, remainingFrontItemSlots),
+            remainingFrontItemSlots > 0 ? PRINT_MODE_MAX_SERVE_NEEDS : 0,
         );
 
     return draft;
@@ -19110,9 +19127,31 @@
       campaignCount: campaignCount,
       serveNeedCount: serveNeedCount,
       customBlockUnits: customBlockUnits,
-      totalCount: campaignCount + serveNeedCount + customBlockUnits,
+      totalCount: (campaignCount ? 1 : 0) +
+        (serveNeedCount ? 1 : 0) + customBlockUnits,
       maxCount: PRINT_MODE_MAX_FRONT_CONTENT_ITEMS,
     };
+  }
+
+  function getBulletinCentralFrontUnits_() {
+    return (getSelectedBulletinCampaigns_().length ? 1 : 0) +
+      (getSelectedBulletinServeNeeds_().length ? 1 : 0);
+  }
+
+  function getBulletinFrontDensityClass_() {
+    var selectionState = getBulletinFrontContentSelectionState_();
+    var classNames = [];
+    if (selectionState.totalCount >= PRINT_MODE_MAX_FRONT_CONTENT_ITEMS) {
+      classNames.push("is-front-density-4");
+    } else if (
+      selectionState.totalCount === PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - 1
+    ) {
+      classNames.push("is-front-density-3");
+    }
+    if (selectionState.campaignCount + selectionState.serveNeedCount >= 5) {
+      classNames.push("is-front-live-dense");
+    }
+    return classNames.join(" ");
   }
 
   function normalizeBulletinBlockSize_(value) {
@@ -19324,7 +19363,10 @@
         input.checked &&
         index === -1 &&
         ids.length < PRINT_MODE_MAX_CAMPAIGNS &&
-        selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        (
+          selectionState.campaignCount > 0 ||
+          selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        )
       ) {
         ids.push(id);
       } else if (!input.checked && index !== -1) {
@@ -19349,7 +19391,10 @@
         input.checked &&
         serveNeedIndex === -1 &&
         serveNeedIds.length < PRINT_MODE_MAX_SERVE_NEEDS &&
-        selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        (
+          selectionState.serveNeedCount > 0 ||
+          selectionState.totalCount < PRINT_MODE_MAX_FRONT_CONTENT_ITEMS
+        )
       ) {
         serveNeedIds.push(id);
       } else if (!input.checked && serveNeedIndex !== -1) {
@@ -19386,17 +19431,13 @@
     );
     var campaignIds = (draft.campaignIds || []).slice(
         0,
-        Math.min(PRINT_MODE_MAX_CAMPAIGNS, remainingCentralSlots),
+        remainingCentralSlots > 0 ? PRINT_MODE_MAX_CAMPAIGNS : 0,
     );
+    var campaignUnits = campaignIds.length ? 1 : 0;
     var serveNeedIds = (draft.serveNeedIds || []).slice(
         0,
-        Math.min(
-            PRINT_MODE_MAX_SERVE_NEEDS,
-            Math.max(
-                0,
-                remainingCentralSlots - campaignIds.length,
-            ),
-        ),
+        remainingCentralSlots - campaignUnits > 0 ?
+          PRINT_MODE_MAX_SERVE_NEEDS : 0,
     );
     return {
       serviceDate: normalizeSundayDateInputValue_(draft.serviceDate),

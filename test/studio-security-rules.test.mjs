@@ -983,10 +983,23 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
     "social-statement",
     socialProjectPayload("social-statement"),
   );
-  await createSocialProject(
+  const pointeGlassPayload = socialProjectPayload("social-pointe-glass");
+  pointeGlassPayload.content.heroMode = "logo";
+  pointeGlassPayload.content.heroLogoSource = "upload";
+  pointeGlassPayload.content.heroLogoStoragePath =
+    "studio-projects/social-pointe-glass/logo-campaign.png";
+  pointeGlassPayload.content.heroLogoName = "Campaign logo";
+  const {primaryReference: pointeGlassReference} = await createSocialProject(
     db,
     "social-pointe-glass",
-    socialProjectPayload("social-pointe-glass"),
+    pointeGlassPayload,
+  );
+  await assertFails(
+    pointeGlassReference.update({
+      "content.heroLogoStoragePath":
+        "studio-projects/another-project/logo-campaign.png",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
   );
   const borrowedSocialGlass = socialProjectPayload("social-statement");
   borrowedSocialGlass.content.composition = "pointe-glass";
@@ -1073,13 +1086,14 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
     "slide-4",
     "slide-5",
     "slide-6",
+    "slide-7",
   ];
   const {reference: carouselReference} = await createSocialProject(
     db,
     "social-carousel",
     carouselPayload,
   );
-  for (let index = 2; index <= 6; index += 1) {
+  for (let index = 2; index <= 7; index += 1) {
     await assertSucceeds(
       carouselReference.collection("slides").doc(`slide-${index}`).set(
         socialSlidePayload({
@@ -1114,9 +1128,29 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
+  const duplicateSeventhSlide = {
+    ...carouselPayload,
+    slideOrder: [...carouselPayload.slideOrder.slice(0, 6), "slide-6"],
+  };
+  delete duplicateSeventhSlide.content;
+  await assertFails(
+    db.doc("centralStudioProjects/social-carousel-duplicate").set(
+      duplicateSeventhSlide,
+    ),
+  );
+  const malformedSeventhSlide = {
+    ...carouselPayload,
+    slideOrder: [...carouselPayload.slideOrder.slice(0, 6), "slide/7"],
+  };
+  delete malformedSeventhSlide.content;
+  await assertFails(
+    db.doc("centralStudioProjects/social-carousel-malformed").set(
+      malformedSeventhSlide,
+    ),
+  );
   const oversizedCarousel = {
     ...carouselPayload,
-    slideOrder: [...carouselPayload.slideOrder, "slide-7"],
+    slideOrder: [...carouselPayload.slideOrder, "slide-8"],
   };
   delete oversizedCarousel.content;
   await assertFails(

@@ -439,7 +439,7 @@ service cloud.firestore {
     }
 
     function validPageId(value) {
-      return value is string && value.size() > 0 && value.size() <= 128;
+      return value is string && value.matches("^[^/]{1,128}$");
     }
 
     function validPageOrder(pageOrder) {
@@ -569,7 +569,9 @@ service cloud.firestore {
         content.format.matches("^(square|portrait)$") &&
         validEventComposition(templateId, content.composition) &&
         (
-          templateId == "social-simple-statement" ?
+          templateId.matches(
+            "^(social-simple-statement|social-pointe-glass)$"
+          ) ?
             validHeroReference(content, projectId) :
             content.heroMode == "text" &&
             content.heroLogoSource == "" &&
@@ -812,14 +814,15 @@ service cloud.firestore {
     function validSocialSlideOrder(slideOrder) {
       return slideOrder is list &&
         slideOrder.size() >= 1 &&
-        slideOrder.size() <= 6 &&
+        slideOrder.size() <= 7 &&
         slideOrder[0] == "primary" &&
         slideOrder.toSet().size() == slideOrder.size() &&
         (slideOrder.size() < 2 || validPageId(slideOrder[1])) &&
         (slideOrder.size() < 3 || validPageId(slideOrder[2])) &&
         (slideOrder.size() < 4 || validPageId(slideOrder[3])) &&
         (slideOrder.size() < 5 || validPageId(slideOrder[4])) &&
-        (slideOrder.size() < 6 || validPageId(slideOrder[5]));
+        (slideOrder.size() < 6 || validPageId(slideOrder[5])) &&
+        (slideOrder.size() < 7 || validPageId(slideOrder[6]));
     }
 
     function validSocialSlide(data, projectId, templateId) {

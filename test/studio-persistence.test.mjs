@@ -21,6 +21,7 @@ import {
   GRAPHIC_BRAND_COLOR_OPTIONS,
   GRAPHIC_BRAND_MARK_OPTIONS,
   GRAPHIC_FONT_WEIGHT_OPTIONS,
+  MAX_SOCIAL_CAROUSEL_SLIDES,
   TEMPLATE_CATALOG,
   createSocialCarouselSlide,
   createStudioProject,
@@ -219,7 +220,7 @@ test("Pointe Glass templates keep their controlled material defaults", () => {
   assert.equal(socialProject.content.textAlignment, "center");
   assert.equal(socialProject.content.fontWeight, "medium");
   assert.equal(socialProject.content.brandColor, "auto");
-  assert.equal(supportsHeroLogoTemplate(socialTemplate.id), false);
+  assert.equal(supportsHeroLogoTemplate(socialTemplate.id), true);
   assert.equal(
     socialSlideForCloud(
       {content: socialProject.content},
@@ -272,7 +273,7 @@ test("Simple Statement keeps its ID, auto contrast, and background support", () 
   );
 });
 
-test("Simple Statement keeps valid hero logos while other Social Posts strip them", () => {
+test("supported Social Posts keep valid hero logos while other templates strip them", () => {
   const simple = createStudioProject("social-simple-statement");
   simple.id = "simple-logo-project";
   Object.assign(simple.content, {
@@ -290,6 +291,27 @@ test("Simple Statement keeps valid hero logos while other Social Posts strip the
   assert.equal(simplePayload.content, undefined);
   assert.equal(simpleSlide.content.heroMode, "logo");
   assert.equal(simpleSlide.content.heroLogoSource, "upload");
+
+  const pointeGlass = createStudioProject("social-pointe-glass");
+  pointeGlass.id = "pointe-glass-logo-project";
+  Object.assign(pointeGlass.content, {
+    heroMode: "logo",
+    heroLogoSource: "upload",
+    heroLogoStoragePath:
+      "studio-projects/pointe-glass-logo-project/logo-mark.png",
+    heroLogoName: "Campaign mark",
+  });
+  const pointeGlassSlide = socialSlideForCloud(
+    {content: pointeGlass.content},
+    pointeGlass.templateId,
+    pointeGlass.id,
+  );
+  assert.equal(pointeGlassSlide.content.heroMode, "logo");
+  assert.equal(pointeGlassSlide.content.heroLogoSource, "upload");
+  assert.equal(
+    pointeGlassSlide.content.heroLogoStoragePath,
+    pointeGlass.content.heroLogoStoragePath,
+  );
 
   const bold = createStudioProject("social-statement");
   bold.id = "bold-logo-project";
@@ -310,11 +332,11 @@ test("Simple Statement keeps valid hero logos while other Social Posts strip the
   assert.equal(boldSlide.content.heroLogoSource, "");
 });
 
-test("Social carousel projects preserve six ordered slides in one cloud project", () => {
+test("Social carousel projects preserve seven ordered slides in one cloud project", () => {
   const project = createStudioProject("social-simple-statement");
   project.id = "carousel-project";
   project.postMode = "carousel";
-  project.carouselSlides = Array.from({length: 7}, (_, index) =>
+  project.carouselSlides = Array.from({length: 8}, (_, index) =>
     createSocialCarouselSlide(
       {...project.content, title: `Slide ${index + 2}`},
       `slide-${index + 2}`,
@@ -322,16 +344,25 @@ test("Social carousel projects preserve six ordered slides in one cloud project"
   );
 
   const migrated = migrateLegacyStudioProject(project);
-  assert.equal(getSocialProjectSlides(migrated).length, 6);
+  assert.equal(MAX_SOCIAL_CAROUSEL_SLIDES, 7);
+  assert.equal(getSocialProjectSlides(migrated).length, 7);
   const payload = projectForCloud(migrated, "studio-admin");
   assert.equal(payload.postMode, "carousel");
   assert.deepEqual(
     payload.slideOrder,
-    ["primary", "slide-2", "slide-3", "slide-4", "slide-5", "slide-6"],
+    [
+      "primary",
+      "slide-2",
+      "slide-3",
+      "slide-4",
+      "slide-5",
+      "slide-6",
+      "slide-7",
+    ],
   );
   assert.deepEqual(
     getSocialProjectSlides(migrated).slice(1).map((slide) => slide.content.title),
-    ["Slide 2", "Slide 3", "Slide 4", "Slide 5", "Slide 6"],
+    ["Slide 2", "Slide 3", "Slide 4", "Slide 5", "Slide 6", "Slide 7"],
   );
 });
 

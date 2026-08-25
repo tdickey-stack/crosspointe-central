@@ -2,7 +2,7 @@ export const STUDIO_STORAGE_KEY = "crosspointeStudioProjectsV1";
 export const DOCUMENT_PROJECT_TEMPLATE_ID = "document-project";
 export const LEGACY_POLICY_TEMPLATE_ID = "policy-document";
 export const SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID = "social-simple-statement";
-export const MAX_SOCIAL_CAROUSEL_SLIDES = 6;
+export const MAX_SOCIAL_CAROUSEL_SLIDES = 7;
 
 export const BRAND_COLOR_OPTIONS = [
   {value: "red", label: "CrossPointe Red", hex: "#EF3E2D", ink: "light"},
@@ -743,7 +743,8 @@ export function isSocialTemplateId(templateId) {
 export function supportsHeroLogoTemplate(templateId) {
   return (
     isEventTemplateId(templateId) ||
-    templateId === SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID
+    templateId === SOCIAL_SIMPLE_STATEMENT_TEMPLATE_ID ||
+    templateId === "social-pointe-glass"
   );
 }
 

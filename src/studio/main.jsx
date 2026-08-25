@@ -4891,7 +4891,10 @@ function SocialProjectBriefSheet({project, updateProject, onClose}) {
             onClick={() => setPostMode("carousel")}
           >
             <strong>Carousel</strong>
-            <span>Keep up to six slides in this Studio project.</span>
+            <span>
+              Keep up to {MAX_SOCIAL_CAROUSEL_SLIDES} slides in this Studio
+              project.
+            </span>
           </button>
         </div>
         <div className="studio-event-brief-summary">

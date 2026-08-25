@@ -1,6 +1,8 @@
 import {toCanvas} from "html-to-image";
 import {jsPDF} from "jspdf";
 
+import {buildCarouselZip} from "./carousel-archive.js";
+
 const EVENT_EXPORT_SIZES = {
   square: {width: 1080, height: 1080, label: "1x1"},
   portrait: {width: 1080, height: 1350, label: "4x5"},
@@ -285,6 +287,17 @@ function downloadDataUrl(dataUrl, filename) {
   link.remove();
 }
 
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.download = filename;
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 async function prepareDirectoryImages(element, resolvePlanningCenterImage) {
   const images = Array.from(
     element?.querySelectorAll("img[data-studio-directory-image]") || [],
@@ -342,7 +355,7 @@ export async function exportEventPng(
   }
 }
 
-export async function exportCarouselPngs(
+export async function exportCarouselZip(
   project,
   elements,
   {filenameBase = ""} = {},
@@ -367,6 +380,8 @@ export async function exportCarouselPngs(
   await waitForFonts();
   await waitForStableLayout(slideElements);
   const results = [];
+  const archiveFiles = [];
+  const base = filenameBase || safeFilename(project?.name, "social-carousel");
   for (let index = 0; index < slides.length; index += 1) {
     const content = slides[index];
     const format = content.format || "square";
@@ -384,15 +399,17 @@ export async function exportCarouselPngs(
         {requireNativeSize: true},
       );
       const slideNumber = String(index + 1).padStart(2, "0");
-      const base = filenameBase || safeFilename(project?.name, "social-carousel");
       const filename = `${base}-s${slideNumber}-${size.label}.png`;
-      downloadDataUrl(png, filename);
+      archiveFiles.push({filename, dataUrl: png});
       results.push({filename, width: size.width, height: size.height});
     } finally {
       restoreBackground();
     }
   }
-  return {files: results, slides: results.length};
+  const filename = filenameBase ? `${base}.zip` : `${base}-carousel.zip`;
+  const archive = buildCarouselZip(archiveFiles);
+  downloadBlob(new Blob([archive], {type: "application/zip"}), filename);
+  return {filename, files: results, slides: results.length};
 }
 
 export async function exportPolicyPdf(

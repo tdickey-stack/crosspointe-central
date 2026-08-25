@@ -2,7 +2,7 @@ import React, {useEffect, useMemo, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
 import {
-  exportCarouselPngs,
+  exportCarouselZip,
   exportDocumentPdf,
   exportEventPng,
   openDocumentSystemPrint,
@@ -4343,14 +4343,12 @@ function CreativeFilenameDialog({
           <div>
             <span className="studio-kicker">CREATIVE TEAM EXPORT</span>
             <h2 id="studio-creative-filename-title">
-              {carouselSlideCount ? "Name these files" : "Name this file"}
+              {carouselSlideCount ? "Name this carousel ZIP" : "Name this file"}
             </h2>
             <p>
-              Studio formats the download as
-              CONTENTID_WORKTYPE_DESCRIPTION_YYYYMMDD_VXXX.
               {carouselSlideCount
-                ? " Each slide adds its slide number and ratio."
-                : ""}
+                ? "Studio packages every slide PNG into one ZIP. The base name follows CONTENTID_WORKTYPE_DESCRIPTION_YYYYMMDD_VXXX, and each PNG inside adds its slide number and ratio."
+                : "Studio formats the download as CONTENTID_WORKTYPE_DESCRIPTION_YYYYMMDD_VXXX."}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close filename dialog">
@@ -4402,12 +4400,12 @@ function CreativeFilenameDialog({
             />
           </label>
           <div className="studio-creative-filename-preview">
-            <span>{carouselSlideCount ? "DOWNLOAD NAMES" : "DOWNLOAD NAME"}</span>
+            <span>{carouselSlideCount ? "ZIP DOWNLOAD" : "DOWNLOAD NAME"}</span>
             <strong>
               {carouselSlideCount
-                ? `${preview}-s01-${carouselRatio}.${extension} … ${preview}-s${
-                    String(carouselSlideCount).padStart(2, "0")
-                  }-${carouselRatio}.${extension}`
+                ? `${preview}.zip · contains ${preview}-s01-${carouselRatio}.${extension} … ${preview}-s${String(
+                    carouselSlideCount,
+                  ).padStart(2, "0")}-${carouselRatio}.${extension}`
                 : `${preview}.${extension}`}
             </strong>
           </div>
@@ -4418,7 +4416,7 @@ function CreativeFilenameDialog({
             </button>
             <button className="studio-button is-primary" type="submit">
               {carouselSlideCount
-                ? `Export ${carouselSlideCount} ${extension.toUpperCase()}s`
+                ? `Export ${carouselSlideCount}-slide ZIP`
                 : `Export ${extension.toUpperCase()}`}
             </button>
           </div>
@@ -5660,7 +5658,9 @@ function EventStudioEditor({
     setSideSheet("");
     setExportState({
       status: "working",
-      message: "Preparing the high-resolution PNG…",
+      message: isCarousel
+        ? "Preparing the carousel ZIP…"
+        : "Preparing the high-resolution PNG…",
     });
     try {
       await new Promise((resolve) =>
@@ -5669,7 +5669,7 @@ function EventStudioEditor({
         ),
       );
       const result = isCarousel
-        ? await exportCarouselPngs(
+        ? await exportCarouselZip(
             project,
             slides.map((slide) => eventExportRefs.current.get(slide.id)),
             {filenameBase},
@@ -5680,7 +5680,7 @@ function EventStudioEditor({
       setExportState({
         status: "success",
         message: isCarousel
-          ? `Studio prepared ${result.slides} slide PNG downloads. Allow multiple downloads if your browser asks.`
+          ? `Studio downloaded ${result.filename} with ${result.slides} slide PNGs.`
           : `${result.filename} was downloaded at ${result.width} × ${result.height}px.`,
       });
     } catch (error) {
@@ -5939,7 +5939,7 @@ function EventStudioEditor({
               onCreativeFilenameChange={setCreativeFilenameEnabled}
               onClose={() => setSideSheet("")}
               onExport={requestExport}
-              exportLabel={isCarousel ? "Export Carousel PNGs" : "Export High-Res PNG"}
+              exportLabel={isCarousel ? "Export Carousel ZIP" : "Export High-Res PNG"}
             />
           ) : null}
         </div>

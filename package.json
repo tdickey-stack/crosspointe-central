@@ -11,7 +11,7 @@
     "test:planner": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/planner-domain.test.mjs test/planner-persistence.test.mjs test/planner-briefs.test.mjs functions/planner/brief-email.test.js functions/planner/pco-form-webhook.test.js",
     "test:planner-rules": "firebase emulators:exec --project crosspointe-central-planner-rules --only firestore \"node --test test/planner-security-rules.test.mjs\"",
     "test:analytics": "node --test test/central-analytics.test.cjs",
-    "test:studio-client": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/studio-persistence.test.mjs test/studio-creative-filename.test.mjs",
+    "test:studio-client": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/studio-persistence.test.mjs test/studio-creative-filename.test.mjs test/studio-carousel-archive.test.mjs",
     "test:studio-backend": "npm --prefix studio-functions test",
     "test:studio-rules": "firebase emulators:exec --project crosspointe-central-studio-rules --only firestore,storage \"node --test test/studio-security-rules.test.mjs\"",
     "wayfinder:validate": "npm --prefix functions run wayfinder:validate",
@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@fullcalendar/react": "^7.0.2",
+    "fflate": "0.8.3",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
     "temporal-polyfill": "^1.0.4"

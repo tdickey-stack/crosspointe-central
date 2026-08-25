@@ -11,6 +11,9 @@ importers:
       '@fullcalendar/react':
         specifier: ^7.0.2
         version: 7.0.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(temporal-polyfill@1.0.4)
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       html-to-image:
         specifier: ^1.11.13
         version: 1.11.13

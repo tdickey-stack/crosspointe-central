@@ -69,6 +69,7 @@ import {
   mapServeNeedsComparisonItemsById_,
 
   normalizeAdminEmail_,
+  normalizeCampaignDateValue_,
   normalizeCampaignPublishDocId_,
   normalizeChangeRequestDecision_,
   normalizeNextStepPublishDocId_,
@@ -105,7 +106,10 @@ import {
 
 import admin from "firebase-admin";
 import {setGlobalOptions} from "firebase-functions/v2";
-import {onDocumentWritten} from "firebase-functions/v2/firestore";
+import {
+  onDocumentCreated,
+  onDocumentWritten,
+} from "firebase-functions/v2/firestore";
 import {onRequest} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import {defineSecret} from "firebase-functions/params";
@@ -123,6 +127,23 @@ import {
   buildPlannerBriefEmailText,
   normalizePlannerBriefEmailPayload,
 } from "./planner/brief-email.js";
+import {
+  CHANGE_REQUEST_REMINDER_INTERVAL_MS,
+  CHANGE_REQUEST_SUBMITTED_EVENT,
+  buildChangeRequestNotificationEventId,
+  createChangeRequestNotificationRuntime,
+  createPumbleChangeRequestTransport,
+  createPumbleDirectApiClient,
+  disconnectPumbleNotificationPreferences,
+  isRetryableChangeRequestDeliveryError,
+  normalizeChangeRequestNotificationChannelSelection,
+  normalizeChangeRequestNotificationPreferences,
+  serializeChangeRequestNotificationPreferences,
+} from "./change-requests/index.js";
+import {
+  PUMBLE_BOT_CREDENTIAL_PATH,
+  createPumbleOAuthService,
+} from "./change-requests/pumble-oauth.js";
 import {
   buildPlannerRequestDocument,
   buildPlanningCenterFormSubmissionUrl,
@@ -270,6 +291,10 @@ const CENTRAL_ADMIN_INVITES_COLLECTION_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/invites";
 const CENTRAL_ADMIN_CHANGE_REQUESTS_COLLECTION_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/changeRequests";
+const CHANGE_REQUEST_NOTIFICATION_EVENTS_COLLECTION_PATH =
+  CENTRAL_ADMIN_ROOT_DOC_PATH + "/changeRequestNotificationEvents";
+const CHANGE_REQUEST_NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const CHANGE_REQUEST_NOTIFICATION_CLEANUP_LIMIT = 100;
 const CENTRAL_ADMIN_AUDIT_LOG_COLLECTION_PATH =
   CENTRAL_ADMIN_ROOT_DOC_PATH + "/auditLog";
 const CHANGE_REQUEST_CLEANUP_LIMIT_PER_STATUS = 25;
@@ -328,6 +353,9 @@ const CENTRAL_GMAIL_SENDER_EMAIL =
   trimEnvString_(process.env.CENTRAL_GMAIL_SENDER_EMAIL) || "";
 const CENTRAL_ADMIN_URL =
   trimEnvString_(process.env.CENTRAL_ADMIN_URL) || "";
+const CENTRAL_PUMBLE_CALLBACK_URL = trimEnvString_(
+    process.env.CENTRAL_PUMBLE_CALLBACK_URL,
+) || "";
 const CENTRAL_ADMIN_INVITE_TTL_DAYS = parsePositiveInt_(
     process.env.CENTRAL_ADMIN_INVITE_TTL_DAYS,
     14,
@@ -492,10 +520,57 @@ const PCO_WEBHOOK_AUTHENTICITY_SECRET =
   defineSecret("PCO_WEBHOOK_AUTHENTICITY_SECRET");
 const CENTRAL_CALENDAR_SIGNING_KEY =
   defineSecret("CENTRAL_CALENDAR_SIGNING_KEY");
+const CENTRAL_PUMBLE_APP_KEY = defineSecret("CENTRAL_PUMBLE_APP_KEY");
+const CENTRAL_PUMBLE_BOT_TOKEN = defineSecret("CENTRAL_PUMBLE_BOT_TOKEN");
+const CENTRAL_PUMBLE_APP_ID = defineSecret("CENTRAL_PUMBLE_APP_ID");
+const CENTRAL_PUMBLE_CLIENT_SECRET =
+  defineSecret("CENTRAL_PUMBLE_CLIENT_SECRET");
 const GMAIL_SECRETS = [
   CENTRAL_GMAIL_CLIENT_SECRET,
   CENTRAL_GMAIL_REFRESH_TOKEN,
 ];
+const PUMBLE_SECRETS = [CENTRAL_PUMBLE_APP_KEY, CENTRAL_PUMBLE_BOT_TOKEN];
+const PUMBLE_OAUTH_START_SECRETS = [CENTRAL_PUMBLE_APP_ID];
+const PUMBLE_OAUTH_CALLBACK_SECRETS = [
+  CENTRAL_PUMBLE_APP_KEY,
+  CENTRAL_PUMBLE_APP_ID,
+  CENTRAL_PUMBLE_CLIENT_SECRET,
+];
+const CHANGE_REQUEST_NOTIFICATION_SECRETS = [
+  ...GMAIL_SECRETS,
+  ...PUMBLE_SECRETS,
+];
+const changeRequestPumbleApiClient = createPumbleDirectApiClient({
+  fetchImpl: (...args) => fetch(...args),
+  getAppKey: () => CENTRAL_PUMBLE_APP_KEY.value(),
+  getBotToken: getCurrentPumbleBotToken_,
+});
+const changeRequestPumbleTransport = createPumbleChangeRequestTransport({
+  apiClient: changeRequestPumbleApiClient,
+});
+const changeRequestPumbleOAuthService = createPumbleOAuthService({
+  firestore,
+  timestampFromMillis: (milliseconds) =>
+    admin.firestore.Timestamp.fromMillis(milliseconds),
+  fetchImpl: (...args) => fetch(...args),
+  getAppId: () => CENTRAL_PUMBLE_APP_ID.value(),
+  getAppKey: () => CENTRAL_PUMBLE_APP_KEY.value(),
+  getClientSecret: () => CENTRAL_PUMBLE_CLIENT_SECRET.value(),
+  adminUrl: trimEnvString_(CENTRAL_ADMIN_URL) ||
+    "https://crosspointe-central.web.app/admin",
+  callbackUrl: CENTRAL_PUMBLE_CALLBACK_URL ||
+    "https://us-central1-crosspointe-central.cloudfunctions.net/" +
+    "changeRequestPumbleOAuthCallback",
+});
+const changeRequestNotificationRuntime =
+  createChangeRequestNotificationRuntime({
+    firestore,
+    timestampFromMillis: (milliseconds) =>
+      admin.firestore.Timestamp.fromMillis(milliseconds),
+    actionUrl: buildChangeRequestReviewUrl_(),
+    sendEmail: sendChangeRequestEmailNotification_,
+    sendPumble: sendChangeRequestPumbleNotification_,
+  });
 const PLANNING_CENTER_SECRETS = [PCO_APP_ID, PCO_SECRET];
 const PLANNER_PCO_WEBHOOK_SECRETS = [
   PCO_APP_ID,
@@ -2182,6 +2257,476 @@ export const publishPreviewContent = onRequest(
     },
 );
 
+export const changeRequestPumbleStatus = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      if (request.method !== "GET") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      try {
+        const reviewer = await verifyChangeRequestReviewerRequest_(request);
+        const userSnapshot = await firestore
+            .doc(getCentralAdminUserDocPath_(reviewer.uid))
+            .get();
+        response.status(200).json({
+          ok: true,
+          ...serializePumbleConnectionStatus_(userSnapshot.data()),
+        });
+      } catch (error) {
+        respondWithPumbleConnectionError_(response, error);
+      }
+    },
+);
+
+export const changeRequestPumbleOAuthStart = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+      secrets: PUMBLE_OAUTH_START_SECRETS,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      if (request.method !== "POST") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      try {
+        const reviewer = await verifyChangeRequestReviewerRequest_(request);
+        const authorization = await changeRequestPumbleOAuthService
+            .beginAuthorization(reviewer.uid, {
+              returnUrl: request.body && request.body.returnUrl,
+              requestOrigin: request.get("origin"),
+            });
+        response.status(200).json({
+          ok: true,
+          authorizationUrl: authorization.authorizationUrl,
+        });
+      } catch (error) {
+        console.error("Pumble authorization start failed.", {
+          code: String(error && error.code || ""),
+          message: String(error && error.message || ""),
+        });
+        respondWithPumbleConnectionError_(response, error);
+      }
+    },
+);
+
+export const changeRequestPumbleOAuthCallback = onRequest(
+    {
+      region: "us-central1",
+      cors: false,
+      concurrency: 1,
+      maxInstances: 1,
+      secrets: PUMBLE_OAUTH_CALLBACK_SECRETS,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      response.set("Referrer-Policy", "no-referrer");
+      if (request.method !== "GET") {
+        response.status(405).send("Method not allowed.");
+        return;
+      }
+
+      let callbackStatus = "pending";
+      let callbackCode = "";
+      let completionToken = "";
+      let returnUrl = changeRequestPumbleOAuthService.adminUrl;
+      try {
+        const result = await changeRequestPumbleOAuthService
+            .completeAuthorization({
+              code: request.query && request.query.code,
+              state: request.query && request.query.state,
+            });
+        completionToken = result.completionToken;
+        returnUrl = result.returnUrl;
+      } catch (error) {
+        callbackStatus = "error";
+        callbackCode = normalizePumbleCallbackErrorCode_(error && error.code);
+        if (error && error.returnUrl) {
+          returnUrl = String(error.returnUrl);
+        }
+        console.warn("Pumble authorization callback failed.", {
+          code: callbackCode,
+          message: String(error && error.message || ""),
+        });
+      }
+
+      const redirectUrl = new URL(returnUrl);
+      if (completionToken) {
+        redirectUrl.hash = new URLSearchParams({
+          pumble: callbackStatus,
+          pumble_token: completionToken,
+        }).toString();
+      } else {
+        redirectUrl.searchParams.set("pumble", callbackStatus);
+      }
+      if (!completionToken && callbackCode) {
+        redirectUrl.searchParams.set("pumble_code", callbackCode);
+      }
+      response.redirect(303, redirectUrl.toString());
+    },
+);
+
+export const changeRequestPumbleOAuthComplete = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      if (request.method !== "POST") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      try {
+        const reviewer = await verifyChangeRequestReviewerRequest_(request);
+        const userRef = firestore.doc(
+            getCentralAdminUserDocPath_(reviewer.uid),
+        );
+        await changeRequestPumbleOAuthService
+            .finalizeAuthorization({
+              uid: reviewer.uid,
+              completionToken: request.body && request.body.completionToken,
+              applyConnection: async ({transaction, connection}) => {
+                const userSnapshot = await transaction.get(userRef);
+                const email = normalizeAdminEmail_(userSnapshot.get("email"));
+                if (!userSnapshot.exists ||
+                  userSnapshot.get("active") !== true ||
+                  !isAllowedCentralAdminEmail_(email)) {
+                  throw createChangeRequestError_(
+                      "admin-access-required",
+                      "Your admin access record must remain active.",
+                  );
+                }
+                const permission = getChangeRequestsPermission_(
+                    userSnapshot.get("pageAccess") || {},
+                );
+                if (!canReviewChangeRequestsWithPermission_(permission)) {
+                  throw createChangeRequestError_(
+                      "change-request-review-forbidden",
+                      "Your current access no longer allows linking Pumble.",
+                  );
+                }
+                transaction.update(userRef, {
+                  "notificationIntegrations.pumble": connection,
+                  "updatedAt":
+                    admin.firestore.FieldValue.serverTimestamp(),
+                });
+              },
+            });
+        response.status(200).json({
+          ok: true,
+          linked: true,
+          message: "Pumble was linked successfully.",
+        });
+      } catch (error) {
+        console.warn("Pumble authorization completion failed.", {
+          code: normalizePumbleCallbackErrorCode_(error && error.code),
+          message: String(error && error.message || ""),
+        });
+        respondWithPumbleConnectionError_(response, error);
+      }
+    },
+);
+
+export const changeRequestPumbleDisconnect = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      if (request.method !== "POST") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      try {
+        const reviewer = await verifyChangeRequestReviewerRequest_(request);
+        const userRef = firestore.doc(
+            getCentralAdminUserDocPath_(reviewer.uid),
+        );
+        const preferences = await firestore.runTransaction(
+            async (transaction) => {
+              const userSnapshot = await transaction.get(userRef);
+              if (!userSnapshot.exists) {
+                throw createChangeRequestError_(
+                    "admin-access-required",
+                    "Your admin access record is unavailable.",
+                );
+              }
+              const disconnectedPreferences =
+                disconnectPumbleNotificationPreferences(userSnapshot.get(
+                    "notificationPreferences.changeRequests",
+                ));
+              transaction.update(userRef, {
+                "notificationIntegrations.pumble":
+                  admin.firestore.FieldValue.delete(),
+                "notificationPreferences.changeRequests":
+                  disconnectedPreferences,
+                "notificationPreferences.updatedAt":
+                  admin.firestore.FieldValue.serverTimestamp(),
+                "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
+              });
+              return serializeChangeRequestNotificationPreferences(
+                  disconnectedPreferences,
+              );
+            },
+        );
+        response.status(200).json({
+          ok: true,
+          linked: false,
+          preferences,
+          message: "Pumble was disconnected from your Central account.",
+        });
+      } catch (error) {
+        respondWithPumbleConnectionError_(response, error);
+      }
+    },
+);
+
+export const changeRequestNotificationPreferences = onRequest(
+    {
+      region: "us-central1",
+      cors: true,
+    },
+    async (request, response) => {
+      response.set("Cache-Control", "no-store");
+      if (request.method !== "GET" && request.method !== "POST") {
+        response.status(405).json({error: "Method not allowed."});
+        return;
+      }
+
+      const idToken = getBearerToken_(request.headers.authorization);
+      if (!idToken) {
+        response.status(401).json({
+          error: "Missing Firebase ID token. Sign in again and retry.",
+        });
+        return;
+      }
+
+      let decodedToken = null;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+      } catch (error) {
+        response.status(401).json({
+          error: "Your Firebase sign-in expired. Sign in again and retry.",
+        });
+        return;
+      }
+
+      try {
+        await verifyChangeRequestReviewerAccess_(decodedToken);
+        const userRef = firestore.doc(
+            getCentralAdminUserDocPath_(decodedToken.uid),
+        );
+        let pumbleConnection;
+        let preferences;
+        let message = "";
+
+        if (request.method === "GET") {
+          const userSnapshot = await userRef.get();
+          const userData = userSnapshot.data() || {};
+          pumbleConnection = serializePumbleConnectionStatus_(userData);
+          preferences = serializeChangeRequestNotificationPreferences(
+              userData.notificationPreferences &&
+              userData.notificationPreferences.changeRequests,
+          );
+        } else {
+          if (!request.body || !Array.isArray(request.body.channels)) {
+            response.status(400).json({
+              error: "Notification channels must be an array.",
+              code: "invalid-notification-channels",
+            });
+            return;
+          }
+          let selected = null;
+          try {
+            selected = normalizeChangeRequestNotificationChannelSelection(
+                request.body && request.body.channels,
+            );
+          } catch (error) {
+            response.status(400).json({
+              error: String(error && error.message ||
+                "Choose Email, Pumble, or both."),
+              code: "invalid-notification-channels",
+            });
+            return;
+          }
+          const selectedPreferences =
+            serializeChangeRequestNotificationPreferences(selected);
+
+          if (!selectedPreferences.channels.length) {
+            response.status(400).json({
+              error: "Choose Email, Pumble, or both.",
+              code: "notification-channel-required",
+            });
+            return;
+          }
+          const transactionResult = await firestore.runTransaction(
+              async (transaction) => {
+                const userSnapshot = await transaction.get(userRef);
+                if (!userSnapshot.exists) {
+                  throw createChangeRequestError_(
+                      "admin-access-required",
+                      "Your admin access record is unavailable.",
+                  );
+                }
+                const currentConnection = serializePumbleConnectionStatus_(
+                    userSnapshot.data(),
+                );
+                if (selected.pumble && !currentConnection.linked) {
+                  return {conflict: true, pumbleConnection: currentConnection};
+                }
+                transaction.update(userRef, {
+                  "notificationPreferences.changeRequests": selected,
+                  "notificationPreferences.updatedAt":
+                    admin.firestore.FieldValue.serverTimestamp(),
+                  "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
+                });
+                return {
+                  conflict: false,
+                  pumbleConnection: currentConnection,
+                };
+              },
+          );
+          pumbleConnection = transactionResult.pumbleConnection;
+          if (transactionResult.conflict) {
+            response.status(409).json({
+              error: "Link your Pumble account before selecting Pumble.",
+              code: "pumble-not-linked",
+              pumbleConnection,
+            });
+            return;
+          }
+          preferences = selectedPreferences;
+          message = "Change Request notification preferences saved.";
+        }
+
+        response.status(200).json({
+          ok: true,
+          preferences,
+          pumbleConnection,
+          ...(message ? {message} : {}),
+        });
+      } catch (error) {
+        console.error("Change Request notification preferences failed.", {
+          code: String(error && error.code || ""),
+          message: String(error && error.message || ""),
+        });
+        response.status(getChangeRequestStatusCode_(error)).json({
+          error: getChangeRequestErrorMessage_(error),
+          code: String(error && error.code || ""),
+        });
+      }
+    },
+);
+
+export const changeRequestNotificationEventCreated = onDocumentCreated(
+    {
+      region: "us-central1",
+      document:
+        CHANGE_REQUEST_NOTIFICATION_EVENTS_COLLECTION_PATH +
+        "/{eventId}",
+      secrets: CHANGE_REQUEST_NOTIFICATION_SECRETS,
+    },
+    async (event) => {
+      const eventId = String(event.params && event.params.eventId || "").trim();
+      const result = await changeRequestNotificationRuntime.dispatchEvent(
+          eventId,
+      );
+      console.info("Change Request notification event processed.", result);
+    },
+);
+
+export const changeRequestNotificationDispatchScheduled = onSchedule(
+    {
+      region: "us-central1",
+      schedule: "every 1 minutes",
+      timeZone: "America/Chicago",
+      maxInstances: 1,
+      secrets: CHANGE_REQUEST_NOTIFICATION_SECRETS,
+    },
+    async () => {
+      const results = [];
+      for (let index = 0; index < 10; index += 1) {
+        const result = await changeRequestNotificationRuntime
+            .dispatchNextEvent();
+        results.push(result);
+        if (!result.dispatched) break;
+      }
+      if (results.some((result) => result.dispatched)) {
+        console.info("Change Request notification dispatch complete.", {
+          processedCount: results.filter((result) => result.dispatched).length,
+        });
+      }
+    },
+);
+
+export const changeRequestReminderScheduled = onSchedule(
+    {
+      region: "us-central1",
+      schedule: "every 60 minutes",
+      timeZone: "America/Chicago",
+      maxInstances: 1,
+    },
+    async () => {
+      const results = [];
+      for (let index = 0; index < 10; index += 1) {
+        const result = await changeRequestNotificationRuntime
+            .queueDueReminderDigest();
+        results.push(result);
+        if (!result.queued) break;
+      }
+      const queued = results.filter((result) => result.queued);
+      if (queued.length) {
+        console.info("Change Request reminder digest queued.", {
+          eventCount: queued.length,
+          requestCount: queued.reduce((total, result) => {
+            return total + result.requestCount;
+          }, 0),
+        });
+      }
+    },
+);
+
+export const changeRequestNotificationCleanupScheduled = onSchedule(
+    {
+      region: "us-central1",
+      schedule: "every day 03:17",
+      timeZone: "America/Chicago",
+      maxInstances: 1,
+    },
+    async () => {
+      const cutoff = admin.firestore.Timestamp.fromMillis(
+          Date.now() - CHANGE_REQUEST_NOTIFICATION_RETENTION_MS,
+      );
+      const snapshot = await firestore
+          .collection(CHANGE_REQUEST_NOTIFICATION_EVENTS_COLLECTION_PATH)
+          .where("completedAt", "<=", cutoff)
+          .orderBy("completedAt")
+          .limit(CHANGE_REQUEST_NOTIFICATION_CLEANUP_LIMIT)
+          .get();
+      for (const eventDocument of snapshot.docs) {
+        await firestore.recursiveDelete(eventDocument.ref);
+      }
+      if (!snapshot.empty) {
+        console.info("Expired Change Request notification records removed.", {
+          deletedEventCount: snapshot.size,
+          retentionDays: 30,
+        });
+      }
+    },
+);
+
 export const submitChangeRequest = onRequest(
     {
       region: "us-central1",
@@ -2252,6 +2797,7 @@ export const submitChangeRequest = onRequest(
             requestBody,
         );
         const summary = changeRequestMetadata.summary;
+        const notificationQueuedAt = admin.firestore.Timestamp.now();
         const requestDocPayload = {
           target: "preview",
           section: section,
@@ -2263,8 +2809,13 @@ export const submitChangeRequest = onRequest(
           submittedByUid: submitter.uid,
           submittedByEmail: submitter.email,
           submittedByName: submitter.displayName,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          reminderSequence: 0,
+          nextReminderAt: admin.firestore.Timestamp.fromMillis(
+              notificationQueuedAt.toMillis() +
+              CHANGE_REQUEST_REMINDER_INTERVAL_MS,
+          ),
+          createdAt: notificationQueuedAt,
+          updatedAt: notificationQueuedAt,
         };
         if (
           changeRequestMetadata &&
@@ -2273,9 +2824,34 @@ export const submitChangeRequest = onRequest(
         ) {
           Object.assign(requestDocPayload, changeRequestMetadata.requestFields);
         }
-        const requestRef = await firestore
+        const requestRef = firestore
             .collection(CENTRAL_ADMIN_CHANGE_REQUESTS_COLLECTION_PATH)
-            .add(requestDocPayload);
+            .doc();
+        const notificationEventId = buildChangeRequestNotificationEventId({
+          eventType: CHANGE_REQUEST_SUBMITTED_EVENT,
+          requestId: requestRef.id,
+        });
+        const notificationEventRef = firestore
+            .collection(
+                CHANGE_REQUEST_NOTIFICATION_EVENTS_COLLECTION_PATH,
+            )
+            .doc(notificationEventId);
+        const batch = firestore.batch();
+        batch.set(requestRef, requestDocPayload);
+        batch.set(notificationEventRef, {
+          eventType: CHANGE_REQUEST_SUBMITTED_EVENT,
+          status: "pending",
+          requestId: requestRef.id,
+          requestIds: [requestRef.id],
+          requestCount: 1,
+          attemptCount: 0,
+          dueAt: notificationQueuedAt,
+          leaseId: "",
+          leaseUntil: null,
+          createdAt: notificationQueuedAt,
+          updatedAt: notificationQueuedAt,
+        });
+        await batch.commit();
 
         await writeChangeRequestAuditLog_({
           action: "submitChangeRequest",
@@ -3113,6 +3689,295 @@ async function queueCentralAdminInviteNotification_(inviteData) {
     html: messageHtml,
   });
   return String(sendResult && sendResult.id || "").trim();
+}
+
+/**
+ * Builds the authenticated Change Request review destination.
+ * @param {string} requestId Optional request to expand.
+ * @return {string} HTTPS Admin URL.
+ */
+function buildChangeRequestReviewUrl_(requestId = "") {
+  const fallback = "https://crosspointe-central.web.app/admin";
+  const url = new URL(trimEnvString_(CENTRAL_ADMIN_URL) || fallback);
+  const normalizedPath = url.pathname.replace(/\/+$/, "");
+  if (!normalizedPath.endsWith("/change-requests")) {
+    url.pathname = normalizedPath + "/change-requests";
+  }
+  url.search = "";
+  const normalizedRequestId = String(requestId || "").trim();
+  if (normalizedRequestId) {
+    url.searchParams.set("request", normalizedRequestId);
+  }
+  return url.toString();
+}
+
+/**
+ * Authenticates an Admin request and requires Change Request review access.
+ * @param {Object} request HTTPS request.
+ * @return {Promise<Object>} Reviewer identity.
+ */
+async function verifyChangeRequestReviewerRequest_(request) {
+  const idToken = getBearerToken_(request.headers.authorization);
+  if (!idToken) {
+    const error = new Error(
+        "Missing Firebase ID token. Sign in again and retry.",
+    );
+    error.code = "firebase-auth-required";
+    error.status = 401;
+    throw error;
+  }
+
+  let decodedToken;
+  try {
+    decodedToken = await admin.auth().verifyIdToken(idToken);
+  } catch (cause) {
+    const error = new Error(
+        "Your Firebase sign-in expired. Sign in again and retry.",
+    );
+    error.code = "firebase-auth-invalid";
+    error.status = 401;
+    error.cause = cause;
+    throw error;
+  }
+  return verifyChangeRequestReviewerAccess_(decodedToken);
+}
+
+/**
+ * Produces the token-free Pumble connection status returned to Admin.
+ * @param {*} userData Central admin record.
+ * @return {Object} Safe connection status.
+ */
+function serializePumbleConnectionStatus_(userData) {
+  const source = userData && typeof userData === "object" ? userData : {};
+  const integrations = source.notificationIntegrations &&
+    typeof source.notificationIntegrations === "object" ?
+    source.notificationIntegrations : {};
+  const connection = integrations.pumble &&
+    typeof integrations.pumble === "object" ? integrations.pumble : {};
+  const linked = connection.status === "linked" &&
+    Boolean(String(connection.userId || "").trim()) &&
+    Boolean(String(connection.botId || "").trim()) &&
+    Boolean(String(connection.workspaceId || "").trim());
+  const linkedAtMs = connection.linkedAt &&
+    typeof connection.linkedAt.toMillis === "function" ?
+    connection.linkedAt.toMillis() : NaN;
+  return {
+    linked,
+    displayName: linked ? String(connection.displayName || "").trim() : "",
+    linkedAt: linked && Number.isFinite(linkedAtMs) ?
+      new Date(linkedAtMs).toISOString() : "",
+  };
+}
+
+/**
+ * Sends a bounded Pumble connection error response.
+ * @param {Object} response HTTPS response.
+ * @param {*} error Request error.
+ * @return {void}
+ */
+function respondWithPumbleConnectionError_(response, error) {
+  const status = Number(error && error.status) ||
+    getChangeRequestStatusCode_(error);
+  response.status(status >= 400 && status <= 599 ? status : 500).json({
+    error: getChangeRequestErrorMessage_(error),
+    code: normalizePumbleCallbackErrorCode_(error && error.code),
+  });
+}
+
+/**
+ * Allows only stable, client-safe Pumble OAuth error codes.
+ * @param {*} value Raw error code.
+ * @return {string} Safe callback code.
+ */
+function normalizePumbleCallbackErrorCode_(value) {
+  const code = String(value || "").trim();
+  const allowed = new Set([
+    "admin-access-required",
+    "change-request-review-forbidden",
+    "firebase-auth-invalid",
+    "firebase-auth-required",
+    "pumble-credentials-missing",
+    "pumble-bot-verification-failed",
+    "pumble-oauth-completion-expired",
+    "pumble-oauth-completion-invalid",
+    "pumble-oauth-code-invalid",
+    "pumble-oauth-exchange-failed",
+    "pumble-oauth-network-failed",
+    "pumble-oauth-response-invalid",
+    "pumble-oauth-rotation-busy",
+    "pumble-oauth-rotation-lost",
+    "pumble-oauth-return-invalid",
+    "pumble-oauth-state-expired",
+    "pumble-oauth-state-invalid",
+    "pumble-oauth-timeout",
+    "pumble-oauth-user-mismatch",
+    "pumble-workspace-mismatch",
+  ]);
+  return allowed.has(code) ? code : "pumble-link-failed";
+}
+
+/**
+ * Delivers a provider-neutral Change Request digest through Gmail.
+ * @param {Object} notification Runtime notification model.
+ * @return {Promise<Object>} Provider result.
+ */
+async function sendChangeRequestEmailNotification_(notification) {
+  const source = notification && typeof notification === "object" ?
+    notification : {};
+  const recipient = source.recipient || {};
+  const digest = source.digest || {};
+  const rows = (Array.isArray(digest.items) ? digest.items : []).flatMap(
+      (item, index) => {
+        return [
+          ["Request " + String(index + 1), String(item.summary || "")],
+          ["Section", String(item.sectionLabel || "")],
+          ["Submitted By", String(item.submitterLabel || "")],
+        ];
+      },
+  );
+  const result = await sendCentralEmail_({
+    to: String(recipient.email || "").trim(),
+    subject: String(digest.subject || "Change Request awaiting review").trim(),
+    text: String(source.text || "").trim(),
+    html: buildCentralEmailHtml_({
+      preheader: digest.lead,
+      title: digest.title,
+      lead: digest.lead,
+      sections: [{
+        title: digest.items && digest.items.length > 1 ?
+          "Pending Requests" : "Request Details",
+        rows,
+      }],
+      actionLabel: digest.actionLabel,
+      actionUrl: digest.actionUrl,
+      footerText:
+        "You received this because your Central account can review Change " +
+        "Requests. Update your channels from the Change Requests page.",
+    }),
+  });
+  return {providerMessageId: String(result && result.id || "").trim()};
+}
+
+/**
+ * Delivers a provider-neutral Change Request digest through the Pumble bot.
+ * @param {Object} notification Runtime notification model.
+ * @return {Promise<Object>} Provider result.
+ */
+async function sendChangeRequestPumbleNotification_(notification) {
+  const source = notification && typeof notification === "object" ?
+    notification : {};
+  const recipient = source.recipient || {};
+  try {
+    const result = await changeRequestPumbleTransport.send({
+      recipientUserId: recipient.pumbleUserId,
+      botUserId: recipient.pumbleBotUserId,
+      text: source.text,
+    });
+    return {
+      providerMessageId: String(result && result.messageId || "").trim(),
+    };
+  } catch (error) {
+    if (!isRetryableChangeRequestDeliveryError(error)) {
+      let needsEmailFallback = false;
+      try {
+        needsEmailFallback = await degradeChangeRequestPumbleConnection_(
+            recipient.uid,
+            error,
+        );
+      } catch (degradeError) {
+        console.error("Unable to mark a failed Pumble connection.", {
+          code: String(degradeError && degradeError.code || ""),
+          message: String(degradeError && degradeError.message || ""),
+        });
+      }
+      if (needsEmailFallback && looksLikeEmailAddress_(recipient.email)) {
+        try {
+          await sendChangeRequestEmailNotification_(notification);
+          console.warn("Pumble notification fell back to email.", {
+            recipientUid: String(recipient.uid || ""),
+            code: String(error && error.code || "pumble-delivery-failed"),
+          });
+        } catch (fallbackError) {
+          console.error("Pumble notification email fallback failed.", {
+            recipientUid: String(recipient.uid || ""),
+            code: String(fallbackError && fallbackError.code || ""),
+          });
+        }
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Marks a terminal Pumble link failure and atomically restores Email delivery.
+ * @param {*} uid Central admin user ID.
+ * @param {*} error Terminal Pumble delivery error.
+ * @return {Promise<boolean>} Whether this notification needs email fallback.
+ */
+async function degradeChangeRequestPumbleConnection_(uid, error) {
+  const normalizedUid = String(uid || "").trim();
+  if (!normalizedUid || normalizedUid.length > 500) return false;
+  const userRef = firestore.doc(getCentralAdminUserDocPath_(normalizedUid));
+  return firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(userRef);
+    if (!snapshot.exists) return false;
+    const preferences = normalizeChangeRequestNotificationPreferences(
+        snapshot.get("notificationPreferences.changeRequests"),
+    );
+    const pumbleWasSelected = preferences.pumble;
+    const needsEmailFallback = pumbleWasSelected && !preferences.email;
+    const update = {
+      "notificationIntegrations.pumble.status": "error",
+      "notificationIntegrations.pumble.lastErrorCode":
+        normalizePumbleDeliveryErrorCode_(error && error.code),
+      "notificationIntegrations.pumble.degradedAt":
+        admin.firestore.FieldValue.serverTimestamp(),
+      "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (pumbleWasSelected) {
+      update["notificationPreferences.changeRequests"] = {
+        email: true,
+        pumble: false,
+      };
+      update["notificationPreferences.updatedAt"] =
+        admin.firestore.FieldValue.serverTimestamp();
+    }
+    transaction.update(userRef, update);
+    return needsEmailFallback;
+  });
+}
+
+/**
+ * Bounds provider error codes before persisting connection health metadata.
+ * @param {*} value Raw provider error code.
+ * @return {string} Safe Pumble delivery error code.
+ */
+function normalizePumbleDeliveryErrorCode_(value) {
+  const code = String(value || "").trim().toLowerCase();
+  return /^pumble-[a-z0-9-]{1,80}$/.test(code) ?
+    code : "pumble-delivery-failed";
+}
+
+/**
+ * Loads the latest OAuth-issued bot token from server-only Firestore state.
+ * The Secret Manager token is retained only as a bootstrap fallback until the
+ * first successful Central account link rotates the credential.
+ * @return {Promise<string>} Current Pumble bot access token.
+ */
+async function getCurrentPumbleBotToken_() {
+  const snapshot = await firestore.doc(PUMBLE_BOT_CREDENTIAL_PATH).get();
+  if (!snapshot.exists) {
+    return CENTRAL_PUMBLE_BOT_TOKEN.value();
+  }
+  const token = String(snapshot.get("token") || "").trim();
+  if (!token || token.length > 10000) {
+    const error = new Error("The rotating Pumble bot credential is invalid.");
+    error.code = "pumble-credentials-invalid";
+    error.retryable = false;
+    throw error;
+  }
+  return token;
 }
 
 async function sendCentralEmail_(options) {
@@ -4600,11 +5465,6 @@ function normalizeCampaignPublicItem_(item) {
     end_date: ongoing ? "" : normalizeCampaignDateValue_(source.end_date),
     sort: normalizeSortValue_(source.sort, 50),
   };
-}
-
-function normalizeCampaignDateValue_(value) {
-  const trimmed = String(value || "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : "";
 }
 
 function getNormalizedCampaignOngoingValue_(item) {

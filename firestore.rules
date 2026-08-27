@@ -38,6 +38,25 @@ service cloud.firestore {
     // Planning Center projects require numeric instance/event IDs, an optional
     // public HTTPS URL, and a timestamp for the last explicit import/refresh.
 
+    // ===============================================================
+    // Change Request notification workflow model
+    // ===============================================================
+    // centralAdmin/root/changeRequests/{requestId}: server-created proposed
+    // content, submitter identity, pending status, and reminder timestamps.
+    // Active admins may read it only when their changeRequests permission is
+    // non-none. All writes remain server-only.
+    // centralAdmin/root/changeRequestNotificationEvents/{eventId}: server-only
+    // notification outbox state, with server-only per-channel deliveries under
+    // deliveries/{deliveryId}. Browsers cannot read or write either level.
+    // centralAdmin/root/pumbleOAuthStates/{stateHash}: short-lived, hashed,
+    // token-free OAuth state mapped to one admin UID. Every document remains
+    // server-only.
+    // centralAdmin/root/pumbleBotCredentials/primary: current rotating Pumble
+    // bot token plus locked workspace/bot IDs. It is server-only and never
+    // exposed to browser clients, including Central admins.
+    // centralAdmin/root/pumbleBotCredentialLocks/primary: short-lived lease
+    // that serializes OAuth bot-token rotations. It is also server-only.
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -83,6 +102,11 @@ service cloud.firestore {
         permission == "edit" ||
         permission == "approve" ||
         permission == "admin";
+    }
+
+    function canReadChangeRequests() {
+      return isActiveAdminUser() &&
+        hasAnySectionAccess(currentUser().data.pageAccess.changeRequests);
     }
 
     // Studio projects contain creative content only. Account identity remains
@@ -1517,8 +1541,30 @@ service cloud.firestore {
     }
 
     match /centralAdmin/root/changeRequests/{requestId} {
-      allow read: if isActiveAdminUser();
+      allow read: if canReadChangeRequests();
       allow write: if false;
+    }
+
+    // Change Request notifications and per-channel delivery records are
+    // server-owned workflow state. Browsers must use privileged Functions.
+    match /centralAdmin/root/changeRequestNotificationEvents/{eventId} {
+      allow read, write: if false;
+
+      match /deliveries/{deliveryId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /centralAdmin/root/pumbleOAuthStates/{stateHash} {
+      allow read, write: if false;
+    }
+
+    match /centralAdmin/root/pumbleBotCredentials/{credentialId} {
+      allow read, write: if false;
+    }
+
+    match /centralAdmin/root/pumbleBotCredentialLocks/{lockId} {
+      allow read, write: if false;
     }
 
     match /centralAdmin/root/auditLog/{logId} {

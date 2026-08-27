@@ -85,6 +85,15 @@
   var PRINT_MODE_EVENT_CONTINUATION_MIN_REMAINDER_WORDS = 12;
   var SUBMIT_CHANGE_REQUEST_ENDPOINT = "/api/admin/submit-change-request";
   var REVIEW_CHANGE_REQUEST_ENDPOINT = "/api/admin/review-change-request";
+  var CHANGE_REQUEST_NOTIFICATION_PREFERENCES_ENDPOINT =
+    "/api/admin/change-request-notification-preferences";
+  var CHANGE_REQUEST_PUMBLE_STATUS_ENDPOINT = "/api/admin/pumble/status";
+  var CHANGE_REQUEST_PUMBLE_OAUTH_START_ENDPOINT =
+    "/api/admin/pumble/oauth/start";
+  var CHANGE_REQUEST_PUMBLE_OAUTH_COMPLETE_ENDPOINT =
+    "/api/admin/pumble/oauth/complete";
+  var CHANGE_REQUEST_PUMBLE_DISCONNECT_ENDPOINT =
+    "/api/admin/pumble/disconnect";
   var LIST_ADMIN_USERS_ENDPOINT = "/api/admin/list-users";
   var PUSH_NOTIFICATION_SEND_ENDPOINT = "/api/admin/push/send";
   var PUSH_NOTIFICATION_SCHEDULE_ENDPOINT = "/api/admin/push/schedule";
@@ -837,6 +846,22 @@
     changeRequestsPendingCount: 0,
     changeRequestsError: "",
     changeRequestsMessage: "",
+    changeRequestNotificationsLoaded: false,
+    changeRequestNotificationsLoading: false,
+    changeRequestNotificationsSaving: false,
+    changeRequestNotificationsLoadFailed: false,
+    changeRequestNotificationChannels: ["email"],
+    changeRequestPumbleConnectionLoaded: false,
+    changeRequestPumbleConnectionLoading: false,
+    changeRequestPumbleConnectionAction: "",
+    changeRequestPumbleLinked: false,
+    changeRequestPumbleDisplayName: "",
+    changeRequestPumbleLinkedAt: "",
+    changeRequestPumbleConnectionError: "",
+    changeRequestPumbleConnectionMessage: "",
+    changeRequestPumbleOAuthReturnError: "",
+    changeRequestNotificationsError: "",
+    changeRequestNotificationsMessage: "",
     quickLinksLoaded: false,
     quickLinksLoading: false,
     quickLinksSaving: false,
@@ -1467,6 +1492,7 @@
           return;
         }
 
+        handleChangeRequestPumbleOAuthReturn_();
         adminState.userDocPath = getAdminUserDocPath_(user.uid);
         loadAdminUserDoc_();
       });
@@ -2557,6 +2583,31 @@
             button.getAttribute("data-admin-request-id") || "",
             "reject",
         );
+        return;
+      }
+
+      if (action === "save-change-request-notifications") {
+        event.preventDefault();
+        saveChangeRequestNotificationPreferences_();
+        return;
+      }
+
+      if (action === "link-change-request-pumble" ||
+        action === "reconnect-change-request-pumble") {
+        event.preventDefault();
+        startChangeRequestPumbleLink_();
+        return;
+      }
+
+      if (action === "disconnect-change-request-pumble") {
+        event.preventDefault();
+        disconnectChangeRequestPumble_();
+        return;
+      }
+
+      if (action === "reload-change-request-pumble") {
+        event.preventDefault();
+        loadChangeRequestPumbleStatusIfNeeded_(true);
         return;
       }
 
@@ -4629,6 +4680,15 @@
       return;
     }
 
+    if (field === "change-request-notifications.delivery") {
+      adminState.changeRequestNotificationChannels =
+        getChangeRequestNotificationChannelsForDelivery_(nextValue);
+      adminState.changeRequestNotificationsError = "";
+      adminState.changeRequestNotificationsMessage = "";
+      renderAdmin_();
+      return;
+    }
+
     markAdminDirtyScope_(getAdminDirtyScopeForField_(field));
 
     if (field.indexOf("bulletin.") === 0) {
@@ -6192,9 +6252,33 @@
       "<main class=\"central-admin-main\">",
       "<div class=\"central-admin-main-inner\">",
       renderAdminHero_(currentPage),
+      renderChangeRequestPumbleOAuthReturnNotice_(),
       renderAdminPagePanel_(currentPage),
       "</div>",
       "</main>",
+    ].join("");
+  }
+
+  function renderChangeRequestPumbleOAuthReturnNotice_() {
+    var success = adminState.changeRequestPumbleConnectionMessage ===
+      "Pumble was linked successfully.";
+    var error = adminState.changeRequestPumbleOAuthReturnError;
+    if (!success && !error) return "";
+
+    return [
+      "<section class=\"central-admin-oauth-return",
+      error ? " is-error" : " is-success",
+      "\" role=\"", error ? "alert" : "status", "\">",
+      "<div><strong>",
+      error ? "Pumble was not linked" : "Pumble is linked",
+      "</strong><p>",
+      escapeHtml_(error ||
+        "You can now use Pumble for Change Request notifications."),
+      "</p></div>",
+      "<a class=\"central-admin-link-button is-secondary\" href=\"/admin/change-requests\">",
+      "Open notification settings",
+      "</a>",
+      "</section>",
     ].join("");
   }
 
@@ -16009,10 +16093,228 @@
         "</p>" :
         "",
       "</div>",
+      renderChangeRequestNotificationPreferences_(),
       renderChangeRequestsList_(),
       "</div>",
       "</div>",
       "</section>",
+    ].join("");
+  }
+
+  function renderChangeRequestNotificationPreferences_() {
+    if (!canReviewChangeRequests_()) {
+      return "";
+    }
+
+    var preferencesLoading = adminState.changeRequestNotificationsLoading &&
+      !adminState.changeRequestNotificationsLoaded;
+    var isSaving = adminState.changeRequestNotificationsSaving;
+    var loadFailed = adminState.changeRequestNotificationsLoadFailed;
+    var delivery = getChangeRequestNotificationDelivery_(
+        adminState.changeRequestNotificationChannels,
+    );
+    var pumbleLoading = adminState.changeRequestPumbleConnectionLoading;
+    var pumbleAction = adminState.changeRequestPumbleConnectionAction;
+    var pumbleLinked = adminState.changeRequestPumbleConnectionLoaded &&
+      adminState.changeRequestPumbleLinked;
+    var pumbleError = adminState.changeRequestPumbleConnectionError;
+    var pumbleOAuthError = adminState.changeRequestPumbleOAuthReturnError;
+    var pumbleUnavailable = !pumbleLinked || pumbleLoading || !!pumbleError;
+    var pumblePreferenceBlocked = delivery !== "email" &&
+      adminState.changeRequestPumbleConnectionLoaded && !pumbleLinked;
+    var statusLabel = preferencesLoading ?
+      "Loading" :
+      loadFailed ?
+      "Unavailable" :
+      pumblePreferenceBlocked ?
+      "Link required" :
+      getChangeRequestNotificationDeliveryLabel_(delivery);
+    var statusTone = preferencesLoading || loadFailed ||
+      pumblePreferenceBlocked ? "is-warn" : "is-safe";
+    var pumbleConnectionLabel = getChangeRequestPumbleConnectionLabel_();
+    var pumbleConnectionDetail = pumbleLoading || pumbleAction ?
+      "Central is securely checking your Pumble connection." :
+      pumbleError ?
+      "Try the connection check again before choosing Pumble delivery." :
+      pumbleLinked ?
+      "Pumble delivery is available for this account." :
+      "Link your Pumble account before choosing Pumble or Email + Pumble.";
+    var pumbleConnectionClass = pumbleError ?
+      " is-error" :
+      pumbleLoading || pumbleAction ? " is-loading" :
+      pumbleLinked ? " is-connected" : "";
+
+    return [
+      "<section class=\"central-admin-item central-admin-notification-preferences\" aria-labelledby=\"change-request-notification-title\">",
+      "<div class=\"central-admin-item-header\"><div>",
+      "<strong id=\"change-request-notification-title\">Your notifications</strong>",
+      "<p>Choose how Central should alert you when a request needs review.</p>",
+      "</div>",
+      renderStatusPill_(statusLabel, statusTone),
+      "</div>",
+      preferencesLoading ?
+        "<p class=\"central-admin-note\" role=\"status\">Loading your notification preference.</p>" :
+        "",
+      "<fieldset class=\"central-admin-notification-options\" aria-describedby=\"change-request-pumble-status\"",
+      preferencesLoading || isSaving || loadFailed ? " disabled" : "",
+      ">",
+      "<legend>Delivery method</legend>",
+      renderChangeRequestNotificationOption_(
+          "email",
+          "Email",
+          "Send each new request and reminder to your Central email address.",
+          delivery === "email",
+          false,
+      ),
+      renderChangeRequestNotificationOption_(
+          "pumble",
+          "Pumble",
+          "Send a private Pumble message without sending an email.",
+          delivery === "pumble",
+          pumbleUnavailable,
+      ),
+      renderChangeRequestNotificationOption_(
+          "both",
+          "Email + Pumble",
+          "Send the alert through both channels.",
+          delivery === "both",
+          pumbleUnavailable,
+      ),
+      "</fieldset>",
+      "<div class=\"central-admin-pumble-connection",
+      pumbleConnectionClass,
+      "\" id=\"change-request-pumble-status\" aria-live=\"polite\">",
+      "<div class=\"central-admin-pumble-connection-copy\">",
+      "<p class=\"central-admin-notification-connection\">",
+      "<span aria-hidden=\"true\"></span>",
+      "<strong>", escapeHtml_(pumbleConnectionLabel), "</strong>",
+      "</p>",
+      "<small>", escapeHtml_(pumbleConnectionDetail), "</small>",
+      "</div>",
+      "<div class=\"central-admin-pumble-actions\">",
+      renderChangeRequestPumbleActions_(),
+      "</div>",
+      "</div>",
+      adminState.changeRequestPumbleConnectionMessage ?
+        "<p class=\"central-admin-note\" role=\"status\">" +
+          escapeHtml_(adminState.changeRequestPumbleConnectionMessage) +
+          "</p>" :
+        "",
+      pumbleError ?
+        "<p class=\"central-admin-note central-admin-notification-error\" role=\"alert\">" +
+          escapeHtml_(pumbleError) +
+          "</p>" :
+        "",
+      pumbleOAuthError ?
+        "<p class=\"central-admin-note central-admin-notification-error\" role=\"alert\">" +
+          escapeHtml_(pumbleOAuthError) +
+          "</p>" :
+        "",
+      adminState.changeRequestNotificationsMessage ?
+        "<p class=\"central-admin-note\" role=\"status\">" +
+          escapeHtml_(adminState.changeRequestNotificationsMessage) +
+          "</p>" :
+        "",
+      adminState.changeRequestNotificationsError ?
+        "<p class=\"central-admin-note central-admin-notification-error\" role=\"alert\">" +
+          escapeHtml_(adminState.changeRequestNotificationsError) +
+          "</p>" :
+        "",
+      "<div class=\"central-admin-action-row\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-change-request-notifications\"",
+      preferencesLoading || isSaving || loadFailed ? " disabled" : "",
+      ">",
+      isSaving ? "Saving..." : "Save Notification Preference",
+      "</button>",
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderChangeRequestPumbleActions_() {
+    var isLoading = adminState.changeRequestPumbleConnectionLoading;
+    var action = adminState.changeRequestPumbleConnectionAction;
+    var isBusy = isLoading || !!action;
+
+    if (adminState.changeRequestPumbleConnectionError) {
+      return [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reload-change-request-pumble\"",
+        isBusy ? " disabled" : "",
+        ">",
+        isLoading ? "Checking..." : "Try Again",
+        "</button>",
+      ].join("");
+    }
+
+    if (adminState.changeRequestPumbleLinked) {
+      return [
+        "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reconnect-change-request-pumble\"",
+        isBusy ? " disabled" : "",
+        ">",
+        action === "link" ? "Opening Pumble..." : "Reconnect",
+        "</button>",
+        "<button type=\"button\" class=\"central-admin-link-button is-danger\" data-admin-action=\"disconnect-change-request-pumble\"",
+        isBusy ? " disabled" : "",
+        ">",
+        action === "disconnect" ? "Disconnecting..." : "Disconnect",
+        "</button>",
+      ].join("");
+    }
+
+    return [
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"link-change-request-pumble\"",
+      isBusy ? " disabled" : "",
+      ">",
+      action === "link" ? "Opening Pumble..." :
+        isLoading ? "Checking..." : "Link Pumble",
+      "</button>",
+    ].join("");
+  }
+
+  function getChangeRequestPumbleConnectionLabel_() {
+    var action = adminState.changeRequestPumbleConnectionAction;
+    if (action === "link") return "Opening Pumble authorization";
+    if (action === "disconnect") return "Disconnecting Pumble";
+    if (adminState.changeRequestPumbleConnectionLoading) {
+      return "Checking your Pumble connection";
+    }
+    if (adminState.changeRequestPumbleConnectionError) {
+      return "Pumble connection unavailable";
+    }
+    if (!adminState.changeRequestPumbleLinked) return "Pumble is not linked";
+
+    var label = "Linked to " +
+      (adminState.changeRequestPumbleDisplayName || "Pumble");
+    if (adminState.changeRequestPumbleLinkedAt) {
+      label += " · " + formatAdminTimestamp_(
+          adminState.changeRequestPumbleLinkedAt,
+      );
+    }
+    return label;
+  }
+
+  function renderChangeRequestNotificationOption_(
+      value,
+      label,
+      description,
+      isSelected,
+      isDisabled,
+  ) {
+    return [
+      "<label class=\"central-admin-notification-option",
+      isSelected ? " is-selected" : "",
+      isDisabled ? " is-disabled" : "",
+      "\">",
+      "<input type=\"radio\" name=\"change-request-notification-delivery\" data-admin-field=\"change-request-notifications.delivery\" value=\"",
+      escapeAttr_(value),
+      "\"",
+      isSelected ? " checked" : "",
+      isDisabled ? " disabled" : "",
+      ">",
+      "<span><strong>", escapeHtml_(label), "</strong><small>",
+      escapeHtml_(description),
+      "</small></span>",
+      "</label>",
     ].join("");
   }
 
@@ -17456,6 +17758,8 @@
     }
 
     if (adminState.currentPageId === "change-requests") {
+      loadChangeRequestPumbleStatusIfNeeded_(false);
+      loadChangeRequestNotificationPreferencesIfNeeded_(false);
       loadChangeRequestsIfNeeded_(false);
       return;
     }
@@ -26141,6 +26445,538 @@
         });
   }
 
+  function normalizeChangeRequestPumbleStatus_(result) {
+    var source = result && typeof result === "object" ? result : {};
+    if (typeof source.linked !== "boolean") {
+      throw new Error("Pumble returned an invalid connection status.");
+    }
+    return {
+      linked: source.linked,
+      displayName: String(source.displayName || "").trim(),
+      linkedAt: String(source.linkedAt || "").trim(),
+    };
+  }
+
+  function loadChangeRequestPumbleStatusIfNeeded_(forceReload) {
+    if (!canReviewChangeRequests_() || !adminState.user) {
+      return;
+    }
+
+    if (!forceReload &&
+      (adminState.changeRequestPumbleConnectionLoading ||
+        adminState.changeRequestPumbleConnectionLoaded ||
+        adminState.changeRequestPumbleConnectionError)) {
+      return;
+    }
+
+    var requestUid = getCurrentAdminUserUid_();
+    adminState.changeRequestPumbleConnectionLoading = true;
+    adminState.changeRequestPumbleConnectionError = "";
+    if (forceReload) {
+      adminState.changeRequestPumbleConnectionMessage = "";
+    }
+    renderAdmin_();
+
+    callChangeRequestPumbleEndpoint_(
+        CHANGE_REQUEST_PUMBLE_STATUS_ENDPOINT,
+        "GET",
+    )
+        .then(function(result) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          var status = normalizeChangeRequestPumbleStatus_(result);
+          adminState.changeRequestPumbleConnectionLoading = false;
+          adminState.changeRequestPumbleConnectionLoaded = true;
+          adminState.changeRequestPumbleLinked = status.linked;
+          adminState.changeRequestPumbleDisplayName = status.displayName;
+          adminState.changeRequestPumbleLinkedAt = status.linkedAt;
+          adminState.changeRequestPumbleConnectionError = "";
+          if (!status.linked &&
+            adminState.changeRequestPumbleConnectionMessage ===
+              "Pumble was linked successfully.") {
+            adminState.changeRequestPumbleConnectionMessage = "";
+            adminState.changeRequestPumbleConnectionError =
+              "Pumble returned to Central, but the link could not be verified.";
+          }
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          adminState.changeRequestPumbleConnectionLoading = false;
+          adminState.changeRequestPumbleConnectionError =
+            error && error.message ? error.message :
+              "Unable to check your Pumble connection right now.";
+          renderAdmin_();
+        });
+  }
+
+  function startChangeRequestPumbleLink_() {
+    if (!canReviewChangeRequests_() || !adminState.user ||
+      adminState.changeRequestPumbleConnectionLoading ||
+      adminState.changeRequestPumbleConnectionAction) {
+      return;
+    }
+
+    var requestUid = getCurrentAdminUserUid_();
+    adminState.changeRequestPumbleConnectionAction = "link";
+    adminState.changeRequestPumbleConnectionError = "";
+    adminState.changeRequestPumbleConnectionMessage = "";
+    adminState.changeRequestPumbleOAuthReturnError = "";
+    renderAdmin_();
+
+    callChangeRequestPumbleEndpoint_(
+        CHANGE_REQUEST_PUMBLE_OAUTH_START_ENDPOINT,
+        "POST",
+        {
+          returnUrl: window.location.origin + "/admin/change-requests",
+        },
+    )
+        .then(function(result) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          var authorizationUrl = normalizePumbleAuthorizationUrl_(
+              result && result.authorizationUrl,
+          );
+          window.location.assign(authorizationUrl);
+        })
+        .catch(function(error) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          adminState.changeRequestPumbleConnectionAction = "";
+          adminState.changeRequestPumbleConnectionError =
+            error && error.message ? error.message :
+              "Unable to open Pumble authorization right now.";
+          renderAdmin_();
+        });
+  }
+
+  function disconnectChangeRequestPumble_() {
+    if (!canReviewChangeRequests_() || !adminState.user ||
+      !adminState.changeRequestPumbleLinked ||
+      adminState.changeRequestPumbleConnectionLoading ||
+      adminState.changeRequestPumbleConnectionAction) {
+      return;
+    }
+
+    var requestUid = getCurrentAdminUserUid_();
+    adminState.changeRequestPumbleConnectionAction = "disconnect";
+    adminState.changeRequestPumbleConnectionError = "";
+    adminState.changeRequestPumbleConnectionMessage = "";
+    adminState.changeRequestPumbleOAuthReturnError = "";
+    renderAdmin_();
+
+    callChangeRequestPumbleEndpoint_(
+        CHANGE_REQUEST_PUMBLE_DISCONNECT_ENDPOINT,
+        "POST",
+    )
+        .then(function(result) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          var status = normalizeChangeRequestPumbleStatus_(result);
+          if (status.linked) {
+            throw new Error("Pumble did not confirm the disconnect.");
+          }
+          adminState.changeRequestPumbleConnectionAction = "";
+          adminState.changeRequestPumbleConnectionLoaded = true;
+          adminState.changeRequestPumbleLinked = status.linked;
+          adminState.changeRequestPumbleDisplayName = "";
+          adminState.changeRequestPumbleLinkedAt = "";
+          if (result && result.preferences) {
+            adminState.changeRequestNotificationChannels =
+              normalizeChangeRequestNotificationChannels_(
+                  result.preferences.channels,
+              );
+            adminState.changeRequestNotificationsLoaded = true;
+            adminState.changeRequestNotificationsLoadFailed = false;
+          }
+          adminState.changeRequestPumbleConnectionMessage =
+            result && result.message ? String(result.message) :
+              "Pumble was disconnected from your Central account.";
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          adminState.changeRequestPumbleConnectionAction = "";
+          adminState.changeRequestPumbleConnectionError =
+            error && error.message ? error.message :
+              "Unable to disconnect Pumble right now.";
+          renderAdmin_();
+        });
+  }
+
+  function callChangeRequestPumbleEndpoint_(endpoint, method, body) {
+    var requestUser = adminState.user;
+    if (!requestUser) {
+      return Promise.reject(
+          new Error("Sign in before managing your Pumble connection."),
+      );
+    }
+
+    return requestUser.getIdToken()
+        .then(function(idToken) {
+          return fetch(endpoint, {
+            method: method,
+            headers: {
+              Authorization: "Bearer " + idToken,
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: method === "POST" ? JSON.stringify(body || {}) : undefined,
+          });
+        })
+        .then(parseAdminEndpointResponse_);
+  }
+
+  function getCurrentAdminUserUid_() {
+    return String(adminState.user && adminState.user.uid || "").trim();
+  }
+
+  function isCurrentAdminUserUid_(uid) {
+    var normalized = String(uid || "").trim();
+    return !!normalized && normalized === getCurrentAdminUserUid_();
+  }
+
+  function normalizePumbleAuthorizationUrl_(value) {
+    var normalized = String(value || "").trim();
+    var parsed = null;
+    try {
+      parsed = new URL(normalized);
+    } catch (error) {
+      throw new Error("Pumble returned an invalid authorization link.");
+    }
+    if (parsed.origin !== "https://app.pumble.com" ||
+      parsed.pathname !== "/access-request") {
+      throw new Error("Pumble returned an unexpected authorization link.");
+    }
+    return parsed.toString();
+  }
+
+  function handleChangeRequestPumbleOAuthReturn_() {
+    if (!window.URLSearchParams) return;
+    var searchParams = new URLSearchParams(window.location.search);
+    var hashParams = new URLSearchParams(
+        String(window.location.hash || "").replace(/^#/, ""),
+    );
+    var status = String(
+        searchParams.get("pumble") || hashParams.get("pumble") || "",
+    )
+        .trim()
+        .toLowerCase();
+    if (status !== "pending" && status !== "error") return;
+
+    adminState.changeRequestPumbleConnectionLoaded = false;
+    if (status === "pending") {
+      completeChangeRequestPumbleOAuth_(
+          hashParams.get("pumble_token"),
+      );
+    } else {
+      adminState.changeRequestPumbleConnectionMessage = "";
+      adminState.changeRequestPumbleOAuthReturnError =
+        getChangeRequestPumbleOAuthErrorMessage_(
+            searchParams.get("pumble_code"),
+        );
+    }
+
+    adminState.currentPageId = "change-requests";
+    adminState.sidebarNavGroup = getAdminSidebarGroupForPageId_(
+        adminState.currentPageId,
+    );
+    clearChangeRequestPumbleOAuthParams_();
+  }
+
+  function completeChangeRequestPumbleOAuth_(completionToken) {
+    var requestUid = getCurrentAdminUserUid_();
+    var token = String(completionToken || "").trim();
+    if (!requestUid || !token) {
+      adminState.changeRequestPumbleOAuthReturnError =
+        "This Pumble link expired. Start the connection again.";
+      return;
+    }
+    adminState.changeRequestPumbleConnectionAction = "link";
+    callChangeRequestPumbleEndpoint_(
+        CHANGE_REQUEST_PUMBLE_OAUTH_COMPLETE_ENDPOINT,
+        "POST",
+        {completionToken: token},
+    )
+        .then(function(result) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          adminState.changeRequestPumbleConnectionAction = "";
+          adminState.changeRequestPumbleConnectionLoaded = true;
+          adminState.changeRequestPumbleLinked = true;
+          adminState.changeRequestPumbleConnectionMessage =
+            result && result.message ? String(result.message) :
+              "Pumble was linked successfully.";
+          adminState.changeRequestPumbleConnectionError = "";
+          adminState.changeRequestPumbleOAuthReturnError = "";
+          loadChangeRequestPumbleStatusIfNeeded_(true);
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          adminState.changeRequestPumbleConnectionAction = "";
+          adminState.changeRequestPumbleOAuthReturnError =
+            error && error.message ? error.message :
+              "Pumble could not finish linking right now. Try again.";
+          renderAdmin_();
+        });
+  }
+
+  function getChangeRequestPumbleOAuthErrorMessage_(code) {
+    var normalized = String(code || "").trim().toLowerCase();
+    if (normalized === "pumble-oauth-state-invalid" ||
+      normalized === "pumble-oauth-state-expired") {
+      return "This Pumble link expired. Start the connection again.";
+    }
+    if (normalized === "pumble-oauth-completion-invalid" ||
+      normalized === "pumble-oauth-completion-expired") {
+      return "This Pumble link expired. Start the connection again.";
+    }
+    if (normalized === "pumble-oauth-user-mismatch") {
+      return "Sign in with the Central account that started Pumble linking.";
+    }
+    if (normalized === "pumble-oauth-code-invalid") {
+      return "Pumble did not return a valid authorization. Start again.";
+    }
+    if (normalized === "pumble-workspace-mismatch") {
+      return "That Pumble account belongs to a different workspace.";
+    }
+    if (normalized === "pumble-bot-verification-failed") {
+      return "Central could not verify the configured Pumble bot. Contact an administrator.";
+    }
+    if (normalized === "pumble-oauth-network-failed" ||
+      normalized === "pumble-oauth-exchange-failed" ||
+      normalized === "pumble-oauth-response-invalid" ||
+      normalized === "pumble-oauth-timeout") {
+      return "Pumble could not finish linking right now. Try again.";
+    }
+    if (normalized === "admin-access-required" ||
+      normalized === "change-request-review-forbidden" ||
+      normalized === "firebase-auth-invalid" ||
+      normalized === "firebase-auth-required") {
+      return "Your Central session or permissions could not link Pumble.";
+    }
+    if (normalized === "pumble-credentials-missing") {
+      return "Pumble linking is not configured yet. Contact an administrator.";
+    }
+    return "Pumble could not be linked. Try again.";
+  }
+
+  function clearChangeRequestPumbleOAuthParams_() {
+    if (!window.URL || !window.history || !window.history.replaceState) {
+      return;
+    }
+    try {
+      var nextUrl = new URL(window.location.href);
+      nextUrl.pathname = "/admin/change-requests";
+      nextUrl.searchParams.delete("pumble");
+      nextUrl.searchParams.delete("pumble_code");
+      nextUrl.searchParams.delete("pumble_token");
+      var hashParams = new URLSearchParams(
+          String(nextUrl.hash || "").replace(/^#/, ""),
+      );
+      hashParams.delete("pumble");
+      hashParams.delete("pumble_token");
+      nextUrl.hash = hashParams.toString();
+      window.history.replaceState(
+          {},
+          "",
+          nextUrl.pathname + (nextUrl.search || "") + (nextUrl.hash || ""),
+      );
+    } catch (error) {
+    }
+  }
+
+  function normalizeChangeRequestNotificationPreferences_(result) {
+    var source = result && result.preferences &&
+      typeof result.preferences === "object" ?
+      result.preferences :
+      {};
+    var channels = normalizeChangeRequestNotificationChannels_(
+        source.channels,
+    );
+
+    return {
+      channels: channels,
+    };
+  }
+
+  function normalizeChangeRequestNotificationChannels_(channels) {
+    var normalized = [];
+
+    (Array.isArray(channels) ? channels : []).forEach(function(channel) {
+      var value = String(channel || "").trim().toLowerCase();
+      if ((value === "email" || value === "pumble") &&
+        normalized.indexOf(value) === -1) {
+        normalized.push(value);
+      }
+    });
+
+    return normalized.length ? normalized : ["email"];
+  }
+
+  function getChangeRequestNotificationChannelsForDelivery_(delivery) {
+    if (delivery === "pumble") {
+      return ["pumble"];
+    }
+
+    if (delivery === "both") {
+      return ["email", "pumble"];
+    }
+
+    return ["email"];
+  }
+
+  function getChangeRequestNotificationDelivery_(channels) {
+    var normalized = normalizeChangeRequestNotificationChannels_(channels);
+    var hasEmail = normalized.indexOf("email") !== -1;
+    var hasPumble = normalized.indexOf("pumble") !== -1;
+
+    if (hasEmail && hasPumble) {
+      return "both";
+    }
+
+    return hasPumble ? "pumble" : "email";
+  }
+
+  function getChangeRequestNotificationDeliveryLabel_(delivery) {
+    if (delivery === "pumble") {
+      return "Pumble";
+    }
+
+    if (delivery === "both") {
+      return "Email + Pumble";
+    }
+
+    return "Email";
+  }
+
+  function loadChangeRequestNotificationPreferencesIfNeeded_(forceReload) {
+    if (!canReviewChangeRequests_()) {
+      return;
+    }
+
+    if (!forceReload &&
+      (adminState.changeRequestNotificationsLoading ||
+        adminState.changeRequestNotificationsLoaded)) {
+      return;
+    }
+
+    var requestUid = getCurrentAdminUserUid_();
+    adminState.changeRequestNotificationsLoading = true;
+    adminState.changeRequestNotificationsLoadFailed = false;
+    adminState.changeRequestNotificationsError = "";
+    renderAdmin_();
+
+    callChangeRequestNotificationPreferencesEndpoint_("GET")
+        .then(function(result) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          var normalized =
+            normalizeChangeRequestNotificationPreferences_(result);
+          adminState.changeRequestNotificationsLoading = false;
+          adminState.changeRequestNotificationsLoaded = true;
+          adminState.changeRequestNotificationsLoadFailed = false;
+          adminState.changeRequestNotificationChannels = normalized.channels;
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          adminState.changeRequestNotificationsLoading = false;
+          adminState.changeRequestNotificationsLoaded = true;
+          adminState.changeRequestNotificationsLoadFailed = true;
+          adminState.changeRequestNotificationsError = error && error.message ?
+            error.message :
+            "Unable to load your notification preference.";
+          renderAdmin_();
+        });
+  }
+
+  function saveChangeRequestNotificationPreferences_() {
+    if (!canReviewChangeRequests_() ||
+      adminState.changeRequestNotificationsSaving ||
+      adminState.changeRequestNotificationsLoadFailed) {
+      return;
+    }
+
+    var channels = normalizeChangeRequestNotificationChannels_(
+        adminState.changeRequestNotificationChannels,
+    );
+    var needsPumble = channels.indexOf("pumble") !== -1;
+
+    if (needsPumble &&
+      (!adminState.changeRequestPumbleConnectionLoaded ||
+        !adminState.changeRequestPumbleLinked)) {
+      adminState.changeRequestNotificationsError =
+        "Link this Central account to Pumble before choosing Pumble delivery.";
+      renderAdmin_();
+      return;
+    }
+
+    var requestUid = getCurrentAdminUserUid_();
+    adminState.changeRequestNotificationsSaving = true;
+    adminState.changeRequestNotificationsError = "";
+    adminState.changeRequestNotificationsMessage = "";
+    renderAdmin_();
+
+    callChangeRequestNotificationPreferencesEndpoint_("POST", {
+      channels: channels,
+    })
+        .then(function(result) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          var normalized =
+            normalizeChangeRequestNotificationPreferences_(result);
+          adminState.changeRequestNotificationsSaving = false;
+          adminState.changeRequestNotificationsLoaded = true;
+          adminState.changeRequestNotificationChannels = normalized.channels;
+          adminState.changeRequestNotificationsMessage = result && result.message ?
+            String(result.message) :
+            "Your notification preference was saved.";
+          renderAdmin_();
+        })
+        .catch(function(error) {
+          if (!isCurrentAdminUserUid_(requestUid)) return;
+          adminState.changeRequestNotificationsSaving = false;
+          adminState.changeRequestNotificationsError = error && error.message ?
+            error.message :
+            "Unable to save your notification preference.";
+          renderAdmin_();
+        });
+  }
+
+  function callChangeRequestNotificationPreferencesEndpoint_(method, payload) {
+    var requestUser = adminState.user;
+    if (!requestUser) {
+      return Promise.reject(
+          new Error("Sign in before updating notification preferences."),
+      );
+    }
+
+    return requestUser.getIdToken()
+        .then(function(idToken) {
+          var requestOptions = {
+            method: method,
+            headers: {
+              Authorization: "Bearer " + idToken,
+              Accept: "application/json",
+            },
+          };
+
+          if (method === "POST") {
+            requestOptions.headers["Content-Type"] = "application/json";
+            requestOptions.body = JSON.stringify(payload || {});
+          }
+
+          return fetch(
+              CHANGE_REQUEST_NOTIFICATION_PREFERENCES_ENDPOINT,
+              requestOptions,
+          );
+        })
+        .then(parseAdminEndpointResponse_)
+        .then(function(result) {
+          if (!result || result.ok !== true) {
+            throw new Error(
+                "Change Request notification preferences are unavailable.",
+            );
+          }
+          return result;
+        });
+  }
+
   function loadChangeRequestsSummaryIfNeeded_() {
     if (!hasChangeRequestsInboxAccess_()) {
       return;
@@ -26182,7 +27018,12 @@
           adminState.changeRequestsLoading = false;
           adminState.changeRequestsLoaded = true;
           adminState.changeRequestsItems = items;
-          if (!items.some(function(item) {
+          var requestedId = getRequestedChangeRequestId_();
+          if (requestedId && items.some(function(item) {
+            return item.id === requestedId;
+          })) {
+            adminState.changeRequestsExpandedId = requestedId;
+          } else if (!items.some(function(item) {
             return item.id === adminState.changeRequestsExpandedId;
           })) {
             adminState.changeRequestsExpandedId = "";
@@ -26210,10 +27051,9 @@
       return;
     }
 
-    adminState.changeRequestsExpandedId =
-      adminState.changeRequestsExpandedId === nextId ?
-        "" :
-        nextId;
+    var shouldClose = adminState.changeRequestsExpandedId === nextId;
+    adminState.changeRequestsExpandedId = shouldClose ? "" : nextId;
+    setRequestedChangeRequestId_(shouldClose ? "" : nextId);
     renderAdmin_();
   }
 
@@ -26223,7 +27063,40 @@
     }
 
     adminState.changeRequestsExpandedId = "";
+    setRequestedChangeRequestId_("");
     renderAdmin_();
+  }
+
+  function getRequestedChangeRequestId_() {
+    if (!window.URLSearchParams) {
+      return "";
+    }
+
+    return String(
+        new URLSearchParams(window.location.search).get("request") || "",
+    ).trim();
+  }
+
+  function setRequestedChangeRequestId_(requestId) {
+    if (!window.URL || !window.history || !window.history.replaceState) {
+      return;
+    }
+
+    try {
+      var nextUrl = new URL(window.location.href);
+      var normalizedId = String(requestId || "").trim();
+      if (normalizedId) {
+        nextUrl.searchParams.set("request", normalizedId);
+      } else {
+        nextUrl.searchParams.delete("request");
+      }
+      window.history.replaceState(
+          {},
+          "",
+          nextUrl.pathname + (nextUrl.search || "") + (nextUrl.hash || ""),
+      );
+    } catch (error) {
+    }
   }
 
   function reviewChangeRequest_(requestId, decision) {
@@ -26268,6 +27141,7 @@
           adminState.changeRequestsActionPending = false;
           adminState.changeRequestsLoaded = false;
           adminState.changeRequestsExpandedId = "";
+          setRequestedChangeRequestId_("");
           adminState.changeRequestsMessage = result && result.message ?
             result.message :
             (decision === "approve" ?
@@ -27515,6 +28389,22 @@
     adminState.changeRequestsPendingCount = 0;
     adminState.changeRequestsError = "";
     adminState.changeRequestsMessage = "";
+    adminState.changeRequestNotificationsLoaded = false;
+    adminState.changeRequestNotificationsLoading = false;
+    adminState.changeRequestNotificationsSaving = false;
+    adminState.changeRequestNotificationsLoadFailed = false;
+    adminState.changeRequestNotificationChannels = ["email"];
+    adminState.changeRequestPumbleConnectionLoaded = false;
+    adminState.changeRequestPumbleConnectionLoading = false;
+    adminState.changeRequestPumbleConnectionAction = "";
+    adminState.changeRequestPumbleLinked = false;
+    adminState.changeRequestPumbleDisplayName = "";
+    adminState.changeRequestPumbleLinkedAt = "";
+    adminState.changeRequestPumbleConnectionError = "";
+    adminState.changeRequestPumbleConnectionMessage = "";
+    adminState.changeRequestPumbleOAuthReturnError = "";
+    adminState.changeRequestNotificationsError = "";
+    adminState.changeRequestNotificationsMessage = "";
   }
 
   function renderStatusPill_(label, toneClass) {

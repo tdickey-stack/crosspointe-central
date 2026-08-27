@@ -41,6 +41,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Install web dependencies
         run: pnpm install --frozen-lockfile
 
@@ -73,6 +79,12 @@ jobs:
 
       - name: Test push notifications
         run: npm --prefix functions run test:push
+
+      - name: Test Change Request notifications
+        run: npm --prefix functions run test:change-requests
+
+      - name: Test Change Request security rules
+        run: pnpm run test:change-request-rules
 
       - name: Write Functions environment file
         env:
@@ -110,6 +122,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Install web dependencies
         run: pnpm install --frozen-lockfile
 
@@ -143,6 +161,12 @@ jobs:
       - name: Test push notifications
         run: npm --prefix functions run test:push
 
+      - name: Test Change Request notifications
+        run: npm --prefix functions run test:change-requests
+
+      - name: Test Change Request security rules
+        run: pnpm run test:change-request-rules
+
       - name: Write Functions environment file
         env:
           FIREBASE_FUNCTIONS_ENV: ${{ secrets.FIREBASE_FUNCTIONS_ENV }}
@@ -159,11 +183,11 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CROSSPOINTE_CENTRAL }}
 
-      - name: Deploy shared Firestore rules
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only firestore:rules --non-interactive
+      - name: Deploy shared Firestore schema
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only firestore:rules,firestore:indexes --non-interactive
 
       - name: Deploy unpinned Dev endpoints
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:bulletinMode,functions:studioPlanningCenterEvents,functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief,functions:planningCenterPlannerWebhook --non-interactive
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:bulletinMode,functions:studioPlanningCenterEvents,functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief,functions:planningCenterPlannerWebhook,functions:submitChangeRequest,functions:changeRequestPumbleStatus,functions:changeRequestPumbleOAuthStart,functions:changeRequestPumbleOAuthCallback,functions:changeRequestPumbleOAuthComplete,functions:changeRequestPumbleDisconnect,functions:changeRequestNotificationPreferences,functions:changeRequestNotificationEventCreated,functions:changeRequestNotificationDispatchScheduled,functions:changeRequestReminderScheduled,functions:changeRequestNotificationCleanupScheduled --non-interactive
 
       - name: Deploy Firebase preview channel
         run: ./node_modules/.bin/firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive

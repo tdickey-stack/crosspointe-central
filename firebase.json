@@ -614,6 +614,48 @@
         }
       },
       {
+        "source": "/api/admin/change-request-notification-preferences",
+        "function": {
+          "functionId": "changeRequestNotificationPreferences",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/pumble/status",
+        "function": {
+          "functionId": "changeRequestPumbleStatus",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/pumble/oauth/start",
+        "function": {
+          "functionId": "changeRequestPumbleOAuthStart",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/pumble/oauth/callback",
+        "function": {
+          "functionId": "changeRequestPumbleOAuthCallback",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/pumble/oauth/complete",
+        "function": {
+          "functionId": "changeRequestPumbleOAuthComplete",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/pumble/disconnect",
+        "function": {
+          "functionId": "changeRequestPumbleDisconnect",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/admin/list-users",
         "function": {
           "functionId": "listAdminUsers",

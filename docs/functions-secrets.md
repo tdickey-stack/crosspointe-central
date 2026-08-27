@@ -26,6 +26,10 @@ do not provide a separate secret store.
 - `CENTRAL_GMAIL_REFRESH_TOKEN`
 - `CENTRAL_CALENDAR_SIGNING_KEY`
 - `WAYFINDER_GEMINI_API_KEY` (already migrated before this runbook)
+- `CENTRAL_PUMBLE_APP_KEY`
+- `CENTRAL_PUMBLE_BOT_TOKEN`
+- `CENTRAL_PUMBLE_APP_ID`
+- `CENTRAL_PUMBLE_CLIENT_SECRET`
 
 ### Ordinary Functions settings
 
@@ -137,7 +141,7 @@ or rotating it.
 4. Deploy the Gmail-bound functions:
 
 ```bash
-./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:upsertAdminUser,functions:shareServeNeedInterest
+./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:upsertAdminUser,functions:shareServeNeedInterest,functions:changeRequestNotificationEventCreated,functions:changeRequestNotificationDispatchScheduled
 ```
 
 5. Verify one admin invitation and one Serve Needs notification.
@@ -159,7 +163,64 @@ working. Instead, plan a short mail outage and perform this sequence:
 See Google's OAuth token-revocation documentation for the project-wide grant
 behavior: https://developers.google.com/identity/protocols/oauth2/web-server#tokenrevoke
 
-### 4. Remove old copies
+### 4. Configure the Change Request notification bot
+
+The Change Request notification integration uses a dedicated Pumble bot in
+the existing CrossPointe workspace. Admins explicitly link their Pumble
+identity from Central Settings. The OAuth response supplies their exact Pumble
+user ID; Central discards the user access token and sends through the bot.
+Terminal bot/API authorization failures mark the saved link unhealthy and
+atomically return that admin to Email notifications; a Pumble-only delivery
+also attempts Email fallback for the affected notification. Completed event
+and nested delivery audit records are recursively removed after 30 days.
+
+Configure these **Bot scopes**:
+
+- `channels:read`
+- `channels:write`
+- `messages:write`
+
+`channels:write` lets the bot create its first direct conversation with a
+linked admin. `files:write` is not required for the current text-only messages.
+No User scopes are required. Register this exact OAuth redirect URL in the
+app (without a trailing slash):
+
+```text
+https://us-central1-crosspointe-central.cloudfunctions.net/changeRequestPumbleOAuthCallback
+```
+
+The direct Function URL is stable across Firebase Hosting preview channels.
+`CENTRAL_PUMBLE_CALLBACK_URL` can override it if the callback later moves to a
+custom or canonical Hosting domain. Store the four credentials interactively:
+
+```bash
+./node_modules/.bin/firebase functions:secrets:set CENTRAL_PUMBLE_APP_ID --project crosspointe-central
+./node_modules/.bin/firebase functions:secrets:set CENTRAL_PUMBLE_APP_KEY --project crosspointe-central
+./node_modules/.bin/firebase functions:secrets:set CENTRAL_PUMBLE_BOT_TOKEN --project crosspointe-central
+./node_modules/.bin/firebase functions:secrets:set CENTRAL_PUMBLE_CLIENT_SECRET --project crosspointe-central
+```
+
+`CENTRAL_PUMBLE_BOT_TOKEN` is the bootstrap fallback used before the first
+successful Central OAuth link. Pumble may rotate the bot token during OAuth;
+Central verifies that newly issued token and stores it in the server-only
+`centralAdmin/root/pumbleBotCredentials/primary` Firestore document. After
+that, notification delivery loads the current credential from Firestore and
+does not require a manual Secret Manager update after each authorization.
+OAuth state and completion documents never contain a provider token.
+
+Never put either token or secret in `functions/.env` or commit it to the
+repository. Browser access to both the credential document and its short-lived
+rotation lease is explicitly denied by Firestore rules. The Pumble Signing
+Secret is not required unless Central later receives signed Pumble events or
+interactive callbacks.
+
+Deploy only the Pumble-bound functions after a credential rotation:
+
+```bash
+./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:changeRequestPumbleStatus,functions:changeRequestPumbleOAuthStart,functions:changeRequestPumbleOAuthCallback,functions:changeRequestPumbleOAuthComplete,functions:changeRequestPumbleDisconnect,functions:changeRequestNotificationPreferences,functions:changeRequestNotificationEventCreated,functions:changeRequestNotificationDispatchScheduled,functions:changeRequestReminderScheduled,functions:changeRequestNotificationCleanupScheduled
+```
+
+### 5. Remove old copies
 
 After the deployed functions are verified:
 

@@ -1597,6 +1597,220 @@
   align-items: start;
 }
 
+[data-app-route="admin"] .central-admin-notification-preferences {
+  gap: 14px;
+  padding: 18px;
+}
+
+[data-app-route="admin"] .central-admin-oauth-return {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 16px;
+  background: rgba(34, 197, 94, 0.07);
+}
+
+[data-app-route="admin"] .central-admin-oauth-return > div {
+  display: grid;
+  gap: 3px;
+}
+
+[data-app-route="admin"] .central-admin-oauth-return p {
+  margin: 0;
+  color: var(--cp-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+[data-app-route="admin"] .central-admin-oauth-return.is-error {
+  border-color: rgba(180, 35, 24, 0.3);
+  background: rgba(180, 35, 24, 0.06);
+}
+
+[data-app-route="admin"] .central-admin-notification-preferences .central-admin-item-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+[data-app-route="admin"] .central-admin-notification-preferences .central-admin-item-header p {
+  margin: 0;
+  color: var(--cp-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+[data-app-route="admin"] .central-admin-notification-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+[data-app-route="admin"] .central-admin-notification-options legend {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  color: var(--cp-text-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-app-route="admin"] .central-admin-notification-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-height: 94px;
+  padding: 13px;
+  border: 1px solid rgba(113, 113, 122, 0.24);
+  border-radius: 16px;
+  background: rgba(113, 113, 122, 0.05);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+
+[data-app-route="admin"] .central-admin-notification-option:focus-within {
+  outline: 3px solid rgba(239, 59, 45, 0.2);
+  outline-offset: 2px;
+}
+
+[data-app-route="admin"] .central-admin-notification-option.is-selected {
+  border-color: rgba(239, 59, 45, 0.52);
+  background: rgba(239, 59, 45, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(239, 59, 45, 0.12);
+}
+
+[data-app-route="admin"] .central-admin-notification-option.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+[data-app-route="admin"] .central-admin-notification-option input {
+  margin: 3px 0 0;
+  accent-color: var(--cp-red);
+}
+
+[data-app-route="admin"] .central-admin-notification-option span {
+  display: grid;
+  gap: 5px;
+}
+
+[data-app-route="admin"] .central-admin-notification-option strong {
+  font-size: 0.88rem;
+  line-height: 1.2;
+}
+
+[data-app-route="admin"] .central-admin-notification-option small {
+  color: var(--cp-muted);
+  font-size: 0.78rem;
+  line-height: 1.42;
+}
+
+[data-app-route="admin"] .central-admin-notification-connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--cp-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+[data-app-route="admin"] .central-admin-pumble-connection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 14px;
+  border: 1px solid rgba(113, 113, 122, 0.22);
+  border-radius: 14px;
+  background: rgba(113, 113, 122, 0.045);
+}
+
+[data-app-route="admin"] .central-admin-pumble-connection-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+[data-app-route="admin"] .central-admin-pumble-connection-copy small {
+  color: var(--cp-muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+[data-app-route="admin"] .central-admin-pumble-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+[data-app-route="admin"] .central-admin-pumble-actions .central-admin-link-button {
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+[data-app-route="admin"] .central-admin-pumble-connection.is-connected {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+[data-app-route="admin"] .central-admin-pumble-connection.is-error {
+  border-color: rgba(180, 35, 24, 0.28);
+  background: rgba(180, 35, 24, 0.05);
+}
+
+[data-app-route="admin"] .central-admin-notification-connection > span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+}
+
+[data-app-route="admin"] .central-admin-notification-connection.is-connected > span {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+}
+
+[data-app-route="admin"] .central-admin-pumble-connection.is-connected .central-admin-notification-connection > span {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+}
+
+[data-app-route="admin"] .central-admin-pumble-connection.is-error .central-admin-notification-connection > span {
+  background: #b42318;
+  box-shadow: 0 0 0 4px rgba(180, 35, 24, 0.12);
+}
+
+[data-app-route="admin"] .central-admin-pumble-connection.is-loading .central-admin-notification-connection > span {
+  animation: central-admin-pumble-status-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes central-admin-pumble-status-pulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+[data-app-route="admin"] .central-admin-notification-error {
+  color: #b42318;
+}
+
 [data-app-route="admin"] .central-admin-change-request-item.is-expanded {
   background: rgba(239, 59, 45, 0.05);
   border-color: rgba(239, 59, 45, 0.14);
@@ -3521,6 +3735,46 @@
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
 }
 
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-notification-option {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-notification-option.is-selected {
+  background: rgba(239, 59, 45, 0.14);
+  border-color: rgba(239, 59, 45, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(239, 59, 45, 0.2);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-pumble-connection {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-pumble-connection.is-connected {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-pumble-connection.is-error {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-oauth-return {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-oauth-return.is-error {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .central-admin-notification-error {
+  color: #fca5a5;
+}
+
 :root[data-theme="dark"][data-app-route="admin"] .central-admin-pill,
 :root[data-theme="dark"][data-app-route="admin"] .central-admin-empty,
 :root[data-theme="dark"][data-app-route="admin"] .central-admin-details,
@@ -3895,6 +4149,28 @@
   [data-app-route="admin"] .central-admin-item-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  [data-app-route="admin"] .central-admin-notification-options {
+    grid-template-columns: 1fr;
+  }
+
+  [data-app-route="admin"] .central-admin-notification-option {
+    min-height: 0;
+  }
+
+  [data-app-route="admin"] .central-admin-pumble-connection {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-app-route="admin"] .central-admin-pumble-actions {
+    justify-content: flex-start;
+  }
+
+  [data-app-route="admin"] .central-admin-oauth-return {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   [data-app-route="admin"] .wayfinder-beta-limit-grid,

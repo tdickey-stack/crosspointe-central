@@ -191,7 +191,10 @@ https://us-central1-crosspointe-central.cloudfunctions.net/changeRequestPumbleOA
 
 The direct Function URL is stable across Firebase Hosting preview channels.
 `CENTRAL_PUMBLE_CALLBACK_URL` can override it if the callback later moves to a
-custom or canonical Hosting domain. Store the four credentials interactively:
+custom or canonical Hosting domain. The production Admin origin
+`https://central.crosspointe.tv` is an approved post-OAuth return origin; it is
+not a Pumble callback URL and does not need to be registered with Pumble.
+Store the four credentials interactively:
 
 ```bash
 ./node_modules/.bin/firebase functions:secrets:set CENTRAL_PUMBLE_APP_ID --project crosspointe-central

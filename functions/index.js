@@ -558,6 +558,10 @@ const changeRequestPumbleOAuthService = createPumbleOAuthService({
   getClientSecret: () => CENTRAL_PUMBLE_CLIENT_SECRET.value(),
   adminUrl: trimEnvString_(CENTRAL_ADMIN_URL) ||
     "https://crosspointe-central.web.app/admin",
+  approvedReturnOrigins: [
+    "https://crosspointe-central.web.app",
+    "https://central.crosspointe.tv",
+  ],
   callbackUrl: CENTRAL_PUMBLE_CALLBACK_URL ||
     "https://us-central1-crosspointe-central.cloudfunctions.net/" +
     "changeRequestPumbleOAuthCallback",

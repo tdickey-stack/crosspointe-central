@@ -26,6 +26,8 @@ const STATE = "state_abcdefghijklmnopqrstuvwxyz0123456789";
 const COMPLETION_TOKEN = "complete_abcdefghijklmnopqrstuvwxyz012345";
 const PREVIEW_URL =
   "https://crosspointe-central--dev-ab12cd.web.app/admin/change-requests";
+const CUSTOM_URL =
+  "https://central.crosspointe.tv/admin/change-requests";
 
 test("builds a same-origin callback and least-privilege bot consent URL",
     () => {
@@ -136,25 +138,85 @@ test("rejects a bot token that Pumble does not accept", async () => {
   );
 });
 
-test("allows only canonical and same-project preview return hosts", () => {
-  assert.equal(normalizePumbleOAuthReturnUrl(
-      PREVIEW_URL + "?ignored=true#ignored",
-      "https://crosspointe-central.web.app/admin",
-  ), PREVIEW_URL);
-  assert.equal(normalizePumbleOAuthReturnUrl(
-      "https://crosspointe-central.web.app/other",
-      "https://crosspointe-central.web.app/admin",
-  ), "https://crosspointe-central.web.app/admin/change-requests");
-  assert.throws(() => normalizePumbleOAuthReturnUrl(
-      "https://crosspointe-central--dev-ab12cd.web.app.attacker.test/admin",
-      "https://crosspointe-central.web.app/admin",
-  ));
-  assert.throws(() => normalizePumbleOAuthReturnUrl(
-      PREVIEW_URL,
-      "https://crosspointe-central.web.app/admin",
-      "https://crosspointe-central.web.app",
-  ));
-});
+test(
+    "allows only approved Central and same-project preview return hosts",
+    () => {
+      assert.equal(normalizePumbleOAuthReturnUrl(
+          PREVIEW_URL + "?ignored=true#ignored",
+          "https://crosspointe-central.web.app/admin",
+      ), PREVIEW_URL);
+      assert.equal(normalizePumbleOAuthReturnUrl(
+          "https://crosspointe-central.web.app/other",
+          "https://crosspointe-central.web.app/admin",
+      ), "https://crosspointe-central.web.app/admin/change-requests");
+      assert.equal(normalizePumbleOAuthReturnUrl(
+          CUSTOM_URL + "?ignored=true#ignored",
+          "https://crosspointe-central.web.app/admin",
+          "https://central.crosspointe.tv",
+          ["https://central.crosspointe.tv"],
+      ), CUSTOM_URL);
+      assert.throws(() => normalizePumbleOAuthReturnUrl(
+          "https://crosspointe-central--dev-ab12cd.web.app.attacker.test/admin",
+          "https://crosspointe-central.web.app/admin",
+      ));
+      assert.throws(() => normalizePumbleOAuthReturnUrl(
+          PREVIEW_URL,
+          "https://crosspointe-central.web.app/admin",
+          "https://crosspointe-central.web.app",
+      ));
+      assert.throws(() => normalizePumbleOAuthReturnUrl(
+          "https://central.crosspointe.tv.attacker.test/admin",
+          "https://crosspointe-central.web.app/admin",
+          "https://central.crosspointe.tv.attacker.test",
+          ["https://central.crosspointe.tv"],
+      ));
+      assert.throws(() => normalizePumbleOAuthReturnUrl(
+          "https://user:password@central.crosspointe.tv/admin",
+          "https://crosspointe-central.web.app/admin",
+          "https://central.crosspointe.tv",
+          ["https://central.crosspointe.tv"],
+      ));
+      assert.equal(normalizePumbleOAuthReturnUrl(
+          PREVIEW_URL,
+          "https://central.crosspointe.tv/admin",
+          new URL(PREVIEW_URL).origin,
+          ["https://crosspointe-central.web.app"],
+      ), PREVIEW_URL);
+    },
+);
+
+test("OAuth service stores an approved production custom return URL",
+    async () => {
+      const firestore = new FakeFirestore();
+      const service = createPumbleOAuthService({
+        firestore,
+        timestampFromMillis: fakeTimestamp,
+        fetchImpl: createPumbleOAuthFetch({requests: []}),
+        getAppId: () => "app-id",
+        getAppKey: () => "app-key",
+        getClientSecret: () => "client-secret",
+        adminUrl: ADMIN_URL,
+        approvedReturnOrigins: ["https://central.crosspointe.tv"],
+        now: () => Date.parse("2026-08-28T18:00:00Z"),
+        createState: () => STATE,
+        createCompletionToken: () => COMPLETION_TOKEN,
+      });
+
+      await service.beginAuthorization("firebase-user-1", {
+        returnUrl: CUSTOM_URL,
+        requestOrigin: "https://central.crosspointe.tv",
+      });
+
+      const stored = firestore.read(PUMBLE_OAUTH_STATES_PATH + "/" +
+    hashPumbleOAuthState(STATE));
+      assert.equal(stored.returnUrl, CUSTOM_URL);
+
+      const completed = await service.completeAuthorization({
+        code: "authorization-code",
+        state: STATE,
+      });
+      assert.equal(completed.returnUrl, CUSTOM_URL);
+    });
 
 test("provider failures preserve the state-validated preview return URL",
     async () => {

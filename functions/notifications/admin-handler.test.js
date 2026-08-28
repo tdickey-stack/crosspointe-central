@@ -3,6 +3,112 @@ import test from "node:test";
 
 import {createAdminNotificationPreferencesHandler} from "./admin-handler.js";
 
+test("atomically saves the Notifications page preferences", async () => {
+  const userData = {
+    active: true,
+    pageAccess: {changeRequests: "approve", serveNeeds: "view"},
+    notificationPreferences: {
+      changeRequests: {email: true, pumble: false},
+      serveNeeds: {pumble: false},
+    },
+    notificationIntegrations: {
+      pumble: {
+        status: "linked",
+        userId: "pumble-user",
+        botId: "pumble-bot",
+        workspaceId: "workspace-1",
+      },
+    },
+  };
+  let update = null;
+  const snapshot = {
+    exists: true,
+    data: () => userData,
+    get: (field) => userData[field],
+  };
+  const handler = createAdminNotificationPreferencesHandler({
+    firestore: {
+      doc: (path) => ({path}),
+      runTransaction: async (callback) => callback({
+        get: async () => snapshot,
+        update: (reference, value) => {
+          update = {reference, value};
+        },
+      }),
+    },
+    fieldValue: {serverTimestamp: () => "server-time"},
+    verifyAdmin: async () => ({uid: "admin-unified"}),
+    getUserDocPath: (uid) => `adminUsers/${uid}`,
+    serializePumbleConnection: () => ({linked: true}),
+  });
+  const response = createResponse_();
+
+  await handler({
+    method: "POST",
+    body: {
+      notificationPreferences: {
+        changeRequests: {email: false, pumble: true},
+        serveNeeds: {pumble: true},
+      },
+    },
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.message, "Notification preferences saved.");
+  assert.deepEqual(response.body.preferences.channels, ["pumble"]);
+  assert.deepEqual(response.body.pumbleNotifications, {
+    changeRequests: true,
+    serveNeeds: true,
+  });
+  assert.equal(update.reference.path, "adminUsers/admin-unified");
+  assert.deepEqual(
+      update.value["notificationPreferences.changeRequests"],
+      {email: false, pumble: true},
+  );
+  assert.equal(
+      update.value["notificationPreferences.serveNeeds.pumble"],
+      true,
+  );
+});
+
+test("unified preferences require one Change Request channel", async () => {
+  const userData = {
+    active: true,
+    pageAccess: {changeRequests: "approve"},
+  };
+  const snapshot = {
+    exists: true,
+    data: () => userData,
+    get: (field) => userData[field],
+  };
+  const handler = createAdminNotificationPreferencesHandler({
+    firestore: {
+      doc: (path) => ({path}),
+      runTransaction: async (callback) => callback({
+        get: async () => snapshot,
+        update: () => assert.fail("Invalid preferences must not be saved."),
+      }),
+    },
+    fieldValue: {serverTimestamp: () => "server-time"},
+    verifyAdmin: async () => ({uid: "admin-no-channel"}),
+    getUserDocPath: (uid) => `adminUsers/${uid}`,
+    serializePumbleConnection: () => ({linked: false}),
+  });
+  const response = createResponse_();
+
+  await handler({
+    method: "POST",
+    body: {
+      notificationPreferences: {
+        changeRequests: {email: false, pumble: false},
+      },
+    },
+  }, response);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.code, "notification-channel-required");
+});
+
 test(
     "saves Pumble event preferences with Change Request email fallback",
     async () => {

@@ -17,6 +17,7 @@
     "test:push": "node --test push-notifications.test.js",
     "test:campaigns": "node --test campaigns/*.test.js",
     "test:change-requests": "node --test change-requests/*.test.js",
+    "test:notifications": "node --test notifications/*.test.js",
     "test:events": "node --test calendar-source-cache.test.js event-overrides.test.js event-visibility.test.js room-rules-baseline.test.js",
     "test:sunday": "node --test this-sunday.test.js",
     "serve": "firebase emulators:start --only functions",

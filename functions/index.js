@@ -576,7 +576,10 @@ const changeRequestPumbleOAuthService = createPumbleOAuthService({
 const adminNotificationPreferencesHandler =
   createAdminNotificationPreferencesHandler({
     firestore,
-    fieldValue: admin.firestore.FieldValue,
+    fieldValue: {
+      serverTimestamp: () =>
+        admin.firestore.FieldValue.serverTimestamp(),
+    },
     verifyAdmin: verifyCentralAdminRequest_,
     getUserDocPath: getCentralAdminUserDocPath_,
     serializePumbleConnection: serializePumbleConnectionStatus_,
@@ -600,7 +603,11 @@ const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
 const serveNeedPumbleNotificationRuntime =
   createServeNeedPumbleNotificationRuntime({
     firestore,
-    fieldValue: admin.firestore.FieldValue,
+    fieldValue: {
+      serverTimestamp: () =>
+        admin.firestore.FieldValue.serverTimestamp(),
+      delete: () => admin.firestore.FieldValue.delete(),
+    },
     transport: changeRequestPumbleTransport,
     degradeConnection: degradePumbleConnection_,
     usersCollectionPath: CENTRAL_ADMIN_USERS_COLLECTION_PATH,

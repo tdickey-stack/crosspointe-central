@@ -83,6 +83,9 @@ jobs:
       - name: Test Change Request notifications
         run: npm --prefix functions run test:change-requests
 
+      - name: Test Admin notification integrations
+        run: npm --prefix functions run test:notifications
+
       - name: Test Change Request security rules
         run: pnpm run test:change-request-rules
 
@@ -164,6 +167,9 @@ jobs:
       - name: Test Change Request notifications
         run: npm --prefix functions run test:change-requests
 
+      - name: Test Admin notification integrations
+        run: npm --prefix functions run test:notifications
+
       - name: Test Change Request security rules
         run: pnpm run test:change-request-rules
 
@@ -187,7 +193,7 @@ jobs:
         run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only firestore:rules,firestore:indexes --non-interactive
 
       - name: Deploy unpinned Dev endpoints
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:bulletinMode,functions:studioPlanningCenterEvents,functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief,functions:planningCenterPlannerWebhook,functions:submitChangeRequest,functions:changeRequestPumbleStatus,functions:changeRequestPumbleOAuthStart,functions:changeRequestPumbleOAuthCallback,functions:changeRequestPumbleOAuthComplete,functions:changeRequestPumbleDisconnect,functions:changeRequestNotificationPreferences,functions:changeRequestNotificationEventCreated,functions:changeRequestNotificationDispatchScheduled,functions:changeRequestReminderScheduled,functions:changeRequestNotificationCleanupScheduled --non-interactive
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:bulletinMode,functions:studioPlanningCenterEvents,functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief,functions:planningCenterPlannerWebhook,functions:shareServeNeedInterest,functions:submitChangeRequest,functions:changeRequestPumbleStatus,functions:changeRequestPumbleOAuthStart,functions:changeRequestPumbleOAuthCallback,functions:changeRequestPumbleOAuthComplete,functions:changeRequestPumbleDisconnect,functions:changeRequestNotificationPreferences,functions:changeRequestNotificationEventCreated,functions:changeRequestNotificationDispatchScheduled,functions:changeRequestReminderScheduled,functions:changeRequestNotificationCleanupScheduled --non-interactive
 
       - name: Deploy Firebase preview channel
         run: ./node_modules/.bin/firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive

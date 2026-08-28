@@ -78,28 +78,34 @@ test("Pumble linking uses authenticated status and mutation endpoints", () => {
   assert.match(adminSource, /parsed\.pathname !== "\/access-request"/);
 });
 
-test("Pumble choices stay disabled until explicit linking is verified", () => {
+test("Pumble settings live in Integrations and require verified linking", () => {
   const renderStart = adminSource.indexOf(
-      "function renderChangeRequestNotificationPreferences_",
+      "function renderPumbleIntegrationSection_",
   );
   const renderEnd = adminSource.indexOf(
-      "function renderChangeRequestNotificationOption_",
+      "function renderPumbleNotificationType_",
       renderStart,
   );
   const renderBlock = adminSource.slice(renderStart, renderEnd);
 
   assert.match(renderBlock, /changeRequestPumbleConnectionLoaded/);
   assert.match(renderBlock, /changeRequestPumbleLinked/);
-  assert.match(renderBlock, /pumbleUnavailable/);
-  assert.match(renderBlock, /Link Pumble/);
-  assert.match(renderBlock, /Reconnect/);
-  assert.match(renderBlock, /Disconnect/);
+  assert.match(renderBlock, /!linked \|\| eligibility\.changeRequests !== true/);
+  assert.match(renderBlock, /!linked \|\| eligibility\.serveNeeds !== true/);
+  assert.match(renderBlock, /Serve Needs responses/);
+  assert.match(adminSource, /Link Pumble/);
+  assert.match(adminSource, /Reconnect/);
+  assert.match(adminSource, /Disconnect/);
   assert.match(adminStyles, /central-admin-pumble-connection\.is-connected/);
   assert.match(adminStyles, /central-admin-pumble-connection\.is-error/);
   assert.match(adminStyles, /central-admin-pumble-connection\.is-loading/);
+  assert.match(
+      adminStyles,
+      /central-admin-notification-options\.is-two-column[\s\S]*grid-template-columns: 1fr/,
+  );
 
   const saveStart = adminSource.indexOf(
-      "function saveChangeRequestNotificationPreferences_",
+      "function savePumbleNotificationPreferences_",
   );
   const saveEnd = adminSource.indexOf(
       "function callChangeRequestNotificationPreferencesEndpoint_",
@@ -108,7 +114,23 @@ test("Pumble choices stay disabled until explicit linking is verified", () => {
   const saveBlock = adminSource.slice(saveStart, saveEnd);
   assert.match(saveBlock, /changeRequestPumbleConnectionLoaded/);
   assert.match(saveBlock, /changeRequestPumbleLinked/);
+  assert.match(saveBlock, /pumbleNotifications: selected/);
   assert.doesNotMatch(saveBlock, /pumbleIdentity\.status/);
+
+  const changeRequestStart = adminSource.indexOf(
+      "function renderChangeRequestNotificationPreferences_",
+  );
+  const changeRequestEnd = adminSource.indexOf(
+      "function renderChangeRequestPumbleActions_",
+      changeRequestStart,
+  );
+  const changeRequestBlock = adminSource.slice(
+      changeRequestStart,
+      changeRequestEnd,
+  );
+  assert.match(changeRequestBlock, /Email notifications/);
+  assert.match(changeRequestBlock, /\/admin\/integrations/);
+  assert.doesNotMatch(changeRequestBlock, /link-change-request-pumble/);
 });
 
 test("Pumble OAuth returns use safe codes and leave other query state", () => {
@@ -136,9 +158,9 @@ test("Pumble OAuth returns use safe codes and leave other query state", () => {
   assert.doesNotMatch(handlerBlock, /pumble_message/);
   assert.match(
       handlerBlock,
-      /adminState\.currentPageId = "change-requests";[\s\S]*clearChangeRequestPumbleOAuthParams_\(\)/,
+      /adminState\.currentPageId = "integrations";[\s\S]*clearChangeRequestPumbleOAuthParams_\(\)/,
   );
-  assert.match(handlerBlock, /nextUrl\.pathname = "\/admin\/change-requests"/);
+  assert.match(handlerBlock, /nextUrl\.pathname = "\/admin\/integrations"/);
   assert.match(handlerBlock, /nextUrl\.searchParams\.delete\("pumble"\)/);
   assert.match(handlerBlock, /nextUrl\.searchParams\.delete\("pumble_token"\)/);
   assert.match(
@@ -149,7 +171,32 @@ test("Pumble OAuth returns use safe codes and leave other query state", () => {
       adminSource,
       /function renderAdminMain_[\s\S]*renderChangeRequestPumbleOAuthReturnNotice_\(\)/,
   );
-  assert.match(adminSource, /Open notification settings/);
+  assert.match(adminSource, /Open Pumble settings/);
+});
+
+test("every active Admin can open Integrations without seeing gated services", () => {
+  const accessStart = adminSource.indexOf("function canAccessAdminPage_");
+  const accessEnd = adminSource.indexOf(
+      "function getPageAccessLevel_",
+      accessStart,
+  );
+  const accessBlock = adminSource.slice(accessStart, accessEnd);
+  assert.match(accessBlock, /page\.id === "integrations"/);
+  assert.match(accessBlock, /return true/);
+
+  const renderStart = adminSource.indexOf(
+      "function renderIntegrationsPagePanel_",
+  );
+  const renderEnd = adminSource.indexOf(
+      "function renderPumbleIntegrationSection_",
+      renderStart,
+  );
+  const renderBlock = adminSource.slice(renderStart, renderEnd);
+  assert.match(renderBlock, /canViewServiceSettings = permission !== "none"/);
+  assert.match(renderBlock, /renderPumbleIntegrationSection_\(\)/);
+  assert.match(renderBlock, /canViewServiceSettings \? \[/);
+  assert.match(renderBlock, /renderGoogleCalendarIntegrationSection_\(\)/);
+  assert.match(renderBlock, /renderPlanningCenterIntegrationSection_\(\)/);
 });
 
 test("disconnect applies server-normalized Email preferences", () => {

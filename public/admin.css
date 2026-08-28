@@ -1651,6 +1651,14 @@
   border: 0;
 }
 
+[data-app-route="admin"] .central-admin-notification-options.is-two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+[data-app-route="admin"] .central-admin-notification-options.is-single-column {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 [data-app-route="admin"] .central-admin-notification-options legend {
   grid-column: 1 / -1;
   margin-bottom: 2px;
@@ -4151,7 +4159,9 @@
     align-items: flex-start;
   }
 
-  [data-app-route="admin"] .central-admin-notification-options {
+  [data-app-route="admin"] .central-admin-notification-options,
+  [data-app-route="admin"] .central-admin-notification-options.is-two-column,
+  [data-app-route="admin"] .central-admin-notification-options.is-single-column {
     grid-template-columns: 1fr;
   }
 

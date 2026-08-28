@@ -136,7 +136,6 @@ import {
   createPumbleDirectApiClient,
   disconnectPumbleNotificationPreferences,
   isRetryableChangeRequestDeliveryError,
-  normalizeChangeRequestNotificationChannelSelection,
   normalizeChangeRequestNotificationPreferences,
   serializeChangeRequestNotificationPreferences,
 } from "./change-requests/index.js";
@@ -144,6 +143,10 @@ import {
   PUMBLE_BOT_CREDENTIAL_PATH,
   createPumbleOAuthService,
 } from "./change-requests/pumble-oauth.js";
+import {createAdminNotificationPreferencesHandler} from
+  "./notifications/admin-handler.js";
+import {createServeNeedPumbleNotificationRuntime} from
+  "./notifications/serve-needs-runtime.js";
 import {
   buildPlannerRequestDocument,
   buildPlanningCenterFormSubmissionUrl,
@@ -540,6 +543,10 @@ const CHANGE_REQUEST_NOTIFICATION_SECRETS = [
   ...GMAIL_SECRETS,
   ...PUMBLE_SECRETS,
 ];
+const SERVE_NEED_NOTIFICATION_SECRETS = [
+  ...GMAIL_SECRETS,
+  ...PUMBLE_SECRETS,
+];
 const changeRequestPumbleApiClient = createPumbleDirectApiClient({
   fetchImpl: (...args) => fetch(...args),
   getAppKey: () => CENTRAL_PUMBLE_APP_KEY.value(),
@@ -566,6 +573,14 @@ const changeRequestPumbleOAuthService = createPumbleOAuthService({
     "https://us-central1-crosspointe-central.cloudfunctions.net/" +
     "changeRequestPumbleOAuthCallback",
 });
+const adminNotificationPreferencesHandler =
+  createAdminNotificationPreferencesHandler({
+    firestore,
+    fieldValue: admin.firestore.FieldValue,
+    verifyAdmin: verifyCentralAdminRequest_,
+    getUserDocPath: getCentralAdminUserDocPath_,
+    serializePumbleConnection: serializePumbleConnectionStatus_,
+  });
 const changeRequestNotificationRuntime =
   createChangeRequestNotificationRuntime({
     firestore,
@@ -582,6 +597,16 @@ const PLANNER_PCO_WEBHOOK_SECRETS = [
   PCO_WEBHOOK_AUTHENTICITY_SECRET,
 ];
 const PCO_TIMEZONE = process.env.PCO_TIMEZONE || "America/Chicago";
+const serveNeedPumbleNotificationRuntime =
+  createServeNeedPumbleNotificationRuntime({
+    firestore,
+    fieldValue: admin.firestore.FieldValue,
+    transport: changeRequestPumbleTransport,
+    degradeConnection: degradePumbleConnection_,
+    usersCollectionPath: CENTRAL_ADMIN_USERS_COLLECTION_PATH,
+    interestsCollectionPath: CENTRAL_SERVE_NEEDS_INTERESTS_COLLECTION_PATH,
+    timeZone: PCO_TIMEZONE,
+  });
 const PCO_CENTRAL_TAG_NAME = process.env.PCO_CENTRAL_TAG_NAME || "Central";
 const PCO_CENTRAL_FEATURED_TAG_NAME =
   process.env.PCO_CENTRAL_FEATURED_TAG_NAME || "Central Featured";
@@ -2274,9 +2299,9 @@ export const changeRequestPumbleStatus = onRequest(
       }
 
       try {
-        const reviewer = await verifyChangeRequestReviewerRequest_(request);
+        const adminUser = await verifyCentralAdminRequest_(request);
         const userSnapshot = await firestore
-            .doc(getCentralAdminUserDocPath_(reviewer.uid))
+            .doc(getCentralAdminUserDocPath_(adminUser.uid))
             .get();
         response.status(200).json({
           ok: true,
@@ -2302,9 +2327,9 @@ export const changeRequestPumbleOAuthStart = onRequest(
       }
 
       try {
-        const reviewer = await verifyChangeRequestReviewerRequest_(request);
+        const adminUser = await verifyCentralAdminRequest_(request);
         const authorization = await changeRequestPumbleOAuthService
-            .beginAuthorization(reviewer.uid, {
+            .beginAuthorization(adminUser.uid, {
               returnUrl: request.body && request.body.returnUrl,
               requestOrigin: request.get("origin"),
             });
@@ -2391,32 +2416,31 @@ export const changeRequestPumbleOAuthComplete = onRequest(
       }
 
       try {
-        const reviewer = await verifyChangeRequestReviewerRequest_(request);
+        const adminUser = await verifyCentralAdminRequest_(request);
         const userRef = firestore.doc(
-            getCentralAdminUserDocPath_(reviewer.uid),
+            getCentralAdminUserDocPath_(adminUser.uid),
         );
         await changeRequestPumbleOAuthService
             .finalizeAuthorization({
-              uid: reviewer.uid,
+              uid: adminUser.uid,
               completionToken: request.body && request.body.completionToken,
               applyConnection: async ({transaction, connection}) => {
                 const userSnapshot = await transaction.get(userRef);
-                const email = normalizeAdminEmail_(userSnapshot.get("email"));
                 if (!userSnapshot.exists ||
-                  userSnapshot.get("active") !== true ||
-                  !isAllowedCentralAdminEmail_(email)) {
+                  userSnapshot.get("active") !== true) {
                   throw createChangeRequestError_(
                       "admin-access-required",
                       "Your admin access record must remain active.",
                   );
                 }
-                const permission = getChangeRequestsPermission_(
-                    userSnapshot.get("pageAccess") || {},
+                const storedEmail = normalizeAdminEmail_(
+                    userSnapshot.get("email"),
                 );
-                if (!canReviewChangeRequestsWithPermission_(permission)) {
+                if (storedEmail && adminUser.email &&
+                  storedEmail !== adminUser.email) {
                   throw createChangeRequestError_(
-                      "change-request-review-forbidden",
-                      "Your current access no longer allows linking Pumble.",
+                      "admin-access-required",
+                      "Your signed-in account no longer matches this Admin record.",
                   );
                 }
                 transaction.update(userRef, {
@@ -2454,9 +2478,9 @@ export const changeRequestPumbleDisconnect = onRequest(
       }
 
       try {
-        const reviewer = await verifyChangeRequestReviewerRequest_(request);
+        const adminUser = await verifyCentralAdminRequest_(request);
         const userRef = firestore.doc(
-            getCentralAdminUserDocPath_(reviewer.uid),
+            getCentralAdminUserDocPath_(adminUser.uid),
         );
         const preferences = await firestore.runTransaction(
             async (transaction) => {
@@ -2476,6 +2500,7 @@ export const changeRequestPumbleDisconnect = onRequest(
                   admin.firestore.FieldValue.delete(),
                 "notificationPreferences.changeRequests":
                   disconnectedPreferences,
+                "notificationPreferences.serveNeeds.pumble": false,
                 "notificationPreferences.updatedAt":
                   admin.firestore.FieldValue.serverTimestamp(),
                 "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
@@ -2502,136 +2527,7 @@ export const changeRequestNotificationPreferences = onRequest(
       region: "us-central1",
       cors: true,
     },
-    async (request, response) => {
-      response.set("Cache-Control", "no-store");
-      if (request.method !== "GET" && request.method !== "POST") {
-        response.status(405).json({error: "Method not allowed."});
-        return;
-      }
-
-      const idToken = getBearerToken_(request.headers.authorization);
-      if (!idToken) {
-        response.status(401).json({
-          error: "Missing Firebase ID token. Sign in again and retry.",
-        });
-        return;
-      }
-
-      let decodedToken = null;
-      try {
-        decodedToken = await admin.auth().verifyIdToken(idToken);
-      } catch (error) {
-        response.status(401).json({
-          error: "Your Firebase sign-in expired. Sign in again and retry.",
-        });
-        return;
-      }
-
-      try {
-        await verifyChangeRequestReviewerAccess_(decodedToken);
-        const userRef = firestore.doc(
-            getCentralAdminUserDocPath_(decodedToken.uid),
-        );
-        let pumbleConnection;
-        let preferences;
-        let message = "";
-
-        if (request.method === "GET") {
-          const userSnapshot = await userRef.get();
-          const userData = userSnapshot.data() || {};
-          pumbleConnection = serializePumbleConnectionStatus_(userData);
-          preferences = serializeChangeRequestNotificationPreferences(
-              userData.notificationPreferences &&
-              userData.notificationPreferences.changeRequests,
-          );
-        } else {
-          if (!request.body || !Array.isArray(request.body.channels)) {
-            response.status(400).json({
-              error: "Notification channels must be an array.",
-              code: "invalid-notification-channels",
-            });
-            return;
-          }
-          let selected = null;
-          try {
-            selected = normalizeChangeRequestNotificationChannelSelection(
-                request.body && request.body.channels,
-            );
-          } catch (error) {
-            response.status(400).json({
-              error: String(error && error.message ||
-                "Choose Email, Pumble, or both."),
-              code: "invalid-notification-channels",
-            });
-            return;
-          }
-          const selectedPreferences =
-            serializeChangeRequestNotificationPreferences(selected);
-
-          if (!selectedPreferences.channels.length) {
-            response.status(400).json({
-              error: "Choose Email, Pumble, or both.",
-              code: "notification-channel-required",
-            });
-            return;
-          }
-          const transactionResult = await firestore.runTransaction(
-              async (transaction) => {
-                const userSnapshot = await transaction.get(userRef);
-                if (!userSnapshot.exists) {
-                  throw createChangeRequestError_(
-                      "admin-access-required",
-                      "Your admin access record is unavailable.",
-                  );
-                }
-                const currentConnection = serializePumbleConnectionStatus_(
-                    userSnapshot.data(),
-                );
-                if (selected.pumble && !currentConnection.linked) {
-                  return {conflict: true, pumbleConnection: currentConnection};
-                }
-                transaction.update(userRef, {
-                  "notificationPreferences.changeRequests": selected,
-                  "notificationPreferences.updatedAt":
-                    admin.firestore.FieldValue.serverTimestamp(),
-                  "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
-                });
-                return {
-                  conflict: false,
-                  pumbleConnection: currentConnection,
-                };
-              },
-          );
-          pumbleConnection = transactionResult.pumbleConnection;
-          if (transactionResult.conflict) {
-            response.status(409).json({
-              error: "Link your Pumble account before selecting Pumble.",
-              code: "pumble-not-linked",
-              pumbleConnection,
-            });
-            return;
-          }
-          preferences = selectedPreferences;
-          message = "Change Request notification preferences saved.";
-        }
-
-        response.status(200).json({
-          ok: true,
-          preferences,
-          pumbleConnection,
-          ...(message ? {message} : {}),
-        });
-      } catch (error) {
-        console.error("Change Request notification preferences failed.", {
-          code: String(error && error.code || ""),
-          message: String(error && error.message || ""),
-        });
-        response.status(getChangeRequestStatusCode_(error)).json({
-          error: getChangeRequestErrorMessage_(error),
-          code: String(error && error.code || ""),
-        });
-      }
-    },
+    adminNotificationPreferencesHandler,
 );
 
 export const changeRequestNotificationEventCreated = onDocumentCreated(
@@ -3172,7 +3068,7 @@ export const shareServeNeedInterest = onRequest(
     {
       region: "us-central1",
       cors: true,
-      secrets: GMAIL_SECRETS,
+      secrets: SERVE_NEED_NOTIFICATION_SECRETS,
     },
     async (request, response) => {
       if (request.method !== "POST") {
@@ -3339,6 +3235,7 @@ export const shareServeNeedInterest = onRequest(
         };
 
         await interestRef.set(interestRecord);
+        let emailNotificationError = null;
 
         try {
           await queueServeNeedInterestNotification_(
@@ -3355,11 +3252,26 @@ export const shareServeNeedInterest = onRequest(
               interestRef.id,
               notificationError,
           );
+          emailNotificationError = notificationError;
+        }
 
+        try {
+          await queueServeNeedInterestPumbleNotifications_(
+              interestRef.id,
+              interestRecord,
+          );
+        } catch (pumbleError) {
+          console.error("Serve Need Pumble notifications failed.", {
+            code: String(pumbleError && pumbleError.code || ""),
+            message: String(pumbleError && pumbleError.message || ""),
+          });
+        }
+
+        if (emailNotificationError) {
           response.status(502).json({
             error:
               getServeNeedInterestNotificationErrorMessage_(
-                  notificationError,
+                  emailNotificationError,
               ),
             code: "notification-failed",
             saved: true,
@@ -3507,12 +3419,20 @@ async function queueServeNeedInterestNotification_(interestId, interestData) {
 }
 
 /**
- * Sends and records a Campaign contact notification.
+ * Sends a new Serve Needs response to each eligible, opted-in Pumble Admin.
+ * Pumble is an additional Admin alert; its outcome never changes the existing
+ * contact-email delivery result returned to the public form.
  *
- * @param {string} interestId Stored submission ID.
+ * @param {string} interestId Stored Serve Needs interest ID.
  * @param {Object} interestData Stored submission data.
- * @return {Promise<void>} Resolves after the delivery state is recorded.
+ * @return {Promise<void>} Resolves after delivery outcomes are recorded.
  */
+async function queueServeNeedInterestPumbleNotifications_(
+    interestId,
+    interestData,
+) {
+  return serveNeedPumbleNotificationRuntime.notify(interestId, interestData);
+}
 async function queueCampaignInterestNotification_(interestId, interestData) {
   const interest = interestData || {};
   const to = String(interest.contactEmail || "").trim();
@@ -3716,11 +3636,13 @@ function buildChangeRequestReviewUrl_(requestId = "") {
 }
 
 /**
- * Authenticates an Admin request and requires Change Request review access.
+ * Authenticates a request from any active Central Admin or invited workspace
+ * account. This is the minimum boundary for managing one's own Pumble link.
+ *
  * @param {Object} request HTTPS request.
- * @return {Promise<Object>} Reviewer identity.
+ * @return {Promise<Object>} Active Admin identity and user data.
  */
-async function verifyChangeRequestReviewerRequest_(request) {
+async function verifyCentralAdminRequest_(request) {
   const idToken = getBearerToken_(request.headers.authorization);
   if (!idToken) {
     const error = new Error(
@@ -3743,7 +3665,31 @@ async function verifyChangeRequestReviewerRequest_(request) {
     error.cause = cause;
     throw error;
   }
-  return verifyChangeRequestReviewerAccess_(decodedToken);
+
+  const userSnapshot = await firestore
+      .doc(getCentralAdminUserDocPath_(decodedToken.uid))
+      .get();
+  const userData = userSnapshot.data() || {};
+  const tokenEmail = normalizeAdminEmail_(decodedToken.email);
+  const storedEmail = normalizeAdminEmail_(userData.email);
+  if (!userSnapshot.exists || userData.active !== true ||
+    (storedEmail && tokenEmail !== storedEmail)) {
+    const error = createChangeRequestError_(
+        "admin-access-required",
+        "Your Central Admin access record must be active.",
+    );
+    error.status = 403;
+    throw error;
+  }
+
+  return {
+    uid: String(decodedToken.uid || "").trim(),
+    email: tokenEmail || storedEmail,
+    displayName: String(
+        decodedToken.name || userData.displayName || "",
+    ).trim(),
+    userData,
+  };
 }
 
 /**
@@ -3856,7 +3802,8 @@ async function sendChangeRequestEmailNotification_(notification) {
       actionUrl: digest.actionUrl,
       footerText:
         "You received this because your Central account can review Change " +
-        "Requests. Update your channels from the Change Requests page.",
+        "Requests. Manage Pumble from Integrations and Email from the " +
+        "Change Requests page.",
     }),
   });
   return {providerMessageId: String(result && result.id || "").trim()};
@@ -3884,7 +3831,7 @@ async function sendChangeRequestPumbleNotification_(notification) {
     if (!isRetryableChangeRequestDeliveryError(error)) {
       let needsEmailFallback = false;
       try {
-        needsEmailFallback = await degradeChangeRequestPumbleConnection_(
+        needsEmailFallback = await degradePumbleConnection_(
             recipient.uid,
             error,
         );
@@ -3914,12 +3861,13 @@ async function sendChangeRequestPumbleNotification_(notification) {
 }
 
 /**
- * Marks a terminal Pumble link failure and atomically restores Email delivery.
+ * Marks a terminal Pumble link failure, disables Pumble notification types,
+ * and atomically restores Change Request Email delivery when needed.
  * @param {*} uid Central admin user ID.
  * @param {*} error Terminal Pumble delivery error.
  * @return {Promise<boolean>} Whether this notification needs email fallback.
  */
-async function degradeChangeRequestPumbleConnection_(uid, error) {
+async function degradePumbleConnection_(uid, error) {
   const normalizedUid = String(uid || "").trim();
   if (!normalizedUid || normalizedUid.length > 500) return false;
   const userRef = firestore.doc(getCentralAdminUserDocPath_(normalizedUid));
@@ -3944,9 +3892,10 @@ async function degradeChangeRequestPumbleConnection_(uid, error) {
         email: true,
         pumble: false,
       };
-      update["notificationPreferences.updatedAt"] =
-        admin.firestore.FieldValue.serverTimestamp();
     }
+    update["notificationPreferences.serveNeeds.pumble"] = false;
+    update["notificationPreferences.updatedAt"] =
+      admin.firestore.FieldValue.serverTimestamp();
     transaction.update(userRef, update);
     return needsEmailFallback;
   });

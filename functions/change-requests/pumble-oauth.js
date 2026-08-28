@@ -76,6 +76,8 @@ export function createPumbleOAuthService(options = {}) {
       "OAuth request timeout",
   );
   const adminUrl = normalizeHttpsUrl_(options.adminUrl, "Admin URL");
+  const approvedReturnOrigins = Array.isArray(options.approvedReturnOrigins) ?
+    options.approvedReturnOrigins : [];
   const callbackUrl = normalizeHttpsUrl_(
       options.callbackUrl || buildPumbleOAuthCallbackUrl(adminUrl),
       "Pumble OAuth callback URL",
@@ -98,6 +100,7 @@ export function createPumbleOAuthService(options = {}) {
         input.returnUrl,
         adminUrl,
         input.requestOrigin,
+        approvedReturnOrigins,
     );
 
     await states.doc(stateHash).create({
@@ -146,6 +149,8 @@ export function createPumbleOAuthService(options = {}) {
           const returnUrl = normalizePumbleOAuthReturnUrl(
               data.returnUrl,
               adminUrl,
+              "",
+              approvedReturnOrigins,
           );
           const expiresAtMs = toMillis_(data.expiresAt);
           if (!Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs) {
@@ -379,28 +384,44 @@ export function buildPumbleOAuthCallbackUrl(adminUrl) {
  * @param {*} value Requested return URL.
  * @param {string} adminUrl Configured canonical Admin URL.
  * @param {string} requestOrigin Browser origin that started authorization.
+ * @param {string[]} approvedReturnOrigins Additional exact Central origins.
  * @return {string} Canonical Change Requests return URL.
  */
 export function normalizePumbleOAuthReturnUrl(
     value,
     adminUrl,
     requestOrigin = "",
+    approvedReturnOrigins = [],
 ) {
   const canonical = new URL(normalizeHttpsUrl_(adminUrl, "Admin URL"));
   const requested = new URL(normalizeHttpsUrl_(
       value || canonical.origin,
       "Pumble OAuth return URL",
   ));
-  const canonicalHost = canonical.hostname.toLowerCase();
   const requestedHost = requested.hostname.toLowerCase();
-  const projectHostMatch = canonicalHost.match(/^([a-z0-9-]+)\.web\.app$/);
-  const previewPrefix = projectHostMatch ? projectHostMatch[1] + "--" : "";
+  const approvedOrigins = [canonical.origin];
+  const hostingSiteIds = [];
+  approvedReturnOrigins.forEach((origin) => {
+    const approved = new URL(normalizeHttpsUrl_(
+        origin,
+        "Approved Pumble OAuth return origin",
+    ));
+    approvedOrigins.push(approved.origin);
+  });
+  approvedOrigins.forEach((origin) => {
+    const approved = new URL(origin);
+    const hostingSiteMatch = approved.hostname.toLowerCase()
+        .match(/^([a-z0-9-]+)\.web\.app$/);
+    if (hostingSiteMatch) hostingSiteIds.push(hostingSiteMatch[1]);
+  });
   const isCanonicalOrigin = requested.origin === canonical.origin;
-  const isPreviewOrigin = Boolean(previewPrefix) &&
+  const isApprovedOrigin = approvedOrigins.includes(requested.origin);
+  const isPreviewOrigin = hostingSiteIds.some((siteId) =>
     requested.port === "" &&
-    requestedHost.startsWith(previewPrefix) &&
-    requestedHost.endsWith(".web.app");
-  if (!isCanonicalOrigin && !isPreviewOrigin) {
+    requestedHost.startsWith(siteId + "--") &&
+    requestedHost.endsWith(".web.app"),
+  );
+  if (!isCanonicalOrigin && !isApprovedOrigin && !isPreviewOrigin) {
     throw oauthError_(
         "pumble-oauth-return-invalid",
         "The Pumble return URL is not an approved Central host.",
@@ -419,6 +440,13 @@ export function normalizePumbleOAuthReturnUrl(
           400,
       );
     }
+  }
+  if (requested.username || requested.password) {
+    throw oauthError_(
+        "pumble-oauth-return-invalid",
+        "The Pumble return URL must not include credentials.",
+        400,
+    );
   }
   requested.pathname = "/admin/change-requests";
   requested.search = "";

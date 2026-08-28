@@ -50,6 +50,18 @@ export function createAdminNotificationPreferencesHandler(options = {}) {
       } else if (request.body &&
         Object.prototype.hasOwnProperty.call(
             request.body,
+            "notificationPreferences",
+        )) {
+        result = await updateNotificationPreferences_({
+          firestore,
+          fieldValue,
+          userRef,
+          selection: request.body.notificationPreferences,
+          serializePumbleConnection,
+        });
+      } else if (request.body &&
+        Object.prototype.hasOwnProperty.call(
+            request.body,
             "pumbleNotifications",
         )) {
         result = await updatePumblePreferences_({
@@ -86,6 +98,175 @@ export function createAdminNotificationPreferencesHandler(options = {}) {
       });
     }
   };
+}
+
+/**
+ * Atomically updates every personal notification preference shown in Admin.
+ *
+ * Event groups are optional so users only change settings they are eligible
+ * to manage. Existing request contracts remain available for older clients.
+ *
+ * @param {Object} options Transaction and serialization dependencies.
+ * @return {Promise<Object>} Serialized preferences or an HTTP error result.
+ */
+async function updateNotificationPreferences_(options) {
+  let selection;
+  try {
+    selection = normalizeUnifiedNotificationSelection_(options.selection);
+  } catch (error) {
+    return errorResult_(400, error, "invalid-notification-preferences");
+  }
+
+  const transactionResult = await options.firestore.runTransaction(
+      async (transaction) => {
+        const snapshot = await transaction.get(options.userRef);
+        assertActiveUser_(snapshot);
+        const userData = snapshot.data() || {};
+        const eligibility = getAdminPumbleNotificationEligibility(userData);
+        const pumbleConnection = options.serializePumbleConnection(userData);
+        const currentChangeRequests =
+          normalizeChangeRequestNotificationPreferences(
+              userData.notificationPreferences &&
+              userData.notificationPreferences.changeRequests,
+          );
+        const currentPumble = getAdminPumbleNotificationPreferences(userData);
+        const nextChangeRequests = selection.changeRequests ||
+          currentChangeRequests;
+        const nextServeNeedsPumble = selection.serveNeeds ?
+          selection.serveNeeds.pumble : currentPumble.serveNeeds;
+
+        if (selection.changeRequests && !eligibility.changeRequests) {
+          return {forbidden: "changeRequests", eligibility};
+        }
+        if (selection.serveNeeds && !eligibility.serveNeeds) {
+          return {forbidden: "serveNeeds", eligibility};
+        }
+        if (selection.changeRequests &&
+          !nextChangeRequests.email && !nextChangeRequests.pumble) {
+          return {missingChannel: true, eligibility};
+        }
+        if ((selection.changeRequests && nextChangeRequests.pumble) ||
+          (selection.serveNeeds && nextServeNeedsPumble)) {
+          if (!pumbleConnection.linked) {
+            return {conflict: true, eligibility, pumbleConnection};
+          }
+        }
+
+        const update = {
+          "notificationPreferences.updatedAt":
+            options.fieldValue.serverTimestamp(),
+          "updatedAt": options.fieldValue.serverTimestamp(),
+        };
+        if (selection.changeRequests) {
+          update["notificationPreferences.changeRequests"] =
+            nextChangeRequests;
+        }
+        if (selection.serveNeeds) {
+          update["notificationPreferences.serveNeeds.pumble"] =
+            nextServeNeedsPumble;
+        }
+        transaction.update(options.userRef, update);
+
+        return {
+          eligibility,
+          pumbleConnection,
+          preferences: serializeChangeRequestNotificationPreferences(
+              nextChangeRequests,
+          ),
+          pumbleNotifications: {
+            changeRequests: nextChangeRequests.pumble,
+            serveNeeds: nextServeNeedsPumble,
+          },
+          message: "Notification preferences saved.",
+        };
+      },
+  );
+
+  if (transactionResult.forbidden) {
+    return {
+      status: 403,
+      error: {
+        error:
+          "Your current Admin access does not allow one of those " +
+          "notification types.",
+        code: "notification-type-forbidden",
+        eligibility: transactionResult.eligibility,
+      },
+    };
+  }
+  if (transactionResult.missingChannel) {
+    return {
+      status: 400,
+      error: {
+        error: "Choose Email, Pumble, or both for Change Requests.",
+        code: "notification-channel-required",
+      },
+    };
+  }
+  if (transactionResult.conflict) {
+    return {
+      status: 409,
+      error: {
+        error: "Link your Pumble account before enabling notifications.",
+        code: "pumble-not-linked",
+        pumbleConnection: transactionResult.pumbleConnection,
+      },
+    };
+  }
+  return transactionResult;
+}
+
+/**
+ * Validates the Notifications page's partial, permission-aware payload.
+ *
+ * @param {*} value Proposed notification settings.
+ * @return {Object} Storage-ready event preferences.
+ */
+function normalizeUnifiedNotificationSelection_(value) {
+  const source = value && typeof value === "object" &&
+    !Array.isArray(value) ? value : null;
+  if (!source) {
+    throw new Error("Notification preferences must be an object.");
+  }
+
+  const hasChangeRequests = Object.prototype.hasOwnProperty.call(
+      source,
+      "changeRequests",
+  );
+  const hasServeNeeds = Object.prototype.hasOwnProperty.call(
+      source,
+      "serveNeeds",
+  );
+  if (!hasChangeRequests && !hasServeNeeds) {
+    throw new Error("Choose at least one notification type to update.");
+  }
+
+  const normalized = {};
+  if (hasChangeRequests) {
+    const changeRequests = source.changeRequests;
+    if (!changeRequests || typeof changeRequests !== "object" ||
+      Array.isArray(changeRequests) ||
+      typeof changeRequests.email !== "boolean" ||
+      typeof changeRequests.pumble !== "boolean") {
+      throw new Error(
+          "Change Request preferences must include Email and Pumble.",
+      );
+    }
+    normalized.changeRequests = {
+      email: changeRequests.email,
+      pumble: changeRequests.pumble,
+    };
+  }
+  if (hasServeNeeds) {
+    const serveNeeds = source.serveNeeds;
+    if (!serveNeeds || typeof serveNeeds !== "object" ||
+      Array.isArray(serveNeeds) ||
+      typeof serveNeeds.pumble !== "boolean") {
+      throw new Error("Serve Needs preferences must include Pumble.");
+    }
+    normalized.serveNeeds = {pumble: serveNeeds.pumble};
+  }
+  return normalized;
 }
 
 /**

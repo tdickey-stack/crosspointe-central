@@ -23,7 +23,7 @@ test("Change Request notification UI uses the privileged endpoint", () => {
       /\/api\/admin\/change-request-notification-preferences/,
   );
   assert.match(adminSource, /Authorization: "Bearer " \+ idToken/);
-  assert.match(adminSource, /channels: channels/);
+  assert.match(adminSource, /notificationPreferences: selected/);
 });
 
 test("temporary preference failures cannot overwrite stored channels", () => {
@@ -41,7 +41,7 @@ test("temporary preference failures cannot overwrite stored channels", () => {
       "function loadChangeRequestNotificationPreferencesIfNeeded_",
   );
   const saveStart = adminSource.indexOf(
-      "function saveChangeRequestNotificationPreferences_",
+      "function saveNotificationPreferences_",
       loadStart,
   );
   const loadBlock = adminSource.slice(loadStart, saveStart);
@@ -78,12 +78,12 @@ test("Pumble linking uses authenticated status and mutation endpoints", () => {
   assert.match(adminSource, /parsed\.pathname !== "\/access-request"/);
 });
 
-test("Pumble settings live in Integrations and require verified linking", () => {
+test("personal notification settings live together and require verified linking", () => {
   const renderStart = adminSource.indexOf(
-      "function renderPumbleIntegrationSection_",
+      "function renderNotificationsPagePanel_",
   );
   const renderEnd = adminSource.indexOf(
-      "function renderPumbleNotificationType_",
+      "function renderNotificationPreferenceOption_",
       renderStart,
   );
   const renderBlock = adminSource.slice(renderStart, renderEnd);
@@ -105,7 +105,7 @@ test("Pumble settings live in Integrations and require verified linking", () => 
   );
 
   const saveStart = adminSource.indexOf(
-      "function savePumbleNotificationPreferences_",
+      "function saveNotificationPreferences_",
   );
   const saveEnd = adminSource.indexOf(
       "function callChangeRequestNotificationPreferencesEndpoint_",
@@ -114,7 +114,9 @@ test("Pumble settings live in Integrations and require verified linking", () => 
   const saveBlock = adminSource.slice(saveStart, saveEnd);
   assert.match(saveBlock, /changeRequestPumbleConnectionLoaded/);
   assert.match(saveBlock, /changeRequestPumbleLinked/);
-  assert.match(saveBlock, /pumbleNotifications: selected/);
+  assert.match(saveBlock, /notificationPreferences: selected/);
+  assert.match(saveBlock, /selected\.changeRequests/);
+  assert.match(saveBlock, /selected\.serveNeeds/);
   assert.doesNotMatch(saveBlock, /pumbleIdentity\.status/);
 
   const changeRequestStart = adminSource.indexOf(
@@ -128,9 +130,15 @@ test("Pumble settings live in Integrations and require verified linking", () => 
       changeRequestStart,
       changeRequestEnd,
   );
-  assert.match(changeRequestBlock, /Email notifications/);
-  assert.match(changeRequestBlock, /\/admin\/integrations/);
+  assert.match(changeRequestBlock, /Your notifications/);
+  assert.match(changeRequestBlock, /\/admin\/notifications/);
   assert.doesNotMatch(changeRequestBlock, /link-change-request-pumble/);
+
+  assert.match(adminSource, /Response destination/);
+  assert.match(
+      adminSource,
+      /separate from your personal notification preferences/,
+  );
 });
 
 test("Pumble OAuth returns use safe codes and leave other query state", () => {
@@ -158,9 +166,9 @@ test("Pumble OAuth returns use safe codes and leave other query state", () => {
   assert.doesNotMatch(handlerBlock, /pumble_message/);
   assert.match(
       handlerBlock,
-      /adminState\.currentPageId = "integrations";[\s\S]*clearChangeRequestPumbleOAuthParams_\(\)/,
+      /adminState\.currentPageId = "notifications";[\s\S]*clearChangeRequestPumbleOAuthParams_\(\)/,
   );
-  assert.match(handlerBlock, /nextUrl\.pathname = "\/admin\/integrations"/);
+  assert.match(handlerBlock, /nextUrl\.pathname = "\/admin\/notifications"/);
   assert.match(handlerBlock, /nextUrl\.searchParams\.delete\("pumble"\)/);
   assert.match(handlerBlock, /nextUrl\.searchParams\.delete\("pumble_token"\)/);
   assert.match(
@@ -171,29 +179,30 @@ test("Pumble OAuth returns use safe codes and leave other query state", () => {
       adminSource,
       /function renderAdminMain_[\s\S]*renderChangeRequestPumbleOAuthReturnNotice_\(\)/,
   );
-  assert.match(adminSource, /Open Pumble settings/);
+  assert.match(adminSource, /Open Notifications/);
 });
 
-test("every active Admin can open Integrations without seeing gated services", () => {
+test("every active Admin can open Notifications while Integrations stays gated", () => {
   const accessStart = adminSource.indexOf("function canAccessAdminPage_");
   const accessEnd = adminSource.indexOf(
       "function getPageAccessLevel_",
       accessStart,
   );
   const accessBlock = adminSource.slice(accessStart, accessEnd);
-  assert.match(accessBlock, /page\.id === "integrations"/);
+  assert.match(accessBlock, /page\.id === "notifications"/);
   assert.match(accessBlock, /return true/);
+  assert.doesNotMatch(accessBlock, /page\.id === "integrations"/);
 
   const renderStart = adminSource.indexOf(
       "function renderIntegrationsPagePanel_",
   );
   const renderEnd = adminSource.indexOf(
-      "function renderPumbleIntegrationSection_",
+      "function renderNotificationsPagePanel_",
       renderStart,
   );
   const renderBlock = adminSource.slice(renderStart, renderEnd);
   assert.match(renderBlock, /canViewServiceSettings = permission !== "none"/);
-  assert.match(renderBlock, /renderPumbleIntegrationSection_\(\)/);
+  assert.doesNotMatch(renderBlock, /Pumble/);
   assert.match(renderBlock, /canViewServiceSettings \? \[/);
   assert.match(renderBlock, /renderGoogleCalendarIntegrationSection_\(\)/);
   assert.match(renderBlock, /renderPlanningCenterIntegrationSection_\(\)/);

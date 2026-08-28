@@ -319,11 +319,20 @@
       hideFromOverview: true,
     },
     {
+      id: "notifications",
+      label: "Notifications",
+      route: "/admin/notifications",
+      pageAccessKey: "",
+      summary: "Choose how Central keeps you informed across the admin workspace.",
+      collectionPath: CENTRAL_ADMIN_USERS_COLLECTION_PATH,
+      status: "Personal settings",
+    },
+    {
       id: "integrations",
       label: "Integrations",
       route: "/admin/integrations",
       pageAccessKey: "integrations",
-      summary: "Manage your notification connections and the service settings available to your role.",
+      summary: "Manage the service connections and settings available to your role.",
       collectionPath: PUBLISHED_HUB_SUNDAY_SETTINGS_DOC_PATH,
       status: "Preview workflow",
     },
@@ -381,6 +390,7 @@
     {type: "page", id: "studio"},
     {type: "page", id: "planner"},
     {type: "group", id: "settings"},
+    {type: "page", id: "notifications"},
     {type: "page", id: "integrations"},
     {type: "page", id: "wayfinder"},
     {type: "page", id: "change-requests"},
@@ -859,7 +869,6 @@
       changeRequests: false,
       serveNeeds: false,
     },
-    pumbleNotificationPreferencesSaving: false,
     pumbleNotificationPreferencesMessage: "",
     pumbleNotificationPreferencesError: "",
     changeRequestPumbleConnectionLoaded: false,
@@ -2597,15 +2606,9 @@
         return;
       }
 
-      if (action === "save-change-request-notifications") {
+      if (action === "save-notification-preferences") {
         event.preventDefault();
-        saveChangeRequestNotificationPreferences_();
-        return;
-      }
-
-      if (action === "save-pumble-notifications") {
-        event.preventDefault();
-        savePumbleNotificationPreferences_();
+        saveNotificationPreferences_();
         return;
       }
 
@@ -4717,6 +4720,23 @@
       var pumbleType = field.replace("pumble-notifications.", "");
       if (pumbleType === "changeRequests" || pumbleType === "serveNeeds") {
         adminState.pumbleNotificationPreferences[pumbleType] = !!nextValue;
+        if (pumbleType === "changeRequests") {
+          var notificationChannels =
+            normalizeChangeRequestNotificationChannels_(
+                adminState.changeRequestNotificationChannels,
+            ).filter(function(channel) {
+              return channel !== "pumble";
+            });
+          if (nextValue) {
+            notificationChannels.push("pumble");
+          } else if (notificationChannels.indexOf("email") === -1) {
+            notificationChannels.push("email");
+          }
+          adminState.changeRequestNotificationChannels =
+            notificationChannels;
+        }
+        adminState.changeRequestNotificationsError = "";
+        adminState.changeRequestNotificationsMessage = "";
         adminState.pumbleNotificationPreferencesError = "";
         adminState.pumbleNotificationPreferencesMessage = "";
         renderAdmin_();
@@ -6310,8 +6330,8 @@
       escapeHtml_(error ||
         "You can now choose which Central notifications arrive in Pumble."),
       "</p></div>",
-      "<a class=\"central-admin-link-button is-secondary\" href=\"/admin/integrations\">",
-      "Open Pumble settings",
+      "<a class=\"central-admin-link-button is-secondary\" href=\"/admin/notifications\">",
+      "Open Notifications",
       "</a>",
       "</section>",
     ].join("");
@@ -6835,6 +6855,10 @@
 
     if (currentPage.id === "integrations") {
       return renderIntegrationsPagePanel_(currentPage);
+    }
+
+    if (currentPage.id === "notifications") {
+      return renderNotificationsPagePanel_(currentPage);
     }
 
     if (currentPage.id === "wayfinder") {
@@ -12029,7 +12053,6 @@
       ) : "",
       "</div>",
       "<div class=\"central-admin-stack\">",
-      renderPumbleIntegrationSection_(),
       canViewServiceSettings ? [
       "<div class=\"central-admin-item\">",
       "<div class=\"central-admin-item-header\">",
@@ -12086,7 +12109,7 @@
     ].join("");
   }
 
-  function renderPumbleIntegrationSection_() {
+  function renderNotificationsPagePanel_(currentPage) {
     var preferencesLoading = adminState.changeRequestNotificationsLoading &&
       !adminState.changeRequestNotificationsLoaded;
     var pumbleLoading = adminState.changeRequestPumbleConnectionLoading;
@@ -12095,23 +12118,51 @@
       adminState.changeRequestPumbleLinked;
     var connectionError = adminState.changeRequestPumbleConnectionError;
     var busy = preferencesLoading || pumbleLoading || !!pumbleAction ||
-      adminState.pumbleNotificationPreferencesSaving;
+      adminState.changeRequestNotificationsSaving;
     var preferences = adminState.pumbleNotificationPreferences || {};
     var eligibility = adminState.pumbleNotificationEligibility || {};
-    var statusLabel = pumbleLoading || pumbleAction ? "Checking" :
-      connectionError ? "Unavailable" : linked ? "Linked" : "Not linked";
-    var statusTone = linked ? "is-safe" : "is-warn";
+    var channels = normalizeChangeRequestNotificationChannels_(
+        adminState.changeRequestNotificationChannels,
+    );
+    var emailEnabled = channels.indexOf("email") !== -1;
+    var anyEligible = eligibility.changeRequests === true ||
+      eligibility.serveNeeds === true;
+    var needsPumble = preferences.changeRequests === true ||
+      preferences.serveNeeds === true;
+    var email = String(adminState.user && adminState.user.email || "").trim();
     var connectionClass = connectionError ? " is-error" :
       pumbleLoading || pumbleAction ? " is-loading" :
       linked ? " is-connected" : "";
 
     return [
-      "<section class=\"central-admin-item central-admin-notification-preferences\" aria-labelledby=\"pumble-integration-title\">",
-      "<div class=\"central-admin-item-header\"><div>",
-      "<strong id=\"pumble-integration-title\">Pumble</strong>",
-      "<p>Link your account to receive private messages from the Central bot.</p>",
+      "<section class=\"central-admin-panel\">",
+      "<div class=\"central-admin-panel-header\"><div>",
+      "<h3>", escapeHtml_(currentPage.label), "</h3>",
+      "<p>", escapeHtml_(currentPage.summary), "</p>",
       "</div>",
-      renderStatusPill_(statusLabel, statusTone),
+      renderStatusPill_(currentPage.status, "is-safe"),
+      "</div><div class=\"central-admin-page-body\">",
+      "<div class=\"central-admin-page-meta\">",
+      renderInlineMeta_("Route", currentPage.route),
+      renderInlineMeta_("Scope", "Only your Central account"),
+      "</div><div class=\"central-admin-stack\">",
+      "<section class=\"central-admin-item central-admin-notification-preferences\" aria-labelledby=\"notification-delivery-title\">",
+      "<div class=\"central-admin-item-header\"><div>",
+      "<strong id=\"notification-delivery-title\">Delivery methods</strong>",
+      "<p>Email uses your Central sign-in address. Pumble sends a private message from the Central bot.</p>",
+      "</div>",
+      renderStatusPill_(
+          email ? (linked ? "Email + Pumble ready" : "Email ready") :
+            (linked ? "Pumble ready" : "Setup needed"),
+          email || linked ? "is-safe" : "is-warn",
+      ),
+      "</div>",
+      "<div class=\"central-admin-notification-delivery-grid\">",
+      "<div class=\"central-admin-notification-delivery\"><div>",
+      "<strong>Email</strong><small>",
+      escapeHtml_(email || "No Central email available"),
+      "</small></div>",
+      renderStatusPill_(email ? "Available" : "Unavailable", email ? "is-safe" : "is-warn"),
       "</div>",
       "<div class=\"central-admin-pumble-connection",
       connectionClass,
@@ -12126,7 +12177,7 @@
       "</small>",
       "</div><div class=\"central-admin-pumble-actions\">",
       renderChangeRequestPumbleActions_(),
-      "</div></div>",
+      "</div></div></div>",
       connectionError ?
         "<p class=\"central-admin-note central-admin-notification-error\" role=\"alert\">" +
           escapeHtml_(connectionError) + "</p>" : "",
@@ -12138,28 +12189,56 @@
         "<p class=\"central-admin-note\" role=\"status\">" +
           escapeHtml_(adminState.changeRequestPumbleConnectionMessage) +
           "</p>" : "",
+      "</section>",
+      "<section class=\"central-admin-item central-admin-notification-preferences\" aria-labelledby=\"notification-events-title\">",
+      "<div class=\"central-admin-item-header\"><div>",
+      "<strong id=\"notification-events-title\">Notify me about</strong>",
+      "<p>These preferences apply only to you and follow your current Admin permissions.</p>",
+      "</div></div>",
       "<fieldset class=\"central-admin-notification-options is-two-column\" aria-describedby=\"admin-pumble-status\"",
       busy || adminState.changeRequestNotificationsLoadFailed ?
         " disabled" : "",
-      "><legend>Notify me in Pumble for</legend>",
-      renderPumbleNotificationType_(
-          "changeRequests",
-          "Change Requests",
+      "><legend>Change Requests</legend>",
+      renderNotificationPreferenceOption_(
+          "change-request-notifications.email",
+          "Email",
+          "New review requests and the existing 48-hour reminders.",
+          emailEnabled,
+          eligibility.changeRequests !== true ||
+            preferences.changeRequests !== true,
+          eligibility.changeRequests ?
+            (preferences.changeRequests ? "" :
+              "Email stays on until Pumble is selected.") :
+            "Requires Change Request approval access.",
+      ),
+      renderNotificationPreferenceOption_(
+          "pumble-notifications.changeRequests",
+          "Pumble",
           "New review requests and the existing 48-hour reminders.",
           preferences.changeRequests === true,
           !linked || eligibility.changeRequests !== true,
           eligibility.changeRequests ? "" :
             "Requires Change Request approval access.",
       ),
-      renderPumbleNotificationType_(
-          "serveNeeds",
-          "Serve Needs responses",
+      "</fieldset>",
+      "<fieldset class=\"central-admin-notification-options is-single-column\" aria-describedby=\"admin-pumble-status\"",
+      busy || adminState.changeRequestNotificationsLoadFailed ?
+        " disabled" : "",
+      "><legend>Serve Needs responses</legend>",
+      renderNotificationPreferenceOption_(
+          "pumble-notifications.serveNeeds",
+          "Pumble",
           "Every new response submitted through the Serve Needs form.",
           preferences.serveNeeds === true,
           !linked || eligibility.serveNeeds !== true,
           eligibility.serveNeeds ? "" : "Requires Serve Needs access.",
       ),
       "</fieldset>",
+      "<p class=\"central-admin-footer-note\">Serve Needs response emails go to each opportunity's Response destination. <a class=\"central-admin-inline-link\" href=\"/admin/serve-needs\">Manage Serve Needs</a></p>",
+      !anyEligible ?
+        renderAdminNote_(
+            "Your current Admin permissions do not include notification-enabled workflows.",
+        ) : "",
       adminState.pumbleNotificationPreferencesMessage ?
         "<p class=\"central-admin-note\" role=\"status\">" +
           escapeHtml_(adminState.pumbleNotificationPreferencesMessage) +
@@ -12168,19 +12247,20 @@
         "<p class=\"central-admin-note central-admin-notification-error\" role=\"alert\">" +
           escapeHtml_(adminState.pumbleNotificationPreferencesError) +
           "</p>" : "",
-      "<div class=\"central-admin-action-row\"><button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-pumble-notifications\"",
-      busy || !linked || adminState.changeRequestNotificationsLoadFailed ?
+      "<div class=\"central-admin-action-row\"><button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-notification-preferences\"",
+      busy || !anyEligible || (needsPumble && !linked) ||
+        adminState.changeRequestNotificationsLoadFailed ?
         " disabled" : "",
       ">",
-      adminState.pumbleNotificationPreferencesSaving ?
-        "Saving..." : "Save Pumble Notifications",
-      "</button></div>",
-      "</section>",
+      adminState.changeRequestNotificationsSaving ?
+        "Saving..." : "Save Notification Preferences",
+      "</button></div></section>",
+      "</div></div></section>",
     ].join("");
   }
 
-  function renderPumbleNotificationType_(
-      type,
+  function renderNotificationPreferenceOption_(
+      field,
       label,
       description,
       checked,
@@ -12191,8 +12271,8 @@
       "<label class=\"central-admin-notification-option",
       checked ? " is-selected" : "",
       disabled ? " is-disabled" : "",
-      "\"><input type=\"checkbox\" data-admin-field=\"pumble-notifications.",
-      escapeAttr_(type), "\"",
+      "\"><input type=\"checkbox\" data-admin-field=\"",
+      escapeAttr_(field), "\"",
       checked ? " checked" : "",
       disabled ? " disabled" : "",
       "><span><strong>", escapeHtml_(label), "</strong><small>",
@@ -15622,6 +15702,7 @@
       renderAdminNote_(
           "Add volunteer opportunities, then drag them into the order you want people to see.",
       ),
+      "<p class=\"central-admin-footer-note\">Personal Serve Needs alerts are managed in <a class=\"central-admin-inline-link\" href=\"/admin/notifications\">Notifications</a>.</p>",
       "</div>",
       renderAdminCollectionActions_({
         section: "serveNeeds",
@@ -15725,10 +15806,10 @@
         "\">",
         "</label>",
         "<label class=\"central-admin-field\">",
-        "<span>Contact Email</span>",
+        "<span>Response destination</span>",
         "<input type=\"email\" data-admin-field=\"serve-need.contact_email\" placeholder=\"ministry@crosspointe.tv\" value=\"",
         escapeAttr_(draft.contact_email || ""),
-        "\">",
+        "\"><small>Responses are emailed to this ministry address. This is separate from your personal notification preferences.</small>",
         "</label>",
         "<label class=\"central-admin-checkbox\">",
         "<input type=\"checkbox\" data-admin-field=\"serve-need.active\"",
@@ -15828,11 +15909,11 @@
             "</p>" :
             "",
           item.contact_email ?
-            "<a class=\"central-admin-inline-link\" href=\"mailto:" +
+            "<p class=\"central-admin-footer-note\">Response destination: <a class=\"central-admin-inline-link\" href=\"mailto:" +
             escapeAttr_(item.contact_email) +
             "\">" +
             escapeHtml_(item.contact_email) +
-            "</a>" :
+            "</a></p>" :
             "",
           "<div class=\"central-admin-page-meta\">",
           renderInlineMeta_("Ministry", item.ministry || "General"),
@@ -16257,66 +16338,13 @@
       return "";
     }
 
-    var preferencesLoading = adminState.changeRequestNotificationsLoading &&
-      !adminState.changeRequestNotificationsLoaded;
-    var isSaving = adminState.changeRequestNotificationsSaving;
-    var loadFailed = adminState.changeRequestNotificationsLoadFailed;
-    var channels = normalizeChangeRequestNotificationChannels_(
-        adminState.changeRequestNotificationChannels,
-    );
-    var emailEnabled = channels.indexOf("email") !== -1;
-    var pumbleEnabled = channels.indexOf("pumble") !== -1;
-    var statusLabel = preferencesLoading ?
-      "Loading" :
-      loadFailed ?
-      "Unavailable" :
-      emailEnabled ? "Email on" : "Pumble only";
-    var statusTone = preferencesLoading || loadFailed ?
-      "is-warn" : "is-safe";
-
     return [
-      "<section class=\"central-admin-item central-admin-notification-preferences\" aria-labelledby=\"change-request-notification-title\">",
+      "<section class=\"central-admin-item\" aria-labelledby=\"change-request-notification-title\">",
       "<div class=\"central-admin-item-header\"><div>",
-      "<strong id=\"change-request-notification-title\">Email notifications</strong>",
-      "<p>Control Change Request email here. Link Pumble and choose Pumble notification types from Integrations.</p>",
+      "<strong id=\"change-request-notification-title\">Your notifications</strong>",
+      "<p class=\"central-admin-footer-note\">Change Request delivery settings now live in one place with your other personal notifications.</p>",
       "</div>",
-      renderStatusPill_(statusLabel, statusTone),
-      "</div>",
-      preferencesLoading ?
-        "<p class=\"central-admin-note\" role=\"status\">Loading your notification preference.</p>" :
-        "",
-      "<fieldset class=\"central-admin-notification-options is-single-column\"",
-      preferencesLoading || isSaving || loadFailed ? " disabled" : "",
-      ">",
-      "<legend>Delivery</legend>",
-      "<label class=\"central-admin-notification-option",
-      emailEnabled ? " is-selected" : "",
-      !pumbleEnabled ? " is-disabled" : "",
-      "\"><input type=\"checkbox\" data-admin-field=\"change-request-notifications.email\"",
-      emailEnabled ? " checked" : "",
-      !pumbleEnabled ? " disabled" : "",
-      "><span><strong>Email</strong><small>Send each new request and reminder to your Central email address.",
-      !pumbleEnabled ?
-        " Email stays on until Pumble notifications are enabled." : "",
-      "</small></span></label>",
-      "</fieldset>",
-      "<p class=\"central-admin-footer-note\"><a class=\"central-admin-inline-link\" href=\"/admin/integrations\">Manage Pumble in Integrations</a></p>",
-      adminState.changeRequestNotificationsMessage ?
-        "<p class=\"central-admin-note\" role=\"status\">" +
-          escapeHtml_(adminState.changeRequestNotificationsMessage) +
-          "</p>" :
-        "",
-      adminState.changeRequestNotificationsError ?
-        "<p class=\"central-admin-note central-admin-notification-error\" role=\"alert\">" +
-          escapeHtml_(adminState.changeRequestNotificationsError) +
-          "</p>" :
-        "",
-      "<div class=\"central-admin-action-row\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-change-request-notifications\"",
-      preferencesLoading || isSaving || loadFailed ? " disabled" : "",
-      ">",
-      isSaving ? "Saving..." : "Save Email Preference",
-      "</button>",
+      "<a class=\"central-admin-link-button is-secondary\" href=\"/admin/notifications\">Open Notifications</a>",
       "</div>",
       "</section>",
     ].join("");
@@ -17813,12 +17841,9 @@
       return;
     }
 
-    if (adminState.currentPageId === "integrations") {
+    if (adminState.currentPageId === "notifications") {
       loadChangeRequestPumbleStatusIfNeeded_(false);
       loadChangeRequestNotificationPreferencesIfNeeded_(false);
-      if (getPageAccessLevel_("integrations") !== "none") {
-        loadSettingsIfNeeded_();
-      }
       return;
     }
 
@@ -17833,7 +17858,6 @@
     }
 
     if (adminState.currentPageId === "change-requests") {
-      loadChangeRequestNotificationPreferencesIfNeeded_(false);
       loadChangeRequestsIfNeeded_(false);
       return;
     }
@@ -17854,6 +17878,7 @@
       "settings-sunday-mode",
       "settings-rooms",
       "settings-team",
+      "integrations",
     ].indexOf(String(pageId || "")) !== -1;
   }
 
@@ -26600,7 +26625,7 @@
         CHANGE_REQUEST_PUMBLE_OAUTH_START_ENDPOINT,
         "POST",
         {
-          returnUrl: window.location.origin + "/admin/integrations",
+          returnUrl: window.location.origin + "/admin/notifications",
         },
     )
         .then(function(result) {
@@ -26750,7 +26775,7 @@
         );
     }
 
-    adminState.currentPageId = "integrations";
+    adminState.currentPageId = "notifications";
     adminState.sidebarNavGroup = getAdminSidebarGroupForPageId_(
         adminState.currentPageId,
     );
@@ -26840,7 +26865,7 @@
     }
     try {
       var nextUrl = new URL(window.location.href);
-      nextUrl.pathname = "/admin/integrations";
+      nextUrl.pathname = "/admin/notifications";
       nextUrl.searchParams.delete("pumble");
       nextUrl.searchParams.delete("pumble_code");
       nextUrl.searchParams.delete("pumble_token");
@@ -26950,8 +26975,8 @@
         });
   }
 
-  function saveChangeRequestNotificationPreferences_() {
-    if (!canReviewChangeRequests_() ||
+  function saveNotificationPreferences_() {
+    if (!isActiveAdminUserRecord_() ||
       adminState.changeRequestNotificationsSaving ||
       adminState.changeRequestNotificationsLoadFailed) {
       return;
@@ -26960,54 +26985,22 @@
     var channels = normalizeChangeRequestNotificationChannels_(
         adminState.changeRequestNotificationChannels,
     );
-    var requestUid = getCurrentAdminUserUid_();
-    adminState.changeRequestNotificationsSaving = true;
-    adminState.changeRequestNotificationsError = "";
-    adminState.changeRequestNotificationsMessage = "";
-    renderAdmin_();
-
-    callChangeRequestNotificationPreferencesEndpoint_("POST", {
-      channels: channels,
-    })
-        .then(function(result) {
-          if (!isCurrentAdminUserUid_(requestUid)) return;
-          var normalized =
-            normalizeChangeRequestNotificationPreferences_(result);
-          adminState.changeRequestNotificationsSaving = false;
-          adminState.changeRequestNotificationsLoaded = true;
-          adminState.changeRequestNotificationChannels = normalized.channels;
-          adminState.pumbleNotificationPreferences =
-            normalized.pumbleNotifications;
-          adminState.pumbleNotificationEligibility = normalized.eligibility;
-          adminState.changeRequestNotificationsMessage = result && result.message ?
-            String(result.message) :
-            "Your notification preference was saved.";
-          renderAdmin_();
-        })
-        .catch(function(error) {
-          if (!isCurrentAdminUserUid_(requestUid)) return;
-          adminState.changeRequestNotificationsSaving = false;
-          adminState.changeRequestNotificationsError = error && error.message ?
-            error.message :
-            "Unable to save your notification preference.";
-          renderAdmin_();
-        });
-  }
-
-  function savePumbleNotificationPreferences_() {
-    if (!isActiveAdminUserRecord_() ||
-      adminState.pumbleNotificationPreferencesSaving ||
-      adminState.changeRequestNotificationsLoadFailed) {
-      return;
+    var pumble = adminState.pumbleNotificationPreferences || {};
+    var eligibility = adminState.pumbleNotificationEligibility || {};
+    var selected = {};
+    if (eligibility.changeRequests === true) {
+      selected.changeRequests = {
+        email: channels.indexOf("email") !== -1,
+        pumble: pumble.changeRequests === true,
+      };
     }
-
-    var selected = {
-      changeRequests:
-        adminState.pumbleNotificationPreferences.changeRequests === true,
-      serveNeeds:
-        adminState.pumbleNotificationPreferences.serveNeeds === true,
-    };
-    if ((selected.changeRequests || selected.serveNeeds) &&
+    if (eligibility.serveNeeds === true) {
+      selected.serveNeeds = {pumble: pumble.serveNeeds === true};
+    }
+    var pumbleSelected = selected.changeRequests &&
+      selected.changeRequests.pumble || selected.serveNeeds &&
+      selected.serveNeeds.pumble;
+    if (pumbleSelected &&
       (!adminState.changeRequestPumbleConnectionLoaded ||
         !adminState.changeRequestPumbleLinked)) {
       adminState.pumbleNotificationPreferencesError =
@@ -27017,19 +27010,21 @@
     }
 
     var requestUid = getCurrentAdminUserUid_();
-    adminState.pumbleNotificationPreferencesSaving = true;
+    adminState.changeRequestNotificationsSaving = true;
+    adminState.changeRequestNotificationsError = "";
+    adminState.changeRequestNotificationsMessage = "";
     adminState.pumbleNotificationPreferencesError = "";
     adminState.pumbleNotificationPreferencesMessage = "";
     renderAdmin_();
 
     callChangeRequestNotificationPreferencesEndpoint_("POST", {
-      pumbleNotifications: selected,
+      notificationPreferences: selected,
     })
         .then(function(result) {
           if (!isCurrentAdminUserUid_(requestUid)) return;
           var normalized =
             normalizeChangeRequestNotificationPreferences_(result);
-          adminState.pumbleNotificationPreferencesSaving = false;
+          adminState.changeRequestNotificationsSaving = false;
           adminState.changeRequestNotificationsLoaded = true;
           adminState.changeRequestNotificationChannels = normalized.channels;
           adminState.pumbleNotificationPreferences =
@@ -27037,15 +27032,15 @@
           adminState.pumbleNotificationEligibility = normalized.eligibility;
           adminState.pumbleNotificationPreferencesMessage =
             result && result.message ? String(result.message) :
-              "Your Pumble notification preferences were saved.";
+              "Your notification preferences were saved.";
           renderAdmin_();
         })
         .catch(function(error) {
           if (!isCurrentAdminUserUid_(requestUid)) return;
-          adminState.pumbleNotificationPreferencesSaving = false;
+          adminState.changeRequestNotificationsSaving = false;
           adminState.pumbleNotificationPreferencesError =
             error && error.message ? error.message :
-              "Unable to save your Pumble notification preferences.";
+              "Unable to save your notification preferences.";
           renderAdmin_();
         });
   }
@@ -28514,7 +28509,6 @@
       changeRequests: false,
       serveNeeds: false,
     };
-    adminState.pumbleNotificationPreferencesSaving = false;
     adminState.pumbleNotificationPreferencesMessage = "";
     adminState.pumbleNotificationPreferencesError = "";
     adminState.changeRequestPumbleConnectionLoaded = false;
@@ -28658,7 +28652,7 @@
       return false;
     }
 
-    if (page.id === "integrations") {
+    if (page.id === "notifications") {
       return true;
     }
 

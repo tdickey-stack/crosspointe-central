@@ -1201,6 +1201,12 @@
   line-height: 1.4;
 }
 
+[data-app-route="admin"] .central-admin-field > small {
+  color: var(--cp-muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
 [data-app-route="admin"] .central-admin-field input,
 [data-app-route="admin"] .central-admin-field select {
   width: 100%;
@@ -1731,6 +1737,36 @@
   margin: 0;
   color: var(--cp-muted);
   font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+[data-app-route="admin"] .central-admin-notification-delivery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+[data-app-route="admin"] .central-admin-notification-delivery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 14px;
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  border-radius: 14px;
+  background: rgba(34, 197, 94, 0.06);
+}
+
+[data-app-route="admin"] .central-admin-notification-delivery > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+[data-app-route="admin"] .central-admin-notification-delivery small {
+  overflow-wrap: anywhere;
+  color: var(--cp-muted);
+  font-size: 0.76rem;
   line-height: 1.4;
 }
 
@@ -4167,6 +4203,10 @@
 
   [data-app-route="admin"] .central-admin-notification-option {
     min-height: 0;
+  }
+
+  [data-app-route="admin"] .central-admin-notification-delivery-grid {
+    grid-template-columns: 1fr;
   }
 
   [data-app-route="admin"] .central-admin-pumble-connection {

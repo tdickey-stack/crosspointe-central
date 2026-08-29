@@ -79,6 +79,9 @@
   var PRINT_MODE_EVENT_WEEK_COUNT = 4;
   var PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS = 45;
   var PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS = 70;
+  var PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS = 120;
+  var PRINT_MODE_DESCRIPTION_MAX_CHARACTERS = 140;
+  var PRINT_MODE_DESCRIPTION_OVERRIDE_LIMIT = 12;
   var PRINT_MODE_EVENT_CONTINUATION_TRIGGER_WEIGHT = 6;
   var PRINT_MODE_EVENT_CONTINUATION_MAX_COLUMN_WEIGHT = 7.5;
   var PRINT_MODE_EVENT_CONTINUATION_MIN_PRIMARY_WORDS = 18;
@@ -1104,6 +1107,9 @@
     bulletinCentralData: null,
     bulletinDraft: createEmptyBulletinDraft_(),
     bulletinEditingEventId: "",
+    bulletinEditingFrontContentType: "",
+    bulletinEditingFrontContentId: "",
+    bulletinFrontContentDescriptionDraft: "",
     bulletinEventFilter: "week1",
     bulletinSync: null,
     bulletinError: "",
@@ -1926,6 +1932,33 @@
         event.preventDefault();
         adminState.bulletinEditingEventId = "";
         renderAdmin_();
+        return;
+      }
+
+      if (action === "edit-bulletin-front-content") {
+        event.preventDefault();
+        openBulletinFrontContentEditor_(
+            button.getAttribute("data-admin-bulletin-front-content-type"),
+            button.getAttribute("data-admin-doc-id"),
+        );
+        return;
+      }
+
+      if (action === "close-bulletin-front-content-editor") {
+        event.preventDefault();
+        closeBulletinFrontContentEditor_();
+        return;
+      }
+
+      if (action === "save-bulletin-front-content-description") {
+        event.preventDefault();
+        saveBulletinFrontContentDescription_();
+        return;
+      }
+
+      if (action === "reset-bulletin-front-content-description") {
+        event.preventDefault();
+        resetBulletinFrontContentDescription_();
         return;
       }
 
@@ -4656,6 +4689,18 @@
       return;
     }
 
+    if (event.target.hasAttribute(
+        "data-admin-bulletin-front-content-description",
+    )) {
+      adminState.bulletinFrontContentDescriptionDraft = String(
+          event.target.value || "",
+      ).slice(0, PRINT_MODE_DESCRIPTION_MAX_CHARACTERS);
+      syncBulletinFrontContentDescriptionGuidance_(
+          adminState.bulletinFrontContentDescriptionDraft,
+      );
+      return;
+    }
+
     var field = event.target.getAttribute("data-admin-field");
     var nextValue = event.target.type === "checkbox" ?
       !!event.target.checked :
@@ -5865,6 +5910,7 @@
       renderAdminUserEditorModal_(currentPage),
       renderDeleteConfirmModal_(),
       renderBulletinEventEditorModal_(currentPage),
+      renderBulletinFrontContentEditorModal_(currentPage),
       renderPrintModeQuickAddModal_(currentPage),
       renderBulletinFallbackBlockModal_(currentPage),
       "</div>",
@@ -6432,6 +6478,70 @@
       "</div>",
       "</div>",
       "</div>",
+    ].join("");
+  }
+
+  function renderBulletinFrontContentEditorModal_(currentPage) {
+    if (
+      !currentPage ||
+      currentPage.id !== "bulletin" ||
+      !adminState.bulletinEditingFrontContentId
+    ) {
+      return "";
+    }
+
+    var itemType = adminState.bulletinEditingFrontContentType;
+    var item = getBulletinFrontContentSourceItem_(
+        itemType,
+        adminState.bulletinEditingFrontContentId,
+    );
+    if (!item) {
+      return "";
+    }
+
+    var isCampaign = itemType === "campaign";
+    var title = isCampaign ?
+      String(item.title || "Untitled campaign") :
+      String(item.need || item.title || "Untitled opportunity");
+    var sourceDescription = String(item.description || "").trim();
+    var hasOverride = !!getBulletinDescriptionOverride_(
+        itemType,
+        adminState.bulletinEditingFrontContentId,
+    );
+
+    return [
+      "<div class=\"central-admin-modal central-admin-bulletin-front-copy-modal\" role=\"presentation\">",
+      "<button type=\"button\" class=\"central-admin-modal-scrim\" data-admin-action=\"close-bulletin-front-content-editor\" aria-label=\"Close print copy editor\"></button>",
+      "<div class=\"central-admin-modal-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"central-admin-bulletin-front-copy-modal-title\">",
+      "<div class=\"central-admin-modal-copy\">",
+      "<span class=\"central-admin-kicker\">",
+      isCampaign ? "Campaign Print Copy" : "Serve Opportunity Print Copy",
+      "</span><h3 id=\"central-admin-bulletin-front-copy-modal-title\">",
+      escapeHtml_(title),
+      "</h3><p>This changes only the printed insert. The shared Central description stays unchanged.</p>",
+      "</div>",
+      "<div class=\"central-admin-bulletin-front-copy-fields\">",
+      "<div class=\"central-admin-bulletin-source-copy\"><span>Central Description</span><p>",
+      escapeHtml_(sourceDescription || "No Central description is currently available."),
+      "</p></div>",
+      "<label class=\"central-admin-field\"><span>Printed Description</span>",
+      "<textarea rows=\"5\" maxlength=\"",
+      String(PRINT_MODE_DESCRIPTION_MAX_CHARACTERS),
+      "\" data-admin-bulletin-front-content-description>",
+      escapeHtml_(adminState.bulletinFrontContentDescriptionDraft),
+      "</textarea>",
+      renderBulletinFrontContentDescriptionGuidance_(
+          adminState.bulletinFrontContentDescriptionDraft,
+      ),
+      "</label></div>",
+      "<div class=\"central-admin-action-row central-admin-modal-actions central-admin-bulletin-front-copy-actions\">",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"reset-bulletin-front-content-description\"",
+      hasOverride ? "" : " disabled",
+      ">Use Central Description</button>",
+      "<span class=\"central-admin-bulletin-front-copy-action-spacer\"></span>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"close-bulletin-front-content-editor\">Cancel</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-primary\" data-admin-action=\"save-bulletin-front-content-description\">Save Print Copy</button>",
+      "</div></div></div>",
     ].join("");
   }
 
@@ -7826,6 +7936,89 @@
     renderAdmin_();
   }
 
+  function openBulletinFrontContentEditor_(itemType, itemId) {
+    var normalizedType = itemType === "serve-need" ?
+      "serve-need" : "campaign";
+    var id = String(itemId || "");
+    var item = getBulletinFrontContentSourceItem_(normalizedType, id);
+    if (!item) {
+      return;
+    }
+
+    var override = getBulletinDescriptionOverride_(normalizedType, id);
+    adminState.bulletinEditingFrontContentType = normalizedType;
+    adminState.bulletinEditingFrontContentId = id;
+    adminState.bulletinFrontContentDescriptionDraft = override ?
+      String(override.description || "") :
+      String(item.description || "").trim().slice(
+          0,
+          PRINT_MODE_DESCRIPTION_MAX_CHARACTERS,
+      );
+    adminState.bulletinError = "";
+    renderAdmin_();
+  }
+
+  function closeBulletinFrontContentEditor_() {
+    adminState.bulletinEditingFrontContentType = "";
+    adminState.bulletinEditingFrontContentId = "";
+    adminState.bulletinFrontContentDescriptionDraft = "";
+    adminState.bulletinError = "";
+    renderAdmin_();
+  }
+
+  function saveBulletinFrontContentDescription_() {
+    var itemType = adminState.bulletinEditingFrontContentType;
+    var itemId = adminState.bulletinEditingFrontContentId;
+    var item = getBulletinFrontContentSourceItem_(itemType, itemId);
+    if (!item) {
+      closeBulletinFrontContentEditor_();
+      return;
+    }
+
+    var description = String(
+        adminState.bulletinFrontContentDescriptionDraft || "",
+    ).trim().slice(0, PRINT_MODE_DESCRIPTION_MAX_CHARACTERS);
+    var sourceDescription = String(item.description || "").trim();
+    setBulletinDescriptionOverride_(
+        itemType,
+        itemId,
+        description === sourceDescription ? null : description,
+    );
+    markAdminDirtyScope_("bulletin");
+    requestBulletinPreviewLayoutTransition_(
+        itemType === "serve-need" ? "serve:" + itemId : "campaign:" + itemId,
+        "content",
+    );
+    adminState.bulletinEditingFrontContentType = "";
+    adminState.bulletinEditingFrontContentId = "";
+    adminState.bulletinFrontContentDescriptionDraft = "";
+    adminState.bulletinError = "";
+    adminState.bulletinMessage = "";
+    renderAdmin_();
+  }
+
+  function resetBulletinFrontContentDescription_() {
+    var itemType = adminState.bulletinEditingFrontContentType;
+    var itemId = adminState.bulletinEditingFrontContentId;
+    if (!itemId) {
+      closeBulletinFrontContentEditor_();
+      return;
+    }
+
+    setBulletinDescriptionOverride_(itemType, itemId, null);
+    markAdminDirtyScope_("bulletin");
+    requestBulletinPreviewLayoutTransition_(
+        itemType === "serve-need" ? "serve:" + itemId : "campaign:" + itemId,
+        "content",
+    );
+    adminState.bulletinEditingFrontContentType = "";
+    adminState.bulletinEditingFrontContentId = "";
+    adminState.bulletinFrontContentDescriptionDraft = "";
+    adminState.bulletinError = "";
+    adminState.bulletinMessage = "";
+    renderAdmin_();
+  }
+
   function openBulletinFallbackBlockEditor_(blockId) {
     var blocks = adminState.bulletinDraft.fallbackBlocks || [];
     var block = blockId ? blocks.find(function(item) {
@@ -8299,7 +8492,7 @@
     } else if (step === 4) {
       content = renderPrintModeEventsStep_(canSave);
     } else {
-      content = renderPrintModeReviewStep_();
+      content = renderPrintModeReviewStep_(canSave);
     }
 
     adminState.printModeStepDirection = "";
@@ -8795,7 +8988,7 @@
     ].join("");
   }
 
-  function renderPrintModeReviewStep_() {
+  function renderPrintModeReviewStep_(canSave) {
     var fullPage = getBulletinPrintFormat_() === "full-page";
     var selectedEventCount = getBulletinEventDraftsInWindow_().filter(
         function(item) {
@@ -8830,7 +9023,8 @@
       "<strong>", fullPage ? "Full-page insert" : "Half-letter insert",
       "</strong><small>",
       fullPage ? "Portrait · single-sided · no cutting" :
-        "Landscape · duplex · center cut",
+        "Landscape · duplex · center cut · guide " +
+          (adminState.bulletinDraft.showCutLine === true ? "on" : "off"),
       adminState.bulletinDraft.printColorMode === "bw" ?
         " · black & white" : " · color",
       "</small></div>",
@@ -8849,6 +9043,23 @@
         "</strong><small>Printed on the reverse side</small></div>",
       ].join(""),
       "</div>",
+      fullPage ? "" : [
+        "<div class=\"central-admin-item central-admin-print-mode-cut-line-control\">",
+        "<div class=\"central-admin-item-header\"><strong>Center Cut Guide</strong>",
+        renderStatusPill_(
+            adminState.bulletinDraft.showCutLine === true ? "On" : "Off",
+            adminState.bulletinDraft.showCutLine === true ? "is-live" : "is-safe",
+        ),
+        "</div>",
+        "<p class=\"central-admin-note\">Optionally print a dashed guide between the two half-page inserts. It appears only in Print / Save PDF and is off by default.</p>",
+        renderAdminCheckboxField_({
+          label: "Show center cut guide",
+          field: "bulletin.showCutLine",
+          checked: adminState.bulletinDraft.showCutLine === true,
+          disabled: !canSave,
+        }),
+        "</div>",
+      ].join(""),
       "<div class=\"central-admin-item central-admin-print-mode-print-note\">",
       "<strong>Ready to print?</strong>",
       "<p>",
@@ -9314,7 +9525,10 @@
           (icon.id === iconId ? " selected" : "") + ">" +
           escapeHtml_(icon.label) + "</option>";
       }).join(""),
-      "</select></div></div>",
+      "</select></div>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-print-copy-button\" data-admin-action=\"edit-bulletin-front-content\" data-admin-bulletin-front-content-type=\"campaign\" data-admin-doc-id=\"",
+      escapeAttr_(id), "\"", canSave ? "" : " disabled",
+      ">Edit Print Copy</button></div>",
     ].join("");
   }
 
@@ -9340,7 +9554,10 @@
       escapeAttr_(id), "\"", checked ? " checked" : "",
       canSave && !disableUnchecked ? "" : " disabled", ">",
       "<span><small>", escapeHtml_(ministry), "</small><strong>",
-      escapeHtml_(title), "</strong></span></label></div>",
+      escapeHtml_(title), "</strong></span></label>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-print-copy-button\" data-admin-action=\"edit-bulletin-front-content\" data-admin-bulletin-front-content-type=\"serve-need\" data-admin-doc-id=\"",
+      escapeAttr_(id), "\"", canSave ? "" : " disabled",
+      ">Edit Print Copy</button></div>",
     ].join("");
   }
 
@@ -9431,7 +9648,9 @@
     }
 
     return [
-      "<div class=\"central-bulletin-print-root is-half-letter\" aria-hidden=\"true\">",
+      "<div class=\"central-bulletin-print-root is-half-letter",
+      adminState.bulletinDraft.showCutLine === true ? " has-cut-line" : "",
+      "\" aria-hidden=\"true\">",
       "<section class=\"central-bulletin-sheet central-bulletin-sheet-front\">",
       renderBulletinPanel_("front", false),
       renderBulletinPanel_("front", false),
@@ -10143,6 +10362,75 @@
         messageElement.textContent = state.message;
       }
     });
+  }
+
+  function getBulletinFrontContentDescriptionGuidanceState_(value) {
+    var characterCount = String(value || "").length;
+    var state = {
+      characterCount: characterCount,
+      className: "",
+      message: characterCount ? "Recommended length" :
+        "Description will be hidden",
+    };
+
+    if (characterCount > PRINT_MODE_DESCRIPTION_MAX_CHARACTERS) {
+      state.className = " is-over-limit";
+      state.message = "Shorten before saving";
+    } else if (
+      characterCount > PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS
+    ) {
+      state.className = " is-warning";
+      state.message = "Shorten for the best print fit";
+    }
+
+    return state;
+  }
+
+  function renderBulletinFrontContentDescriptionGuidance_(value) {
+    var state = getBulletinFrontContentDescriptionGuidanceState_(value);
+    return [
+      "<span class=\"central-admin-bulletin-description-guidance",
+      state.className,
+      "\" data-admin-bulletin-front-copy-guidance aria-live=\"polite\">",
+      "<span data-admin-bulletin-description-character-value>",
+      escapeHtml_(String(state.characterCount)),
+      " characters</span><span aria-hidden=\"true\">·</span><span ",
+      "data-admin-bulletin-description-character-message>",
+      escapeHtml_(state.message),
+      "</span><small>",
+      String(PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS),
+      " recommended · ",
+      String(PRINT_MODE_DESCRIPTION_MAX_CHARACTERS),
+      " maximum</small></span>",
+    ].join("");
+  }
+
+  function syncBulletinFrontContentDescriptionGuidance_(value) {
+    var element = document.querySelector(
+        "[data-admin-bulletin-front-copy-guidance]",
+    );
+    if (!element) {
+      return;
+    }
+
+    var state = getBulletinFrontContentDescriptionGuidanceState_(value);
+    element.classList.toggle("is-warning", state.className === " is-warning");
+    element.classList.toggle(
+        "is-over-limit",
+        state.className === " is-over-limit",
+    );
+    var countElement = element.querySelector(
+        "[data-admin-bulletin-description-character-value]",
+    );
+    var messageElement = element.querySelector(
+        "[data-admin-bulletin-description-character-message]",
+    );
+    if (countElement) {
+      countElement.textContent = String(state.characterCount) + " characters";
+    }
+    if (messageElement) {
+      messageElement.textContent = state.message;
+    }
   }
 
   function renderBulletinPrintEventGroup_(group) {
@@ -17996,6 +18284,14 @@
           refreshedDraft.campaignIcons || {},
           currentDraft.campaignIcons || {},
       );
+      refreshedDraft.campaignDescriptionOverrides =
+        normalizeBulletinDescriptionOverrides_(
+            currentDraft.campaignDescriptionOverrides,
+        );
+      refreshedDraft.serveNeedDescriptionOverrides =
+        normalizeBulletinDescriptionOverrides_(
+            currentDraft.serveNeedDescriptionOverrides,
+        );
       adminState.bulletinRefreshing = false;
       adminState.bulletinSync = result && result.sync || null;
       adminState.bulletinCentralData = centralData;
@@ -18906,6 +19202,7 @@
       serviceDate: getDefaultSundayDateInputValue_(),
       printFormat: "half-letter",
       printColorMode: "color",
+      showCutLine: false,
       heroSource: "featured",
       frontContentSource: "mixed",
       headings: {
@@ -18941,7 +19238,9 @@
       events: [],
       campaignIds: [],
       campaignIcons: {},
+      campaignDescriptionOverrides: [],
       serveNeedIds: [],
+      serveNeedDescriptionOverrides: [],
       fallbackBlocks: createDefaultBulletinFallbackBlocks_(),
       frontContentOrder: [],
       backContentOrder: [],
@@ -18978,6 +19277,7 @@
       "full-page" : "half-letter";
     draft.printColorMode = source.printColorMode === "bw" ?
       "bw" : "color";
+    draft.showCutLine = source.showCutLine === true;
     draft.heroSource = source.heroSource === "manual" || !currentFeatured ?
       "manual" : "featured";
     draft.frontContentSource = "mixed";
@@ -19189,6 +19489,14 @@
             0,
             remainingFrontItemSlots > 0 ? PRINT_MODE_MAX_SERVE_NEEDS : 0,
         );
+    draft.campaignDescriptionOverrides =
+      normalizeBulletinDescriptionOverrides_(
+          source.campaignDescriptionOverrides,
+      );
+    draft.serveNeedDescriptionOverrides =
+      normalizeBulletinDescriptionOverrides_(
+          source.serveNeedDescriptionOverrides,
+      );
 
     return draft;
   }
@@ -19427,6 +19735,82 @@
     });
   }
 
+  function normalizeBulletinDescriptionOverrides_(value) {
+    var normalized = [];
+    var seenIds = {};
+    (Array.isArray(value) ? value : []).forEach(function(item) {
+      if (normalized.length >= PRINT_MODE_DESCRIPTION_OVERRIDE_LIMIT) {
+        return;
+      }
+      var id = String(item && item.id || "").trim().slice(0, 160);
+      if (!id || seenIds[id]) {
+        return;
+      }
+      seenIds[id] = true;
+      normalized.push({
+        id: id,
+        description: String(item && item.description || "")
+            .trim()
+            .slice(0, PRINT_MODE_DESCRIPTION_MAX_CHARACTERS),
+      });
+    });
+    return normalized;
+  }
+
+  function getBulletinDescriptionOverrideField_(itemType) {
+    return itemType === "serve-need" ?
+      "serveNeedDescriptionOverrides" :
+      "campaignDescriptionOverrides";
+  }
+
+  function getBulletinDescriptionOverride_(itemType, itemId) {
+    var field = getBulletinDescriptionOverrideField_(itemType);
+    var id = String(itemId || "");
+    return normalizeBulletinDescriptionOverrides_(
+        adminState.bulletinDraft[field],
+    ).find(function(item) {
+      return item.id === id;
+    }) || null;
+  }
+
+  function setBulletinDescriptionOverride_(itemType, itemId, description) {
+    var field = getBulletinDescriptionOverrideField_(itemType);
+    var id = String(itemId || "").trim();
+    var overrides = normalizeBulletinDescriptionOverrides_(
+        adminState.bulletinDraft[field],
+    ).filter(function(item) {
+      return item.id !== id;
+    });
+    if (id && description !== null) {
+      overrides.push({
+        id: id,
+        description: String(description || "")
+            .trim()
+            .slice(0, PRINT_MODE_DESCRIPTION_MAX_CHARACTERS),
+      });
+    }
+    adminState.bulletinDraft[field] = normalizeBulletinDescriptionOverrides_(
+        overrides,
+    );
+  }
+
+  function getBulletinFrontContentSourceItem_(itemType, itemId) {
+    var data = adminState.bulletinCentralData || {};
+    var items = itemType === "serve-need" ? data.serveNeeds : data.campaigns;
+    var id = String(itemId || "");
+    return (Array.isArray(items) ? items : []).find(function(item) {
+      return String(item && item.id || "") === id;
+    }) || null;
+  }
+
+  function applyBulletinDescriptionOverride_(itemType, item) {
+    var source = item || {};
+    var override = getBulletinDescriptionOverride_(itemType, source.id);
+    return Object.assign({}, source, override ? {
+      description: override.description,
+    } : {});
+  }
+
   function normalizeBulletinCampaignIconId_(value) {
     var iconId = String(value || "").trim().toLowerCase();
     var isAllowed = BULLETIN_CAMPAIGN_ICONS.some(function(icon) {
@@ -19524,6 +19908,9 @@
         .filter(function(item) {
           return selectedIds.indexOf(String(item.id || "")) !== -1;
         })
+        .map(function(item) {
+          return applyBulletinDescriptionOverride_("campaign", item);
+        })
         .slice(0, PRINT_MODE_MAX_CAMPAIGNS);
   }
 
@@ -19533,6 +19920,9 @@
     return (Array.isArray(data.serveNeeds) ? data.serveNeeds : [])
         .filter(function(item) {
           return selectedIds.indexOf(String(item.id || "")) !== -1;
+        })
+        .map(function(item) {
+          return applyBulletinDescriptionOverride_("serve-need", item);
         })
         .slice(0, PRINT_MODE_MAX_SERVE_NEEDS);
   }
@@ -19900,6 +20290,7 @@
       printFormat: draft.printFormat === "full-page" ?
         "full-page" : "half-letter",
       printColorMode: draft.printColorMode === "bw" ? "bw" : "color",
+      showCutLine: draft.showCutLine === true,
       heroSource: draft.heroSource === "manual" ? "manual" : "featured",
       frontContentSource: "mixed",
       headings: {
@@ -20006,7 +20397,13 @@
               ),
             };
           }),
+      campaignDescriptionOverrides: normalizeBulletinDescriptionOverrides_(
+          draft.campaignDescriptionOverrides,
+      ),
       serveNeedIds: serveNeedIds,
+      serveNeedDescriptionOverrides: normalizeBulletinDescriptionOverrides_(
+          draft.serveNeedDescriptionOverrides,
+      ),
       // Keep the first selection for older clients until Print Mode has been
       // promoted everywhere.
       serveNeedId: String(serveNeedIds[0] || ""),

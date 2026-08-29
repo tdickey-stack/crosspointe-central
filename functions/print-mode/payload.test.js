@@ -13,6 +13,7 @@ test("Print Mode payload defaults preserve the public contract", () => {
   assert.equal(payload.serviceDate, "");
   assert.equal(payload.printFormat, "half-letter");
   assert.equal(payload.printColorMode, "color");
+  assert.equal(payload.showCutLine, false);
   assert.equal(payload.heroSource, "featured");
   assert.equal(payload.frontContentSource, "mixed");
   assert.equal(payload.headings.frontHeading, "This Week at\nCrossPointe");
@@ -35,7 +36,9 @@ test("Print Mode payload defaults preserve the public contract", () => {
   assert.equal(payload.backCustomPlacement, "after-events");
   assert.deepEqual(payload.events, []);
   assert.deepEqual(payload.campaignIds, []);
+  assert.deepEqual(payload.campaignDescriptionOverrides, []);
   assert.deepEqual(payload.serveNeedIds, []);
+  assert.deepEqual(payload.serveNeedDescriptionOverrides, []);
   assert.equal(payload.serveNeedId, "");
 });
 
@@ -52,6 +55,7 @@ test("Print Mode payload normalizes settings within existing limits", () => {
     serviceDate: "2026-07-26",
     printFormat: "full-page",
     printColorMode: "bw",
+    showCutLine: true,
     heroSource: "manual",
     frontContentSource: "fallback",
     headings: {
@@ -67,7 +71,14 @@ test("Print Mode payload normalizes settings within existing limits", () => {
       {id: "a", icon: "gift"},
       {id: "b", icon: "not-real"},
     ],
+    campaignDescriptionOverrides: [
+      {id: " a ", description: "Short campaign print copy."},
+      {id: "a", description: "Duplicate is ignored."},
+    ],
     serveNeedIds: ["serve-1", "serve-2"],
+    serveNeedDescriptionOverrides: [
+      {id: " serve-1 ", description: ""},
+    ],
     fallbackBlocks: [{
       id: "front-feature",
       title: "Front Feature",
@@ -89,6 +100,7 @@ test("Print Mode payload normalizes settings within existing limits", () => {
   assert.equal(payload.serviceDate, "2026-07-26");
   assert.equal(payload.printFormat, "full-page");
   assert.equal(payload.printColorMode, "bw");
+  assert.equal(payload.showCutLine, true);
   assert.equal(payload.heroSource, "manual");
   assert.equal(payload.frontContentSource, "mixed");
   assert.equal(payload.headings.frontHeading, "First line\nSecond line");
@@ -99,7 +111,15 @@ test("Print Mode payload normalizes settings within existing limits", () => {
     {id: "a", icon: "heart"},
     {id: "b", icon: "general"},
   ]);
+  assert.deepEqual(payload.campaignDescriptionOverrides, [{
+    id: "a",
+    description: "Short campaign print copy.",
+  }]);
   assert.deepEqual(payload.serveNeedIds, []);
+  assert.deepEqual(payload.serveNeedDescriptionOverrides, [{
+    id: "serve-1",
+    description: "",
+  }]);
   assert.equal(payload.serveNeedId, "");
   assert.deepEqual(payload.fallbackBlocks, [{
     id: "front-feature",
@@ -126,6 +146,30 @@ test("Print Mode payload normalizes settings within existing limits", () => {
     location: "",
     included: false,
     includeDescription: true,
+  }]);
+});
+
+test("Print Mode bounds sparse description overrides", () => {
+  const payload = normalizePrintModePayload({
+    campaignDescriptionOverrides: Array.from(
+        {length: 14},
+        (_unused, index) => ({
+          id: "campaign-" + String(index + 1),
+          description: "x".repeat(180),
+        }),
+    ),
+    serveNeedDescriptionOverrides: [
+      {id: "serve-1", description: ""},
+      {id: "serve-1", description: "Duplicate"},
+      {id: "", description: "Missing ID"},
+    ],
+  });
+
+  assert.equal(payload.campaignDescriptionOverrides.length, 12);
+  assert.equal(payload.campaignDescriptionOverrides[0].description.length, 140);
+  assert.deepEqual(payload.serveNeedDescriptionOverrides, [{
+    id: "serve-1",
+    description: "",
   }]);
 });
 

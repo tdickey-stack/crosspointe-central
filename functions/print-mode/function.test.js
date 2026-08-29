@@ -131,6 +131,15 @@ test("Print Mode POST preserves settings and audit write paths", async () => {
     body: {
       serviceDate: "2026-07-26",
       printFormat: "full-page",
+      showCutLine: true,
+      campaignDescriptionOverrides: [{
+        id: "campaign-1",
+        description: "Short campaign copy.",
+      }],
+      serveNeedDescriptionOverrides: [{
+        id: "serve-1",
+        description: "",
+      }],
       events: [{id: "event-1", title: "Event"}],
     },
   }, response);
@@ -142,6 +151,15 @@ test("Print Mode POST preserves settings and audit write paths", async () => {
       "centralAdmin/root/public/bulletinMode",
   );
   assert.equal(documentWrites[0].value.serviceDate, "2026-07-26");
+  assert.equal(documentWrites[0].value.showCutLine, true);
+  assert.deepEqual(documentWrites[0].value.campaignDescriptionOverrides, [{
+    id: "campaign-1",
+    description: "Short campaign copy.",
+  }]);
+  assert.deepEqual(documentWrites[0].value.serveNeedDescriptionOverrides, [{
+    id: "serve-1",
+    description: "",
+  }]);
   assert.equal(documentWrites[0].value.updatedByUid, "user-1");
   assert.equal(
       documentWrites[0].value.updatedByEmail,

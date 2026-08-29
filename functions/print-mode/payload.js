@@ -7,6 +7,8 @@ const PRINT_MODE_MAX_CAMPAIGNS = 3;
 const PRINT_MODE_MAX_SERVE_NEEDS = 3;
 const PRINT_MODE_MAX_FRONT_CONTENT_ITEMS = 4;
 const PRINT_MODE_MAX_CUSTOM_BLOCKS = 8;
+const PRINT_MODE_DESCRIPTION_OVERRIDE_LIMIT = 12;
+const PRINT_MODE_DESCRIPTION_MAX_CHARACTERS = 140;
 const PRINT_MODE_CAMPAIGN_ICON_IDS = new Set([
   "general",
   "gift",
@@ -150,6 +152,12 @@ export function normalizePrintModePayload(sourceData) {
   const rawCampaignIcons = Array.isArray(source.campaignIcons) ?
     source.campaignIcons :
     [];
+  const campaignDescriptionOverrides = normalizePrintModeDescriptionOverrides_(
+      source.campaignDescriptionOverrides,
+  );
+  const serveNeedDescriptionOverrides = normalizePrintModeDescriptionOverrides_(
+      source.serveNeedDescriptionOverrides,
+  );
   const campaignIcons = [];
   const seenCampaignIconIds = new Set();
 
@@ -200,6 +208,7 @@ export function normalizePrintModePayload(sourceData) {
     printFormat: source.printFormat === "full-page" ?
       "full-page" : "half-letter",
     printColorMode: source.printColorMode === "bw" ? "bw" : "color",
+    showCutLine: source.showCutLine === true,
     heroSource: source.heroSource === "manual" ? "manual" : "featured",
     frontContentSource: "mixed",
     headings: {
@@ -293,9 +302,36 @@ export function normalizePrintModePayload(sourceData) {
         }).filter((item) => item.id),
     campaignIds: normalizedCampaignIds,
     campaignIcons: campaignIcons,
+    campaignDescriptionOverrides: campaignDescriptionOverrides,
     serveNeedIds: normalizedServeNeedIds,
+    serveNeedDescriptionOverrides: serveNeedDescriptionOverrides,
     serveNeedId: normalizedServeNeedIds[0] || "",
   };
+}
+
+function normalizePrintModeDescriptionOverrides_(source) {
+  const normalized = [];
+  const seenIds = new Set();
+
+  (Array.isArray(source) ? source : []).forEach((item) => {
+    if (normalized.length >= PRINT_MODE_DESCRIPTION_OVERRIDE_LIMIT) {
+      return;
+    }
+    const id = normalizePrintModeText(item && item.id, 160);
+    if (!id || seenIds.has(id)) {
+      return;
+    }
+    seenIds.add(id);
+    normalized.push({
+      id: id,
+      description: normalizePrintModeLongText_(
+          item && item.description,
+          PRINT_MODE_DESCRIPTION_MAX_CHARACTERS,
+      ),
+    });
+  });
+
+  return normalized;
 }
 
 function normalizePrintModeBlockSize_(value) {

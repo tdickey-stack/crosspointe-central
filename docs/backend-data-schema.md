@@ -241,6 +241,8 @@ public Central frontend.
 ```text
 serviceDate
 printFormat (half-letter | full-page)
+printColorMode (color | bw)
+showCutLine
 heroSource (featured | manual)
 headings.frontHeading
 headings.backEyebrow
@@ -267,7 +269,12 @@ events[].includeDescription
 campaignIds[]
 campaignIcons[].id
 campaignIcons[].icon
+campaignDescriptionOverrides[].id
+campaignDescriptionOverrides[].description
 serveNeedId
+serveNeedIds[]
+serveNeedDescriptionOverrides[].id
+serveNeedDescriptionOverrides[].description
 updatedAt
 updatedByUid
 updatedByEmail
@@ -277,6 +284,9 @@ Event IDs are Planning Center event-instance IDs. Bulletin Mode stores only
 print-specific overrides; schedules and Planning Center defaults continue to
 come from Planning Center through the live Central data flow. `printFormat`
 defaults to `half-letter` for existing documents that do not have the field.
+`showCutLine` defaults to `false`; Campaign and Serve description override
+arrays are sparse, and an explicit empty description suppresses the source
+description in Print Mode without changing the shared Central record.
 
 ## What "Upsert" Means Here
 

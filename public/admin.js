@@ -79,6 +79,9 @@
   var PRINT_MODE_EVENT_WEEK_COUNT = 4;
   var PRINT_MODE_EVENT_DESCRIPTION_RECOMMENDED_WORDS = 45;
   var PRINT_MODE_EVENT_DESCRIPTION_WARNING_WORDS = 70;
+  // The featured hero keeps more copy space than its supporting cards.
+  var PRINT_MODE_HERO_DESCRIPTION_RECOMMENDED_CHARACTERS = 400;
+  var PRINT_MODE_HERO_DESCRIPTION_WARNING_CHARACTERS = 600;
   var PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS = 120;
   var PRINT_MODE_DESCRIPTION_MAX_CHARACTERS = 140;
   var PRINT_MODE_DESCRIPTION_OVERRIDE_LIMIT = 12;
@@ -4793,6 +4796,16 @@
 
     if (field.indexOf("bulletin.") === 0) {
       updateBulletinDraftField_(field.replace("bulletin.", ""), nextValue);
+      if (
+        field === "bulletin.featured.description" ||
+        field === "bulletin.fallbackHero.description"
+      ) {
+        syncBulletinHeroDescriptionGuidance_(
+            field === "bulletin.featured.description" ?
+              "featured" : "manual",
+            nextValue,
+        );
+      }
       if (field === "bulletin.serviceDate" ||
         field === "bulletin.featured.includeDescription" ||
         event.type === "change") {
@@ -9288,10 +9301,11 @@
         maxLength: 180,
         disabled: !canSave,
       }),
-      renderAdminTextareaField_({
+      renderBulletinHeroDescriptionField_({
         label: "Printed Description",
         field: "bulletin.featured.description",
         value: featured.description,
+        guidanceKey: "featured",
         rows: 3,
         maxLength: 1200,
         disabled: !canSave,
@@ -9404,10 +9418,11 @@
         maxLength: 180,
         disabled: !canSave,
       }),
-      renderAdminTextareaField_({
+      renderBulletinHeroDescriptionField_({
         label: "Welcome Message",
         field: "bulletin.fallbackHero.description",
         value: fallback.description,
+        guidanceKey: "manual",
         rows: 4,
         maxLength: 1200,
         wide: true,
@@ -10308,6 +10323,109 @@
     }
 
     return state;
+  }
+
+  function renderBulletinHeroDescriptionField_(config) {
+    var source = config || {};
+    return [
+      "<label class=\"central-admin-field",
+      source.wide ? " central-admin-field-wide" : "",
+      "\"><span>", escapeHtml_(source.label || ""), "</span>",
+      "<textarea data-admin-field=\"", escapeAttr_(source.field || ""),
+      "\" rows=\"", escapeAttr_(String(source.rows || 3)), "\"",
+      source.maxLength ? " maxlength=\"" +
+        escapeAttr_(String(source.maxLength)) + "\"" : "",
+      source.disabled ? " disabled" : "",
+      ">", escapeHtml_(source.value || ""), "</textarea>",
+      source.hint ? "<small class=\"central-admin-field-hint\">" +
+        escapeHtml_(source.hint) + "</small>" : "",
+      renderBulletinHeroDescriptionGuidance_(
+          source.value,
+          source.guidanceKey,
+      ),
+      "</label>",
+    ].join("");
+  }
+
+  function getBulletinHeroDescriptionGuidanceState_(value) {
+    var characterCount = String(value || "").length;
+    var state = {
+      characterCount: characterCount,
+      className: "",
+      message: characterCount ?
+        "Featured copy has priority" : "No hero description",
+    };
+
+    if (
+      characterCount > PRINT_MODE_HERO_DESCRIPTION_WARNING_CHARACTERS
+    ) {
+      state.className = " is-over-limit";
+      state.message = "Shorten to keep inside the hero card";
+    } else if (
+      characterCount > PRINT_MODE_HERO_DESCRIPTION_RECOMMENDED_CHARACTERS
+    ) {
+      state.className = " is-warning";
+      state.message = "May clip when the front page is full";
+    }
+
+    return state;
+  }
+
+  function renderBulletinHeroDescriptionGuidance_(value, guidanceKey) {
+    var state = getBulletinHeroDescriptionGuidanceState_(value);
+    return [
+      "<span class=\"central-admin-bulletin-description-guidance",
+      state.className,
+      "\" data-admin-bulletin-hero-description-guidance=\"",
+      escapeAttr_(guidanceKey || "hero"),
+      "\" aria-live=\"polite\"><span ",
+      "data-admin-bulletin-hero-description-character-value>",
+      escapeHtml_(String(state.characterCount)),
+      " characters</span><span aria-hidden=\"true\">·</span><span ",
+      "data-admin-bulletin-hero-description-character-message>",
+      escapeHtml_(state.message),
+      "</span><small>",
+      String(PRINT_MODE_HERO_DESCRIPTION_RECOMMENDED_CHARACTERS),
+      " characters recommended; supporting cards use 120</small>",
+      "</span>",
+    ].join("");
+  }
+
+  function syncBulletinHeroDescriptionGuidance_(guidanceKey, value) {
+    var state = getBulletinHeroDescriptionGuidanceState_(value);
+    document.querySelectorAll(
+        "[data-admin-bulletin-hero-description-guidance]",
+    ).forEach(function(element) {
+      if (
+        element.getAttribute(
+            "data-admin-bulletin-hero-description-guidance",
+        ) !== String(guidanceKey || "hero")
+      ) {
+        return;
+      }
+
+      element.classList.toggle(
+          "is-warning",
+          state.className === " is-warning",
+      );
+      element.classList.toggle(
+          "is-over-limit",
+          state.className === " is-over-limit",
+      );
+      var countElement = element.querySelector(
+          "[data-admin-bulletin-hero-description-character-value]",
+      );
+      var messageElement = element.querySelector(
+          "[data-admin-bulletin-hero-description-character-message]",
+      );
+      if (countElement) {
+        countElement.textContent =
+          String(state.characterCount) + " characters";
+      }
+      if (messageElement) {
+        messageElement.textContent = state.message;
+      }
+    });
   }
 
   function renderBulletinEventDescriptionGuidance_(item) {

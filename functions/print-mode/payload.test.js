@@ -58,6 +58,16 @@ test("Print Mode payload normalizes settings within existing limits", () => {
     showCutLine: true,
     heroSource: "manual",
     frontContentSource: "fallback",
+    featuredEvent: {
+      id: " featured-1 ",
+      title: " Featured Print Title ",
+      description: "PCO featured print copy persists.",
+    },
+    fallbackHero: {
+      eyebrow: " Welcome ",
+      title: " Manual Print Title ",
+      description: "Manual hero print copy persists.",
+    },
     headings: {
       frontHeading: " First line \n Second line \n Ignored line ",
     },
@@ -103,6 +113,18 @@ test("Print Mode payload normalizes settings within existing limits", () => {
   assert.equal(payload.showCutLine, true);
   assert.equal(payload.heroSource, "manual");
   assert.equal(payload.frontContentSource, "mixed");
+  assert.equal(payload.featuredEvent.id, "featured-1");
+  assert.equal(payload.featuredEvent.title, "Featured Print Title");
+  assert.equal(
+      payload.featuredEvent.description,
+      "PCO featured print copy persists.",
+  );
+  assert.equal(payload.fallbackHero.eyebrow, "Welcome");
+  assert.equal(payload.fallbackHero.title, "Manual Print Title");
+  assert.equal(
+      payload.fallbackHero.description,
+      "Manual hero print copy persists.",
+  );
   assert.equal(payload.headings.frontHeading, "First line\nSecond line");
   assert.equal(payload.giving.monthlyBudget, 12346);
   assert.equal(payload.giving.monthToDateGiving, 0);

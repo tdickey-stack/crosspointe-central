@@ -6704,8 +6704,8 @@ button:disabled {
 .central-bulletin-featured,
 .central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
 .central-bulletin-featured {
-  max-height: 1.76in;
-  min-height: 1.76in;
+  max-height: 2.2in;
+  min-height: 2.2in;
   overflow: hidden;
 }
 
@@ -6720,7 +6720,7 @@ button:disabled {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
+  -webkit-line-clamp: 8;
 }
 
 .central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
@@ -6736,8 +6736,8 @@ button:disabled {
 
 .central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
 .central-bulletin-featured {
-  max-height: 1.58in;
-  min-height: 1.58in;
+  max-height: 2.2in;
+  min-height: 2.2in;
   padding: 0.105in 0.12in;
 }
 
@@ -6750,13 +6750,13 @@ button:disabled {
 .central-bulletin-panel-front.is-front-density-4:not(.is-full-page)
 .central-bulletin-description {
   margin-top: 0.04in;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 8;
 }
 
 .central-bulletin-panel-front.is-front-density-4.is-front-live-dense:not(.is-full-page)
 .central-bulletin-featured {
-  max-height: 1.18in;
-  min-height: 1.18in;
+  max-height: 2.2in;
+  min-height: 2.2in;
 }
 
 .central-bulletin-panel-front.is-front-density-4.is-front-live-dense:not(.is-full-page)
@@ -6778,7 +6778,7 @@ button:disabled {
 .central-bulletin-panel-front.is-front-density-4.is-front-live-dense:not(.is-full-page)
 .central-bulletin-description {
   margin-top: 0.025in;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 8;
 }
 
 .central-bulletin-panel-front.is-front-density-4:not(.is-full-page)

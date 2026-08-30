@@ -25,6 +25,34 @@
 * left off on all campaign-functions from helpers.js being moved to this module and currently bringing over normalizeCampaignsChangeSet_ from index.js
 */
 
+// Campaign functions in index.js that can eventually appear in their own files similar to campaigns/contact.js...
+// getFirestoreCampaignsOverride_
+// shareCampaignInterest
+// queueCampaignInterestNotification_
+// buildCampaignContactEmailHtml_
+// markCampaignInterestNotificationFailed_
+// getFirestoreCampaignsOverride_
+// toCentralCampaignFromFirestoreDoc_
+// getVisibleCampaignItems_
+// normalizeCampaignPublicItem_
+// getNormalizedCampaignOngoingValue_
+// isCampaignVisible_
+// getSubmittedCampaignsChangeSet_
+// normalizeCampaignsPayloadItems_
+// publishPreviewCampaignsPayload_
+// resolveCampaignsApprovalPayload_
+// getCurrentCampaignsBaselineItems_
+// normalizeCampaignsComparisonItems_
+// normalizeCampaignsChangeSet_
+// normalizeCampaignComparisonItem_
+// summarizeCampaignsChangeSet_
+// computeCampaignsChangeSet_
+// applyCampaignsChangeSet_
+// buildCampaignsChangeRequestSummary_
+// summarizeCampaignsSubmittedChangeSet_
+// createCampaignsComparisonHash_
+// buildPublishedCampaignPayload_
+
 import {
     isActive_,
     isTruthyValue_,

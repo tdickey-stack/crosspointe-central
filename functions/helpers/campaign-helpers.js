@@ -21,17 +21,42 @@
 * in either functions/helpers/helpers.js or functions/index.js. If it is declared
 * and defined in those files as well, then delete it from there and import it
 * into index.js.
+*
+* left off on all campaign-functions from helpers.js being moved to this module and currently bringing over normalizeCampaignsChangeSet_ from index.js
 */
 
+// Campaign functions in index.js that can eventually appear in their own files similar to campaigns/contact.js...
+// getFirestoreCampaignsOverride_
+// shareCampaignInterest
+// queueCampaignInterestNotification_
+// buildCampaignContactEmailHtml_
+// markCampaignInterestNotificationFailed_
+// getFirestoreCampaignsOverride_
+// toCentralCampaignFromFirestoreDoc_
+// getVisibleCampaignItems_
+// normalizeCampaignPublicItem_
+// getNormalizedCampaignOngoingValue_
+// isCampaignVisible_
+// getSubmittedCampaignsChangeSet_
+// normalizeCampaignsPayloadItems_
+// publishPreviewCampaignsPayload_
+// resolveCampaignsApprovalPayload_
+// getCurrentCampaignsBaselineItems_
+// normalizeCampaignsComparisonItems_
+// normalizeCampaignsChangeSet_
+// normalizeCampaignComparisonItem_
+// summarizeCampaignsChangeSet_
+// computeCampaignsChangeSet_
+// applyCampaignsChangeSet_
+// buildCampaignsChangeRequestSummary_
+// summarizeCampaignsSubmittedChangeSet_
+// createCampaignsComparisonHash_
+// buildPublishedCampaignPayload_
+
 import {
-    // areCampaignsComparisonItemsEqual_,
-    // getCampaignConflictLabel_,
+    isActive_,
     isTruthyValue_,
-    // mapCampaignsComparisonItemsById_,
-    // normalizeCampaignDateValue_,
-    // normalizeCampaignPublishDocId_,
     normalizeSortValue_,
-    // sortCampaignsComparisonItems_,
     trimFirestoreStringValue_
 } from './helpers'
 
@@ -177,11 +202,68 @@ function sortCampaignsComparisonItems_(a, b) {
   return String(a && a.id || "").localeCompare(String(b && b.id || ""));
 }
 
+function isCampaignVisible_(item, todayKey) {
+  if (!isActive_(item)) {
+    return false;
+  }
+
+  if (getNormalizedCampaignOngoingValue_(item)) {
+    return true;
+  }
+
+  const startDate = normalizeCampaignDateValue_(item && item.start_date);
+  const endDate = normalizeCampaignDateValue_(item && item.end_date);
+
+  if (!startDate && !endDate) {
+    return true;
+  }
+
+  if (startDate && todayKey < startDate) {
+    return false;
+  }
+
+  if (endDate && todayKey > endDate) {
+    return false;
+  }
+
+  return true;
+}
+
+function computeCampaignsChangeSet_(baselineItems, proposedItems) {
+  const baselineById = mapCampaignsComparisonItemsById_(baselineItems);
+  const proposedById = mapCampaignsComparisonItemsById_(proposedItems);
+  const upsertItems = [];
+  const removeIds = [];
+
+  proposedById.forEach((item, id) => {
+    const baselineItem = baselineById.get(id) || null;
+
+    if (!baselineItem || !areCampaignsComparisonItemsEqual_(baselineItem, item)) {
+      upsertItems.push(item);
+    }
+  });
+
+  baselineById.forEach((item, id) => {
+    if (!proposedById.has(id)) {
+      removeIds.push(id);
+    }
+  });
+
+  return {
+    upsertItems: upsertItems.sort(sortCampaignsComparisonItems_),
+    removeIds: removeIds.sort(),
+  };
+}
+
+
+
 export {
     areCampaignsComparisonItemsEqual_,
+    computeCampaignsChangeSet_,
     getCampaignConflictLabel_,
     getNormalizedCampaignOngoingValue_,
     getVisibleCampaignItems_,
+    isCampaignVisible_,
     mapCampaignsComparisonItemsById_,
     normalizeCampaignDateValue_,
     normalizeCampaignPublishDocId_,

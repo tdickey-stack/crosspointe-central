@@ -1049,6 +1049,10 @@ function normalizeCampaignDateValue_(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : "";
 }
 
+function isActive_(item) {
+  return String((item && item.active) || "").toLowerCase() === "true";
+}
+
 export {
   areCampaignsComparisonItemsEqual_,
   areNextStepsComparisonItemsEqual_,
@@ -1102,6 +1106,7 @@ export {
   hasQuickLinksDraftBeenInitialized_,
   htmlToPlainText_,
 
+  isActive_,
   isLocalCentralHostname_,
   isTruthyValue_,
   isVerifiedGoogleInviteIdentity_,

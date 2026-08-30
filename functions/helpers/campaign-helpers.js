@@ -21,17 +21,14 @@
 * in either functions/helpers/helpers.js or functions/index.js. If it is declared
 * and defined in those files as well, then delete it from there and import it
 * into index.js.
+*
+* left off on all campaign-functions from helpers.js being moved to this module and currently bringing over normalizeCampaignsChangeSet_ from index.js
 */
 
 import {
-    // areCampaignsComparisonItemsEqual_,
-    // getCampaignConflictLabel_,
+    isActive_,
     isTruthyValue_,
-    // mapCampaignsComparisonItemsById_,
-    // normalizeCampaignDateValue_,
-    // normalizeCampaignPublishDocId_,
     normalizeSortValue_,
-    // sortCampaignsComparisonItems_,
     trimFirestoreStringValue_
 } from './helpers'
 
@@ -177,11 +174,68 @@ function sortCampaignsComparisonItems_(a, b) {
   return String(a && a.id || "").localeCompare(String(b && b.id || ""));
 }
 
+function isCampaignVisible_(item, todayKey) {
+  if (!isActive_(item)) {
+    return false;
+  }
+
+  if (getNormalizedCampaignOngoingValue_(item)) {
+    return true;
+  }
+
+  const startDate = normalizeCampaignDateValue_(item && item.start_date);
+  const endDate = normalizeCampaignDateValue_(item && item.end_date);
+
+  if (!startDate && !endDate) {
+    return true;
+  }
+
+  if (startDate && todayKey < startDate) {
+    return false;
+  }
+
+  if (endDate && todayKey > endDate) {
+    return false;
+  }
+
+  return true;
+}
+
+function computeCampaignsChangeSet_(baselineItems, proposedItems) {
+  const baselineById = mapCampaignsComparisonItemsById_(baselineItems);
+  const proposedById = mapCampaignsComparisonItemsById_(proposedItems);
+  const upsertItems = [];
+  const removeIds = [];
+
+  proposedById.forEach((item, id) => {
+    const baselineItem = baselineById.get(id) || null;
+
+    if (!baselineItem || !areCampaignsComparisonItemsEqual_(baselineItem, item)) {
+      upsertItems.push(item);
+    }
+  });
+
+  baselineById.forEach((item, id) => {
+    if (!proposedById.has(id)) {
+      removeIds.push(id);
+    }
+  });
+
+  return {
+    upsertItems: upsertItems.sort(sortCampaignsComparisonItems_),
+    removeIds: removeIds.sort(),
+  };
+}
+
+
+
 export {
     areCampaignsComparisonItemsEqual_,
+    computeCampaignsChangeSet_,
     getCampaignConflictLabel_,
     getNormalizedCampaignOngoingValue_,
     getVisibleCampaignItems_,
+    isCampaignVisible_,
     mapCampaignsComparisonItemsById_,
     normalizeCampaignDateValue_,
     normalizeCampaignPublishDocId_,

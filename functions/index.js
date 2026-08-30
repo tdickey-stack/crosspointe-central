@@ -53,6 +53,7 @@ import {
   hasQuickLinksDraftBeenInitialized_,
   htmlToPlainText_,
 
+  isActive_,
   isLocalCentralHostname_,
   isTruthyValue_,
   isVerifiedGoogleInviteIdentity_,
@@ -7156,10 +7157,6 @@ function sortByDate_(a, b) {
 
 function sortBySort_(a, b) {
   return Number(a.sort || 999) - Number(b.sort || 999);
-}
-
-function isActive_(item) {
-  return String((item && item.active) || "").toLowerCase() === "true";
 }
 
 function dateKey_(date, timezone) {

@@ -40,6 +40,7 @@ export function resolveCentralEmbedEvents(publishedConfig, eventGroups) {
           Number.MAX_SAFE_INTEGER : sourceOrder,
         _itemOrder: itemIndex,
         key: "event-" + String(itemIndex + 1) + "-" + source.id,
+        featured: source.featured === true,
         title: overrides.title !== null ? overrides.title : source.title,
         date: overrides.date !== null ? overrides.date : source.date,
         time: overrides.time !== null ? overrides.time : source.time,
@@ -102,6 +103,9 @@ function compareCentralEmbedSources_(left, right) {
 }
 
 function compareResolvedCentralEmbedEvents_(left, right) {
+  if (left.featured !== right.featured) {
+    return left.featured ? -1 : 1;
+  }
   const timeDifference = left._sortStartsAtMs - right._sortStartsAtMs;
   if (Number.isFinite(timeDifference) && timeDifference !== 0) {
     return timeDifference;
@@ -188,31 +192,46 @@ function renderCentralEmbedEventHtml_(event, layout) {
   const schedule = [event.date, event.time].filter(Boolean).join(" · ");
 
   return [
-    "<article class=\"central-embed-event\">",
+    "<article itemscope itemtype=\"https://schema.org/Event\" class=\"central-embed-event",
+    event.featured ? " is-featured" : "",
+    "\" data-central-embed-event-kind=\"",
+    event.featured ? "featured" : "normal",
+    "\">",
     event.imageUrl ?
-      "<div class=\"central-embed-media\"><img src=\"" +
+      "<div class=\"central-embed-media\"><img itemprop=\"image\" src=\"" +
         escapeAttr_(event.imageUrl) + "\" alt=\"" +
         escapeAttr_(event.title + " event graphic") +
         "\" loading=\"lazy\"></div>" :
       "",
     "<div class=\"central-embed-copy\">",
+    event.featured ?
+      "<span class=\"central-embed-featured-label\">Featured</span>" :
+      "",
     schedule ?
-      "<time class=\"central-embed-time\"" + dateTime + ">" +
+      "<time class=\"central-embed-time\"" +
+        (event.startsAt ? " itemprop=\"startDate\"" : "") +
+        dateTime + ">" +
         escapeHtml_(schedule) + "</time>" :
       "",
-    "<h2 class=\"central-embed-title\">",
+    event.endsAt ?
+      "<meta itemprop=\"endDate\" content=\"" +
+        escapeAttr_(event.endsAt) + "\">" :
+      "",
+    "<h2 class=\"central-embed-title\" itemprop=\"name\">",
     escapeHtml_(event.title),
     "</h2>",
     event.location ?
-      "<p class=\"central-embed-location\">" +
-        escapeHtml_(event.location) + "</p>" :
+      "<p class=\"central-embed-location\" itemprop=\"location\" " +
+        "itemscope itemtype=\"https://schema.org/Place\"><span " +
+        "itemprop=\"name\">" + escapeHtml_(event.location) +
+        "</span></p>" :
       "",
     event.description && layout !== CENTRAL_EMBED_LAYOUT_COMPACT ?
-      "<p class=\"central-embed-description\">" +
+      "<p class=\"central-embed-description\" itemprop=\"description\">" +
         escapeHtml_(event.description).replace(/\n/g, "<br>") + "</p>" :
       "",
     event.actionUrl ?
-      "<a class=\"central-embed-action\" href=\"" +
+      "<a class=\"central-embed-action\" itemprop=\"url\" href=\"" +
         escapeAttr_(event.actionUrl) +
         "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
         escapeHtml_(event.actionLabel) + "</a>" :

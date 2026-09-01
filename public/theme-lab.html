@@ -11,8 +11,17 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <script>
       (function() {
-        var queryTheme = new URLSearchParams(window.location.search).get("theme");
+        var query = new URLSearchParams(window.location.search);
+        var queryTheme = query.get("theme");
         var theme = "light";
+
+        document.documentElement.setAttribute("data-app-route", "public");
+        if (query.get("season") === "catm") {
+          document.documentElement.setAttribute(
+            "data-seasonal-experience",
+            "christmas-at-the-movies"
+          );
+        }
 
         try {
           if (queryTheme === "light" || queryTheme === "dark") {
@@ -41,10 +50,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&amp;family=Montserrat:wght@400;600;700;800;900&amp;display=swap"
       rel="stylesheet"
     >
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/christmas-movies.css">
     <style>
       body.theme-lab-page {
         min-height: 100vh;
@@ -259,15 +269,17 @@
           <div class="theme-lab-title">
             <h1>Central Theme Lab</h1>
             <p>
-              Use this preview page to tune the dark mode visuals without
-              waiting on live data.
+              Compare normal Central and Christmas At The Movies in both color
+              themes without waiting on live data.
             </p>
           </div>
 
           <div class="theme-lab-actions">
             <a class="theme-lab-link" data-theme-link="light" href="/theme-lab.html?theme=light">Light</a>
             <a class="theme-lab-link" data-theme-link="dark" href="/theme-lab.html?theme=dark">Dark</a>
-            <a class="theme-lab-link" href="/loader-lab.html">Loader Lab</a>
+            <a class="theme-lab-link" data-season-link="normal" href="/theme-lab.html">Normal Central</a>
+            <a class="theme-lab-link" data-season-link="catm" href="/theme-lab.html?season=catm">Christmas At The Movies</a>
+            <a class="theme-lab-link" id="theme-lab-loader-link" href="/loader-lab.html">Loader Lab</a>
           </div>
         </div>
       </div>
@@ -285,19 +297,32 @@
                   CrossPointe Central
                 </div>
 
-                <button
-                  type="button"
-                  class="theme-toggle"
-                  id="theme-lab-toggle-home"
-                >
-                  <span class="theme-toggle-copy">
-                    <strong>Dark Mode</strong>
-                    <small id="theme-lab-toggle-home-status">Off</small>
-                  </span>
-                  <span class="theme-toggle-switch" aria-hidden="true">
-                    <span class="theme-toggle-thumb"></span>
-                  </span>
-                </button>
+                <div class="central-display-controls">
+                  <button
+                    type="button"
+                    class="theme-toggle"
+                    id="theme-lab-toggle-home"
+                  >
+                    <span class="theme-toggle-copy">
+                      <strong>Dark Mode</strong>
+                      <small id="theme-lab-toggle-home-status">Off</small>
+                    </span>
+                    <span class="theme-toggle-switch" aria-hidden="true">
+                      <span class="theme-toggle-thumb"></span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    class="seasonal-experience-toggle"
+                    data-season-toggle
+                  >
+                    Christmas Mode
+                  </button>
+                </div>
+              </div>
+
+              <div class="catm-hero-brand catm-only" aria-hidden="true">
+                <img src="/CATM_LOGO.svg" alt="">
               </div>
 
               <div class="hero-grid">
@@ -444,19 +469,28 @@
                 </span>
 
                 <div class="sunday-badge-actions">
-                  <button
-                    type="button"
-                    class="theme-toggle"
-                    id="theme-lab-toggle-sunday"
-                  >
-                    <span class="theme-toggle-copy">
-                      <strong>Dark Mode</strong>
-                      <small id="theme-lab-toggle-sunday-status">Off</small>
-                    </span>
-                    <span class="theme-toggle-switch" aria-hidden="true">
-                      <span class="theme-toggle-thumb"></span>
-                    </span>
-                  </button>
+                  <div class="central-display-controls">
+                    <button
+                      type="button"
+                      class="theme-toggle"
+                      id="theme-lab-toggle-sunday"
+                    >
+                      <span class="theme-toggle-copy">
+                        <strong>Dark Mode</strong>
+                        <small id="theme-lab-toggle-sunday-status">Off</small>
+                      </span>
+                      <span class="theme-toggle-switch" aria-hidden="true">
+                        <span class="theme-toggle-thumb"></span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      class="seasonal-experience-toggle"
+                      data-season-toggle
+                    >
+                      Christmas Mode
+                    </button>
+                  </div>
 
                   <span
                     class="sunday-status-pill live"
@@ -465,6 +499,10 @@
                     Live Now
                   </span>
                 </div>
+              </div>
+
+              <div class="catm-hero-brand catm-only" aria-hidden="true">
+                <img src="/CATM_LOGO.svg" alt="">
               </div>
 
               <h1>Everything you need for this morning.</h1>
@@ -592,6 +630,7 @@
       (function() {
         var queryParams = new URLSearchParams(window.location.search);
         var theme = document.documentElement.getAttribute("data-theme") || "light";
+        var season = queryParams.get("season") === "catm" ? "catm" : "normal";
         var serviceStatus = queryParams.get("status") || "live";
         var toggleIds = [
           ["theme-lab-toggle-home", "theme-lab-toggle-home-status"],
@@ -622,6 +661,11 @@
 
           url.searchParams.set("theme", theme);
           url.searchParams.set("status", serviceStatus);
+          if (season === "catm") {
+            url.searchParams.set("season", "catm");
+          } else {
+            url.searchParams.delete("season");
+          }
           url.hash = "";
           window.history.replaceState({}, "", url.toString());
         }
@@ -659,7 +703,8 @@
               link.setAttribute(
                 "href",
                 "/theme-lab.html?theme=" + encodeURIComponent(themeLink) +
-                "&status=" + encodeURIComponent(serviceStatus)
+                "&status=" + encodeURIComponent(serviceStatus) +
+                (season === "catm" ? "&season=catm" : "")
               );
             }
 
@@ -668,6 +713,42 @@
               link.getAttribute("data-theme-link") === theme
             );
           });
+        }
+
+        function syncSeason() {
+          var isSeasonal = season === "catm";
+
+          if (isSeasonal) {
+            document.documentElement.setAttribute(
+              "data-seasonal-experience",
+              "christmas-at-the-movies"
+            );
+          } else {
+            document.documentElement.removeAttribute("data-seasonal-experience");
+          }
+
+          document.querySelectorAll("[data-season-toggle]").forEach(function(button) {
+            button.textContent = isSeasonal ? "Use Normal Central" : "Christmas Mode";
+            button.setAttribute("aria-pressed", isSeasonal ? "true" : "false");
+          });
+
+          document.querySelectorAll("[data-season-link]").forEach(function(link) {
+            var linkSeason = link.getAttribute("data-season-link");
+            var url = new URL("/theme-lab.html", window.location.origin);
+            url.searchParams.set("theme", theme);
+            url.searchParams.set("status", serviceStatus);
+            if (linkSeason === "catm") url.searchParams.set("season", "catm");
+            link.setAttribute("href", url.pathname + url.search);
+            link.classList.toggle("is-active", linkSeason === season);
+          });
+
+          var loaderLink = document.getElementById("theme-lab-loader-link");
+          if (loaderLink) {
+            loaderLink.setAttribute(
+              "href",
+              "/loader-lab.html" + (isSeasonal ? "?season=catm" : "")
+            );
+          }
         }
 
         function syncServiceStatus() {
@@ -694,6 +775,7 @@
           button.addEventListener("click", function() {
             theme = theme === "dark" ? "light" : "dark";
             syncTheme();
+            syncSeason();
             syncPreviewUrl_();
           });
         });
@@ -706,10 +788,21 @@
             serviceStatus = nextStatus;
             syncServiceStatus();
             syncTheme();
+            syncSeason();
             syncPreviewUrl_();
           });
         });
 
+        document.querySelectorAll("[data-season-toggle]").forEach(function(button) {
+          button.addEventListener("click", function() {
+            season = season === "catm" ? "normal" : "catm";
+            syncSeason();
+            syncTheme();
+            syncPreviewUrl_();
+          });
+        });
+
+        syncSeason();
         syncTheme();
         syncServiceStatus();
       }());

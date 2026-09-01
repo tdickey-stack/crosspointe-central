@@ -611,6 +611,14 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.embeds-event-option .embeds-featured-note {
+  color: var(--embeds-plum-dark);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .embeds-check {
   align-items: center;
   border: 1px solid var(--embeds-line);
@@ -638,6 +646,11 @@ textarea:focus-visible {
 
 .embeds-selected-event.is-missing {
   border-color: rgba(155, 60, 73, 0.3);
+}
+
+.embeds-selected-event.is-featured {
+  border-color: rgba(118, 81, 111, 0.35);
+  box-shadow: inset 4px 0 0 var(--embeds-plum);
 }
 
 .embeds-selected-top {

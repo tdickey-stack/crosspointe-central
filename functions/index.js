@@ -210,6 +210,7 @@ import {
   findPlanningCenterTagId,
   getCentralFeaturedEventCandidates,
   getPlanningCenterEventSchedule,
+  planningCenterInstanceHasTag,
 } from "./planning-center/featured-event.js";
 import {
   filterExpiredCentralEvents,
@@ -5735,9 +5736,19 @@ async function fetchCentralCalendarEvents_(
       (data.data || []).map(async (instance) => {
         const attrs = instance.attributes || {};
 
-        if (!instanceHasCentralTag_(instance, tagMap)) {
+        if (!planningCenterInstanceHasTag(
+            instance,
+            tagMap,
+            PCO_CENTRAL_TAG_NAME,
+        )) {
           return null;
         }
+
+        const featured = planningCenterInstanceHasTag(
+            instance,
+            tagMap,
+            PCO_CENTRAL_FEATURED_TAG_NAME,
+        );
 
         const startsAt = attrs.published_starts_at || attrs.starts_at || "";
         if (!startsAt) return null;
@@ -5755,7 +5766,7 @@ async function fetchCentralCalendarEvents_(
             instance,
             eventRef && eventMap[eventRef.id] ? eventMap[eventRef.id] : {},
             roomRules,
-            false,
+            featured,
             eventOverrides,
         );
       }),
@@ -6214,17 +6225,6 @@ async function buildCentralCalendarItem_(
     _planningCenterNamedDoorsOpenTime: namedDoorsOpenTime,
     _dateObj: startsDate,
   };
-}
-
-function instanceHasCentralTag_(instance, tagMap) {
-  const tagRefs =
-    instance.relationships &&
-    instance.relationships.tags &&
-    instance.relationships.tags.data ?
-      instance.relationships.tags.data :
-      [];
-
-  return tagRefs.some((tagRef) => tagMap[tagRef.id] === PCO_CENTRAL_TAG_NAME);
 }
 
 function cleanLocation_(location) {

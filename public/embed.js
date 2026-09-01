@@ -213,6 +213,11 @@
       renderError_(host, "");
       return;
     }
+    var hasStaticHtml = !!host.querySelector(".central-embed-root");
+    if (hasStaticHtml) {
+      enhanceEmbed_(host);
+      host.setAttribute("data-central-embed-static", "true");
+    }
     host.setAttribute("data-central-embed-loading", "true");
     host.setAttribute("aria-busy", "true");
     fetch(
@@ -231,7 +236,7 @@
       host.setAttribute("data-central-embed-loaded", "true");
       host.removeAttribute("aria-busy");
     }).catch(function() {
-      renderError_(host, embedId);
+      if (!hasStaticHtml) renderError_(host, embedId);
       host.removeAttribute("aria-busy");
     });
   }

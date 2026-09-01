@@ -527,6 +527,58 @@ function renderThemeToggle_() {
   ].join("");
 }
 
+function getCentralSeasonalExperienceState_() {
+  if (!window.CentralSeasonalExperience ||
+    typeof window.CentralSeasonalExperience.getState !== "function") {
+    return {
+      available: false,
+      active: false,
+      mode: "normal",
+    };
+  }
+
+  return window.CentralSeasonalExperience.getState();
+}
+
+function isChristmasAtTheMoviesActive_() {
+  return getCentralSeasonalExperienceState_().active === true;
+}
+
+function renderSeasonalExperienceToggle_() {
+  var state = getCentralSeasonalExperienceState_();
+  if (!state.available) return "";
+
+  var label = state.active ? "Use Normal Central" : "Christmas Mode";
+  var detail = state.active ?
+    "Switch to the normal Central experience" :
+    "Preview the Christmas At The Movies experience";
+
+  return [
+    "<button type=\"button\" class=\"seasonal-experience-toggle\"",
+    " aria-pressed=\"", state.active ? "true" : "false", "\"",
+    " aria-label=\"", escapeAttr(detail), "\"",
+    " onclick=\"toggleCentralSeasonalExperience()\">",
+      escapeHtml(label),
+    "</button>",
+  ].join("");
+}
+
+function renderCentralDisplayControls_() {
+  return [
+    "<div class=\"central-display-controls\">",
+      renderThemeToggle_(),
+      renderSeasonalExperienceToggle_(),
+    "</div>",
+  ].join("");
+}
+
+function toggleCentralSeasonalExperience() {
+  if (!window.CentralSeasonalExperience ||
+    typeof window.CentralSeasonalExperience.toggle !== "function") return;
+
+  window.CentralSeasonalExperience.toggle(true);
+}
+
 function isSundayModeActive_() {
   return !!(
     currentCentralData &&
@@ -712,6 +764,13 @@ function hideCentralLoader_(immediate) {
   centralLoaderVisible = false;
   loader.classList.add("is-collapsing");
 
+  var reducedMotion = !!(
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+  var collapseDurationMs = reducedMotion ? 80 : CENTRAL_LOADER_COLLAPSE_MS;
+  var revealDurationMs = reducedMotion ? 160 : CENTRAL_LOADER_DOOR_MS;
+
   centralLoaderRevealTimeout = window.setTimeout(function() {
     centralLoaderRevealTimeout = 0;
     loader.classList.add("is-revealing");
@@ -722,8 +781,8 @@ function hideCentralLoader_(immediate) {
       loader.setAttribute("aria-hidden", "true");
       centralLoaderBootStartedAt = 0;
       centralLoaderHideTimeout = 0;
-    }, CENTRAL_LOADER_DOOR_MS);
-  }, CENTRAL_LOADER_COLLAPSE_MS);
+    }, revealDurationMs);
+  }, collapseDurationMs);
 }
 
 function setLoadingMessage(message, detail, progress) {
@@ -802,6 +861,14 @@ function updateCentralLoaderUi_() {
 
   loader.style.setProperty("--central-loader-progress", progressValue);
   loader.style.setProperty("--central-loader-progress-ratio", progressRatio);
+  loader.style.setProperty(
+      "--catm-source-pile-radius-x",
+      Math.max(0.01, 48 * (progress / 100)).toFixed(2) + "%",
+  );
+  loader.style.setProperty(
+      "--catm-source-pile-radius-y",
+      Math.max(0.01, 50 * (progress / 100)).toFixed(2) + "%",
+  );
 
   if (barEl) {
     barEl.style.width = progressValue;
@@ -809,9 +876,11 @@ function updateCentralLoaderUi_() {
 
   if (percentEl) {
     percentEl.textContent = progressText;
+    percentEl.setAttribute("aria-valuenow", String(Math.round(progress)));
   }
 
   syncCentralLoaderDots_(loader, progress);
+  syncCatmPopcornLoader_(loader, progress);
 }
 
 function getCentralLoaderDotCount_(progress) {
@@ -839,6 +908,64 @@ function syncCentralLoaderDots_(loader, progress) {
   dots.forEach(function(dotEl, index) {
     dotEl.classList.toggle("is-visible", index < visibleCount);
   });
+}
+
+function syncCatmPopcornLoader_(loader, progress) {
+  if (!loader) return;
+
+  var popcorn = loader.querySelector(".catm-loader-popcorn-animated");
+  if (!popcorn) return;
+
+  var clamped = Math.max(0, Math.min(100, Number(progress) || 0));
+  var previous = Number(popcorn.getAttribute("data-progress"));
+  if (!Number.isFinite(previous)) previous = 0;
+
+  var kernels = popcorn.querySelectorAll(".catm-loader-kernel");
+  var previousCount = 0;
+  var nextCount = 0;
+  var newlyPopped = 0;
+
+  kernels.forEach(function(kernel) {
+    var threshold = Number(kernel.getAttribute("data-threshold")) || 0;
+    var wasPopped = kernel.classList.contains("is-popped");
+    var shouldPop = clamped >= threshold;
+
+    if (wasPopped) previousCount += 1;
+    if (shouldPop) nextCount += 1;
+
+    if (shouldPop && !wasPopped) {
+      kernel.style.animationDelay = Math.min(newlyPopped * 42, 210) + "ms";
+      newlyPopped += 1;
+    }
+
+    kernel.classList.toggle("is-popped", shouldPop);
+  });
+
+  if (nextCount > previousCount) {
+    popcorn.classList.remove("is-popping");
+    void popcorn.offsetWidth;
+    popcorn.classList.add("is-popping");
+  }
+
+  var flyawayToTrigger = null;
+  popcorn.querySelectorAll(".catm-loader-flyaway").forEach(function(kernel) {
+    var threshold = Number(kernel.getAttribute("data-threshold")) || 0;
+    var crossedThreshold = previous < threshold && clamped >= threshold;
+
+    if (clamped < threshold) {
+      kernel.classList.remove("is-flying");
+    } else if (crossedThreshold) {
+      flyawayToTrigger = kernel;
+    }
+  });
+
+  if (flyawayToTrigger) {
+    flyawayToTrigger.classList.remove("is-flying");
+    void flyawayToTrigger.offsetWidth;
+    flyawayToTrigger.classList.add("is-flying");
+  }
+
+  popcorn.setAttribute("data-progress", clamped.toFixed(2));
 }
 
 function startCentralLoaderTrickle_(maxProgress) {
@@ -870,7 +997,9 @@ function finalizeCentralLoader_() {
   stopCentralLoaderTrickle_();
   setLoadingMessage(
       "Central Is Ready",
-      "Opening the doors to everything happening at CrossPointe.",
+      isChristmasAtTheMoviesActive_() ?
+        "Raising the curtain on everything happening at CrossPointe." :
+        "Opening the doors to everything happening at CrossPointe.",
       100,
   );
 
@@ -1207,7 +1336,10 @@ function renderCentral(data) {
               "<span class=\"eyebrow-dot\"></span>",
               escapeHtml(s.site_title || "CrossPointe Central"),
             "</div>",
-            renderThemeToggle_(),
+            renderCentralDisplayControls_(),
+          "</div>",
+          "<div class=\"catm-hero-brand catm-only\" aria-hidden=\"true\">",
+            "<img src=\"/CATM_LOGO.svg\" alt=\"\">",
           "</div>",
           "<div class=\"hero-grid\">",
             "<div>",
@@ -2042,11 +2174,14 @@ function renderSundayPage(data) {
               escapeHtml(eyebrowText),
             "</span>",
             "<div class=\"sunday-badge-actions\">",
-              renderThemeToggle_(),
+              renderCentralDisplayControls_(),
               "<span class=\"sunday-status-pill " + escapeAttr(heroStatus.tone || "") + "\">",
                 escapeHtml(heroStatus.badge || "Sunday Mode"),
               "</span>",
             "</div>",
+          "</div>",
+          "<div class=\"catm-hero-brand catm-only\" aria-hidden=\"true\">",
+            "<img src=\"/CATM_LOGO.svg\" alt=\"\">",
           "</div>",
           "<h1>" + escapeHtml(heroHeading) + "</h1>",
           "<p>" + escapeHtml(heroSubheading) + "</p>",

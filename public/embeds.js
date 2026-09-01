@@ -594,7 +594,7 @@
       "<span class=\"embeds-status ", embed.published ? "is-published\">PUBLISHED" : "\">DRAFT", "</span></div></section>",
       embed.published ? renderPublishTools_(embed) : "",
       renderLayoutPicker_(embed),
-      "<div class=\"embeds-editor-grid\"><section class=\"embeds-panel embeds-picker\"><div class=\"embeds-panel-heading\"><div><h2>1. Select events</h2><p>Checking one recurring instance includes its future Planning Center dates automatically.</p></div><button class=\"embeds-button is-small\" type=\"button\" data-embeds-action=\"refresh-events\">Refresh</button></div>",
+      "<div class=\"embeds-editor-grid\"><section class=\"embeds-panel embeds-picker\"><div class=\"embeds-panel-heading\"><div><h2>1. Select events</h2><p>Checking one recurring instance includes its future Planning Center dates automatically. Events tagged Central Featured are promoted automatically.</p></div><button class=\"embeds-button is-small\" type=\"button\" data-embeds-action=\"refresh-events\">Refresh</button></div>",
       "<label class=\"embeds-search\"><span>Search Central events</span><input type=\"search\" data-embeds-search placeholder=\"Title, date, or location\" value=\"", escapeAttr_(state.search), "\"></label>",
       "<div class=\"embeds-event-options\">",
       filteredEvents.length ? filteredEvents.map(function(eventItem) {
@@ -603,7 +603,7 @@
         }));
       }).join("") : "<p class=\"embeds-empty-inline\">No events match that search.</p>",
       "</div></section>",
-      "<section class=\"embeds-selected-column\"><div class=\"embeds-panel embeds-selected-heading\"><div class=\"embeds-panel-heading\"><div><h2>2. Customize and order</h2><p>Blank fields continue using current Central / Planning Center values.</p></div><b>", String(items.length), " selected</b></div></div>",
+      "<section class=\"embeds-selected-column\"><div class=\"embeds-panel embeds-selected-heading\"><div class=\"embeds-panel-heading\"><div><h2>2. Customize and order</h2><p>Blank fields continue using current Central / Planning Center values. Published cards put Central Featured events first, then sort each group chronologically.</p></div><b>", String(items.length), " selected</b></div></div>",
       items.length ? items.map(function(item, index) {
         return renderSelectedEvent_(item, index, items.length);
       }).join("") : "<div class=\"embeds-panel embeds-empty\"><h3>Select an event to begin</h3><p>The event stays connected to Central unless you override a field for this embed.</p></div>",
@@ -614,7 +614,7 @@
 
   function renderPublishTools_(embed) {
     return [
-      "<section class=\"embeds-panel embeds-publish-tools\"><div><p class=\"embeds-kicker\">LIVE EMBED</p><h2>Stable code and server-renderable HTML</h2><p>The code keeps the same embed ID. Publishing later replaces its live configuration without replacing this snippet.</p></div><div class=\"embeds-publish-actions\"><button class=\"embeds-button is-primary\" type=\"button\" data-embeds-action=\"copy-code\" data-embed-id=\"", escapeAttr_(embed.id), "\">Copy Embed Code</button><button class=\"embeds-button\" type=\"button\" data-embeds-action=\"copy-html-url\" data-embed-id=\"", escapeAttr_(embed.id), "\">Copy HTML Endpoint</button><a class=\"embeds-button\" href=\"", escapeAttr_(getHtmlEndpoint_(embed.id)), "\" target=\"_blank\" rel=\"noopener\">Preview Live</a></div><pre>", escapeHtml_(getEmbedCode_(embed.id)), "</pre></section>",
+      "<section class=\"embeds-panel embeds-publish-tools\"><div><p class=\"embeds-kicker\">LIVE EMBED</p><h2>Crawlable HTML with live updates</h2><p>Copied code includes the current semantic event HTML for bots and no-JavaScript visitors. The loader refreshes it from Central for browsers. For always-current HTML in the host page source itself, configure that site’s server or build to fetch the HTML endpoint.</p></div><div class=\"embeds-publish-actions\"><button class=\"embeds-button is-primary\" type=\"button\" data-embeds-action=\"copy-code\" data-embed-id=\"", escapeAttr_(embed.id), "\"", state.working ? " disabled" : "", ">", state.working ? "Preparing…" : "Copy Crawlable Embed Code", "</button><a class=\"embeds-button\" href=\"/embed-lab.html?id=", encodeURIComponent(embed.id), "\">Test in Embed Lab</a><button class=\"embeds-button\" type=\"button\" data-embeds-action=\"copy-html-url\" data-embed-id=\"", escapeAttr_(embed.id), "\">Copy HTML Endpoint</button><a class=\"embeds-button\" href=\"", escapeAttr_(getHtmlEndpoint_(embed.id)), "\" target=\"_blank\" rel=\"noopener\">Preview Live</a></div><pre>", escapeHtml_(getEmbedCode_(embed.id, "<!-- Current published event cards are inserted here when copied. -->")), "</pre></section>",
     ].join("");
   }
 
@@ -645,7 +645,7 @@
   function renderEventOption_(eventItem, selected) {
     var occurrenceCount = getSeriesSourcesForEvent_(eventItem).length;
     return [
-      "<button type=\"button\" class=\"embeds-event-option", selected ? " is-selected" : "", "\" data-embeds-action=\"toggle-event\" data-source-event-id=\"", escapeAttr_(eventItem.id), "\"><span class=\"embeds-check\">", selected ? "✓" : "", "</span><span><strong>", escapeHtml_(eventItem.title), "</strong><small>", escapeHtml_([eventItem.date, eventItem.time].filter(Boolean).join(" · ")), "</small>", eventItem.location ? "<small>" + escapeHtml_(eventItem.location) + "</small>" : "", occurrenceCount > 1 ? "<small class=\"embeds-series-note\">Recurring series · " + String(occurrenceCount) + " dates in the next 60 days</small>" : "", "</span></button>",
+      "<button type=\"button\" class=\"embeds-event-option", selected ? " is-selected" : "", "\" data-embeds-action=\"toggle-event\" data-source-event-id=\"", escapeAttr_(eventItem.id), "\"><span class=\"embeds-check\">", selected ? "✓" : "", "</span><span><strong>", escapeHtml_(eventItem.title), "</strong>", eventItem.featured ? "<small class=\"embeds-featured-note\">Central Featured</small>" : "", "<small>", escapeHtml_([eventItem.date, eventItem.time].filter(Boolean).join(" · ")), "</small>", eventItem.location ? "<small>" + escapeHtml_(eventItem.location) + "</small>" : "", occurrenceCount > 1 ? "<small class=\"embeds-series-note\">Recurring series · " + String(occurrenceCount) + " dates in the next 60 days</small>" : "", "</span></button>",
     ].join("");
   }
 
@@ -661,7 +661,7 @@
     var image = overrides.image && overrides.image.url ?
       overrides.image.url : source.imageUrl;
     return [
-      "<article class=\"embeds-panel embeds-selected-event\"><div class=\"embeds-selected-top\"><div><span>", seriesSources.length > 1 ? "RECURRING SERIES · " + String(seriesSources.length) + " UPCOMING INSTANCES" : "EVENT " + String(index + 1), "</span><h3>", escapeHtml_(overrides.title || source.title), "</h3><p>", escapeHtml_([overrides.date || source.date, overrides.time || source.time].filter(Boolean).join(" · ")), "</p>", seriesSources.length > 1 ? "<small class=\"embeds-series-help\">Future Planning Center instances in this series are included automatically. Overrides below apply to every instance.</small>" : "", "</div>", renderOrderActions_(item, index, total), "</div>",
+      "<article class=\"embeds-panel embeds-selected-event", source.featured ? " is-featured" : "", "\"><div class=\"embeds-selected-top\"><div><span>", source.featured ? "CENTRAL FEATURED" : (seriesSources.length > 1 ? "RECURRING SERIES · " + String(seriesSources.length) + " UPCOMING INSTANCES" : "EVENT " + String(index + 1)), "</span><h3>", escapeHtml_(overrides.title || source.title), "</h3><p>", escapeHtml_([overrides.date || source.date, overrides.time || source.time].filter(Boolean).join(" · ")), "</p>", source.featured ? "<small class=\"embeds-series-help\">Featured automatically from the Central Featured tag in Planning Center.</small>" : (seriesSources.length > 1 ? "<small class=\"embeds-series-help\">Future Planning Center instances in this series are included automatically. Overrides below apply to every instance.</small>" : ""), "</div>", renderOrderActions_(item, index, total), "</div>",
       "<div class=\"embeds-fields\">",
       renderOverrideInput_(item, "title", "Title", source.title),
       renderOverrideInput_(item, "date", "Date", source.date),
@@ -692,14 +692,30 @@
     ].join("");
   }
 
-  function getEmbedCode_(id) {
+  function getEmbedCode_(id, staticHtml) {
     var htmlEndpoint = getHtmlEndpoint_(id);
+    var publishedHtml = String(staticHtml || "").trim();
+    var staticContent = publishedHtml ?
+      indentEmbedHtml_(publishedHtml) + "\n" +
+        "  <p class=\"central-embed-source\"><a href=\"" +
+        htmlEndpoint + "\">View the latest CrossPointe events</a></p>\n" :
+      "  <p><a href=\"" + htmlEndpoint +
+        "\">View upcoming CrossPointe events</a></p>\n";
     return [
+      "<link rel=\"stylesheet\" href=\"", window.location.origin,
+      "/embed.css\" data-central-embed-styles>\n",
       "<div class=\"central-embed\" data-central-embed=\"", id, "\">\n",
-      "  <p><a href=\"", htmlEndpoint, "\">View upcoming CrossPointe events</a></p>\n",
+      staticContent,
       "</div>\n",
       "<script async src=\"", window.location.origin, "/embed.js\"></script>",
     ].join("");
+  }
+
+  function indentEmbedHtml_(html) {
+    return String(html || "").trim().replace(/></g, ">\n<")
+        .split("\n").map(function(line) {
+          return "  " + line;
+        }).join("\n");
   }
 
   function getHtmlEndpoint_(id) {
@@ -713,14 +729,37 @@
       render_();
       return;
     }
-    copyText_(getEmbedCode_(id), "Embed code copied.");
+    state.working = true;
+    state.error = "";
+    state.message = "Preparing crawlable event HTML…";
+    render_();
+    fetch(getHtmlEndpoint_(id) + "?styles=0", {
+      cache: "no-store",
+      headers: {Accept: "text/html"},
+    }).then(function(response) {
+      if (!response.ok) {
+        throw new Error("The published event HTML could not be loaded.");
+      }
+      return response.text();
+    }).then(function(html) {
+      if (html.indexOf("central-embed-root") === -1) {
+        throw new Error("The published event HTML was incomplete.");
+      }
+      return copyText_(
+          getEmbedCode_(id, html),
+          "Crawlable embed code copied with the current event HTML.",
+      );
+    }).catch(showError_).finally(function() {
+      state.working = false;
+      render_();
+    });
   }
 
   function copyText_(value, message) {
     var promise = navigator.clipboard && navigator.clipboard.writeText ?
       navigator.clipboard.writeText(value) :
       Promise.reject(new Error("Clipboard unavailable."));
-    promise.then(function() {
+    return promise.then(function() {
       state.message = message;
       state.error = "";
       render_();

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#211f24">
+    <meta
+      name="description"
+      content="Local testing workspace for Central Event Embeds."
+    >
+    <title>Central Embed Lab</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500;600;700;800&amp;family=League+Spartan:wght@600;700;800&amp;display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="/embed-lab.css">
+    <script defer src="/embed-lab.js"></script>
+  </head>
+  <body>
+    <header class="embed-lab-header">
+      <a class="embed-lab-brand" href="/embeds">
+        <img src="/favicon.svg" alt="">
+        <span><b>Central</b><strong>Embed Lab</strong></span>
+      </a>
+      <nav aria-label="Embed Lab links">
+        <a href="/embeds">Embed editor</a>
+        <a href="http://127.0.0.1:4000" data-emulator-ui-link>Emulator UI</a>
+      </nav>
+    </header>
+
+    <main class="embed-lab-main">
+      <section class="embed-lab-intro">
+        <div>
+          <p class="embed-lab-kicker">LOCAL HOST SIMULATOR</p>
+          <h1>Test the real embed code before it leaves Central.</h1>
+          <p>
+            Load any published Embed ID—or paste its copied code—then resize
+            the simulated website container and inspect the live endpoints.
+          </p>
+        </div>
+        <span class="embed-lab-environment" data-lab-environment>
+          Checking environment
+        </span>
+      </section>
+
+      <section class="embed-lab-workspace">
+        <aside class="embed-lab-controls">
+          <form data-lab-form>
+            <label for="embed-lab-source">Embed ID or copied embed code</label>
+            <textarea
+              id="embed-lab-source"
+              rows="3"
+              spellcheck="false"
+              data-lab-source
+            ></textarea>
+            <button class="embed-lab-button is-primary" type="submit">
+              Load embed
+            </button>
+          </form>
+
+          <div class="embed-lab-control-group">
+            <span>Emulator demos</span>
+            <div class="embed-lab-button-row">
+              <button
+                class="embed-lab-button"
+                type="button"
+                data-demo-id="embed_labstandard1"
+              >Standard demo</button>
+              <button
+                class="embed-lab-button"
+                type="button"
+                data-demo-id="embed_labcompact01"
+              >Compact demo</button>
+            </div>
+            <small>Run <code>npm run seed:embed-lab</code> after startup.</small>
+          </div>
+
+          <fieldset class="embed-lab-control-group">
+            <legend>Host width</legend>
+            <div class="embed-lab-segmented" data-lab-widths>
+              <button type="button" data-width="1200">Wide</button>
+              <button type="button" data-width="760">Column</button>
+              <button type="button" data-width="390">Mobile</button>
+            </div>
+          </fieldset>
+
+          <fieldset class="embed-lab-control-group">
+            <legend>Host background</legend>
+            <div class="embed-lab-segmented" data-lab-backgrounds>
+              <button type="button" data-background="light">Light</button>
+              <button type="button" data-background="warm">Warm</button>
+              <button type="button" data-background="dark">Dark</button>
+            </div>
+          </fieldset>
+
+          <div class="embed-lab-control-group">
+            <span>Live endpoints</span>
+            <div class="embed-lab-link-list">
+              <a href="#" target="_blank" rel="noopener" data-lab-html-link>
+                Server-rendered HTML
+              </a>
+              <a href="#" target="_blank" rel="noopener" data-lab-json-link>
+                Public JSON
+              </a>
+            </div>
+          </div>
+
+          <button class="embed-lab-button" type="button" data-lab-copy>
+            Copy current embed code
+          </button>
+        </aside>
+
+        <section class="embed-lab-preview-column">
+          <div class="embed-lab-status" data-lab-status aria-live="polite">
+            <span></span>
+            <div>
+              <strong>Ready to load</strong>
+              <small>Choose a demo or enter a published Embed ID.</small>
+            </div>
+          </div>
+
+          <div class="embed-lab-stage" data-lab-stage>
+            <div class="embed-lab-device" data-lab-device>
+              <div class="embed-lab-site-chrome">
+                <i></i><i></i><i></i>
+                <span data-lab-device-label>Third-party site · 1200px</span>
+              </div>
+              <iframe
+                title="Central Embed third-party host preview"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                data-lab-frame
+              ></iframe>
+            </div>
+          </div>
+
+          <details class="embed-lab-payload">
+            <summary>Inspect public JSON payload</summary>
+            <pre data-lab-payload>No payload loaded.</pre>
+          </details>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

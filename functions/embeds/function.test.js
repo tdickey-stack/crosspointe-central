@@ -74,6 +74,7 @@ function createPublicOptions_(documentData) {
               location: "CrossPointe",
               description: "Public description",
               church_center_url: "https://example.com/event",
+              featured: "TRUE",
               private_notes: "secret",
             }]},
           },
@@ -106,6 +107,7 @@ test("public endpoint returns only resolved published fields", async () => {
   assert.equal(response.headers["Cache-Control"], "no-store");
   assert.equal(response.body.layout, "compact");
   assert.equal(response.body.events[0].title, "Public Event");
+  assert.equal(response.body.events[0].featured, true);
   assert.equal(Object.hasOwn(response.body, "name"), false);
   assert.equal(Object.hasOwn(response.body, "createdByEmail"), false);
   assert.equal(JSON.stringify(response.body).includes("private_notes"), false);

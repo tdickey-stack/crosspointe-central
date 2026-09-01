@@ -1,0 +1,904 @@
+:root {
+  --catm-velvet: #7b1020;
+  --catm-velvet-dark: #35060d;
+  --catm-evergreen: #123f32;
+  --catm-evergreen-deep: #071d18;
+  --catm-gold: #f4c768;
+  --catm-gold-bright: #ffe7a8;
+  --catm-cream: #fff5dc;
+  --catm-snow: #fffdfa;
+  --catm-ink: #170d0d;
+  --catm-display-font: "Cinzel", Georgia, serif;
+}
+
+.catm-only,
+.catm-loader-stage,
+.catm-loader-brand {
+  display: none;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] {
+  --cp-red: #b7192e;
+  --cp-dark: var(--catm-evergreen-deep);
+  --cp-darker: #030d0b;
+  --cp-soft: #f4ead7;
+  --cp-bg: #f4ead7;
+  --cp-text: #33241f;
+  --cp-text-strong: #1d1210;
+  --cp-muted: #766157;
+  --cp-border: rgba(104, 69, 43, 0.2);
+  --cp-surface: #fffaf0;
+  --cp-surface-elevated: #fffdf8;
+  --cp-surface-soft: #f9efdd;
+  --cp-surface-tint: linear-gradient(180deg, #fffdf8 0%, #fff4df 100%);
+  --cp-page-tint: linear-gradient(180deg, #efe1ca 0%, #fffaf0 38%, #f4ead7 100%);
+  --cp-action-surface: var(--catm-evergreen);
+  --cp-action-text: #ffffff;
+  --cp-secondary-surface: rgba(255, 245, 220, 0.12);
+  --cp-secondary-text: var(--catm-cream);
+  --cp-chip-bg: rgba(183, 25, 46, 0.08);
+  --cp-chip-bg-hover: rgba(183, 25, 46, 0.13);
+  --cp-chip-bg-active: rgba(244, 199, 104, 0.2);
+  --cp-chip-border: rgba(123, 16, 32, 0.26);
+  --cp-chip-border-active: rgba(123, 16, 32, 0.42);
+  --cp-card-shadow: 0 14px 34px rgba(62, 35, 21, 0.1);
+}
+
+:root[data-app-route="public"][data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] {
+  --cp-soft: #171c19;
+  --cp-bg: #09130f;
+  --cp-text: #f4eadb;
+  --cp-text-strong: #fffaf0;
+  --cp-muted: #c5b5a1;
+  --cp-border: rgba(244, 199, 104, 0.2);
+  --cp-surface: #14211b;
+  --cp-surface-elevated: #192920;
+  --cp-surface-soft: #1d2d25;
+  --cp-surface-tint: linear-gradient(180deg, #1e3027 0%, #111d18 100%);
+  --cp-page-tint: linear-gradient(180deg, #101c17 0%, #0c1713 42%, #07100d 100%);
+  --cp-action-surface: var(--catm-gold);
+  --cp-action-text: #231407;
+  --cp-card-shadow: 0 16px 38px rgba(0, 0, 0, 0.32);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .catm-only,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .catm-loader-stage,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .catm-loader-brand {
+  display: block;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-standard-visual,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-door {
+  display: none;
+}
+
+.catm-loader-stage {
+  position: absolute;
+  inset: 0 0 -48px;
+  z-index: 0;
+  overflow: hidden;
+  background: #2a040b;
+  transform: translate3d(0, 0, 0);
+  transition: transform 1.48s cubic-bezier(0.72, 0, 0.18, 1), opacity 0.18s ease;
+  will-change: transform;
+  -webkit-mask-image:
+    linear-gradient(#000 0 0),
+    radial-gradient(ellipse 72px 48px at 50% 0, #000 98%, transparent 100%);
+  -webkit-mask-position: top left, bottom left;
+  -webkit-mask-size: 100% calc(100% - 47px), 144px 48px;
+  -webkit-mask-repeat: no-repeat, repeat-x;
+  mask-image:
+    linear-gradient(#000 0 0),
+    radial-gradient(ellipse 72px 48px at 50% 0, #000 98%, transparent 100%);
+  mask-position: top left, bottom left;
+  mask-size: 100% calc(100% - 47px), 144px 48px;
+  mask-repeat: no-repeat, repeat-x;
+}
+
+.catm-loader-curtain {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 8%, rgba(255, 223, 164, 0.18), transparent 38%),
+    repeating-linear-gradient(
+      90deg,
+      #4b0712 0,
+      #8e1528 7%,
+      #5b0917 14%,
+      #a31d31 21%,
+      #4b0712 28%
+    );
+  box-shadow:
+    inset 0 -48px 70px rgba(28, 0, 6, 0.7),
+    inset 0 0 120px rgba(18, 0, 4, 0.64);
+}
+
+.catm-loader-curtain::before {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  top: -3vh;
+  left: -3vw;
+  right: -3vw;
+  height: clamp(92px, 17vh, 180px);
+  border-radius: 0 0 48% 48% / 0 0 42% 42%;
+  background:
+    radial-gradient(ellipse at 50% 0, rgba(255, 230, 184, 0.2), transparent 54%),
+    repeating-linear-gradient(
+      90deg,
+      #40050e 0,
+      #9d1a2e 9%,
+      #5b0716 18%,
+      #ad2035 27%,
+      #40050e 36%
+    );
+  border-bottom: 5px solid rgba(244, 199, 104, 0.74);
+  box-shadow: 0 18px 32px rgba(20, 0, 5, 0.46);
+}
+
+.catm-loader-curtain::after {
+  content: "";
+  position: absolute;
+  left: -8%;
+  right: -8%;
+  top: calc(100% - clamp(96px, 18vh, 170px));
+  height: clamp(96px, 18vh, 170px);
+  z-index: 9;
+  background:
+    radial-gradient(circle at 24px 6px, rgba(255, 255, 255, 0.22) 0 16px, transparent 17px 32px),
+    radial-gradient(circle at 88px 6px, rgba(255, 255, 255, 0.16) 0 13px, transparent 14px 28px),
+    linear-gradient(
+      180deg,
+      rgba(255, 239, 195, 0.28) 0%,
+      rgba(92, 14, 28, 0.52) 24%,
+      rgba(44, 6, 12, 0.96) 74%,
+      rgba(25, 0, 5, 0.98) 100%
+    );
+  background-size:
+    104px 40px,
+    104px 34px,
+    100% 100%;
+  background-repeat: repeat-x;
+  background-position:
+    0 0,
+    52px 0,
+    0 0;
+  clip-path: polygon(
+    0% 52%,
+    4% 38%,
+    10% 50%,
+    16% 34%,
+    22% 50%,
+    28% 34%,
+    34% 48%,
+    40% 33%,
+    46% 50%,
+    52% 34%,
+    58% 50%,
+    64% 33%,
+    70% 48%,
+    76% 32%,
+    82% 52%,
+    88% 34%,
+    94% 50%,
+    100% 32%,
+    100% 100%,
+    0% 100%
+  );
+  box-shadow:
+    inset 0 -12px 24px rgba(22, 0, 5, 0.34),
+    inset 0 12px 24px rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+.catm-loader-snow {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.catm-loader-snowflake {
+  position: absolute;
+  top: -12vh;
+  left: var(--snow-x);
+  width: var(--snow-size);
+  height: var(--snow-size);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, var(--snow-opacity, 0.9));
+  box-shadow: 0 0 calc(var(--snow-size) * 1.3) rgba(255, 255, 255, 0.22);
+  will-change: transform;
+  animation: catmSnowFlurry var(--snow-duration) linear infinite;
+  animation-delay: var(--snow-delay);
+}
+
+.catm-loader-snowflake:nth-child(1) { --snow-x: 3%; --snow-size: 3px; --snow-duration: 8.4s; --snow-delay: -5.8s; --snow-opacity: 0.84; --snow-drift-a: 24px; --snow-drift-b: -18px; --snow-drift-c: 13px; --snow-drift-d: -7px; }
+.catm-loader-snowflake:nth-child(2) { --snow-x: 8%; --snow-size: 5px; --snow-duration: 11.2s; --snow-delay: -2.3s; --snow-opacity: 0.96; --snow-drift-a: -17px; --snow-drift-b: 31px; --snow-drift-c: -25px; --snow-drift-d: 18px; }
+.catm-loader-snowflake:nth-child(3) { --snow-x: 13%; --snow-size: 2px; --snow-duration: 7.6s; --snow-delay: -6.4s; --snow-opacity: 0.68; --snow-drift-a: 12px; --snow-drift-b: -28px; --snow-drift-c: 22px; --snow-drift-d: 4px; }
+.catm-loader-snowflake:nth-child(4) { --snow-x: 18%; --snow-size: 4px; --snow-duration: 13.1s; --snow-delay: -8.7s; --snow-opacity: 0.78; --snow-drift-a: -29px; --snow-drift-b: 18px; --snow-drift-c: 35px; --snow-drift-d: -16px; }
+.catm-loader-snowflake:nth-child(5) { --snow-x: 23%; --snow-size: 6px; --snow-duration: 9.7s; --snow-delay: -1.2s; --snow-opacity: 0.92; --snow-drift-a: 35px; --snow-drift-b: -13px; --snow-drift-c: -31px; --snow-drift-d: 21px; }
+.catm-loader-snowflake:nth-child(6) { --snow-x: 28%; --snow-size: 3px; --snow-duration: 15.3s; --snow-delay: -11.5s; --snow-opacity: 0.72; --snow-drift-a: -11px; --snow-drift-b: 24px; --snow-drift-c: -18px; --snow-drift-d: 32px; }
+.catm-loader-snowflake:nth-child(7) { --snow-x: 33%; --snow-size: 4px; --snow-duration: 10.5s; --snow-delay: -7.1s; --snow-opacity: 0.88; --snow-drift-a: 21px; --snow-drift-b: 8px; --snow-drift-c: -34px; --snow-drift-d: -12px; }
+.catm-loader-snowflake:nth-child(8) { --snow-x: 38%; --snow-size: 2px; --snow-duration: 8.9s; --snow-delay: -3.9s; --snow-opacity: 0.64; --snow-drift-a: -24px; --snow-drift-b: -6px; --snow-drift-c: 27px; --snow-drift-d: 15px; }
+.catm-loader-snowflake:nth-child(9) { --snow-x: 43%; --snow-size: 5px; --snow-duration: 12.6s; --snow-delay: -9.4s; --snow-opacity: 0.94; --snow-drift-a: 14px; --snow-drift-b: -32px; --snow-drift-c: 19px; --snow-drift-d: -23px; }
+.catm-loader-snowflake:nth-child(10) { --snow-x: 48%; --snow-size: 3px; --snow-duration: 7.9s; --snow-delay: -0.8s; --snow-opacity: 0.76; --snow-drift-a: -33px; --snow-drift-b: 26px; --snow-drift-c: 7px; --snow-drift-d: -18px; }
+.catm-loader-snowflake:nth-child(11) { --snow-x: 53%; --snow-size: 4px; --snow-duration: 14.2s; --snow-delay: -12.1s; --snow-opacity: 0.82; --snow-drift-a: 27px; --snow-drift-b: -15px; --snow-drift-c: -8px; --snow-drift-d: 29px; }
+.catm-loader-snowflake:nth-child(12) { --snow-x: 58%; --snow-size: 6px; --snow-duration: 10.1s; --snow-delay: -4.7s; --snow-opacity: 0.98; --snow-drift-a: -18px; --snow-drift-b: 34px; --snow-drift-c: -22px; --snow-drift-d: 9px; }
+.catm-loader-snowflake:nth-child(13) { --snow-x: 63%; --snow-size: 2px; --snow-duration: 16s; --snow-delay: -6.9s; --snow-opacity: 0.62; --snow-drift-a: 9px; --snow-drift-b: -21px; --snow-drift-c: 32px; --snow-drift-d: -28px; }
+.catm-loader-snowflake:nth-child(14) { --snow-x: 68%; --snow-size: 4px; --snow-duration: 9.2s; --snow-delay: -8.1s; --snow-opacity: 0.9; --snow-drift-a: -28px; --snow-drift-b: 12px; --snow-drift-c: 24px; --snow-drift-d: -5px; }
+.catm-loader-snowflake:nth-child(15) { --snow-x: 73%; --snow-size: 3px; --snow-duration: 11.8s; --snow-delay: -1.9s; --snow-opacity: 0.7; --snow-drift-a: 31px; --snow-drift-b: -25px; --snow-drift-c: 6px; --snow-drift-d: 20px; }
+.catm-loader-snowflake:nth-child(16) { --snow-x: 78%; --snow-size: 5px; --snow-duration: 13.7s; --snow-delay: -10.6s; --snow-opacity: 0.86; --snow-drift-a: -8px; --snow-drift-b: 29px; --snow-drift-c: -36px; --snow-drift-d: 14px; }
+.catm-loader-snowflake:nth-child(17) { --snow-x: 83%; --snow-size: 2px; --snow-duration: 8.1s; --snow-delay: -5.1s; --snow-opacity: 0.66; --snow-drift-a: 18px; --snow-drift-b: -34px; --snow-drift-c: 15px; --snow-drift-d: -21px; }
+.catm-loader-snowflake:nth-child(18) { --snow-x: 88%; --snow-size: 6px; --snow-duration: 12.9s; --snow-delay: -3.2s; --snow-opacity: 0.95; --snow-drift-a: -35px; --snow-drift-b: 17px; --snow-drift-c: 28px; --snow-drift-d: -11px; }
+.catm-loader-snowflake:nth-child(19) { --snow-x: 93%; --snow-size: 4px; --snow-duration: 9.5s; --snow-delay: -7.8s; --snow-opacity: 0.8; --snow-drift-a: 23px; --snow-drift-b: 4px; --snow-drift-c: -27px; --snow-drift-d: 33px; }
+.catm-loader-snowflake:nth-child(20) { --snow-x: 97%; --snow-size: 3px; --snow-duration: 15s; --snow-delay: -13.4s; --snow-opacity: 0.74; --snow-drift-a: -15px; --snow-drift-b: 33px; --snow-drift-c: -12px; --snow-drift-d: -26px; }
+.catm-loader-snowflake:nth-child(21) { --snow-x: 6%; --snow-size: 2px; --snow-duration: 12.2s; --snow-delay: -9.8s; --snow-opacity: 0.58; --snow-drift-a: 30px; --snow-drift-b: -9px; --snow-drift-c: -20px; --snow-drift-d: 11px; }
+.catm-loader-snowflake:nth-child(22) { --snow-x: 31%; --snow-size: 5px; --snow-duration: 8.7s; --snow-delay: -4.4s; --snow-opacity: 0.89; --snow-drift-a: -22px; --snow-drift-b: 15px; --snow-drift-c: 38px; --snow-drift-d: -19px; }
+.catm-loader-snowflake:nth-child(23) { --snow-x: 57%; --snow-size: 3px; --snow-duration: 10.9s; --snow-delay: -6.2s; --snow-opacity: 0.77; --snow-drift-a: 16px; --snow-drift-b: -37px; --snow-drift-c: 10px; --snow-drift-d: 25px; }
+.catm-loader-snowflake:nth-child(24) { --snow-x: 81%; --snow-size: 4px; --snow-duration: 14.7s; --snow-delay: -2.6s; --snow-opacity: 0.83; --snow-drift-a: -31px; --snow-drift-b: 23px; --snow-drift-c: -16px; --snow-drift-d: 7px; }
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-content {
+  z-index: 8;
+  gap: 18px;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .catm-loader-series-logo {
+  transform: translateY(-10px);
+}
+
+.catm-loader-brand {
+  width: min(390px, 78vw);
+  margin-bottom: 2px;
+}
+
+.catm-loader-series-logo {
+  display: block;
+  width: 100%;
+  max-height: 128px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 22px rgba(23, 0, 4, 0.42));
+}
+
+.catm-loader-popcorn {
+  --catm-final-artwork-mix: clamp(
+    0,
+    calc((var(--central-loader-progress-ratio, 0) - 0.99) * 100),
+    1
+  );
+  position: relative;
+  width: clamp(146px, 24vw, 212px);
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  filter: drop-shadow(0 18px 26px rgba(25, 0, 5, 0.34));
+}
+
+.catm-loader-popcorn img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.catm-loader-popcorn-base {
+  display: none;
+  opacity: 0.2;
+  filter: grayscale(1) brightness(1.55);
+}
+
+.catm-loader-popcorn-fill {
+  display: none;
+  position: absolute;
+  inset: 0;
+  clip-path: inset(calc(100% - var(--central-loader-progress, 0%)) 0 0 0);
+  transition: clip-path 0.16s linear;
+}
+
+.catm-loader-popcorn-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 38% 9px at 50% calc(100% - var(--central-loader-progress, 0%)),
+    rgba(255, 239, 194, 0.68),
+    rgba(255, 239, 194, 0.24) 46%,
+    transparent 74%
+  );
+  -webkit-mask: url("/LoaderPopcornBucket.svg") center / contain no-repeat;
+  mask: url("/LoaderPopcornBucket.svg") center / contain no-repeat;
+}
+
+.catm-loader-popcorn-animated,
+.catm-loader-kernels,
+.catm-loader-source-pile,
+.catm-loader-bucket-shell {
+  position: absolute;
+  inset: 0;
+}
+
+.catm-loader-popcorn-animated {
+  --catm-kernel-scale: 1;
+  opacity: calc(1 - var(--catm-final-artwork-mix));
+  transition: opacity 0.16s linear;
+}
+
+.catm-loader-kernels {
+  z-index: 3;
+}
+
+.catm-loader-source-pile {
+  z-index: 1;
+  clip-path: inset(0 0 55% 0);
+  -webkit-mask-image: radial-gradient(
+    ellipse var(--catm-source-pile-radius-x, 0.01%) var(--catm-source-pile-radius-y, 0.01%)
+      at 53% 44%,
+    #000 84%,
+    rgba(0, 0, 0, 0.76) 93%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse var(--catm-source-pile-radius-x, 0.01%) var(--catm-source-pile-radius-y, 0.01%)
+      at 53% 44%,
+    #000 84%,
+    rgba(0, 0, 0, 0.76) 93%,
+    transparent 100%
+  );
+}
+
+.catm-loader-bucket-shell {
+  z-index: 2;
+  transform-origin: 50% 72%;
+}
+
+.catm-loader-bucket-shell img {
+  inset: auto auto 0 50%;
+  width: 69%;
+  height: 64%;
+  object-fit: fill;
+  transform: translateX(-50%);
+}
+
+.catm-loader-popcorn-final {
+  z-index: 5;
+  opacity: var(--catm-final-artwork-mix);
+  transition: opacity 0.16s linear;
+}
+
+.catm-loader-popcorn-animated.is-popping .catm-loader-bucket-shell {
+  animation: catmBucketPop 0.38s cubic-bezier(0.22, 0.9, 0.32, 1.32);
+}
+
+.catm-loader-kernel,
+.catm-loader-flyaway {
+  position: absolute;
+  left: var(--kernel-x, 50%);
+  top: var(--kernel-y, 39%);
+  z-index: 1;
+  width: calc(var(--kernel-size, 27px) * var(--catm-kernel-scale));
+  height: calc(var(--kernel-size, 27px) * 0.82 * var(--catm-kernel-scale));
+  border: 1px solid rgba(178, 111, 32, 0.62);
+  border-radius: 62% 48% 58% 46% / 55% 64% 46% 58%;
+  background:
+    radial-gradient(circle at 55% 58%, #d99a32 0 9%, transparent 10%),
+    radial-gradient(circle at 42% 35%, #fffdf0 0 18%, transparent 19%),
+    linear-gradient(145deg, #fffce9 0%, #f8e7ad 58%, #e4b85f 100%);
+  box-shadow:
+    inset -2px -3px 4px rgba(181, 114, 32, 0.18),
+    0 3px 5px rgba(42, 6, 12, 0.25);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.15) rotate(var(--kernel-rotate, 0deg));
+  transform-origin: 50% 60%;
+  will-change: transform, opacity;
+}
+
+.catm-loader-kernel::before,
+.catm-loader-kernel::after,
+.catm-loader-flyaway::before,
+.catm-loader-flyaway::after {
+  content: "";
+  position: absolute;
+  border: 1px solid rgba(178, 111, 32, 0.48);
+  background: linear-gradient(145deg, #fffef4 0%, #f6e3a4 100%);
+  box-shadow: inset -1px -2px 3px rgba(181, 114, 32, 0.14);
+}
+
+.catm-loader-kernel::before,
+.catm-loader-flyaway::before {
+  width: 62%;
+  height: 72%;
+  left: -22%;
+  top: 20%;
+  border-radius: 58% 48% 60% 42%;
+  transform: rotate(-24deg);
+}
+
+.catm-loader-kernel::after,
+.catm-loader-flyaway::after {
+  width: 58%;
+  height: 70%;
+  right: -21%;
+  top: 8%;
+  border-radius: 46% 62% 44% 58%;
+  transform: rotate(25deg);
+}
+
+.catm-loader-kernel.is-popped {
+  animation: catmKernelPop 0.54s cubic-bezier(0.16, 0.82, 0.27, 1.28) both;
+}
+
+.catm-loader-ticket {
+  width: calc(34px * var(--catm-kernel-scale));
+  height: calc(55px * var(--catm-kernel-scale));
+  border: 2px solid #75451e;
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, transparent 0 5px, rgba(117, 69, 30, 0.22) 5px 6px, transparent 6px),
+    linear-gradient(145deg, #f8d27b 0%, #dca453 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 239, 181, 0.42),
+    0 4px 7px rgba(42, 6, 12, 0.3);
+  color: #4d2b18;
+}
+
+.catm-loader-ticket::before {
+  content: "ADMIT\A ONE";
+  inset: 12px 2px auto;
+  width: auto;
+  height: auto;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-family: var(--catm-display-font);
+  font-size: calc(6px * var(--catm-kernel-scale));
+  font-weight: 900;
+  line-height: 0.92;
+  text-align: center;
+  white-space: pre;
+  transform: none;
+}
+
+.catm-loader-ticket::after {
+  content: "★ ★";
+  inset: 4px 2px auto;
+  width: auto;
+  height: auto;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-size: calc(5px * var(--catm-kernel-scale));
+  letter-spacing: 1px;
+  text-align: center;
+  transform: none;
+}
+
+.catm-loader-flyaway {
+  --kernel-size: 26px;
+  --kernel-x: 50%;
+  --kernel-y: 42%;
+  z-index: 4;
+}
+
+.catm-loader-flyaway-left.is-flying {
+  animation: catmKernelFlyLeft 1.28s cubic-bezier(0.17, 0.74, 0.2, 1) both;
+}
+
+.catm-loader-flyaway-right.is-flying {
+  animation: catmKernelFlyRight 1.38s cubic-bezier(0.17, 0.74, 0.2, 1) both;
+}
+
+.catm-loader-flyaway-center.is-flying {
+  animation: catmKernelFlyCenter 1.5s cubic-bezier(0.17, 0.74, 0.2, 1) both;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-badge {
+  border-color: rgba(244, 199, 104, 0.5);
+  background: rgba(34, 4, 10, 0.56);
+  color: var(--catm-gold-bright);
+  box-shadow: 0 8px 24px rgba(20, 0, 4, 0.18);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-kicker {
+  color: var(--catm-gold-bright);
+  font-family: var(--catm-display-font);
+  letter-spacing: 0.14em;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-copy h1 {
+  color: #ffffff;
+  font-family: var(--catm-display-font);
+  letter-spacing: -0.025em;
+  text-shadow: 0 4px 20px rgba(24, 0, 5, 0.46);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-badge {
+  transform: translateY(-61px);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-copy p:last-child {
+  color: rgba(255, 248, 235, 0.78);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-percent {
+  border-color: rgba(244, 199, 104, 0.44);
+  background: rgba(34, 4, 10, 0.62);
+  color: var(--catm-cream);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-collapsing .catm-loader-snowflake {
+  animation-play-state: paused;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-revealing .catm-loader-stage {
+  transform: translate3d(0, -106%, 0);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-collapsing .central-loader-badge,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-collapsing .central-loader-copy,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-collapsing .central-loader-progress {
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-collapsing .central-loader-badge,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-revealing .central-loader-badge {
+  transform: translateY(-61px);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-revealing .central-loader-content {
+  opacity: 1;
+  transform: translate3d(0, -106%, 0);
+  transition-duration: 1.48s;
+  transition-timing-function: cubic-bezier(0.72, 0, 0.18, 1);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-hidden .catm-loader-snowflake {
+  animation-play-state: paused;
+}
+
+.central-display-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.seasonal-experience-toggle {
+  appearance: none;
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.seasonal-experience-toggle:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.17);
+}
+
+.seasonal-experience-toggle:focus-visible {
+  outline: 2px solid var(--catm-gold-bright);
+  outline-offset: 3px;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] body {
+  background:
+    radial-gradient(circle at top, rgba(123, 16, 32, 0.12), transparent 34rem),
+    var(--cp-bg);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .hero,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .sunday-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 82% 12%, rgba(244, 199, 104, 0.22), transparent 25rem),
+    radial-gradient(circle at 10% 110%, rgba(183, 25, 46, 0.25), transparent 30rem),
+    linear-gradient(135deg, var(--catm-evergreen) 0%, var(--catm-evergreen-deep) 58%, #020907 100%);
+  border-bottom: 7px solid var(--catm-gold);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .hero::after,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .sunday-hero::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16px;
+  background:
+    radial-gradient(circle, var(--catm-gold-bright) 0 3px, rgba(244, 199, 104, 0.18) 4px, transparent 7px)
+      0 50% / 30px 16px repeat-x;
+  filter: drop-shadow(0 0 7px rgba(255, 213, 117, 0.42));
+  pointer-events: none;
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .hero > .wrap,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .sunday-hero > .wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.catm-hero-brand {
+  width: min(430px, 82vw);
+  margin: 22px 0 2px;
+}
+
+.catm-hero-brand img {
+  display: block;
+  width: 100%;
+  max-height: 138px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.3));
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .eyebrow {
+  border-color: rgba(244, 199, 104, 0.46);
+  background: rgba(53, 6, 13, 0.34);
+  color: var(--catm-cream);
+  box-shadow: inset 0 0 0 1px rgba(255, 231, 168, 0.06);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .eyebrow-dot {
+  background: var(--catm-gold);
+  box-shadow: 0 0 10px rgba(244, 199, 104, 0.58);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .content {
+  background:
+    linear-gradient(90deg, rgba(123, 16, 32, 0.035) 1px, transparent 1px) 0 0 / 28px 100%,
+    var(--cp-page-tint);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .card,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .banner,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .sunday-status-card,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .sunday-action,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .sunday-module-card {
+  border-color: rgba(125, 82, 42, 0.28);
+  box-shadow:
+    inset 0 0 0 1px rgba(244, 199, 104, 0.08),
+    var(--cp-card-shadow);
+}
+
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .section-kicker,
+:root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .meta {
+  color: var(--catm-velvet);
+}
+
+:root[data-app-route="public"][data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .section-kicker,
+:root[data-app-route="public"][data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .meta {
+  color: var(--catm-gold);
+}
+
+@keyframes catmSnowFlurry {
+  0% {
+    transform: translate3d(0, -8vh, 0) rotate(0deg);
+  }
+  19% {
+    transform: translate3d(var(--snow-drift-a), 18vh, 0) rotate(62deg);
+  }
+  41% {
+    transform: translate3d(var(--snow-drift-b), 47vh, 0) rotate(151deg);
+  }
+  63% {
+    transform: translate3d(var(--snow-drift-c), 75vh, 0) rotate(229deg);
+  }
+  82% {
+    transform: translate3d(var(--snow-drift-d), 99vh, 0) rotate(306deg);
+  }
+  100% {
+    transform: translate3d(0, 122vh, 0) rotate(380deg);
+  }
+}
+
+@keyframes catmKernelPop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 76px) scale(0.12) rotate(calc(var(--kernel-rotate, 0deg) - 34deg));
+  }
+  46% {
+    opacity: 1;
+    transform: translate(-50%, -15px) scale(1.18) rotate(calc(var(--kernel-rotate, 0deg) + 12deg));
+  }
+  72% {
+    opacity: 1;
+    transform: translate(-50%, 4px) scale(0.92) rotate(calc(var(--kernel-rotate, 0deg) - 4deg));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1) rotate(var(--kernel-rotate, 0deg));
+  }
+}
+
+@keyframes catmBucketPop {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  38% {
+    transform: translateY(5px) scale(0.96, 1.04);
+  }
+  68% {
+    transform: translateY(-7px) scale(1.04, 0.97);
+  }
+}
+
+@keyframes catmKernelFlyLeft {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 62px) scale(0.18) rotate(0deg);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-80%, -30px) scale(1.16) rotate(-56deg);
+  }
+  58% {
+    opacity: 1;
+    transform: translate(-29vw, -52vh) scale(1) rotate(-310deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-58vw, -76vh) scale(0.74) rotate(-620deg);
+  }
+}
+
+@keyframes catmKernelFlyRight {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 62px) scale(0.18) rotate(0deg);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-18%, -34px) scale(1.2) rotate(62deg);
+  }
+  58% {
+    opacity: 1;
+    transform: translate(31vw, -48vh) scale(1) rotate(336deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(60vw, -72vh) scale(0.72) rotate(680deg);
+  }
+}
+
+@keyframes catmKernelFlyCenter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 62px) scale(0.18) rotate(0deg);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -42px) scale(1.22) rotate(-42deg);
+  }
+  62% {
+    opacity: 1;
+    transform: translate(8vw, -61vh) scale(0.96) rotate(380deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(14vw, -92vh) scale(0.65) rotate(740deg);
+  }
+}
+
+@media screen and (max-width: 720px) {
+  .catm-loader-snowflake:nth-child(3n) {
+    opacity: 0;
+  }
+
+  .catm-loader-brand {
+    width: min(320px, 78vw);
+  }
+
+  .catm-loader-series-logo {
+    max-height: 94px;
+  }
+
+  .catm-loader-popcorn {
+    width: clamp(132px, 38vw, 172px);
+  }
+
+  .catm-loader-popcorn-animated {
+    --catm-kernel-scale: 0.82;
+  }
+
+  .central-display-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .seasonal-experience-toggle,
+  .central-display-controls .theme-toggle {
+    flex: 1 1 170px;
+    max-width: 224px;
+  }
+
+  .catm-hero-brand {
+    margin-top: 18px;
+  }
+
+  :root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader-badge {
+    transform: translateY(-151px);
+  }
+
+  :root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-collapsing .central-loader-badge,
+  :root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-revealing .central-loader-badge {
+    transform: translateY(-151px) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catm-loader-snow {
+    display: none !important;
+  }
+
+  .catm-loader-popcorn-animated {
+    display: none;
+  }
+
+  .catm-loader-popcorn-final {
+    display: none;
+  }
+
+  .catm-loader-popcorn-base,
+  .catm-loader-popcorn-fill {
+    display: block;
+  }
+
+  .catm-loader-stage,
+  .catm-loader-popcorn-fill {
+    transition-duration: 0.12s;
+  }
+
+  :root[data-app-route="public"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-revealing .catm-loader-stage {
+    opacity: 1;
+    transform: translate3d(0, -106%, 0);
+  }
+}
+
+:root[data-reduced-motion-preview="true"] .catm-loader-snow {
+  display: none !important;
+}
+
+:root[data-reduced-motion-preview="true"] .catm-loader-popcorn-animated {
+  display: none;
+}
+
+:root[data-reduced-motion-preview="true"] .catm-loader-popcorn-final {
+  display: none;
+}
+
+:root[data-reduced-motion-preview="true"] .catm-loader-popcorn-base,
+:root[data-reduced-motion-preview="true"] .catm-loader-popcorn-fill {
+  display: block;
+}
+
+:root[data-reduced-motion-preview="true"] .catm-loader-stage,
+:root[data-reduced-motion-preview="true"] .catm-loader-popcorn-fill {
+  transition-duration: 0.12s;
+}
+
+:root[data-reduced-motion-preview="true"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-revealing .catm-loader-stage {
+  opacity: 1;
+  transform: translate3d(0, -106%, 0);
+}
+
+:root[data-reduced-motion-preview="true"][data-seasonal-experience="christmas-at-the-movies"] .central-loader.is-revealing .central-loader-content {
+  opacity: 1;
+  transform: translate3d(0, -106%, 0);
+}

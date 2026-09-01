@@ -12,6 +12,15 @@
     <script>
       (function() {
         var theme = "light";
+        var query = new URLSearchParams(window.location.search);
+
+        document.documentElement.setAttribute("data-app-route", "public");
+        if (query.get("season") === "catm") {
+          document.documentElement.setAttribute(
+            "data-seasonal-experience",
+            "christmas-at-the-movies"
+          );
+        }
 
         try {
           var storedTheme = localStorage.getItem("central-theme-override-v2");
@@ -42,58 +51,56 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&amp;family=Montserrat:wght@400;600;700;800;900&amp;display=swap"
       rel="stylesheet"
     >
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/christmas-movies.css">
     <style>
       body.loader-lab-page {
         min-height: 100vh;
+        overflow: hidden;
         background: #0f0f10;
       }
 
       .loader-lab-preview .content {
-        padding-bottom: 140px;
+        padding-bottom: 156px;
       }
 
       .loader-lab-panel {
         position: fixed;
-        left: 50%;
+        left: 0;
+        right: 0;
         bottom: 18px;
         z-index: 2300;
-        width: min(560px, calc(100% - 24px));
-        transform: translateX(-50%);
-        background: rgba(17, 17, 20, 0.88);
+        width: 100%;
+        background: rgba(17, 17, 20, 0.92);
         color: #ffffff;
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 22px;
-        padding: 18px;
+        border-radius: 16px 16px 0 0;
+        border-bottom: 0;
+        padding: 8px 10px 10px;
         box-shadow: 0 22px 55px rgba(0, 0, 0, 0.34);
         backdrop-filter: blur(14px);
       }
 
       .loader-lab-panel h2 {
-        margin: 0;
-        font-size: 1.2rem;
-        letter-spacing: -0.03em;
+        display: none;
       }
 
       .loader-lab-panel p {
-        margin: 8px 0 0;
-        color: rgba(255, 255, 255, 0.72);
-        font-size: 0.92rem;
-        line-height: 1.55;
+        display: none;
       }
 
       .loader-lab-controls {
         display: grid;
-        gap: 14px;
-        margin-top: 16px;
+        gap: 6px;
+        margin-top: 0;
       }
 
       .loader-lab-row {
         display: grid;
-        gap: 10px;
+        gap: 4px;
       }
 
       .loader-lab-row label {
@@ -101,36 +108,38 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        font-size: 0.84rem;
-        font-weight: 800;
+        font-size: 0.66rem;
+        font-weight: 750;
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
 
       .loader-lab-row output {
+        font-size: 0.7rem;
         color: rgba(239, 59, 45, 0.98);
       }
 
       .loader-lab-range {
         width: 100%;
         accent-color: #ef3b2d;
+        height: 18px;
       }
 
       .loader-lab-buttons {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 10px;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
       }
 
       .loader-lab-buttons button {
-        min-height: 42px;
+        min-height: 28px;
         border: 0;
         border-radius: 999px;
-        padding: 0 12px;
+        padding: 0 8px;
         background: rgba(255, 255, 255, 0.1);
         color: #ffffff;
         font: inherit;
-        font-size: 0.84rem;
+        font-size: 0.67rem;
         font-weight: 800;
         cursor: pointer;
         transition: transform 0.2s ease, background 0.2s ease;
@@ -145,17 +154,49 @@
         background: #ef3b2d;
       }
 
+      .loader-lab-modes {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+      }
+
+      .loader-lab-modes button {
+        min-height: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        padding: 0 10px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #ffffff;
+        font: inherit;
+        font-size: 0.64rem;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .loader-lab-modes::-webkit-scrollbar {
+        display: none;
+      }
+
+      .loader-lab-modes button.active {
+        border-color: rgba(244, 199, 104, 0.72);
+        background: rgba(244, 199, 104, 0.18);
+        color: #ffe7a8;
+      }
+
       .loader-lab-note {
-        color: rgba(255, 255, 255, 0.56);
-        font-size: 0.78rem;
+        display: none;
       }
 
       @media screen and (max-width: 640px) {
         .loader-lab-panel {
-          bottom: 12px;
+          bottom: 8px;
           width: calc(100% - 16px);
-          border-radius: 18px;
-          padding: 16px;
+          left: 8px;
+          right: 8px;
+          border-radius: 14px 14px 0 0;
+          padding: 8px;
         }
 
         .loader-lab-buttons {
@@ -192,8 +233,8 @@
                 <small>Preview Mode</small>
                 <strong>Reveal Background</strong>
                 <p>
-                  Use this page to judge the door timing, orbit dots, logo
-                  saturation, and overall feel of the opening animation.
+                  Use this page to judge the curtain timing, snowfall, popcorn
+                  fill, and overall feel of the opening animation.
                 </p>
               </div>
             </div>
@@ -206,7 +247,7 @@
               <h2>Loader Testing Playground</h2>
               <p>
                 The actual app is not loading here. This page just gives the
-                loader something realistic to reveal behind the doors.
+                loader something realistic to reveal behind the curtain.
               </p>
             </section>
 
@@ -214,7 +255,7 @@
               <div class="section-head">
                 <div>
                   <div class="section-kicker">Preview</div>
-                  <h2 class="section-title">What’s Behind The Doors</h2>
+                  <h2 class="section-title">What’s Behind The Curtain</h2>
                 </div>
               </div>
 
@@ -223,7 +264,7 @@
                   <div class="meta">Realistic Background</div>
                   <h3>See The Reveal</h3>
                   <p>
-                    This lets you watch the loader open over something that
+                    This lets you watch the loader rise over something that
                     looks like Central instead of a blank page.
                   </p>
                 </article>
@@ -239,10 +280,10 @@
 
                 <article class="card">
                   <div class="meta">Animation</div>
-                  <h3>Dial In The Doors</h3>
+                  <h3>Dial In The Curtain</h3>
                   <p>
-                    Use the control buttons below to hold the doors closed,
-                    open, or fully hidden while you tweak the motion.
+                    Use the control buttons below to hold the curtain down,
+                    raise it, or fully hide the loader while you tweak motion.
                   </p>
                 </article>
               </div>
@@ -261,26 +302,109 @@
       <div class="central-loader-door central-loader-door-left"></div>
       <div class="central-loader-door central-loader-door-right"></div>
 
+      <div class="catm-loader-stage" aria-hidden="true">
+        <div class="catm-loader-curtain"></div>
+        <div class="catm-loader-snow">
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+          <span class="catm-loader-snowflake"></span>
+        </div>
+      </div>
+
       <div class="central-loader-content">
         <div class="central-loader-badge">CrossPointe Central</div>
 
-        <div class="central-loader-ring">
-          <div class="central-loader-orbit" aria-hidden="true">
-            <span class="central-loader-dot central-loader-dot-1"></span>
-            <span class="central-loader-dot central-loader-dot-2"></span>
-            <span class="central-loader-dot central-loader-dot-3"></span>
-            <span class="central-loader-dot central-loader-dot-4"></span>
-            <span class="central-loader-dot central-loader-dot-5"></span>
-            <span class="central-loader-dot central-loader-dot-6"></span>
-          </div>
-          <div class="central-loader-ring-core">
-            <div class="central-loader-logo">
-              <img
-                src="/loader-icon.svg"
-                alt=""
-                class="central-loader-logo-mark"
-              >
+        <div class="central-loader-standard-visual">
+          <div class="central-loader-ring">
+            <div class="central-loader-orbit" aria-hidden="true">
+              <span class="central-loader-dot central-loader-dot-1"></span>
+              <span class="central-loader-dot central-loader-dot-2"></span>
+              <span class="central-loader-dot central-loader-dot-3"></span>
+              <span class="central-loader-dot central-loader-dot-4"></span>
+              <span class="central-loader-dot central-loader-dot-5"></span>
+              <span class="central-loader-dot central-loader-dot-6"></span>
             </div>
+            <div class="central-loader-ring-core">
+              <div class="central-loader-logo">
+                <img
+                  src="/loader-icon.svg"
+                  alt=""
+                  class="central-loader-logo-mark"
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="catm-loader-brand" aria-hidden="true">
+          <img src="/CATM_LOGO.svg" alt="" class="catm-loader-series-logo">
+          <div class="catm-loader-popcorn">
+            <img
+              src="/LoaderPopcornBucket.svg"
+              alt=""
+              class="catm-loader-popcorn-base"
+            >
+            <div class="catm-loader-popcorn-fill">
+              <img src="/LoaderPopcornBucket.svg" alt="">
+            </div>
+            <div class="catm-loader-popcorn-animated">
+              <div class="catm-loader-source-pile">
+                <img src="/LoaderPopcornBucket.svg" alt="">
+              </div>
+              <div class="catm-loader-kernels">
+                <span class="catm-loader-kernel" data-threshold="4" style="--kernel-x: 49%; --kernel-y: 39%; --kernel-size: 28px; --kernel-rotate: -8deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="8" style="--kernel-x: 40%; --kernel-y: 37%; --kernel-size: 25px; --kernel-rotate: 14deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="13" style="--kernel-x: 58%; --kernel-y: 37%; --kernel-size: 27px; --kernel-rotate: -18deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="18" style="--kernel-x: 32%; --kernel-y: 34%; --kernel-size: 24px; --kernel-rotate: 22deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="24" style="--kernel-x: 68%; --kernel-y: 34%; --kernel-size: 26px; --kernel-rotate: 9deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="30" style="--kernel-x: 47%; --kernel-y: 31%; --kernel-size: 32px; --kernel-rotate: -13deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="36" style="--kernel-x: 56%; --kernel-y: 29%; --kernel-size: 24px; --kernel-rotate: 19deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="42" style="--kernel-x: 38%; --kernel-y: 28%; --kernel-size: 29px; --kernel-rotate: -24deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="48" style="--kernel-x: 63%; --kernel-y: 26%; --kernel-size: 30px; --kernel-rotate: 12deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="54" style="--kernel-x: 29%; --kernel-y: 25%; --kernel-size: 23px; --kernel-rotate: -5deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="60" style="--kernel-x: 72%; --kernel-y: 23%; --kernel-size: 24px; --kernel-rotate: 26deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="66" style="--kernel-x: 49%; --kernel-y: 22%; --kernel-size: 31px; --kernel-rotate: -16deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="72" style="--kernel-x: 41%; --kernel-y: 18%; --kernel-size: 25px; --kernel-rotate: 11deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="78" style="--kernel-x: 59%; --kernel-y: 17%; --kernel-size: 28px; --kernel-rotate: -21deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="84" style="--kernel-x: 33%; --kernel-y: 15%; --kernel-size: 22px; --kernel-rotate: 17deg;"></span>
+                <span class="catm-loader-kernel catm-loader-ticket" data-threshold="88" style="--kernel-x: 63%; --kernel-y: 14%; --kernel-rotate: 10deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="90" style="--kernel-x: 68%; --kernel-y: 13%; --kernel-size: 24px; --kernel-rotate: -10deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="95" style="--kernel-x: 50%; --kernel-y: 11%; --kernel-size: 29px; --kernel-rotate: 23deg;"></span>
+                <span class="catm-loader-kernel" data-threshold="99" style="--kernel-x: 43%; --kernel-y: 7%; --kernel-size: 23px; --kernel-rotate: -19deg;"></span>
+              </div>
+              <span class="catm-loader-flyaway catm-loader-flyaway-left" data-threshold="31"></span>
+              <span class="catm-loader-flyaway catm-loader-flyaway-right" data-threshold="68"></span>
+              <span class="catm-loader-flyaway catm-loader-flyaway-center" data-threshold="94"></span>
+              <div class="catm-loader-bucket-shell">
+                <img src="/EMPTY-BUCKET.svg" alt="">
+              </div>
+            </div>
+            <img
+              src="/LoaderPopcornBucket.svg"
+              alt=""
+              class="catm-loader-popcorn-final"
+            >
           </div>
         </div>
 
@@ -293,7 +417,15 @@
         </div>
 
         <div class="central-loader-progress">
-          <div id="central-loader-percent" class="central-loader-percent">
+          <div
+            id="central-loader-percent"
+            class="central-loader-percent"
+            role="progressbar"
+            aria-label="Loading CrossPointe Central"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="64"
+          >
             64%
           </div>
         </div>
@@ -303,11 +435,17 @@
     <div class="loader-lab-panel">
       <h2>Loader Lab</h2>
       <p>
-        Scrub the progress, hold the doors open, or hide the loader completely
-        while you tune the animation.
+        Switch between the normal and seasonal loader, scrub progress, or hold
+        the reveal while you tune the animation.
       </p>
 
       <div class="loader-lab-controls">
+        <div class="loader-lab-modes" aria-label="Loader preview options">
+          <button id="loader-mode-normal" type="button">Normal Loader</button>
+          <button id="loader-mode-catm" type="button">Christmas At The Movies</button>
+          <button id="loader-motion-toggle" type="button">Reduced Motion: Off</button>
+        </div>
+
         <div class="loader-lab-row">
           <label for="loader-progress">
             Progress
@@ -331,7 +469,7 @@
             Focus Logo
           </button>
           <button id="loader-state-open" type="button">
-            Open Doors
+            Reveal Page
           </button>
           <button id="loader-state-hidden" type="button">
             Hide Loader
@@ -342,8 +480,8 @@
         </div>
 
         <div class="loader-lab-note">
-          Tip: make CSS tweaks, deploy hosting, then refresh this page instead
-          of waiting for the whole Central app flow every time.
+          Tip: make CSS tweaks and refresh this local page instead of waiting
+          for the whole Central app flow every time.
         </div>
       </div>
     </div>
@@ -359,7 +497,11 @@
         var openButton = document.getElementById("loader-state-open");
         var hiddenButton = document.getElementById("loader-state-hidden");
         var resetButton = document.getElementById("loader-state-reset");
+        var normalModeButton = document.getElementById("loader-mode-normal");
+        var catmModeButton = document.getElementById("loader-mode-catm");
+        var motionButton = document.getElementById("loader-motion-toggle");
         var sequenceTimeout = 0;
+        var reducedMotion = false;
         var allButtons = [
           closedButton,
           collapseButton,
@@ -404,6 +546,62 @@
           });
         }
 
+        function syncPopcorn(progress) {
+          var popcorn = loader.querySelector(".catm-loader-popcorn-animated");
+          if (!popcorn) return;
+
+          var clamped = Math.max(0, Math.min(100, Number(progress) || 0));
+          var previous = Number(popcorn.getAttribute("data-progress"));
+          if (!Number.isFinite(previous)) previous = 0;
+
+          var kernels = popcorn.querySelectorAll(".catm-loader-kernel");
+          var previousCount = 0;
+          var nextCount = 0;
+          var newlyPopped = 0;
+
+          kernels.forEach(function(kernel) {
+            var threshold = Number(kernel.getAttribute("data-threshold")) || 0;
+            var wasPopped = kernel.classList.contains("is-popped");
+            var shouldPop = clamped >= threshold;
+
+            if (wasPopped) previousCount += 1;
+            if (shouldPop) nextCount += 1;
+
+            if (shouldPop && !wasPopped) {
+              kernel.style.animationDelay = Math.min(newlyPopped * 42, 210) + "ms";
+              newlyPopped += 1;
+            }
+
+            kernel.classList.toggle("is-popped", shouldPop);
+          });
+
+          if (nextCount > previousCount) {
+            popcorn.classList.remove("is-popping");
+            void popcorn.offsetWidth;
+            popcorn.classList.add("is-popping");
+          }
+
+          var flyawayToTrigger = null;
+          popcorn.querySelectorAll(".catm-loader-flyaway").forEach(function(kernel) {
+            var threshold = Number(kernel.getAttribute("data-threshold")) || 0;
+            var crossedThreshold = previous < threshold && clamped >= threshold;
+
+            if (clamped < threshold) {
+              kernel.classList.remove("is-flying");
+            } else if (crossedThreshold) {
+              flyawayToTrigger = kernel;
+            }
+          });
+
+          if (flyawayToTrigger) {
+            flyawayToTrigger.classList.remove("is-flying");
+            void flyawayToTrigger.offsetWidth;
+            flyawayToTrigger.classList.add("is-flying");
+          }
+
+          popcorn.setAttribute("data-progress", clamped.toFixed(2));
+        }
+
         function setProgress(value) {
           var next = Math.max(0, Math.min(100, Number(value) || 0));
           var progressValue = next.toFixed(2) + "%";
@@ -412,10 +610,61 @@
 
           loader.style.setProperty("--central-loader-progress", progressValue);
           loader.style.setProperty("--central-loader-progress-ratio", progressRatio);
+          loader.style.setProperty(
+            "--catm-source-pile-radius-x",
+            Math.max(0.01, 48 * (next / 100)).toFixed(2) + "%"
+          );
+          loader.style.setProperty(
+            "--catm-source-pile-radius-y",
+            Math.max(0.01, 50 * (next / 100)).toFixed(2) + "%"
+          );
           slider.value = String(next);
           output.textContent = progressText;
           percent.textContent = progressText;
+          percent.setAttribute("aria-valuenow", String(Math.round(next)));
           syncDots(next);
+          syncPopcorn(next);
+        }
+
+        function setSeasonalMode(enabled) {
+          document.documentElement.toggleAttribute(
+            "data-seasonal-experience",
+            enabled
+          );
+          if (enabled) {
+            document.documentElement.setAttribute(
+              "data-seasonal-experience",
+              "christmas-at-the-movies"
+            );
+          }
+
+          normalModeButton.classList.toggle("active", !enabled);
+          catmModeButton.classList.toggle("active", enabled);
+          var url = new URL(window.location.href);
+          if (enabled) {
+            url.searchParams.set("season", "catm");
+          } else {
+            url.searchParams.delete("season");
+          }
+          window.history.replaceState({}, "", url);
+          setClosedState();
+        }
+
+        function toggleReducedMotion() {
+          reducedMotion = !reducedMotion;
+          if (reducedMotion) {
+            document.documentElement.setAttribute(
+              "data-reduced-motion-preview",
+              "true"
+            );
+          } else {
+            document.documentElement.removeAttribute(
+              "data-reduced-motion-preview"
+            );
+          }
+          motionButton.classList.toggle("active", reducedMotion);
+          motionButton.textContent = "Reduced Motion: " +
+            (reducedMotion ? "On" : "Off");
         }
 
         function setClosedState() {
@@ -460,9 +709,19 @@
           setProgress(64);
           setClosedState();
         });
+        normalModeButton.addEventListener("click", function() {
+          setSeasonalMode(false);
+        });
+        catmModeButton.addEventListener("click", function() {
+          setSeasonalMode(true);
+        });
+        motionButton.addEventListener("click", toggleReducedMotion);
 
         setProgress(slider.value);
-        setClosedState();
+        setSeasonalMode(
+          document.documentElement.getAttribute("data-seasonal-experience") ===
+            "christmas-at-the-movies"
+        );
       })();
     </script>
   </body>

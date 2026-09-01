@@ -152,6 +152,7 @@ function sanitizeCentralEmbedSourceEvent_(item) {
         source.planning_center_title || source.title,
         180,
     ),
+    featured: normalizeCentralEmbedFeatured_(source.featured),
     title: normalizeText_(source.title, 180),
     date: normalizeText_(source.date, 100),
     time: normalizeText_(source.time, 100),
@@ -165,6 +166,11 @@ function sanitizeCentralEmbedSourceEvent_(item) {
     churchCenterUrl: normalizePublicUrl_(source.church_center_url, 2000),
     buttonText: normalizeText_(source.button_text, 80),
   };
+}
+
+function normalizeCentralEmbedFeatured_(value) {
+  return value === true ||
+    String(value || "").trim().toUpperCase() === "TRUE";
 }
 
 function normalizeSourceEventId_(value) {

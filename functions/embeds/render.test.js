@@ -17,6 +17,7 @@ const eventGroups = {
     description: "Source description",
     image_url: "https://example.com/source.jpg",
     registration_url: "https://example.com/register",
+    featured: "TRUE",
   }],
 };
 
@@ -24,6 +25,7 @@ test("published values use embed overrides and source fallbacks", () => {
   const events = resolveCentralEmbedEvents({
     items: [{
       sourceEventId: "event-1",
+      featured: false,
       overrides: {
         title: "Embed Title",
         date: null,
@@ -39,7 +41,18 @@ test("published values use embed overrides and source fallbacks", () => {
   assert.equal(events[0].date, "August 20");
   assert.equal(events[0].time, "Doors at 5:30 PM");
   assert.equal(events[0].startsAt, "");
+  assert.equal(events[0].featured, true);
   assert.equal(events[0].actionUrl, "https://example.com/register");
+});
+
+test("legacy manual prominence cannot override the Planning Center tag", () => {
+  const events = resolveCentralEmbedEvents({
+    items: [{sourceEventId: "event-1", featured: true, overrides: {}}],
+  }, {
+    upcoming: [{...eventGroups.upcoming[0], featured: "FALSE"}],
+  });
+
+  assert.equal(events[0].featured, false);
 });
 
 test("missing source events are omitted without breaking the embed", () => {
@@ -119,6 +132,47 @@ test("resolved events are chronological instead of editor ordered", () => {
   ]);
 });
 
+test("Featured events render before earlier normal events", () => {
+  const events = resolveCentralEmbedEvents({
+    items: [{
+      sourceEventId: "normal-earlier",
+      overrides: {},
+    }, {
+      sourceEventId: "featured-later",
+      overrides: {},
+    }, {
+      sourceEventId: "normal-later",
+      overrides: {},
+    }],
+  }, {
+    upcoming: [{
+      ...eventGroups.upcoming[0],
+      id: "normal-later",
+      title: "Normal Later",
+      featured: "FALSE",
+      starts_at: "2026-09-20T23:00:00.000Z",
+    }, {
+      ...eventGroups.upcoming[0],
+      id: "normal-earlier",
+      title: "Normal Earlier",
+      featured: "FALSE",
+      starts_at: "2026-08-15T23:00:00.000Z",
+    }, {
+      ...eventGroups.upcoming[0],
+      id: "featured-later",
+      title: "Featured Later",
+      featured: "TRUE",
+      starts_at: "2026-09-10T23:00:00.000Z",
+    }],
+  });
+
+  assert.deepEqual(events.map((event) => event.title), [
+    "Featured Later",
+    "Normal Earlier",
+    "Normal Later",
+  ]);
+});
+
 test("recurring selection falls back to normalized source title", () => {
   const events = resolveCentralEmbedEvents({
     items: [{
@@ -155,6 +209,7 @@ test("HTML renderer emits semantic markup and escapes content", () => {
     imageUrl: "",
     actionUrl: "https://example.com",
     actionLabel: "Learn More",
+    featured: true,
   }], {includeStyles: false});
 
   assert.match(html, /<section/);
@@ -163,6 +218,14 @@ test("HTML renderer emits semantic markup and escapes content", () => {
   assert.match(html, /<time[^>]+datetime=/);
   assert.match(html, /<a[^>]+href=/);
   assert.match(html, /Kids &lt; Night/);
+  assert.match(html, /data-central-embed-event-kind="featured"/);
+  assert.match(html, /central-embed-featured-label">Featured/);
+  assert.match(html, /itemtype="https:\/\/schema.org\/Event"/);
+  assert.match(html, /itemprop="startDate"/);
+  assert.match(html, /itemprop="name"/);
+  assert.match(html, /itemtype="https:\/\/schema.org\/Place"/);
+  assert.match(html, /itemprop="description"/);
+  assert.match(html, /itemprop="url"/);
   assert.doesNotMatch(html, /Kids < Night/);
 });
 
@@ -187,6 +250,22 @@ test("standard HTML includes a progressive See More control", () => {
   assert.match(html, /data-central-embed-toggle/);
   assert.match(html, /aria-expanded="false">See More/);
 });
+
+test(
+    "normal events are explicitly distinguishable from featured events",
+    () => {
+      const html = renderCentralEmbedHtml("embed_abc123def456", [{
+        title: "Normal Event",
+        featured: false,
+      }, {
+        title: "Featured Event",
+        featured: true,
+      }], {includeStyles: false, layout: "standard"});
+
+      assert.match(html, /data-central-embed-event-kind="normal"/);
+      assert.match(html, /class="central-embed-event is-featured"/);
+    },
+);
 
 test("compact HTML stays bounded to the concise event fields", () => {
   const event = {

@@ -144,6 +144,15 @@
         ]
       },
       {
+        "source": "/embed-lab.@(js|css|html)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/embed.js",
         "headers": [
           {

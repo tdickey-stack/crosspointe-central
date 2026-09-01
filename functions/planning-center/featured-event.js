@@ -20,6 +20,31 @@ export function findPlanningCenterTagId(payload, tagName) {
 }
 
 /**
+ * Checks whether an event instance carries an exact included tag name.
+ *
+ * @param {Object} instance Planning Center event instance.
+ * @param {Map<string, string>|Object} tagMap Included tag lookup.
+ * @param {string} tagName Exact configured tag name.
+ * @return {boolean} Whether the tag is attached to this instance.
+ */
+export function planningCenterInstanceHasTag(instance, tagMap, tagName) {
+  const expectedName = String(tagName || "").trim();
+  const references = instance && instance.relationships &&
+    instance.relationships.tags &&
+    Array.isArray(instance.relationships.tags.data) ?
+      instance.relationships.tags.data : [];
+  if (!expectedName) return false;
+
+  return references.some((reference) => {
+    const id = String(reference && reference.id || "");
+    const value = tagMap instanceof Map ?
+      tagMap.get(id) :
+      tagMap && tagMap[id];
+    return String(value || "").trim() === expectedName;
+  });
+}
+
+/**
  * Resolves the public Doors Open and main event times from a Calendar payload.
  *
  * @param {Object} payload Planning Center event-times response.
@@ -137,7 +162,6 @@ export function getCentralFeaturedEventCandidates(payload, options = {}) {
 
   return (payload && Array.isArray(payload.data) ? payload.data : [])
       .map((instance) => {
-        const tagNames = getInstanceTagNames_(instance, tagMap);
         const eventReference = instance && instance.relationships &&
           instance.relationships.event &&
           instance.relationships.event.data;
@@ -152,8 +176,16 @@ export function getCentralFeaturedEventCandidates(payload, options = {}) {
         if (
           !instance ||
           !instance.id ||
-          !tagNames.includes(centralTagName) ||
-          !tagNames.includes(featuredTagName) ||
+          !planningCenterInstanceHasTag(
+              instance,
+              tagMap,
+              centralTagName,
+          ) ||
+          !planningCenterInstanceHasTag(
+              instance,
+              tagMap,
+              featuredTagName,
+          ) ||
           Number.isNaN(startsAt.getTime())
         ) {
           return null;
@@ -170,22 +202,4 @@ export function getCentralFeaturedEventCandidates(payload, options = {}) {
       .sort((left, right) => {
         return left.startsAt.getTime() - right.startsAt.getTime();
       });
-}
-
-/**
- * Resolves the public tag names attached to an event instance.
- *
- * @param {Object} instance Planning Center event instance.
- * @param {Map<string, string>} tagMap Included tag lookup.
- * @return {Array<string>} Resolved tag names.
- */
-function getInstanceTagNames_(instance, tagMap) {
-  const references = instance && instance.relationships &&
-    instance.relationships.tags &&
-    Array.isArray(instance.relationships.tags.data) ?
-      instance.relationships.tags.data : [];
-
-  return references.map((reference) => {
-    return tagMap.get(String(reference && reference.id || "")) || "";
-  }).filter(Boolean);
 }

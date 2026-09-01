@@ -6,6 +6,7 @@ import {
   findPlanningCenterTagId,
   getCentralFeaturedEventCandidates,
   getPlanningCenterEventSchedule,
+  planningCenterInstanceHasTag,
 } from "./featured-event.js";
 
 test("finds the configured Planning Center tag exactly", () => {
@@ -18,6 +19,36 @@ test("finds the configured Planning Center tag exactly", () => {
 
   assert.equal(findPlanningCenterTagId(payload, "Central Featured"), "2");
   assert.equal(findPlanningCenterTagId(payload, "central featured"), "");
+});
+
+test("detects Central Featured on each calendar instance", () => {
+  const tagMap = {
+    central: "Central",
+    featured: "Central Featured",
+  };
+  const featuredInstance = instance_(
+      "featured-event",
+      "event-1",
+      "2026-09-02T23:30:00Z",
+      ["central", "featured"],
+  );
+  const normalInstance = instance_(
+      "normal-event",
+      "event-2",
+      "2026-09-03T23:30:00Z",
+      ["central"],
+  );
+
+  assert.equal(planningCenterInstanceHasTag(
+      featuredInstance,
+      tagMap,
+      "Central Featured",
+  ), true);
+  assert.equal(planningCenterInstanceHasTag(
+      normalInstance,
+      tagMap,
+      "Central Featured",
+  ), false);
 });
 
 test("separates Doors Open from the main event time", () => {

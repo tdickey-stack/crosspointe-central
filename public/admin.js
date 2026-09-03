@@ -82,7 +82,7 @@
   // The featured hero keeps more copy space than its supporting cards.
   var PRINT_MODE_HERO_DESCRIPTION_RECOMMENDED_CHARACTERS = 400;
   var PRINT_MODE_HERO_DESCRIPTION_WARNING_CHARACTERS = 600;
-  var PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS = 120;
+  var PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS = 100;
   var PRINT_MODE_DESCRIPTION_MAX_CHARACTERS = 140;
   var PRINT_MODE_DESCRIPTION_OVERRIDE_LIMIT = 12;
   var PRINT_MODE_EVENT_CONTINUATION_TRIGGER_WEIGHT = 6;
@@ -5996,6 +5996,11 @@
         "Sign In with Google",
         "</button>",
       ].join("") : "",
+      !isLoading && adminState.authReady && adminState.usingEmulators ? [
+        "<button type=\"button\" class=\"central-admin-access-button is-secondary\" data-admin-action=\"local-test-sign-in\">",
+        "Use Local Test Account",
+        "</button>",
+      ].join("") : "",
       "<a class=\"central-admin-access-button is-secondary\" href=\"/\">",
       "Return to Central",
       "</a>",
@@ -10386,7 +10391,9 @@
       escapeHtml_(state.message),
       "</span><small>",
       String(PRINT_MODE_HERO_DESCRIPTION_RECOMMENDED_CHARACTERS),
-      " characters recommended; supporting cards use 120</small>",
+      " characters recommended; supporting cards use ",
+      String(PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS),
+      "</small>",
       "</span>",
     ].join("");
   }

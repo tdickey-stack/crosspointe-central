@@ -6460,7 +6460,7 @@ button:disabled {
 .central-bulletin-label {
   display: block;
   color: var(--bulletin-red);
-  font-size: 0.09in;
+  font-size: 0.1in;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -6486,7 +6486,7 @@ button:disabled {
 .central-bulletin-featured-time {
   margin: 0.02in 0;
   color: var(--bulletin-red) !important;
-  font-size: 0.095in;
+  font-size: 0.11in;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -6669,7 +6669,7 @@ button:disabled {
   display: block;
   margin: 0;
   color: var(--bulletin-ink) !important;
-  font-size: 0.12in;
+  font-size: 0.14in;
   line-height: 1.15;
 }
 
@@ -6901,7 +6901,7 @@ button:disabled {
 .central-bulletin-serve-ministry {
   display: block;
   color: var(--bulletin-muted);
-  font-size: 0.075in;
+  font-size: 0.085in;
   font-weight: 900;
   letter-spacing: 0.06em;
   line-height: 1.1;
@@ -6912,13 +6912,13 @@ button:disabled {
   padding-left: 0.1in;
   border-left: 1px solid var(--bulletin-line);
   color: var(--bulletin-muted);
-  font-size: 0.07in;
+  font-size: 0.085in;
   line-height: 1.25;
 }
 
 .central-bulletin-serve-cta strong {
   color: var(--bulletin-red);
-  font-size: 0.075in;
+  font-size: 0.09in;
 }
 
 .central-bulletin-giving {
@@ -6954,7 +6954,7 @@ button:disabled {
 
 .central-bulletin-giving-grid span {
   color: var(--bulletin-muted);
-  font-size: 0.065in;
+  font-size: 0.08in;
 }
 
 .central-bulletin-giving-grid strong {
@@ -6965,7 +6965,7 @@ button:disabled {
 .central-bulletin-giving-link {
   margin: 0.045in 0 0;
   color: var(--bulletin-muted);
-  font-size: 0.065in;
+  font-size: 0.08in;
   text-align: center;
 }
 
@@ -7222,7 +7222,7 @@ button:disabled {
 .central-bulletin-event-date span,
 .central-bulletin-event-date small {
   color: var(--bulletin-red) !important;
-  font-size: 0.06in;
+  font-size: 0.075in;
   font-weight: 900;
   letter-spacing: 0.055em;
   line-height: 1;
@@ -7300,7 +7300,7 @@ button:disabled {
   gap: 0.018in;
   margin: 0 0 0.055in;
   color: var(--bulletin-red) !important;
-  font-size: 0.075in;
+  font-size: 0.09in;
   font-weight: 900;
   letter-spacing: 0.015em;
   line-height: 1.25;
@@ -7362,7 +7362,7 @@ button:disabled {
 .central-bulletin-body-copy {
   color: #45464a !important;
   font-family: inherit;
-  font-size: 0.085in;
+  font-size: 0.11in;
   font-weight: 600;
   line-height: 1.3;
 }
@@ -7453,7 +7453,7 @@ button:disabled {
 }
 
 .central-bulletin-event-columns.is-ultra-dense .central-bulletin-event h3 {
-  font-size: 0.09in;
+  font-size: 0.14in;
 }
 
 .central-bulletin-event-columns.is-ultra-dense .central-bulletin-event {
@@ -7467,16 +7467,16 @@ button:disabled {
 }
 
 .central-bulletin-event-columns.is-ultra-dense .central-bulletin-event-date strong {
-  font-size: 0.17in;
+  font-size: 0.18in;
 }
 
 .central-bulletin-event-columns.is-ultra-dense .central-bulletin-event-date span,
 .central-bulletin-event-columns.is-ultra-dense .central-bulletin-event-date small {
-  font-size: 0.05in;
+  font-size: 0.075in;
 }
 
 .central-bulletin-event-columns.is-ultra-dense .central-bulletin-event .central-bulletin-event-meta {
-  font-size: 0.06in;
+  font-size: 0.09in;
 }
 
 .central-bulletin-event-columns.is-ultra-dense
@@ -7503,13 +7503,13 @@ button:disabled {
 }
 
 .central-bulletin-event-columns.is-max-density .central-bulletin-event h3 {
-  font-size: 0.09in;
+  font-size: 0.13in;
   line-height: 1.08;
 }
 
 .central-bulletin-event-columns.is-max-density .central-bulletin-event .central-bulletin-event-meta {
   margin-bottom: 0.025in;
-  font-size: 0.06in;
+  font-size: 0.085in;
   line-height: 1.12;
 }
 
@@ -7524,12 +7524,12 @@ button:disabled {
 }
 
 .central-bulletin-event-columns.is-max-density .central-bulletin-event-date strong {
-  font-size: 0.145in;
+  font-size: 0.17in;
 }
 
 .central-bulletin-event-columns.is-max-density .central-bulletin-event-date span,
 .central-bulletin-event-columns.is-max-density .central-bulletin-event-date small {
-  font-size: 0.043in;
+  font-size: 0.07in;
 }
 
 .central-bulletin-event-columns.is-max-density .central-bulletin-event-entry +
@@ -7552,16 +7552,16 @@ button:disabled {
 
 .central-bulletin-event-columns.is-overflow-density .central-bulletin-event .central-bulletin-event-meta {
   margin-bottom: 0.012in;
-  font-size: 0.047in;
+  font-size: 0.08in;
   line-height: 1.05;
 }
 
 .central-bulletin-event-columns.is-overflow-density .central-bulletin-event-meta-location {
-  display: block;
+  display: none;
 }
 
 .central-bulletin-event-columns.is-overflow-density .central-bulletin-event h3 {
-  font-size: 0.072in;
+  font-size: 0.12in;
   line-height: 1.02;
   -webkit-line-clamp: 1;
 }
@@ -7580,12 +7580,12 @@ button:disabled {
 
 .central-bulletin-event-columns.is-overflow-density .central-bulletin-event-date strong {
   margin: 0.008in 0;
-  font-size: 0.115in;
+  font-size: 0.16in;
 }
 
 .central-bulletin-event-columns.is-overflow-density .central-bulletin-event-date span,
 .central-bulletin-event-columns.is-overflow-density .central-bulletin-event-date small {
-  font-size: 0.036in;
+  font-size: 0.065in;
 }
 
 .central-bulletin-event-columns.is-overflow-density .central-bulletin-event-entry +
@@ -7733,7 +7733,7 @@ button:disabled {
 }
 
 .central-bulletin-panel.is-full-page .central-bulletin-body-copy {
-  font-size: 0.105in;
+  font-size: 0.13in;
   line-height: 1.35;
 }
 

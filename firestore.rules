@@ -634,7 +634,7 @@ service cloud.firestore {
         ) &&
         validStudioString(content.subtitle, 110) &&
         content.date.matches("^.{0,28}$") &&
-        content.time.matches("^.{0,24}$") &&
+        content.time.matches("^.{0,48}$") &&
         content.location.matches("^.{0,34}$") &&
         content.cta.matches("^.{0,44}$") &&
         validGraphicKindFields(content, projectId, templateId) &&

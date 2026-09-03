@@ -1219,7 +1219,7 @@ const SMALL_GROUP_TEXT_FIELD_OPTIONS = {
   title: {label: "Group name", maximum: 52},
   subtitle: {label: "Leader names", maximum: 110, multiline: true},
   date: {label: "Meeting day", maximum: 28},
-  time: {label: "Meeting time", maximum: 24},
+  time: {label: "Meeting time", maximum: 48},
   location: {label: "Meeting location", maximum: 34},
   cta: {label: "Directory prompt", maximum: 44},
 };
@@ -2358,7 +2358,9 @@ function PolicyContentStep({content, updateContent}) {
   );
 }
 
-function EventContentStep({content, updateContent}) {
+function EventContentStep({content, updateContent, templateId}) {
+  const isSmallGroupLeader =
+    getTemplateById(templateId).variant === "small-group-leader";
   return (
     <div className="studio-step-card">
       <div className="studio-step-card-heading">
@@ -2396,10 +2398,10 @@ function EventContentStep({content, updateContent}) {
           maxLength={28}
         />
         <InputField
-          label="Time"
+          label={isSmallGroupLeader ? "Meeting time" : "Time"}
           value={content.time}
           onChange={(value) => updateContent({time: value})}
-          maxLength={24}
+          maxLength={isSmallGroupLeader ? 48 : 24}
         />
         <InputField
           label="Location"
@@ -2901,6 +2903,7 @@ function StepContent({
       <EventContentStep
         content={project.content}
         updateContent={updateContent}
+        templateId={project.templateId}
       />
     );
   }

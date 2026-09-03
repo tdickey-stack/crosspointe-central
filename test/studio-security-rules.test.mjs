@@ -751,8 +751,17 @@ test("event projects accept valid sources and reject cross-project upload paths"
   smallGroupPayload.content.format = "screen";
   smallGroupPayload.content.composition = "groups-gradient";
   smallGroupPayload.content.heroMode = "text";
+  smallGroupPayload.content.time =
+    "Wednesdays at 6:30 PM and Sundays at 10:30 AM CT";
   await assertSucceeds(
     db.doc("centralStudioProjects/small-group-leader").set(smallGroupPayload),
+  );
+  const overlongSmallGroupTimePayload = structuredClone(smallGroupPayload);
+  overlongSmallGroupTimePayload.content.time = "x".repeat(49);
+  await assertFails(
+    db.doc("centralStudioProjects/small-group-leader-long-time").set(
+      overlongSmallGroupTimePayload,
+    ),
   );
   smallGroupPayload.content.format = "square";
   await assertFails(

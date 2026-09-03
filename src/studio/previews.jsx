@@ -1592,7 +1592,7 @@ const SMALL_GROUP_EDITABLE_FIELDS = {
   title: {label: "Group name", maximum: 52},
   subtitle: {label: "Leader names", maximum: 110},
   date: {label: "Meeting day", maximum: 28},
-  time: {label: "Meeting time", maximum: 24},
+  time: {label: "Meeting time", maximum: 48},
   location: {label: "Meeting location", maximum: 34},
   cta: {label: "Directory prompt", maximum: 44},
 };

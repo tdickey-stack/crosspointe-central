@@ -15,7 +15,6 @@ export const CENTRAL_REGISTRATION_SIGNUP_FIELDS = [
   "selection_types",
   "signup_location",
 ];
-export const CENTRAL_REGISTRATION_LOOKAHEAD_DAYS = 30;
 
 /**
  * Selects public Planning Center signups approved for Central.
@@ -136,9 +135,9 @@ function buildCentralRegistrationSignup_(signup, context) {
   const visibilityEnd = eventEnd ||
     (!hasEventStart && hasCloseDate ? closeDate : null);
 
-  if (!hasEventStart && !hasCloseDate) return null;
-  if (hasEventStart && eventStart.getTime() > context.now.getTime() +
-    CENTRAL_REGISTRATION_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000) {
+  // Ongoing signups have no date to expire them, so require an open status.
+  if (!hasEventStart && !hasCloseDate &&
+    (attrs.open !== true || attrs.closed === true)) {
     return null;
   }
   if (visibilityEnd && visibilityEnd.getTime() <= context.now.getTime()) {
@@ -408,15 +407,17 @@ function htmlToPlainText_(value) {
 }
 
 /**
- * Sorts signups by their next event time and then title.
+ * Sorts dated signups chronologically, then ongoing signups by title.
  *
  * @param {Object} left Left signup.
  * @param {Object} right Right signup.
  * @return {number} Sort result.
  */
 function sortCentralRegistrationSignups_(left, right) {
-  const leftTime = new Date(left.starts_at || left.close_at || 0).getTime();
-  const rightTime = new Date(right.starts_at || right.close_at || 0).getTime();
+  const leftDate = left.starts_at || left.close_at;
+  const rightDate = right.starts_at || right.close_at;
+  const leftTime = leftDate ? new Date(leftDate).getTime() : Infinity;
+  const rightTime = rightDate ? new Date(rightDate).getTime() : Infinity;
 
   if (leftTime !== rightTime) return leftTime - rightTime;
   return left.title.localeCompare(right.title);

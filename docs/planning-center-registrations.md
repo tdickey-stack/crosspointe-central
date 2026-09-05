@@ -78,9 +78,17 @@ Seven days before `close_at`, an otherwise open signup changes to
 `Registration closed` until its final signup time ends. After the event ends,
 Central removes the signup automatically.
 
-As a feed safety boundary, Central only returns registration events whose next
-signup time begins within the next 30 days. Signups farther out—or without a
-usable signup time—remain hidden until they enter that rolling window.
+Open signups in the exact `Central` category can appear regardless of how far
+away their event date is, including ongoing registrations with no event date
+or closing date. Archived signups and signups without a valid registration
+link remain excluded.
+
+Ongoing signups with neither date remain visible only while explicitly open
+and not closed. Undated signups with a closing date disappear when that date
+passes. Dated signups retain the event-end removal and closing-status behavior
+above. Cards with an event date or closing date sort chronologically, followed
+by ongoing registrations alphabetically. Undated signups have no Add to Calendar
+action.
 
 ## Verification
 

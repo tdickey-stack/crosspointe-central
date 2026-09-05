@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  CENTRAL_REGISTRATION_LOOKAHEAD_DAYS,
   CENTRAL_REGISTRATION_SIGNUP_FIELDS,
   getCentralRegistrationSignups,
 } from "./registrations.js";
@@ -204,19 +203,15 @@ test("shows closing-soon and closed states until the event ends", () => {
   assert.deepEqual(eventEnded, []);
 });
 
-test("uses the 30-day window only for dated registration events", () => {
-  assert.equal(CENTRAL_REGISTRATION_LOOKAHEAD_DAYS, 30);
-
-  const outsideWindow = getCentralRegistrationSignups(buildPayload(), {
-    now: "2026-07-11T13:59:59Z",
+test("includes open Central signups more than 30 days before the event", () => {
+  const signups = getCentralRegistrationSignups(buildPayload(), {
+    now: "2026-02-01T12:00:00Z",
   });
-  assert.deepEqual(outsideWindow, []);
+  assert.equal(signups.length, 1);
+  assert.equal(signups[0].id, "signup-1");
+});
 
-  const atWindowBoundary = getCentralRegistrationSignups(buildPayload(), {
-    now: "2026-07-11T14:00:00Z",
-  });
-  assert.equal(atWindowBoundary.length, 1);
-
+test("preserves closing-date expiry for undated signups", () => {
   const missingDatePayload = buildPayload();
   missingDatePayload.included = missingDatePayload.included.filter((item) => {
     return item.type !== "SignupTime";
@@ -232,11 +227,63 @@ test("uses the 30-day window only for dated registration events", () => {
   assert.deepEqual(getCentralRegistrationSignups(missingDatePayload, {
     now: "2026-10-28T05:00:00Z",
   }), []);
+});
 
-  missingDatePayload.data[0].attributes.close_at = "";
-  assert.deepEqual(getCentralRegistrationSignups(missingDatePayload, {
-    now: "2026-08-10T15:26:15Z",
+test("includes ongoing Central signups only while explicitly open", () => {
+  const payload = buildPayload();
+  const signup = payload.data[0];
+  signup.attributes.name = "Under One Roof Memorial Bricks";
+  signup.attributes.close_at = null;
+  signup.attributes.at_maximum_capacity = false;
+  signup.relationships.next_signup_time.data = null;
+  const options = {now: "2026-09-05T18:00:00Z"};
+
+  const signups = getCentralRegistrationSignups(payload, options);
+  assert.equal(signups.length, 1);
+  assert.equal(signups[0].title, "Under One Roof Memorial Bricks");
+  assert.equal(signups[0].starts_at, "");
+  assert.equal(signups[0].close_at, "");
+  assert.equal(signups[0].status, "open");
+  assert.equal(signups[0].status_label, "Registration open");
+
+  signup.attributes.closed = true;
+  assert.deepEqual(getCentralRegistrationSignups(payload, options), []);
+  signup.attributes.closed = false;
+  for (const open of [false, null, undefined]) {
+    signup.attributes.open = open;
+    assert.deepEqual(getCentralRegistrationSignups(payload, options), []);
+  }
+
+  signup.attributes.open = true;
+  payload.included.find((item) => item.id === "category-central")
+      .attributes.name = "central";
+  assert.deepEqual(getCentralRegistrationSignups(payload, options), []);
+});
+
+test("keeps scheduled registrations hidden before they open", () => {
+  const payload = buildPayload();
+  payload.data[0].attributes.open = false;
+  payload.data[0].attributes.open_at = "2026-07-20T12:00:00Z";
+  assert.deepEqual(getCentralRegistrationSignups(payload, {
+    now: "2026-07-17T12:00:00Z",
   }), []);
+});
+
+test("sorts dated signups before ongoing signups, then by title", () => {
+  const payload = buildPayload();
+  const dated = payload.data[0];
+  const ongoing = ["Zebra", "Alpha"].map((name) => {
+    const signup = structuredClone(dated);
+    signup.id = name;
+    signup.attributes.name = name;
+    signup.attributes.close_at = null;
+    signup.relationships.next_signup_time.data = null;
+    return signup;
+  });
+  payload.data = [...ongoing, dated];
+  assert.deepEqual(getCentralRegistrationSignups(payload, {
+    now: "2026-07-17T12:00:00Z",
+  }).map((signup) => signup.id), ["signup-1", "Alpha", "Zebra"]);
 });
 
 test("rejects archived and unsafe-url signups", () => {

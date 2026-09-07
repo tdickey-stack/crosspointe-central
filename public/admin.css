@@ -6505,7 +6505,7 @@ button:disabled {
   margin: 0 0 0.07in 0.12in;
   place-items: center;
   overflow: hidden;
-  border-radius: 0.08in;
+  border-radius: 0.11in;
   background: #202124;
 }
 
@@ -6515,6 +6515,7 @@ button:disabled {
   display: block;
   object-fit: cover;
   object-position: center;
+  border-radius: 0.11in !important;
 }
 
 .central-bulletin-campaigns {
@@ -6540,21 +6541,25 @@ button:disabled {
 }
 
 .central-bulletin-fallback-block.is-size-1 {
-  min-height: 0.62in;
+  min-height: 0.54in;
   padding-top: 0.075in;
   padding-bottom: 0.075in;
 }
 
 .central-bulletin-fallback-block.is-size-1.has-image {
-  grid-template-columns: minmax(0, 1fr) 1in;
+  grid-template-columns: minmax(0, 1fr) 0.82in;
 }
 
 .central-bulletin-fallback-block.is-size-1.is-image-left.has-image {
-  grid-template-columns: 1in minmax(0, 1fr);
+  grid-template-columns: 0.82in minmax(0, 1fr);
 }
 
 .central-bulletin-fallback-block.is-size-1 .central-bulletin-fallback-copy p {
   -webkit-line-clamp: 2;
+}
+
+.central-bulletin-fallback-block.is-size-1 .central-bulletin-fallback-copy h3 {
+  font-size: 0.15in;
 }
 
 .central-bulletin-fallback-block.is-size-3 {
@@ -6619,7 +6624,7 @@ button:disabled {
 .central-bulletin-fallback-media {
   min-height: 0.62in;
   overflow: hidden;
-  border-radius: 0.07in;
+  border-radius: 0.11in;
   background: #e4e4e7;
 }
 
@@ -6629,6 +6634,7 @@ button:disabled {
   height: 100%;
   min-height: 0.62in;
   object-fit: cover;
+  border-radius: inherit;
 }
 
 .central-bulletin-campaign {
@@ -6710,6 +6716,12 @@ button:disabled {
 }
 
 .central-bulletin-panel-front.is-front-density-4:not(.is-full-page) > * {
+  flex-shrink: 0;
+}
+
+/* Keep permanent sections and announcements at their measured size. The
+   full-page hero can still use the remaining space above its minimum height. */
+.central-bulletin-panel-front.is-full-page > :not(.central-bulletin-featured) {
   flex-shrink: 0;
 }
 
@@ -6931,7 +6943,7 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 0.05in;
   border: 1px solid var(--bulletin-line);
-  border-radius: 0.08in;
+  border-radius: 0.11in;
   overflow: hidden;
 }
 
@@ -7055,7 +7067,7 @@ button:disabled {
 }
 
 .central-bulletin-back-custom-block.is-size-1 {
-  min-height: 0.74in;
+  min-height: 0.62in;
   padding: 0.075in 0.085in;
 }
 
@@ -7065,7 +7077,7 @@ button:disabled {
 
 .central-bulletin-back-custom-block.is-size-1
 .central-bulletin-back-custom-copy h3 {
-  font-size: 0.13in;
+  font-size: 0.15in;
 }
 
 .central-bulletin-back-custom-block.is-size-2 {
@@ -7090,16 +7102,20 @@ button:disabled {
   align-self: stretch;
   min-height: 0.58in;
   overflow: hidden;
-  border-radius: 0.07in;
-  background: #e4e4e7;
+  border-radius: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
 }
 
 .central-bulletin-back-custom-media img {
   display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 0.58in;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 0.11in;
 }
 
 .central-bulletin-back-custom-copy {
@@ -7109,15 +7125,20 @@ button:disabled {
 
 .central-bulletin-back-custom-copy h3 {
   margin: 0.035in 0 0;
+  display: -webkit-box;
   font-size: 0.15in;
-  line-height: 1.08;
+  color: var(--bulletin-ink) !important;
+  overflow: hidden;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .central-bulletin-back-custom-copy p {
   display: block;
   margin: 0.035in 0 0;
   overflow: visible;
-  font-size: var(--bulletin-back-custom-fit-size, 0.085in);
   overflow-wrap: anywhere;
   -webkit-box-orient: initial;
   -webkit-line-clamp: unset;
@@ -7884,6 +7905,529 @@ button:disabled {
   font-size: 0.075in;
 }
 
+/* Scannable is an isolated Page 1 treatment. Classic and Page 2 keep the
+   existing selectors above so adding future layouts does not change them. */
+.central-bulletin-panel-front.is-bulletin-layout-scannable {
+  --bulletin-type-title: 0.43in;
+  --bulletin-type-h1: 0.278in;
+  --bulletin-type-h2: 0.194in;
+  --bulletin-type-h3: 0.16in;
+  --bulletin-type-h4: 0.132in;
+  --bulletin-type-h5: 0.104in;
+  --bulletin-type-paragraph: 0.118in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-brand strong {
+  font-size: var(--bulletin-type-h4);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-brand span,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-sunday-date,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-label,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-meta,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-meta strong,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-serve-ministry,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-serve-cta,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-serve-cta strong,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-giving-grid span,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-giving-link {
+  font-size: var(--bulletin-type-h5);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-featured h2 {
+  font-size: var(--bulletin-type-h1);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-fallback-copy h3,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-giving-grid strong {
+  font-size: var(--bulletin-type-h2);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-campaign strong,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-serve h3 {
+  font-size: var(--bulletin-type-h3);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-body-copy {
+  font-size: var(--bulletin-type-paragraph);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-heading {
+  padding: 0.15in 0 0.13in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-heading h1 {
+  font-size: var(--bulletin-type-title);
+  line-height: 0.9;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-featured {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 1.86in;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0.11in;
+  background: #f4f4f5;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-featured.has-image {
+  grid-template-columns: 2.12in minmax(0, 1fr);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-featured .central-bulletin-featured-media {
+  float: none;
+  width: 100%;
+  height: 100%;
+  min-height: 1.86in;
+  aspect-ratio: auto;
+  background: transparent;
+  margin: 0;
+  padding-left: 0.08in;
+  border-radius: 0.11in;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-featured-media img {
+  width: auto;
+  height: auto;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 0.11in !important;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-featured-copy {
+  align-self: center;
+  min-width: 0;
+  padding: 0.15in 0.16in 0.14in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-featured h2 {
+  display: -webkit-box;
+  margin: 0.065in 0 0;
+  overflow: hidden;
+  line-height: 1.02;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-meta {
+  display: grid;
+  gap: 0.018in;
+  margin-top: 0.07in;
+  color: var(--bulletin-muted);
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-meta strong {
+  color: var(--bulletin-red);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-featured .central-bulletin-description {
+  display: -webkit-box;
+  margin-top: 0.07in;
+  overflow: hidden;
+  line-height: 1.32;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-content {
+  display: grid;
+  gap: 0.09in;
+  margin-top: 0.1in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-content > *,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-content .central-bulletin-fallback-blocks {
+  margin-top: 0;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-scannable-content .central-bulletin-card {
+  border-width: 0 0 0 0.045in;
+  border-radius: 0.04in;
+  border-left-color: var(--bulletin-red);
+  background: #fafafa;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-campaigns {
+  padding: 0.105in 0.14in 0.075in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-campaign {
+  grid-template-columns: 0.32in minmax(0, 1fr);
+  gap: 0.085in;
+  min-height: 0.48in;
+  padding: 0.06in 0;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-campaign-icon {
+  width: 0.31in;
+  height: 0.31in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-campaign-icon img {
+  width: 0.2in;
+  height: 0.2in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-campaign strong,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-serve h3 {
+  line-height: 1.12;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-campaign p,
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-serve p {
+  line-height: 1.25;
+  -webkit-line-clamp: 2;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-serve {
+  grid-template-columns: minmax(0, 1fr) 1.42in;
+  min-height: 0.82in;
+  padding: 0.11in 0.14in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-fallback-block {
+  padding: 0.105in 0.14in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-fallback-copy p {
+  line-height: 1.25;
+  -webkit-line-clamp: 3;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-giving {
+  margin-top: 0.1in;
+  padding: 0.1in 0.12in 0.07in;
+  border-color: var(--bulletin-ink);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-giving-grid > div {
+  padding: 0.065in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-giving-grid span {
+  font-weight: 700;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-black-and-white
+.central-bulletin-scannable-featured,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-black-and-white
+.central-bulletin-scannable-content .central-bulletin-card {
+  background: #f3f3f3;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-3:not(.is-full-page)
+.central-bulletin-scannable-featured,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-scannable-featured {
+  min-height: 1.65in;
+  max-height: 1.65in;
+  padding: 0;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-3:not(.is-full-page)
+.central-bulletin-scannable-featured .central-bulletin-featured-media,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-scannable-featured .central-bulletin-featured-media {
+  width: 100%;
+  height: 100%;
+  min-height: 1.65in;
+  background: transparent;
+  margin: 0;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-fallback-block.is-size-1 {
+  min-height: 0.56in;
+  padding: 0.07in 0.11in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-fallback-block.is-size-1.has-image {
+  grid-template-columns: minmax(0, 1fr) 0.82in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable
+.central-bulletin-fallback-block.is-size-1.is-image-left.has-image {
+  grid-template-columns: 0.82in minmax(0, 1fr);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-fallback-block.is-size-1.has-image {
+  grid-template-columns: minmax(0, 1fr) 1.05in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-fallback-block.is-size-1.is-image-left.has-image {
+  grid-template-columns: 1.05in minmax(0, 1fr);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-fallback-block.is-size-1 {
+  min-height: 0.7in;
+  padding: 0.065in 0.11in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-heading {
+  padding: 0.105in 0 0.095in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page) {
+  --bulletin-type-title: 0.36in;
+  --bulletin-type-h1: 0.23in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-heading h1 {
+  font-size: var(--bulletin-type-title);
+  line-height: 0.9;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-scannable-featured-copy {
+  padding: 0.11in 0.13in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-3:not(.is-full-page)
+.central-bulletin-scannable-featured h2,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-scannable-featured h2 {
+  margin-top: 0.05in;
+  font-size: var(--bulletin-type-h1);
+  -webkit-line-clamp: 2;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-3:not(.is-full-page)
+.central-bulletin-scannable-featured .central-bulletin-description,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-scannable-featured .central-bulletin-description {
+  margin-top: 0.035in;
+  -webkit-line-clamp: 2;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-3:not(.is-full-page)
+.central-bulletin-campaign p,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-3:not(.is-full-page)
+.central-bulletin-serve p,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaign p,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve p {
+  -webkit-line-clamp: 1;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-3:not(.is-full-page)
+.central-bulletin-fallback-copy p,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-fallback-copy p {
+  -webkit-line-clamp: 2;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-scannable-content {
+  gap: 0.06in;
+  margin-top: 0.065in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaigns {
+  margin-top: 0;
+  padding: 0.075in 0.11in 0.055in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaign {
+  grid-template-columns: 0.28in minmax(0, 1fr);
+  gap: 0.065in;
+  min-height: 0.4in;
+  padding: 0.045in 0;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaign-icon {
+  width: 0.27in;
+  height: 0.27in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaign-icon img {
+  width: 0.18in;
+  height: 0.18in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve {
+  grid-template-columns: minmax(0, 1fr) 1.35in;
+  gap: 0.08in;
+  min-height: 0.7in;
+  margin-top: 0;
+  padding: 0.085in 0.11in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-fallback-block.is-size-1 {
+  min-height: 0.58in;
+  padding: 0.07in 0.11in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-fallback-block.is-size-1 .central-bulletin-fallback-copy p {
+  margin-top: 0.025in;
+  -webkit-line-clamp: 1;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaigns.is-count-3 p,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve.is-count-3 p {
+  display: none;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-campaigns.is-count-3 .central-bulletin-campaign strong,
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-serve.is-count-3 h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-giving {
+  margin-top: 0.065in;
+  padding: 0.075in 0.1in 0.055in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-4:not(.is-full-page)
+.central-bulletin-giving-grid > div {
+  padding: 0.055in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-heading {
+  padding: 0.2in 0 0.18in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page {
+  --bulletin-type-title: 0.58in;
+  --bulletin-type-h1: 0.39in;
+  --bulletin-type-h2: 0.25in;
+  --bulletin-type-h3: 0.194in;
+  --bulletin-type-h4: 0.153in;
+  --bulletin-type-h5: 0.118in;
+  --bulletin-type-paragraph: 0.14in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-scannable-featured {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 2.75in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-scannable-featured.has-image {
+  grid-template-columns: 3.25in minmax(0, 1fr);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-scannable-featured .central-bulletin-featured-media {
+  min-height: 2.75in;
+  background: transparent;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-scannable-featured-copy {
+  padding: 0.24in 0.25in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-scannable-featured .central-bulletin-description {
+  -webkit-line-clamp: 5;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-full-page-cta p {
+  font-size: var(--bulletin-type-h4);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-full-page-cta p strong {
+  font-size: var(--bulletin-type-h2);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-full-page-cta small {
+  font-size: var(--bulletin-type-h5);
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-scannable-content {
+  gap: 0.13in;
+  margin-top: 0.14in;
+}
+
+.central-bulletin-panel-front.is-bulletin-layout-scannable.is-full-page
+.central-bulletin-full-page-cta {
+  margin-top: auto;
+}
+
 @media (max-width: 1160px) {
   [data-app-route="admin"] .central-admin-print-mode-preview-stage {
     min-height: 545px;
@@ -8283,4 +8827,78 @@ button:disabled {
     border: 0.75pt solid #c5c5c8 !important;
     box-shadow: inset 0 0 0 0.5pt #c5c5c8 !important;
   }
+}
+
+/* The footer owns the bottom edge; announcements adapt inside the middle. */
+.central-bulletin-panel-front.is-adaptive-front > * {
+  flex: 0 0 auto;
+}
+.central-bulletin-panel-front.is-adaptive-front.is-full-page > .central-bulletin-featured {
+  flex: 0 0 auto;
+  height: 2.55in;
+}
+.central-bulletin-panel-front.is-adaptive-front > .central-bulletin-front-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  gap: 0.06in;
+  margin-top: 0.065in;
+  overflow: hidden;
+}
+.central-bulletin-panel-front.is-adaptive-front > .central-bulletin-front-content > * {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+.central-bulletin-panel-front.is-adaptive-front > .central-bulletin-giving,
+.central-bulletin-panel-front.is-adaptive-front > .central-bulletin-full-page-cta {
+  flex: 0 0 auto;
+  margin-top: 0.065in;
+}
+.central-bulletin-panel-front.is-adaptive-front .central-bulletin-fallback-copy p {
+  -webkit-line-clamp: 4 !important;
+}
+.central-bulletin-panel-front.is-adaptive-front .central-bulletin-fallback-block.is-size-1 p {
+  -webkit-line-clamp: 2 !important;
+}
+.central-bulletin-panel-front.is-adaptive-front .central-bulletin-fallback-block.is-size-3 p {
+  -webkit-line-clamp: 6 !important;
+}
+.central-bulletin-panel-front.is-adaptive-front .central-bulletin-campaign p,
+.central-bulletin-panel-front.is-adaptive-front .central-bulletin-serve p {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+}
+.central-bulletin-panel-front.is-adaptive-front:is([data-front-fit-level="2"], [data-front-fit-level="3"], [data-front-fit-level="4"]) .central-bulletin-fallback-block {
+  min-height: 0;
+  padding: 0.07in 0.11in;
+}
+.central-bulletin-panel-front.is-adaptive-front:is([data-front-fit-level="2"], [data-front-fit-level="3"], [data-front-fit-level="4"]) .central-bulletin-fallback-copy p {
+  -webkit-line-clamp: 2 !important;
+}
+.central-bulletin-panel-front.is-adaptive-front:is([data-front-fit-level="2"], [data-front-fit-level="3"], [data-front-fit-level="4"]) .central-bulletin-fallback-media {
+  display: none;
+}
+.central-bulletin-panel-front.is-adaptive-front:is([data-front-fit-level="2"], [data-front-fit-level="3"], [data-front-fit-level="4"]) .central-bulletin-fallback-block {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.central-bulletin-panel-front.is-adaptive-front:is([data-front-fit-level="3"], [data-front-fit-level="4"]) :is(.central-bulletin-fallback-copy, .central-bulletin-campaign, .central-bulletin-serve) p {
+  -webkit-line-clamp: 1 !important;
+}
+.central-bulletin-panel-front.is-adaptive-front[data-front-fit-level="4"] :is(.central-bulletin-fallback-copy, .central-bulletin-campaign, .central-bulletin-serve) p {
+  display: none !important;
+}
+
+/* Keep announcement typography identical inside and outside the editor cards. */
+[data-app-route="admin"] .central-bulletin-panel-front.is-adaptive-front .central-bulletin-front-content h3 {
+  margin: 0;
+  letter-spacing: -0.04em;
+}
+[data-app-route="admin"] .central-bulletin-panel-front.is-adaptive-front .central-bulletin-front-content p {
+  margin: 0;
+}
+
+/* Shorten supporting copy before reducing custom blocks or hiding graphics. */
+.central-bulletin-panel-front.is-adaptive-front[data-front-fit-level="1"] :is(.central-bulletin-campaign, .central-bulletin-serve) p {
+  -webkit-line-clamp: 1 !important;
 }

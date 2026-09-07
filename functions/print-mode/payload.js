@@ -5,7 +5,6 @@ export const PRINT_MODE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const PRINT_MODE_EVENT_OVERRIDE_LIMIT = 200;
 const PRINT_MODE_MAX_CAMPAIGNS = 3;
 const PRINT_MODE_MAX_SERVE_NEEDS = 3;
-const PRINT_MODE_MAX_FRONT_CONTENT_ITEMS = 4;
 const PRINT_MODE_MAX_CUSTOM_BLOCKS = 8;
 const PRINT_MODE_DESCRIPTION_OVERRIDE_LIMIT = 12;
 const PRINT_MODE_DESCRIPTION_MAX_CHARACTERS = 140;
@@ -123,28 +122,6 @@ export function normalizePrintModePayload(sourceData) {
         };
       })
       .filter((block) => block.id && block.title);
-  let remainingCustomFrontUnits = PRINT_MODE_MAX_FRONT_CONTENT_ITEMS;
-  normalizedFallbackBlocks.forEach((block) => {
-    if (block.enabled === false || !block.includeOnFront) {
-      return;
-    }
-    if (block.size > remainingCustomFrontUnits) {
-      block.includeOnFront = false;
-      block.enabled = block.includeOnBack;
-      return;
-    }
-    remainingCustomFrontUnits -= block.size;
-  });
-  const customFrontUnits = normalizedFallbackBlocks.reduce(
-      (total, block) => total + (
-        block.enabled !== false && block.includeOnFront ? block.size : 0
-      ),
-      0,
-  );
-  const availableCentralUnits = Math.max(
-      0,
-      PRINT_MODE_MAX_FRONT_CONTENT_ITEMS - customFrontUnits,
-  );
   const rawEvents = Array.isArray(source.events) ? source.events : [];
   const campaignIds = Array.isArray(source.campaignIds) ?
     source.campaignIds :
@@ -177,9 +154,8 @@ export function normalizePrintModePayload(sourceData) {
       .filter((id, index, ids) => id && ids.indexOf(id) === index)
       .slice(
           0,
-          availableCentralUnits > 0 ? PRINT_MODE_MAX_CAMPAIGNS : 0,
+          PRINT_MODE_MAX_CAMPAIGNS,
       );
-  const campaignUnits = normalizedCampaignIds.length ? 1 : 0;
   const rawServeNeedIds = Array.isArray(source.serveNeedIds) ?
     source.serveNeedIds :
     (source.serveNeedId ? [source.serveNeedId] : []);
@@ -188,11 +164,7 @@ export function normalizePrintModePayload(sourceData) {
       .filter((id, index, ids) => id && ids.indexOf(id) === index)
       .slice(
           0,
-          Math.min(
-              PRINT_MODE_MAX_SERVE_NEEDS,
-              availableCentralUnits - campaignUnits > 0 ?
-                PRINT_MODE_MAX_SERVE_NEEDS : 0,
-          ),
+          PRINT_MODE_MAX_SERVE_NEEDS,
       );
   const normalizedFrontContentOrder = normalizePrintModeFrontContentOrder_(
       source.frontContentOrder,
@@ -208,6 +180,8 @@ export function normalizePrintModePayload(sourceData) {
     printFormat: source.printFormat === "full-page" ?
       "full-page" : "half-letter",
     printColorMode: source.printColorMode === "bw" ? "bw" : "color",
+    bulletinLayout: source.bulletinLayout === "scannable" ?
+      "scannable" : "classic",
     showCutLine: source.showCutLine === true,
     heroSource: source.heroSource === "manual" ? "manual" : "featured",
     frontContentSource: "mixed",

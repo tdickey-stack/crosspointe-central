@@ -13,6 +13,7 @@ test("Print Mode payload defaults preserve the public contract", () => {
   assert.equal(payload.serviceDate, "");
   assert.equal(payload.printFormat, "half-letter");
   assert.equal(payload.printColorMode, "color");
+  assert.equal(payload.bulletinLayout, "classic");
   assert.equal(payload.showCutLine, false);
   assert.equal(payload.heroSource, "featured");
   assert.equal(payload.frontContentSource, "mixed");
@@ -55,6 +56,7 @@ test("Print Mode payload normalizes settings within existing limits", () => {
     serviceDate: "2026-07-26",
     printFormat: "full-page",
     printColorMode: "bw",
+    bulletinLayout: "scannable",
     showCutLine: true,
     heroSource: "manual",
     frontContentSource: "fallback",
@@ -110,6 +112,7 @@ test("Print Mode payload normalizes settings within existing limits", () => {
   assert.equal(payload.serviceDate, "2026-07-26");
   assert.equal(payload.printFormat, "full-page");
   assert.equal(payload.printColorMode, "bw");
+  assert.equal(payload.bulletinLayout, "scannable");
   assert.equal(payload.showCutLine, true);
   assert.equal(payload.heroSource, "manual");
   assert.equal(payload.frontContentSource, "mixed");
@@ -137,12 +140,12 @@ test("Print Mode payload normalizes settings within existing limits", () => {
     id: "a",
     description: "Short campaign print copy.",
   }]);
-  assert.deepEqual(payload.serveNeedIds, []);
+  assert.deepEqual(payload.serveNeedIds, ["serve-1", "serve-2"]);
   assert.deepEqual(payload.serveNeedDescriptionOverrides, [{
     id: "serve-1",
     description: "",
   }]);
-  assert.equal(payload.serveNeedId, "");
+  assert.equal(payload.serveNeedId, "serve-1");
   assert.deepEqual(payload.fallbackBlocks, [{
     id: "front-feature",
     eyebrow: "",
@@ -169,6 +172,14 @@ test("Print Mode payload normalizes settings within existing limits", () => {
     included: false,
     includeDescription: true,
   }]);
+});
+
+test("Print Mode payload falls back from unknown bulletin layouts", () => {
+  assert.equal(
+      normalizePrintModePayload({bulletinLayout: "future-layout"})
+          .bulletinLayout,
+      "classic",
+  );
 });
 
 test("Print Mode bounds sparse description overrides", () => {
@@ -249,59 +260,118 @@ test(
     },
 );
 
-test(
-    "Campaign and Serve selections each use one grouped front-page space",
-    () => {
-      const payload = normalizePrintModePayload({
-        campaignIds: ["campaign-1", "campaign-2", "campaign-3"],
-        serveNeedIds: ["serve-1", "serve-2", "serve-3"],
-        fallbackBlocks: [
-          {
-            id: "compact-1",
-            title: "Compact One",
-            size: 1,
-            includeOnFront: true,
-          },
-          {
-            id: "compact-2",
-            title: "Compact Two",
-            size: 1,
-            includeOnFront: true,
-          },
-        ],
-      });
-
-      assert.deepEqual(payload.campaignIds, [
-        "campaign-1",
-        "campaign-2",
-        "campaign-3",
-      ]);
-      assert.deepEqual(payload.serveNeedIds, [
-        "serve-1",
-        "serve-2",
-        "serve-3",
-      ]);
-    },
-);
-
-test("Grouped live content still respects the four-space budget", () => {
+test("Campaign and Serve selections are preserved", () => {
   const payload = normalizePrintModePayload({
-    campaignIds: ["campaign-1", "campaign-2", "campaign-3"],
+    campaignIds: ["campaign-1", "campaign-2"],
+    serveNeedIds: ["serve-1", "serve-2"],
+  });
+
+  assert.deepEqual(payload.campaignIds, ["campaign-1", "campaign-2"]);
+  assert.deepEqual(payload.serveNeedIds, ["serve-1", "serve-2"]);
+});
+
+test("Selections beyond the former weighted limit are preserved", () => {
+  const payload = normalizePrintModePayload({
+    campaignIds: ["campaign-1", "campaign-2"],
     serveNeedIds: ["serve-1", "serve-2"],
     fallbackBlocks: [{
-      id: "large",
-      title: "Large Block",
-      size: 3,
+      id: "compact",
+      title: "Compact Block",
+      size: 1,
       includeOnFront: true,
     }],
   });
 
-  assert.deepEqual(payload.campaignIds, [
-    "campaign-1",
-    "campaign-2",
-    "campaign-3",
-  ]);
-  assert.deepEqual(payload.serveNeedIds, []);
+  assert.equal(payload.fallbackBlocks[0].includeOnFront, true);
+  assert.deepEqual(payload.campaignIds, ["campaign-1", "campaign-2"]);
+  assert.deepEqual(payload.serveNeedIds, ["serve-1", "serve-2"]);
+});
+
+test("Selections retain category caps and deduplication", () => {
+  const payload = normalizePrintModePayload({
+    campaignIds: ["c1", "c1", "c2", "c3", "c4"],
+    serveNeedIds: ["s1", "s2", "s3", "s4"],
+    fallbackBlocks: [
+      {id: "one", title: "One", size: 3, includeOnFront: true},
+      {id: "two", title: "Two", size: 3, includeOnFront: true},
+    ],
+  });
+
+  assert.deepEqual(payload.campaignIds, ["c1", "c2", "c3"]);
+  assert.deepEqual(payload.serveNeedIds, ["s1", "s2", "s3"]);
+  assert.ok(payload.fallbackBlocks.every((block) => block.includeOnFront));
+  assert.ok(payload.fallbackBlocks.every((block) => block.enabled));
+});
+
+test("Custom size does not limit live selections", () => {
+  for (const size of [1, 2, 3]) {
+    const payload = normalizePrintModePayload({
+      campaignIds: ["campaign-1", "campaign-2", "campaign-3"],
+      serveNeedIds: ["serve-1", "serve-2"],
+      fallbackBlocks: [{
+        id: "custom",
+        title: "Custom Block",
+        size: size,
+        includeOnFront: true,
+      }],
+    });
+
+    assert.equal(payload.fallbackBlocks[0].size, size);
+    assert.equal(payload.campaignIds.length, 3);
+    assert.deepEqual(payload.serveNeedIds, ["serve-1", "serve-2"]);
+  }
+});
+
+test("Duplicate and empty live IDs are removed", () => {
+  const payload = normalizePrintModePayload({
+    campaignIds: ["campaign-1", " campaign-1 ", "", "campaign-2"],
+    serveNeedIds: ["", "serve-1", " serve-1 ", "serve-2", "serve-3"],
+  });
+
+  assert.deepEqual(payload.campaignIds, ["campaign-1", "campaign-2"]);
+  assert.deepEqual(payload.serveNeedIds, ["serve-1", "serve-2", "serve-3"]);
+});
+
+test("Back-only blocks preserve live selections", () => {
+  const payload = normalizePrintModePayload({
+    campaignIds: ["campaign-1", "campaign-2"],
+    serveNeedIds: ["serve-1", "serve-2"],
+    fallbackBlocks: [{
+      id: "back-only",
+      title: "Back Only",
+      size: 3,
+      includeOnBack: true,
+    }],
+  });
+
+  assert.equal(payload.fallbackBlocks[0].enabled, true);
+  assert.equal(payload.fallbackBlocks[0].includeOnFront, false);
+  assert.equal(payload.fallbackBlocks[0].includeOnBack, true);
+  assert.deepEqual(payload.campaignIds, ["campaign-1", "campaign-2"]);
+  assert.deepEqual(payload.serveNeedIds, ["serve-1", "serve-2"]);
+});
+
+test("Multiple custom sizes retain both front and back placement", () => {
+  const payload = normalizePrintModePayload({
+    campaignIds: ["campaign-1"],
+    fallbackBlocks: [
+      {id: "large", title: "Large", size: 3, includeOnFront: true},
+      {
+        id: "standard",
+        title: "Standard",
+        size: 2,
+        includeOnFront: true,
+        includeOnBack: true,
+      },
+      {id: "compact", title: "Compact", size: 1, includeOnFront: true},
+    ],
+  });
+
+  assert.equal(payload.fallbackBlocks[1].includeOnFront, true);
+  assert.equal(payload.fallbackBlocks[1].includeOnBack, true);
+  assert.equal(payload.fallbackBlocks[1].enabled, true);
+  assert.equal(payload.fallbackBlocks[2].includeOnFront, true);
+  assert.deepEqual(payload.campaignIds, ["campaign-1"]);
 });
 
 test("Print Mode preserves a safe mixed front-page card order", () => {

@@ -54,6 +54,18 @@ Start the local emulators:
 pnpm run emulators:full
 ```
 
+With Firestore running, copy the currently visible live Campaigns and Serve
+Needs into the local emulator for Print Mode testing:
+
+```bash
+pnpm run seed:print-mode-live
+```
+
+This reads the public live API and writes only to a loopback Firestore emulator
+(port 8080 by default). Rerun it to refresh the copied entries. It preserves
+local-only entries and does not remove items that have since disappeared from
+the live site. It does not copy interest submissions or change production data.
+
 Rebuild the generated YouVersion bundle when needed:
 
 ```bash

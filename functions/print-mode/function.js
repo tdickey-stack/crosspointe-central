@@ -144,11 +144,21 @@ export function createPrintModeHandler(options) {
         return;
       }
 
-      const config = normalizePrintModePayload(
-          request.body && typeof request.body === "object" ?
-            request.body :
-            {},
-      );
+      let sourceData = request.body && typeof request.body === "object" ?
+        request.body :
+        {};
+      if (!Object.prototype.hasOwnProperty.call(sourceData, "bulletinLayout")) {
+        const existingSnapshot = await firestore
+            .doc(PRINT_MODE_SETTINGS_DOC_PATH)
+            .get();
+        sourceData = {
+          ...sourceData,
+          bulletinLayout: existingSnapshot.exists ?
+            existingSnapshot.data().bulletinLayout :
+            undefined,
+        };
+      }
+      const config = normalizePrintModePayload(sourceData);
       await firestore.doc(PRINT_MODE_SETTINGS_DOC_PATH).set({
         ...config,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

@@ -690,6 +690,10 @@ function renderEventEditButton_(item) {
     " aria-label=\"Edit ", escapeAttr(item.title || "event"), "\"",
     " onclick=\"openCentralEventEditor('",
     escapeJsString(String(item.id)), "')\">Edit</button>",
+    item.cta_warning && ["propose", "edit", "approve", "admin"].indexOf(
+        centralEventEditPermission,
+    ) !== -1 ? "<p class=\"event-cta-editor-warning\">Button setup: " +
+      escapeHtml(item.cta_warning) + "</p>" : "",
   ].join("");
 }
 
@@ -1413,7 +1417,6 @@ function renderFeaturedEventHeroCard_(data, settings) {
   var featuredEvent = getFeaturedEventContext_(data, settings);
   if (!featuredEvent) return "";
 
-  var eventKey = featuredEvent.eventKey;
   var title = featuredEvent.title;
   var imageUrl = featuredEvent.imageUrl;
   var schedule = featuredEvent.schedule;
@@ -1440,17 +1443,52 @@ function renderFeaturedEventHeroCard_(data, settings) {
               escapeHtml(schedule) + "</p>" : "",
         "</div>",
         renderEventEditButton_(featuredEvent.item),
-        "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
-          analyticsAttrs_({
-            action: "view_event",
-            contentId: getEventAnalyticsContentId_(featuredEvent.item),
-            contentLabel: title,
-          }),
-          " onclick=\"openEventDetailsModal('",
-          escapeJsString(eventKey),
-          "')\">View Event</button>",
+        renderFeaturedEventActions_(featuredEvent),
       "</div>",
     "</article>",
+  ].join("");
+}
+
+function getSafeEventRegistrationUrl_(value) {
+  var raw = String(value || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return "";
+  try {
+    var parsed = new URL(raw);
+    return parsed.hostname && !parsed.username && !parsed.password ? raw : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function renderFeaturedEventActions_(featuredEvent) {
+  var item = featuredEvent.item;
+  var registrationUrl = getSafeEventRegistrationUrl_(item.registration_url);
+  return [
+    "<div class=\"featured-event-actions\">",
+      registrationUrl ? button(
+          item.registration_button_text || "Sign Up",
+          registrationUrl,
+          "btn-primary featured-event-cta",
+          {
+            event: "registration_click",
+            action: "registration_outbound",
+            contentId: getEventAnalyticsContentId_(item),
+            contentLabel: featuredEvent.title,
+          },
+      ) : "",
+      "<button type=\"button\" class=\"btn featured-event-cta",
+        registrationUrl ? "" : " btn-primary", "\"",
+        " aria-label=\"View featured event: ",
+        escapeAttr(featuredEvent.title), "\"",
+        analyticsAttrs_({
+          action: "view_event",
+          contentId: getEventAnalyticsContentId_(item),
+          contentLabel: featuredEvent.title,
+        }),
+        " onclick=\"openEventDetailsModal('",
+        escapeJsString(featuredEvent.eventKey),
+        "')\">View Event</button>",
+    "</div>",
   ].join("");
 }
 
@@ -1577,17 +1615,7 @@ function renderSundayFeaturedEventCard_(data, settings) {
               escapeHtml(featuredEvent.schedule) + "</p>" : "",
         "</div>",
         renderEventEditButton_(featuredEvent.item),
-        "<button type=\"button\" class=\"btn btn-primary featured-event-cta\"",
-          " aria-label=\"View featured event: ",
-          escapeAttr(featuredEvent.title), "\"",
-          analyticsAttrs_({
-            action: "view_event",
-            contentId: getEventAnalyticsContentId_(featuredEvent.item),
-            contentLabel: featuredEvent.title,
-          }),
-          " onclick=\"openEventDetailsModal('",
-          escapeJsString(featuredEvent.eventKey),
-          "')\">View Event</button>",
+        renderFeaturedEventActions_(featuredEvent),
       "</div>",
     "</article>",
   ].join("");
@@ -3665,6 +3693,7 @@ function registerEventDetailsItem_(item) {
     venue: String(item.venue || "").trim(),
     address: String(item.address || "").trim(),
     description: String(item.description || "").trim(),
+    descriptionHtml: String(item.description_html || "").trim(),
     recurrence: getEventModalRecurrence_(item.recurrence),
     recurrenceDetails: getEventModalRecurrence_(item.recurrence_details),
     featured: item.featured === "TRUE",
@@ -3676,7 +3705,8 @@ function registerEventDetailsItem_(item) {
     registrationStatus: String(item.status || "").trim(),
     registrationStatusLabel: String(item.status_label || "").trim(),
     registrationButtonText: String(
-        item.registration_button_text || "Register in Church Center",
+        item.registration_button_text || (item.source === "Planning Center Registrations" ?
+          "Register in Church Center" : "Sign Up"),
     ).trim(),
     priceLabel: String(item.price_label || "").trim(),
     closeLabel: String(item.close_label || "").trim(),
@@ -3691,6 +3721,36 @@ function getEventAnalyticsContentId_(item) {
         item.id || item.event_id || item.registration_id || item.title
       ) || "",
   ).trim();
+}
+
+// Rebuild the supported markup rather than trusting HTML from cached payloads.
+function renderEventDescription_(item) {
+  var richHtml = String(item.descriptionHtml || "").trim();
+  if (richHtml) {
+    var template = document.createElement("template");
+    template.innerHTML = richHtml;
+    var allowedTags = ["p", "br", "div", "strong", "b", "em", "i", "u", "ul", "ol", "li", "h2", "h3", "h4", "blockquote", "a"];
+    var discardedTags = ["script", "style", "iframe", "object", "embed", "svg", "math", "template"];
+    function renderNode(node) {
+      if (node.nodeType === 3) return escapeHtml(node.textContent || "");
+      if (node.nodeType !== 1) return "";
+      var tag = node.tagName.toLowerCase();
+      if (discardedTags.indexOf(tag) !== -1) return "";
+      var children = Array.prototype.map.call(node.childNodes, renderNode).join("");
+      if (allowedTags.indexOf(tag) === -1) return children;
+      if (tag === "br") return "<br>";
+      if (tag === "a") {
+        var href = String(node.getAttribute("href") || "").trim();
+        if (!getSafeEventRegistrationUrl_(href) && !/^mailto:[^\s<>]+@[^\s<>]+$/i.test(href)) return children;
+        return "<a " + buildLinkAttrs_(href) + ">" + children + "</a>";
+      }
+      return "<" + tag + ">" + children + "</" + tag + ">";
+    }
+    var safeHtml = Array.prototype.map.call(template.content.childNodes, renderNode).join("");
+    if (safeHtml.trim()) return "<div class=\"event-details-rich-text\">" + safeHtml + "</div>";
+  }
+  return "<p>" + escapeHtml(item.description || item.recurrenceDetails ||
+      "More details will be posted here as they become available.") + "</p>";
 }
 
 function openEventDetailsModal(eventKey) {
@@ -3715,7 +3775,7 @@ function openEventDetailsModal(eventKey) {
     "";
   var hasSafeImage = /^https?:\/\//i.test(item.imageUrl);
   var usesHeadingThumbnail = hasSafeImage && item.featured;
-  var hasSafeRegistration = /^https?:\/\//i.test(item.registrationUrl);
+  var hasSafeRegistration = !!getSafeEventRegistrationUrl_(item.registrationUrl);
   var registrationFacts = item.isRegistrationEvent ? [
     item.priceLabel ? {label: "Price", value: item.priceLabel} : null,
     item.closeLabel ? {
@@ -3787,11 +3847,7 @@ function openEventDetailsModal(eventKey) {
       "<div class=\"event-details-content\">",
         "<section class=\"event-details-main\" aria-labelledby=\"event-details-about-title\">",
           "<h3 id=\"event-details-about-title\">Details</h3>",
-          (item.description || item.recurrenceDetails) ?
-            "<p>" + escapeHtml(
-                item.description || item.recurrenceDetails,
-            ) + "</p>" :
-            "<p>More details will be posted here as they become available.</p>",
+          renderEventDescription_(item),
           registrationFacts.length ? [
             "<dl class=\"registration-modal-facts\">",
               registrationFacts.map(function(fact) {
@@ -3831,7 +3887,7 @@ function openEventDetailsModal(eventKey) {
       "<div class=\"event-details-actions",
         item.isRegistrationEvent ? " has-registration-action" : "",
         "\">",
-        hasSafeRegistration && !item.featured ?
+        hasSafeRegistration ?
           item.isRegistrationEvent ? [
             "<div class=\"registration-modal-action\">",
               button(

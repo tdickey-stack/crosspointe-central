@@ -1,3 +1,4 @@
+import {parseEventDescription} from "./planning-center/event-description.js";
 import crypto from "node:crypto";
 
 import {
@@ -5877,6 +5878,8 @@ function applyCachedCalendarItemPresentation_(
     title: effectiveDetails.title,
     location: effectiveDetails.location,
     description: effectiveDetails.description,
+    description_html: effectiveDetails.overridden_fields.includes("description") ?
+      "" : String(source.description_html || ""),
     starts_at: !Number.isNaN(startsAt.getTime()) ?
       startsAt.toISOString() :
       String(source.starts_at || ""),
@@ -6100,12 +6103,13 @@ async function buildCentralCalendarItem_(
     return null;
   }
 
-  const planningCenterDescription = htmlToPlainText_(
+  const planningCenterContent = parseEventDescription(
       eventAttrs.description ||
       eventAttrs.summary ||
       attrs.description ||
       "",
   );
+  const planningCenterDescription = planningCenterContent.description;
   const planningCenterTitle = String(
       attrs.name || "Untitled Event",
   ).trim();
@@ -6146,6 +6150,8 @@ async function buildCentralCalendarItem_(
   });
   const title = effectiveDetails.title;
   const location = effectiveDetails.location;
+  const hasDescriptionOverride = effectiveDetails.overridden_fields
+      .includes("description");
   const description = effectiveDetails.description;
   const doorsOpenStartsAt = new Date(eventSchedule.doorsOpenStartsAt || "");
   const namedDoorsOpenTime = !Number.isNaN(doorsOpenStartsAt.getTime()) ?
@@ -6192,7 +6198,11 @@ async function buildCentralCalendarItem_(
     recurrence_details: recurrenceDetails,
     venue: locationDetails.venue,
     address: locationDetails.address,
-    registration_url: registrationUrl,
+    description_html: hasDescriptionOverride ? "" :
+      planningCenterContent.description_html,
+    cta_warning: planningCenterContent.cta_warning,
+    registration_button_text: planningCenterContent.registration_button_text,
+    registration_url: planningCenterContent.registration_url || registrationUrl,
     church_center_url: churchCenterUrl,
     button_text: churchCenterUrl ? "Learn More" : "",
     button_url: churchCenterUrl,
@@ -7082,6 +7092,9 @@ function toTodayItem_(item) {
     recurrence_details: item.recurrence_details,
     venue: item.venue,
     address: item.address,
+    description_html: item.description_html,
+    cta_warning: item.cta_warning,
+    registration_button_text: item.registration_button_text,
     registration_url: item.registration_url,
     church_center_url: item.church_center_url,
     button_text: item.button_text,
@@ -7126,6 +7139,9 @@ function toUpcomingItem_(item) {
     recurrence_details: item.recurrence_details,
     venue: item.venue,
     address: item.address,
+    description_html: item.description_html,
+    cta_warning: item.cta_warning,
+    registration_button_text: item.registration_button_text,
     registration_url: item.registration_url,
     church_center_url: item.church_center_url,
     button_text: item.button_text,

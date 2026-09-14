@@ -1,4 +1,4 @@
-export const CALENDAR_SOURCE_CACHE_VERSION = "v3";
+export const CALENDAR_SOURCE_CACHE_VERSION = "v4";
 
 /**
  * Builds the shared cache ID for raw Planning Center calendar source data.

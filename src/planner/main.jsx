@@ -41,6 +41,9 @@ import {
 } from "./briefs.js";
 import {parseBriefMarkdown} from "./markdown.js";
 import {createPlannerStore} from "./persistence.js";
+import {describeRecurrence, expandRecurrence, normalizeRecurrence} from "./recurrence.js";
+import {buildOccurrencePlan, buildSeriesPlan, skipOccurrencePlan} from "./series.js";
+import {RecurrenceFields, recurrenceForFrequency} from "./recurrence-controls.jsx";
 import {isStarterPlaybookId} from "./seed-data.js";
 import "./planner.css";
 
@@ -384,6 +387,48 @@ function titleCase(value) {
     .filter(Boolean)
     .map((word) => word[0].toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function plannerId(prefix) {
+  if (globalThis.crypto?.randomUUID) return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function mergeById(current, changed) {
+  const nextById = new Map((changed || []).map((item) => [item.id, item]));
+  const merged = (current || []).map((item) => nextById.get(item.id) || item);
+  const existing = new Set((current || []).map((item) => item.id));
+  return [...merged, ...(changed || []).filter((item) => !existing.has(item.id))];
+}
+
+function seriesPlaybook(workspace, series) {
+  return (workspace.playbookVersions || []).find((item) =>
+    item.playbookId === series.playbookId && Number(item.version) === Number(series.playbookVersion),
+  ) || workspace.playbooks.find((item) =>
+    item.id === series.playbookId && Number(item.version) === Number(series.playbookVersion),
+  ) || null;
+}
+
+function occurrenceDate(campaign) {
+  return campaign?.occurrenceKey || campaign?.eventDate || "";
+}
+
+function registrationDeadlineOffset(campaign, fallback = null) {
+  if (campaign?.deadlineOffsetDays !== undefined && campaign?.deadlineOffsetDays !== null) {
+    const explicit = Number(campaign.deadlineOffsetDays);
+    return Number.isInteger(explicit) && explicit >= 0 && explicit <= 365 ? explicit : fallback;
+  }
+  if (campaign?.eventDate && campaign?.registrationDeadline) {
+    const derived = Math.round((utcDateFromKey(campaign.eventDate).getTime() - utcDateFromKey(campaign.registrationDeadline).getTime()) / 86400000);
+    return Number.isInteger(derived) && derived >= 0 && derived <= 365 ? derived : fallback;
+  }
+  return fallback;
+}
+
+function nextSeriesRevision(series) {
+  const revision = Number(series?.revision);
+  if (!Number.isInteger(revision) || revision < 1) throw new Error("The saved series revision is invalid. Reload the Planner before editing this series.");
+  return revision + 1;
 }
 
 function StatusBadge({status, children}) {
@@ -1032,10 +1077,21 @@ function FilterSelect({label, value, onChange, options}) {
   );
 }
 
-function CampaignsView({workspace, onNewCampaign, onOpenCampaign, canEdit}) {
-  const sorted = workspace.campaigns
-    .filter((campaign) => !isStandaloneContent(campaign))
+function CampaignsView({workspace, onNewCampaign, onOpenCampaign, onEditSeries, canEdit}) {
+  const [expandedSeries, setExpandedSeries] = useState(() => new Set());
+  const series = (workspace.campaignSeries || []).filter((item) => item && item.id);
+  const seriesIds = new Set(series.map((item) => item.id));
+  const oneOffs = workspace.campaigns
+    .filter((campaign) => !isStandaloneContent(campaign) && (!campaign.seriesId || !seriesIds.has(campaign.seriesId)))
     .sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate)));
+  const today = dateKey(new Date());
+  const seriesRows = series.map((item) => {
+    const occurrences = workspace.campaigns.filter((campaign) => campaign.seriesId === item.id)
+      .sort((left, right) => occurrenceDate(left).localeCompare(occurrenceDate(right)));
+    const upcoming = occurrences.find((campaign) => occurrenceDate(campaign) >= today && campaign.status !== "archived") || occurrences.at(-1);
+    return {series: item, occurrences, upcoming};
+  }).sort((left, right) => occurrenceDate(left.upcoming).localeCompare(occurrenceDate(right.upcoming)));
+  const hasCampaigns = seriesRows.length || oneOffs.length;
   return (
     <>
       <PageHeading
@@ -1045,10 +1101,28 @@ function CampaignsView({workspace, onNewCampaign, onOpenCampaign, canEdit}) {
         actions={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>＋ New campaign</button>}
       />
       <section className="planner-panel planner-table-panel">
-        {sorted.length ? (
+        {hasCampaigns ? (
           <div className="planner-campaign-table">
             <div className="planner-table-header"><span>Campaign</span><span>Event</span><span>Playbook</span><span /></div>
-            {sorted.map((campaign) => {
+            {seriesRows.map(({series: item, occurrences, upcoming}) => {
+              const expanded = expandedSeries.has(item.id);
+              const activeOccurrences = occurrences.filter((campaign) => campaign.status !== "archived").length;
+              const conflicts = workspace.scheduledPlays.filter((play) => occurrences.some((campaign) => campaign.id === play.campaignId) && play.status === "conflict").length;
+              let rule = "Recurring campaign";
+              try { rule = describeRecurrence(item.recurrence); } catch (_error) { /* Keep the row available for repair. */ }
+              return <div className={`planner-series-row ${item.saveState === "saving" ? "has-alert" : ""}`} key={item.id}>
+                <button className="planner-campaign-row" onClick={() => upcoming && onOpenCampaign(upcoming)} disabled={!upcoming}>
+                  <span className="planner-campaign-title"><LevelBadge level={item.level} /><span><strong>{item.name}</strong><small>{rule}</small></span>{conflicts > 0 && <StatusBadge status="conflict">{conflicts} conflict{conflicts === 1 ? "" : "s"}</StatusBadge>}</span>
+                  <span><strong>{upcoming ? formatDate(upcoming.eventDate) : "No upcoming date"}</strong><small>{activeOccurrences} event{activeOccurrences === 1 ? "" : "s"} · {item.status === "ended" ? "Ended" : "Series"}</small></span>
+                  <span><strong>{workspace.playbooks.find((playbook) => playbook.id === item.playbookId)?.name || item.playbookId}</strong><small>Pinned to version {item.playbookVersion}</small></span>
+                  <span>›</span>
+                </button>
+                {item.saveState === "saving" && <div className="planner-series-save-warning" role="alert"><span><strong>Save interrupted</strong><small>Review this series and retry to finish creating every event and promotion.</small></span>{canEdit && <button className="planner-text-button" onClick={() => onEditSeries(item, upcoming)}>Review and retry</button>}</div>}
+                <button type="button" className="planner-series-expand" aria-expanded={expanded} onClick={() => setExpandedSeries((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}>{expanded ? "Hide event dates" : `Show ${occurrences.length} event date${occurrences.length === 1 ? "" : "s"}`}</button>
+                {expanded && <div className="planner-series-occurrences">{occurrences.map((campaign) => <button key={campaign.id} onClick={() => onOpenCampaign(campaign)}><time dateTime={campaign.eventDate}>{formatDate(campaign.eventDate)}</time><span>{campaign.status === "archived" ? "Skipped" : campaign.recurrenceException ? "Edited occurrence" : "Scheduled"}</span><i>›</i></button>)}</div>}
+              </div>;
+            })}
+            {oneOffs.map((campaign) => {
               const conflicts = workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id && play.status === "conflict").length;
               return (
                 <button className="planner-campaign-row" key={campaign.id} onClick={() => onOpenCampaign(campaign)}>
@@ -2006,16 +2080,76 @@ function SmuggleSelectionDialog({candidate, onClose, onChoose, onSkip}) {
   );
 }
 
+function SeriesPlanPreview({plan, workspace, fallbackCampaigns = []}) {
+  const finalCampaigns = mergeById(workspace?.campaigns || [], plan?.campaigns || []);
+  const finalPlays = mergeById(workspace?.scheduledPlays || [], plan?.plays || []);
+  let previewCampaigns = plan?.campaigns || [];
+  if (plan?.series?.status === "active") {
+    const occurrenceKeys = new Set(expandRecurrence(plan.series.recurrence));
+    previewCampaigns = finalCampaigns.filter((campaign) => campaign.seriesId === plan.series.id && occurrenceKeys.has(occurrenceDate(campaign)) && campaign.status !== "archived");
+  } else if (!previewCampaigns.length) {
+    previewCampaigns = fallbackCampaigns.map((campaign) => finalCampaigns.find((item) => item.id === campaign.id) || campaign);
+  }
+  previewCampaigns = [...previewCampaigns].sort((left, right) => occurrenceDate(left).localeCompare(occurrenceDate(right)));
+  const occurrenceIds = new Set(previewCampaigns.map((campaign) => campaign.id));
+  const seriesPlays = finalPlays.filter((play) => occurrenceIds.has(play.campaignId));
+  const visibleSeriesPlays = seriesPlays.filter((play) => !["missed", "skipped"].includes(play.status));
+  const reviewCount = visibleSeriesPlays.filter(needsPromotionReview).length;
+  const rule = plan?.series?.recurrence;
+  const skipsMissingMonths = rule?.missingDate === "skip" && ((rule.frequency === "monthly" && rule.monthlyMode === "date" && Number(rule.monthDay) > 28) || (rule.frequency === "yearly" && Number(rule.monthDay) > 28));
+  return <>
+    <div className="planner-preview-metrics">
+      <span><strong>{previewCampaigns.length}</strong> events</span>
+      <span><strong>{visibleSeriesPlays.length}</strong> promotions</span>
+      <span><strong>{reviewCount}</strong> conflicts</span>
+      <span><strong>{plan.summary.preserved}</strong> preserved edits</span>
+    </div>
+    {skipsMissingMonths && <div className="planner-detail-note"><strong>Short months are skipped</strong><p>If the selected day does not exist in a month or year, no event is created for that period. Choose the last-day policy to move those events to the final calendar day instead.</p></div>}
+    {plan.summary.skipped > 0 && <div className="planner-detail-note"><strong>{plan.summary.skipped} existing promotion{plan.summary.skipped === 1 ? " is" : "s are"} no longer scheduled</strong><p>The preview includes promotions removed by this change. Completed and past work remains preserved.</p></div>}
+    <div className="planner-series-preview-list">{previewCampaigns.map((campaign) => {
+      const plays = seriesPlays.filter((play) => play.campaignId === campaign.id && !["missed", "skipped"].includes(play.status));
+      return <details key={campaign.id}><summary><span><strong>{formatDate(campaign.eventDate)}</strong><small>{plays.length} promotion{plays.length === 1 ? "" : "s"}</small></span><span>{plays.some(needsPromotionReview) ? "Needs review" : "Ready"}</span></summary><div>{plays.map((play) => <PlayRow key={play.id} play={play} showDate onClick={() => {}} />)}</div></details>;
+    })}</div>
+  </>;
+}
+
+function seriesDefinition({id, form, recurrence, playbook, revision = 1, status = "active"}) {
+  return {
+    id,
+    name: form.name.trim(),
+    recurrence: normalizeRecurrence({...recurrence, startDate: form.eventDate}),
+    playbookId: playbook.id,
+    playbookVersion: Number(playbook.version),
+    level: Number(playbook.level),
+    campaignType: playbook.campaignType,
+    submittedAt: /(?:Z|[+-]\d\d:\d\d)$/.test(String(form.submittedAt || "")) ? form.submittedAt : businessLocalToIso(form.submittedAt),
+    sourceEventId: form.sourceEventId.trim(),
+    eventDetails: form.eventDetails.trim(),
+    sampleAnnouncement: form.sampleAnnouncement.trim(),
+    notes: form.notes.trim(),
+    deadlineOffsetDays: form.deadlineOffsetDays === "" ? null : Number(form.deadlineOffsetDays),
+    status,
+    revision,
+  };
+}
+
 function NewCampaignDialog({workspace, onClose, onGenerate}) {
   const campaignPlaybooks = workspace.playbooks.filter((item) =>
     item.active !== false &&
     (!isStarterPlaybookId(item.id) || !String(item.campaignType).startsWith("ongoing")),
   );
   const defaultPlaybook = campaignPlaybooks[0] || workspace.playbooks[0];
+  const initialEventDate = addDays(dateKey(new Date()), 28);
+  const [previewCampaignId] = useState(() => plannerId("campaign"));
+  const [seriesId] = useState(() => plannerId("series"));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [form, setForm] = useState({
     name: "",
-    eventDate: addDays(dateKey(new Date()), 28),
+    eventDate: initialEventDate,
     registrationDeadline: "",
+    deadlineOffsetDays: "",
+    repeat: "none",
     submittedAt: businessNowInputValue(),
     playbookId: defaultPlaybook?.id || "",
     sourceEventId: "",
@@ -2023,14 +2157,20 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
     sampleAnnouncement: "",
     notes: "",
   });
+  const [recurrence, setRecurrence] = useState(() => recurrenceForFrequency(initialEventDate, "monthly"));
   const playbook = workspace.playbooks.find((item) => item.id === form.playbookId) || defaultPlaybook;
-  const preview = useMemo(() => {
-    if (!form.name.trim() || !form.eventDate || !playbook) return null;
-    const id = `campaign-preview-${Date.now()}`;
-    const generated = generateCampaignSchedule({
+  const previewState = useMemo(() => {
+    if (!form.name.trim() || !form.eventDate || !playbook) return {plan: null, error: ""};
+    try {
+      if (form.repeat !== "none") {
+        const series = seriesDefinition({id: seriesId, form, recurrence: {...recurrence, frequency: form.repeat}, playbook});
+        expandRecurrence(series.recurrence);
+        return {plan: buildSeriesPlan({series, playbook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date()}), error: ""};
+      }
+      const generated = generateCampaignSchedule({
       campaign: {
         ...form,
-        id,
+        id: previewCampaignId,
         submittedAt: businessLocalToIso(form.submittedAt),
         level: playbook.level,
         campaignType: playbook.campaignType,
@@ -2047,29 +2187,46 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
       capacityRules: workspace.capacityRules.filter((rule) => rule.id !== "level-4-social"),
       campaigns: combinedCampaigns,
     });
-    const ownPlays = capacity.plays.filter((item) => item.campaignId === id);
+    const ownPlays = capacity.plays.filter((item) => item.campaignId === previewCampaignId);
     const plannedPlays = visiblePromotions(ownPlays);
-    return {...generated, plays: ownPlays, plannedPlays, summary: scheduleSummary(ownPlays), conflicts: [...level4.conflicts, ...capacity.conflicts].filter((item) => item.overflowPlayIds.some((playId) => ownPlays.some((play) => play.id === playId)))};
-  }, [form, playbook, workspace]);
+      return {plan: {...generated, plays: ownPlays, plannedPlays, summary: scheduleSummary(ownPlays), conflicts: [...level4.conflicts, ...capacity.conflicts].filter((item) => item.overflowPlayIds.some((playId) => ownPlays.some((play) => play.id === playId)))}, error: ""};
+    } catch (previewError) {
+      return {plan: null, error: previewError.message || "This recurrence could not be previewed."};
+    }
+  }, [form, recurrence, playbook, workspace, previewCampaignId, seriesId]);
+  const preview = previewState.plan;
   const update = (key, value) => setForm((current) => ({...current, [key]: value}));
+  const updateEventDate = (eventDate) => {
+    setForm((current) => ({...current, eventDate}));
+    setRecurrence((current) => eventDate ? {...recurrenceForFrequency(eventDate, current.frequency), interval: current.interval, endType: current.endType, count: current.count, until: current.until, missingDate: current.missingDate} : {...current, startDate: eventDate});
+  };
   return (
     <Modal title="Build a new campaign" eyebrow="Promotion preview" onClose={onClose} size="wide">
       <div className="planner-campaign-builder">
         <form onSubmit={(event) => event.preventDefault()}>
           <div className="planner-form-grid">
             <Field label="Campaign / Event name" wide><input autoFocus required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="Women's Breakfast" /></Field>
-            <Field label="Event date"><input type="date" required value={form.eventDate} onChange={(event) => update("eventDate", event.target.value)} /></Field>
-            <Field label="Registration deadline"><input type="date" value={form.registrationDeadline} max={form.eventDate} onChange={(event) => update("registrationDeadline", event.target.value)} /></Field>
+            <Field label={form.repeat === "none" ? "Event date" : "First event date"}><input type="date" required value={form.eventDate} onChange={(event) => updateEventDate(event.target.value)} /></Field>
+            <Field label="Repeat"><select value={form.repeat} onChange={(event) => { const repeat = event.target.value; update("repeat", repeat); if (repeat !== "none") setRecurrence(recurrenceForFrequency(form.eventDate, repeat)); }}><option value="none">Does not repeat</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></Field>
+            {form.repeat === "none" ? <Field label="Registration deadline"><input type="date" value={form.registrationDeadline} max={form.eventDate} onChange={(event) => update("registrationDeadline", event.target.value)} /></Field> : <Field label="Registration deadline" help="Calculated separately from each event date."><div className="planner-inline-number"><input type="number" min="0" max="365" value={form.deadlineOffsetDays} onChange={(event) => update("deadlineOffsetDays", event.target.value === "" ? "" : Number(event.target.value))} /><span>days before each event</span></div></Field>}
             <Field label="Original request received"><input type="datetime-local" required value={form.submittedAt} onChange={(event) => update("submittedAt", event.target.value)} /></Field>
             <Field label="Promotion playbook"><select value={form.playbookId} onChange={(event) => update("playbookId", event.target.value)}>{campaignPlaybooks.map((item) => <option key={item.id} value={item.id}>Level {item.level} · {item.name}</option>)}</select></Field>
             <Field label="Source Event ID"><input value={form.sourceEventId} onChange={(event) => update("sourceEventId", event.target.value)} placeholder="Optional Central / PCO event ID" /></Field>
+          </div>
+          {form.repeat !== "none" && <><div className="planner-recurrence-heading"><span className="planner-kicker">Custom repeat</span><strong>{formatDate(form.eventDate)} is the first event. Each playbook works backward from its own event date.</strong></div><RecurrenceFields recurrence={{...recurrence, frequency: form.repeat, startDate: form.eventDate}} onChange={setRecurrence} /></>}
+          <div className="planner-form-grid planner-form-copy">
             <Field label="Event details" wide help="Optional brief-ready copy. Supports headings, lists, bold, italics, and line breaks."><MarkdownTextEditor value={form.eventDetails} onChange={(value) => update("eventDetails", value)} placeholder="What should the team know about this event?" /></Field>
             <Field label="Sample announcement" wide help="Optional example wording for stage, email, or social teams."><MarkdownTextEditor value={form.sampleAnnouncement} onChange={(value) => update("sampleAnnouncement", value)} placeholder="Join us for **Women’s Breakfast**…" /></Field>
             <Field label="Notes" wide><textarea value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Context Creative should keep with this campaign." /></Field>
           </div>
         </form>
         <section className="planner-schedule-preview">
-          {!preview ? <EmptyState title="Ready for the details" copy="Name the campaign and choose an event date to preview its promotion plan." /> : (
+          {previewState.error ? <div className="planner-detail-note is-alert" role="alert"><strong>Review the repeat settings</strong><p>{previewState.error}</p></div> : !preview ? <EmptyState title="Ready for the details" copy="Name the campaign and choose an event date to preview its promotion plan." /> : form.repeat !== "none" ? <>
+            <div className="planner-timeliness-card"><div><span className="planner-kicker">Recurring campaign</span><h3>{describeRecurrence(preview.series.recurrence)}</h3></div><p>The selected playbook is pinned to version {preview.series.playbookVersion}. Future playbook changes will not silently change this series.</p></div>
+            <SeriesPlanPreview plan={preview} workspace={workspace} />
+            {saveError && <div className="planner-detail-note is-alert" role="alert"><strong>Series not saved</strong><p>{saveError}</p></div>}
+            <div className="planner-modal-actions"><button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button><button className="planner-button is-primary" disabled={saving} onClick={async () => { setSaving(true); setSaveError(""); try { await onGenerate({kind: "series", plan: preview}); } catch (actionError) { setSaveError(actionError.message || "The recurring campaign could not be saved."); setSaving(false); } }}>{saving ? "Saving series…" : `Add ${preview.summary.occurrences} events`}</button></div>
+          </> : (
             <>
               <div className={`planner-timeliness-card ${preview.campaign.isOnTime ? "is-on-time" : "is-late"}`}>
                 <div><span className="planner-kicker">{preview.campaign.durationWeeks}-week campaign</span><h3>Planning window</h3></div>
@@ -2083,9 +2240,10 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
                 {preview.plannedPlays.map((play) => <PlayRow key={play.id} play={play} onClick={() => {}} />)}
               </div>
               <div className="planner-modal-actions">
-                <button className="planner-button is-secondary" onClick={onClose}>Cancel</button>
-                <button className="planner-button is-primary" onClick={() => onGenerate(preview.campaign, preview.plannedPlays)}>Add {preview.plannedPlays.length} promotions</button>
+                <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button>
+                <button className="planner-button is-primary" disabled={saving} onClick={async () => { setSaving(true); setSaveError(""); try { await onGenerate({kind: "one-off", campaign: preview.campaign, plays: preview.plannedPlays}); } catch (actionError) { setSaveError(actionError.message || "The campaign could not be saved."); setSaving(false); } }}> {saving ? "Saving…" : `Add ${preview.plannedPlays.length} promotions`}</button>
               </div>
+              {saveError && <div className="planner-detail-note is-alert" role="alert"><strong>Campaign not saved</strong><p>{saveError}</p></div>}
             </>
           )}
         </section>
@@ -2151,9 +2309,128 @@ function CampaignBriefContentDialog({campaign, onClose, onSave}) {
   </Modal>;
 }
 
-function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEditContent, onEditBriefContent, onDelete, onCancelSmuggle}) {
+function SeriesEditorDialog({mode, campaign, series = null, workspace, onClose, onSave}) {
+  const converting = mode === "convert";
+  const retrying = mode === "retry";
+  const startDate = converting ? campaign.eventDate : retrying ? series.recurrence.startDate : occurrenceDate(campaign);
+  const [seriesId] = useState(() => series?.id || plannerId("series"));
+  const existingOccurrences = series ? workspace.campaigns.filter((item) => item.seriesId === series.id && occurrenceDate(item) >= startDate && item.status !== "archived").length : 0;
+  const pinnedPlaybook = series ? seriesPlaybook(workspace, series) : (workspace.playbookVersions || []).find((item) => item.playbookId === campaign?.playbookId && Number(item.version) === Number(campaign?.playbookVersion)) || workspace.playbooks.find((item) => item.id === campaign?.playbookId && Number(item.version) === Number(campaign?.playbookVersion));
+  const [form, setForm] = useState(() => ({
+    name: series?.name || campaign?.name || "",
+    eventDate: startDate,
+    submittedAt: series?.submittedAt || campaign?.submittedAt || new Date().toISOString(),
+    sourceEventId: series?.sourceEventId || campaign?.sourceEventId || "",
+    eventDetails: series?.eventDetails || campaign?.eventDetails || "",
+    sampleAnnouncement: series?.sampleAnnouncement || campaign?.sampleAnnouncement || "",
+    notes: series?.notes || campaign?.notes || "",
+    deadlineOffsetDays: series ? series.deadlineOffsetDays ?? "" : registrationDeadlineOffset(campaign) ?? "",
+  }));
+  const [recurrence, setRecurrence] = useState(() => {
+    if (converting) return recurrenceForFrequency(startDate, "monthly");
+    if (retrying) return {...series.recurrence};
+    return {...series.recurrence, startDate, endType: "count", count: Math.max(1, existingOccurrences)};
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const previewState = useMemo(() => {
+    if (!form.name.trim() || !pinnedPlaybook) return {plan: null, error: pinnedPlaybook ? "" : "The pinned playbook version is unavailable."};
+    try {
+      if (retrying) return {plan: buildSeriesPlan({series, playbook: pinnedPlaybook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date(), scope: "future", fromDate: series.saveFromDate || series.recurrence.startDate, seedCampaignId: series.seedCampaignId || ""}), error: ""};
+      const revision = converting ? 1 : nextSeriesRevision(series);
+      const draftSeries = {...(series || {}), ...seriesDefinition({id: seriesId, form, recurrence: {...recurrence, startDate}, playbook: pinnedPlaybook, revision})};
+      const options = {series: draftSeries, playbook: pinnedPlaybook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date()};
+      if (converting) options.seedCampaignId = campaign.id;
+      if (!converting && !retrying) { options.scope = "future"; options.fromDate = startDate; }
+      expandRecurrence(draftSeries.recurrence);
+      return {plan: buildSeriesPlan(options), error: ""};
+    } catch (previewError) {
+      return {plan: null, error: previewError.message || "This series could not be previewed."};
+    }
+  }, [campaign, converting, form, pinnedPlaybook, recurrence, retrying, series, seriesId, startDate, workspace]);
+  const title = converting ? "Repeat this campaign" : retrying ? "Finish saving this series" : "Edit this and future events";
+  return <Modal title={title} eyebrow="Recurring campaign" onClose={onClose} size="wide">
+    <div className="planner-campaign-builder">
+      {retrying ? <div className="planner-series-retry-summary"><div className="planner-detail-note is-alert"><strong>The previous save stopped before every record finished.</strong><p>Retry uses the exact same series definition and revision. Finish this save before editing, skipping, or ending occurrences.</p></div><dl className="planner-detail-list"><div><dt>Repeat</dt><dd>{describeRecurrence(series.recurrence)}</dd></div><div><dt>First event</dt><dd>{formatDate(series.recurrence.startDate)}</dd></div><div><dt>Playbook</dt><dd>{pinnedPlaybook?.name} · v{series.playbookVersion}</dd></div><div><dt>Revision</dt><dd>{series.revision}</dd></div></dl></div> : <form onSubmit={(event) => event.preventDefault()}>
+        <div className="planner-form-grid">
+          <Field label="Campaign / Event name" wide><input value={form.name} onChange={(event) => setForm({...form, name: event.target.value})} /></Field>
+          <Field label="First affected event"><input type="date" value={startDate} disabled /></Field>
+          <Field label="Repeat"><select value={recurrence.frequency} onChange={(event) => setRecurrence(recurrenceForFrequency(startDate, event.target.value))}><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></Field>
+          <Field label="Promotion playbook" help="This saved version stays pinned to the series."><input value={`${pinnedPlaybook?.name || series?.playbookId || campaign?.playbookId || "Unavailable"} · version ${pinnedPlaybook?.version || series?.playbookVersion || campaign?.playbookVersion || "?"}`} disabled /></Field>
+          <Field label="Registration deadline" help="Calculated separately from each event date."><div className="planner-inline-number"><input type="number" min="0" max="365" value={form.deadlineOffsetDays} onChange={(event) => setForm({...form, deadlineOffsetDays: event.target.value === "" ? "" : Number(event.target.value)})} /><span>days before each event</span></div></Field>
+          <Field label="Source Event ID" help="The original source link stays fixed after creation."><input value={form.sourceEventId} disabled /></Field>
+        </div>
+        <div className="planner-recurrence-heading"><span className="planner-kicker">Custom repeat</span><strong>{converting ? "The existing event stays the first occurrence." : "Past events and their edited promotion plans stay unchanged."}</strong></div>
+        <RecurrenceFields recurrence={{...recurrence, startDate}} onChange={setRecurrence} />
+        <div className="planner-form-grid planner-form-copy">
+          <Field label="Event details" wide><MarkdownTextEditor value={form.eventDetails} onChange={(value) => setForm({...form, eventDetails: value})} /></Field>
+          <Field label="Sample announcement" wide><MarkdownTextEditor value={form.sampleAnnouncement} onChange={(value) => setForm({...form, sampleAnnouncement: value})} /></Field>
+          <Field label="Notes" wide><textarea value={form.notes} onChange={(event) => setForm({...form, notes: event.target.value})} /></Field>
+        </div>
+      </form>}
+      <section className="planner-schedule-preview">
+        {previewState.error && <div className="planner-detail-note is-alert" role="alert"><strong>Review the series settings</strong><p>{previewState.error}</p></div>}
+        {previewState.plan && <><div className="planner-timeliness-card"><div><span className="planner-kicker">Review before saving</span><h3>{describeRecurrence(previewState.plan.series.recurrence)}</h3></div><p>Every occurrence receives its own backward-planned campaign. {previewState.plan.summary.preserved} manual edit{previewState.plan.summary.preserved === 1 ? " is" : "s are"} preserved.</p></div><SeriesPlanPreview plan={previewState.plan} workspace={workspace} /></>}
+        {saveError && <div className="planner-detail-note is-alert" role="alert"><strong>Series not saved</strong><p>{saveError}</p></div>}
+        <div className="planner-modal-actions"><button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button><button className="planner-button is-primary" disabled={saving || !previewState.plan} onClick={async () => { setSaving(true); setSaveError(""); try { await onSave(previewState.plan); } catch (actionError) { setSaveError(actionError.message || "The recurring campaign could not be saved."); setSaving(false); } }}>{saving ? "Saving…" : converting ? "Repeat campaign" : retrying ? "Retry series save" : "Update future events"}</button></div>
+      </section>
+    </div>
+  </Modal>;
+}
+
+function OccurrenceEditorDialog({campaign, series, workspace, onClose, onSave}) {
+  const playbook = seriesPlaybook(workspace, {...series, playbookId: campaign.playbookId, playbookVersion: campaign.playbookVersion});
+  const [form, setForm] = useState({name: campaign.name, eventDate: campaign.eventDate, sourceEventId: campaign.sourceEventId || "", eventDetails: campaign.eventDetails || "", sampleAnnouncement: campaign.sampleAnnouncement || "", notes: campaign.notes || "", deadlineOffsetDays: registrationDeadlineOffset(campaign, series.deadlineOffsetDays) ?? ""});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const previewState = useMemo(() => {
+    if (!playbook || !form.name.trim() || !form.eventDate) return {plan: null, error: playbook ? "" : "The pinned playbook version is unavailable."};
+    try {
+      const {sourceEventId: _sourceEventId, ...editable} = form;
+      return {plan: buildOccurrencePlan({campaign, updates: {...editable, deadlineOffsetDays: form.deadlineOffsetDays === "" ? null : Number(form.deadlineOffsetDays)}, playbook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date()}), error: ""};
+    } catch (previewError) { return {plan: null, error: previewError.message || "This occurrence could not be previewed."}; }
+  }, [campaign, form, playbook, workspace]);
+  return <Modal title="Edit this occurrence" eyebrow={`${series.name} · ${formatDate(occurrenceDate(campaign))}`} onClose={onClose} size="wide">
+    <div className="planner-campaign-builder"><form onSubmit={(event) => event.preventDefault()}><div className="planner-form-grid">
+      <Field label="Event name" wide><input value={form.name} onChange={(event) => setForm({...form, name: event.target.value})} /></Field>
+      <Field label="Event date" help={`Its place in the series remains ${formatDate(occurrenceDate(campaign))}.`}><input type="date" value={form.eventDate} onChange={(event) => setForm({...form, eventDate: event.target.value})} /></Field>
+      <Field label="Registration deadline"><div className="planner-inline-number"><input type="number" min="0" max="365" value={form.deadlineOffsetDays} onChange={(event) => setForm({...form, deadlineOffsetDays: event.target.value === "" ? "" : Number(event.target.value)})} /><span>days before this event</span></div></Field>
+      <Field label="Source Event ID" help="The original source link stays fixed."><input value={form.sourceEventId} disabled /></Field>
+      <Field label="Event details" wide><MarkdownTextEditor value={form.eventDetails} onChange={(value) => setForm({...form, eventDetails: value})} /></Field>
+      <Field label="Sample announcement" wide><MarkdownTextEditor value={form.sampleAnnouncement} onChange={(value) => setForm({...form, sampleAnnouncement: value})} /></Field>
+      <Field label="Notes" wide><textarea value={form.notes} onChange={(event) => setForm({...form, notes: event.target.value})} /></Field>
+    </div></form><section className="planner-schedule-preview">
+      {previewState.error && <div className="planner-detail-note is-alert" role="alert"><strong>Review this occurrence</strong><p>{previewState.error}</p></div>}
+      {previewState.plan && <><div className="planner-timeliness-card"><div><span className="planner-kicker">Occurrence exception</span><h3>{formatDate(form.eventDate)}</h3></div><p>The original series date stays recorded. Changes here apply only to this event and its promotions.</p></div><SeriesPlanPreview plan={previewState.plan} workspace={workspace} fallbackCampaigns={[campaign]} /></>}
+      {saveError && <div className="planner-detail-note is-alert" role="alert"><strong>Occurrence not saved</strong><p>{saveError}</p></div>}
+      <div className="planner-modal-actions"><button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button><button className="planner-button is-primary" disabled={saving || !previewState.plan} onClick={async () => { setSaving(true); setSaveError(""); try { await onSave(previewState.plan); } catch (actionError) { setSaveError(actionError.message || "The occurrence could not be saved."); setSaving(false); } }}>{saving ? "Saving…" : "Save occurrence"}</button></div>
+    </section></div>
+  </Modal>;
+}
+
+function EndSeriesDialog({campaign, series, workspace, onClose, onSave}) {
+  const playbook = seriesPlaybook(workspace, series);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const previewState = useMemo(() => {
+    try { return {plan: buildSeriesPlan({series: {...series, status: "ended", revision: nextSeriesRevision(series)}, playbook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date(), scope: "future", fromDate: occurrenceDate(campaign)}), error: ""}; }
+    catch (previewError) { return {plan: null, error: previewError.message || "This series end could not be previewed."}; }
+  }, [campaign, playbook, series, workspace]);
+  const affected = previewState.plan?.campaigns?.filter((item) => item.status === "archived").length || 0;
+  return <Modal title="End series from this occurrence" eyebrow={series.name} onClose={onClose}>
+    <div className="planner-detail-note"><strong>End on {formatDate(occurrenceDate(campaign))}</strong><p>{affected} event{affected === 1 ? "" : "s"} at or after this date will be archived. Their future uncompleted promotions, including manual moves, will be cancelled. Completed and past work stays intact, and no replacement dates will be created.</p></div>
+    {previewState.plan && <div className="planner-preview-metrics"><span><strong>{affected}</strong> events archived</span><span><strong>{previewState.plan.summary.preserved}</strong> edits preserved</span></div>}
+    {(previewState.error || saveError) && <div className="planner-detail-note is-alert" role="alert"><strong>Series not ended</strong><p>{saveError || previewState.error}</p></div>}
+    <div className="planner-modal-actions"><button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button><button className="planner-button is-danger" disabled={saving || !previewState.plan} onClick={async () => { setSaving(true); setSaveError(""); try { await onSave(previewState.plan); } catch (actionError) { setSaveError(actionError.message || "The series could not be ended."); setSaving(false); } }}>{saving ? "Ending…" : "End series"}</button></div>
+  </Modal>;
+}
+
+function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEditContent, onEditBriefContent, onDelete, onCancelSmuggle, onRepeat, onEditOccurrence, onEditFuture, onRetrySeries, onSkipOccurrence, onEndSeries, onNavigateOccurrence}) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmSkip, setConfirmSkip] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [cancellingSmuggleId, setCancellingSmuggleId] = useState("");
   const smuggleRelationships = buildSmuggleRelationships({plays: workspace.scheduledPlays, campaigns: workspace.campaigns});
   const smuggledPlayIds = new Set(smuggleRelationships.map((relationship) => relationship.beneficiaryPlayId).filter(Boolean));
@@ -2165,18 +2442,27 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEd
     !smuggledPlayIds.has(play.id),
   )).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate));
   const standalone = isStandaloneContent(campaign);
-  const series = standalone ? contentSeriesDetails(plays) : null;
-  const seriesSchedule = series?.firstDate === series?.lastDate
-    ? formatDate(series?.firstDate)
-    : `${formatDate(series?.firstDate, {year: false})}–${formatDate(series?.lastDate)}`;
+  const contentSeries = standalone ? contentSeriesDetails(plays) : null;
+  const eventSeries = !standalone && campaign.seriesId ? (workspace.campaignSeries || []).find((item) => item.id === campaign.seriesId) : null;
+  const seriesOccurrences = eventSeries ? workspace.campaigns.filter((item) => item.seriesId === eventSeries.id).sort((left, right) => occurrenceDate(left).localeCompare(occurrenceDate(right))) : [];
+  const occurrenceIndex = seriesOccurrences.findIndex((item) => item.id === campaign.id);
+  const previousOccurrence = occurrenceIndex > 0 ? seriesOccurrences[occurrenceIndex - 1] : null;
+  const nextOccurrence = occurrenceIndex >= 0 && occurrenceIndex < seriesOccurrences.length - 1 ? seriesOccurrences[occurrenceIndex + 1] : null;
+  let eventSeriesLabel = "";
+  if (eventSeries) { try { eventSeriesLabel = describeRecurrence(eventSeries.recurrence); } catch (_error) { eventSeriesLabel = "Repeat rule needs review"; } }
+  const seriesSchedule = contentSeries?.firstDate === contentSeries?.lastDate
+    ? formatDate(contentSeries?.firstDate)
+    : `${formatDate(contentSeries?.firstDate, {year: false})}–${formatDate(contentSeries?.lastDate)}`;
   const hostedByPlay = new Map(smuggleRelationships.map((relationship) => [relationship.hostPlayId, relationship]));
   const guestRelationships = smuggleRelationships.filter((relationship) => relationship.beneficiaryCampaignId === campaign.id);
   const summary = scheduleSummary(plays);
   return (
     <Modal title={campaign.name} eyebrow={standalone ? "Content" : `Level ${campaign.level} campaign`} onClose={onClose} size="wide">
       <div className="planner-campaign-detail-summary">
-        <div><span>{standalone ? "Schedule" : "Event date"}</span><strong>{standalone ? seriesSchedule : formatDate(campaign.eventDate)}</strong></div>{standalone ? <><div><span>Repeat</span><strong>{series?.label || "One time"}</strong></div><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div></>}
+        <div><span>{standalone ? "Schedule" : "Event date"}</span><strong>{standalone ? seriesSchedule : formatDate(campaign.eventDate)}</strong></div>{standalone ? <><div><span>Repeat</span><strong>{contentSeries?.label || "One time"}</strong></div><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div>{eventSeries && <div><span>Series date</span><strong>{formatDate(occurrenceDate(campaign))}</strong></div>}</>}
       </div>
+      {eventSeries && <div className="planner-series-detail-bar"><div><span className="planner-kicker">Recurring series</span><strong>{eventSeriesLabel}</strong><small>Playbook version {eventSeries.playbookVersion} is pinned · {seriesOccurrences.length} recorded event dates</small></div><div><button className="planner-button is-secondary" disabled={!previousOccurrence} onClick={() => previousOccurrence && onNavigateOccurrence(previousOccurrence)}>← Previous</button><button className="planner-button is-secondary" disabled={!nextOccurrence} onClick={() => nextOccurrence && onNavigateOccurrence(nextOccurrence)}>Next →</button></div></div>}
+      {eventSeries?.saveState === "saving" && <div className="planner-detail-note is-alert"><strong>Finish the interrupted series save</strong><p>Editing, skipping, and ending are paused until the original series plan is saved completely.</p></div>}
       <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> {standalone ? "occurrences" : "promotions"}</span>{!standalone && <span><strong>{summary.conflicts}</strong> conflicts</span>}{intentionallySkipped.length > 0 && <span><strong>{intentionallySkipped.length}</strong> not running</span>}</div>
       {campaign.eventDetails && <div className="planner-detail-note planner-campaign-brief-copy"><strong>Event details</strong><PlannerMarkdown value={campaign.eventDetails} /></div>}
       {campaign.sampleAnnouncement && <div className="planner-detail-note planner-campaign-brief-copy"><strong>Sample announcement</strong><PlannerMarkdown value={campaign.sampleAnnouncement} /></div>}
@@ -2192,15 +2478,23 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEd
       </div>)}
       {intentionallySkipped.map((play) => <div className="planner-detail-note is-skipped" key={play.id}><strong>{play.playType} will not run</strong><p>{formatDate(play.scheduledDate)} · This decision removes the announcement from the calendar, capacity totals, and reports.</p></div>)}
       <div className="planner-campaign-play-list">{plays.map((play) => <PlayRow key={play.id} play={play} showDate={standalone && plays.length > 1} smuggleRelationship={hostedByPlay.get(play.id)} onClick={() => onOpenPlay(play)} />)}</div>
-      {confirmDelete && (
+      {confirmDelete && !eventSeries && (
         <div className="planner-delete-confirmation" role="alert">
           <div><strong>Delete this {standalone ? plays.length > 1 ? `content series and all ${plays.length} occurrences` : "content item" : `campaign and all ${plays.length} promotion${plays.length === 1 ? "" : "s"}`}?</strong><p>This cannot be undone and removes it from every Planner view.</p></div>
           <div><button className="planner-button is-secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>Keep {standalone ? "content" : "campaign"}</button><button className="planner-button is-danger" disabled={deleting} onClick={async () => { setDeleting(true); try { await onDelete(campaign); } catch (_error) { /* PlannerApp displays the save error. */ } finally { setDeleting(false); } }}>{deleting ? "Deleting…" : "Delete permanently"}</button></div>
         </div>
       )}
+      {confirmSkip && eventSeries && <div className="planner-delete-confirmation" role="alert"><div><strong>Skip the {formatDate(occurrenceDate(campaign))} occurrence?</strong><p>This archives the event and cancels all of its future uncompleted promotions, including manual moves. Completed and past work stays intact; the recurrence rule and other event dates stay unchanged.</p></div><div><button className="planner-button is-secondary" disabled={skipping} onClick={() => setConfirmSkip(false)}>Keep occurrence</button><button className="planner-button is-danger" disabled={skipping} onClick={async () => { setSkipping(true); setActionError(""); try { await onSkipOccurrence(campaign); } catch (skipError) { setActionError(skipError.message || "The occurrence could not be skipped."); setSkipping(false); } }}>{skipping ? "Skipping…" : "Skip occurrence"}</button></div></div>}
+      {actionError && <div className="planner-detail-note is-alert" role="alert"><strong>Change not saved</strong><p>{actionError}</p></div>}
       <div className="planner-modal-actions">
-        {canEdit && !confirmDelete && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmDelete(true)}>Delete {standalone ? "content" : "campaign"}</button>}
-        {canEdit && !standalone && !confirmDelete && <button className="planner-button is-secondary" onClick={() => onEditBriefContent(campaign)}>Edit brief content</button>}
+        {canEdit && !confirmDelete && !eventSeries && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmDelete(true)}>Delete {standalone ? "content" : "campaign"}</button>}
+        {canEdit && !standalone && !eventSeries && !confirmDelete && <button className="planner-button is-secondary" onClick={() => onRepeat(campaign)}>Repeat campaign</button>}
+        {canEdit && !standalone && !eventSeries && !confirmDelete && <button className="planner-button is-secondary" onClick={() => onEditBriefContent(campaign)}>Edit brief content</button>}
+        {canEdit && eventSeries?.saveState === "saving" && <button className="planner-button is-primary" onClick={() => onRetrySeries(campaign, eventSeries)}>Review and retry save</button>}
+        {canEdit && eventSeries && eventSeries.saveState !== "saving" && !confirmSkip && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmSkip(true)}>Skip occurrence</button>}
+        {canEdit && eventSeries && eventSeries.saveState !== "saving" && !confirmSkip && <button className="planner-button is-secondary" onClick={() => onEndSeries(campaign, eventSeries)}>End series from here</button>}
+        {canEdit && eventSeries && eventSeries.saveState !== "saving" && !confirmSkip && <button className="planner-button is-secondary" onClick={() => onEditFuture(campaign, eventSeries)}>Edit this and future</button>}
+        {canEdit && eventSeries && eventSeries.saveState !== "saving" && !confirmSkip && <button className="planner-button is-primary" onClick={() => onEditOccurrence(campaign, eventSeries)}>Edit occurrence</button>}
         {canEdit && standalone && !confirmDelete && <button className="planner-button is-primary" onClick={() => onEditContent(campaign)}>Edit content</button>}
         <button className="planner-button is-secondary" onClick={onClose}>Close</button>
       </div>
@@ -2256,6 +2550,9 @@ function PlannerApp({authState}) {
   const [editingBriefContent, setEditingBriefContent] = useState(null);
   const [selectedPlay, setSelectedPlay] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
+  const [seriesEditor, setSeriesEditor] = useState(null);
+  const [occurrenceEditor, setOccurrenceEditor] = useState(null);
+  const [endingSeries, setEndingSeries] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [reportSetup, setReportSetup] = useState(null);
   const store = useMemo(() => createPlannerStore({
@@ -2333,6 +2630,17 @@ function PlannerApp({authState}) {
     return saved;
   };
 
+  const saveSeriesPlan = async (plan, success) => {
+    const result = await perform(() => store.saveSeriesPlan(plan), success);
+    setWorkspace((current) => ({
+      ...current,
+      campaignSeries: result.series ? mergeById(current.campaignSeries || [], [result.series]) : current.campaignSeries || [],
+      campaigns: mergeById(current.campaigns, result.campaigns),
+      scheduledPlays: mergeById(current.scheduledPlays, result.plays),
+    }));
+    return result;
+  };
+
   const useSmuggle = async (opportunity) => {
     const host = workspace.scheduledPlays.find((play) => play.id === opportunity.hostScheduledPlayId);
     if (!host) return;
@@ -2357,7 +2665,7 @@ function PlannerApp({authState}) {
   let content = null;
   if (activeView === "calendar") content = <CalendarView workspace={workspace} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
   else if (activeView === "requests") content = <RequestsView workspace={workspace} canEdit={canEdit} onOpenRequest={setSelectedRequest} />;
-  else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} />;
+  else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} onEditSeries={(series, campaign) => setSeriesEditor({mode: "retry", series, campaign})} />;
   else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
   else if (activeView === "reports") content = <ReportsView workspace={workspace} authState={authState} canEdit={canEdit} canEmail={canEmail} initialSetup={reportSetup} onEditBriefContent={setEditingBriefContent} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
   else if (activeView === "playbooks") content = <PlaybooksView workspace={workspace} canEdit={canEdit} onSave={async (playbook) => {
@@ -2418,9 +2726,13 @@ function PlannerApp({authState}) {
         {message && <div className="planner-toast is-success" role="status"><span>{message}</span><button onClick={() => setMessage("")}>×</button></div>}
         {content}
       </main>
-      {newCampaignOpen && <NewCampaignDialog workspace={workspace} onClose={() => setNewCampaignOpen(false)} onGenerate={async (campaign, plays) => {
-        const result = await perform(() => store.saveCampaignSchedule(campaign, plays), `${campaign.name} added with ${plays.length} promotion${plays.length === 1 ? "" : "s"}.`);
-        setWorkspace((current) => ({...current, campaigns: [result.campaign, ...current.campaigns], scheduledPlays: [...current.scheduledPlays, ...result.plays]}));
+      {newCampaignOpen && <NewCampaignDialog workspace={workspace} onClose={() => setNewCampaignOpen(false)} onGenerate={async (payload) => {
+        if (payload.kind === "series") {
+          await saveSeriesPlan(payload.plan, `${payload.plan.series.name} recurring campaign added.`);
+        } else {
+          const result = await perform(() => store.saveCampaignSchedule(payload.campaign, payload.plays), `${payload.campaign.name} added with ${payload.plays.length} promotion${payload.plays.length === 1 ? "" : "s"}.`);
+          setWorkspace((current) => ({...current, campaigns: [result.campaign, ...current.campaigns], scheduledPlays: [...current.scheduledPlays, ...result.plays]}));
+        }
         setNewCampaignOpen(false); setActiveView("campaigns");
       }} />}
       {newContentOpen && <ContentDialog onClose={() => setNewContentOpen(false)} onSave={async ({campaign, plays}) => {
@@ -2438,7 +2750,10 @@ function PlannerApp({authState}) {
         setEditingContent(null); setActiveView("content");
       }} />}
       {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} smuggleRelationship={smuggleByHostPlay.get(selectedPlay.id)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} onCancelSmuggle={removeSmuggle} />}
-      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onEditBriefContent={(campaign) => { setSelectedCampaign(null); setEditingBriefContent(campaign); }} onDelete={deleteCampaign} onCancelSmuggle={removeSmuggle} />}
+      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onEditBriefContent={(campaign) => { setSelectedCampaign(null); setEditingBriefContent(campaign); }} onDelete={deleteCampaign} onCancelSmuggle={removeSmuggle} onRepeat={(campaign) => { setSelectedCampaign(null); setSeriesEditor({mode: "convert", campaign, series: null}); }} onEditOccurrence={(campaign, series) => { setSelectedCampaign(null); setOccurrenceEditor({campaign, series}); }} onEditFuture={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "future", campaign, series}); }} onRetrySeries={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "retry", campaign, series}); }} onEndSeries={(campaign, series) => { setSelectedCampaign(null); setEndingSeries({campaign, series}); }} onSkipOccurrence={async (campaign) => { const plan = skipOccurrencePlan({campaign, plays: workspace.scheduledPlays, generatedAt: new Date()}); await saveSeriesPlan(plan, `${campaign.name} on ${formatDate(occurrenceDate(campaign))} was skipped.`); setSelectedCampaign(null); }} onNavigateOccurrence={setSelectedCampaign} />}
+      {seriesEditor && <SeriesEditorDialog {...seriesEditor} workspace={workspace} onClose={() => setSeriesEditor(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${plan.series.name} recurring schedule was saved.`); setSeriesEditor(null); setActiveView("campaigns"); }} />}
+      {occurrenceEditor && <OccurrenceEditorDialog {...occurrenceEditor} workspace={workspace} onClose={() => setOccurrenceEditor(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${occurrenceEditor.campaign.name} occurrence was updated.`); setOccurrenceEditor(null); }} />}
+      {endingSeries && <EndSeriesDialog {...endingSeries} workspace={workspace} onClose={() => setEndingSeries(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${endingSeries.series.name} was ended from ${formatDate(occurrenceDate(endingSeries.campaign))}.`); setEndingSeries(null); setActiveView("campaigns"); }} />}
       {editingBriefContent && <CampaignBriefContentDialog campaign={editingBriefContent} onClose={() => setEditingBriefContent(null)} onSave={saveCampaignBriefContent} />}
       {selectedRequest && <RequestReviewDialog request={selectedRequest} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedRequest(null)} onConvert={async (request, campaign, plays, eventDate) => {
         const dateWasChanged = eventDate !== request.eventDate || ["needs-review", "manual-required"].includes(request.dateParseStatus);

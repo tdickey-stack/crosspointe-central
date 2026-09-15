@@ -11,7 +11,7 @@
     "seed:print-mode-live": "node scripts/seed-print-mode-live.mjs",
     "test:print-mode-client": "node --test test/print-mode-capacity.test.mjs test/print-mode-layout3.test.mjs",
     "test:admin-access": "node --test test/admin-planner-permissions.test.mjs test/admin-external-invites.test.mjs test/admin-pumble-integration.test.mjs test/central-navigation.test.mjs test/change-request-notifications-client.test.mjs",
-    "test:planner": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/planner-domain.test.mjs test/planner-persistence.test.mjs test/planner-briefs.test.mjs functions/planner/brief-email.test.js functions/planner/pco-form-webhook.test.js",
+    "test:planner": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/planner-domain.test.mjs test/planner-recurrence.test.mjs test/planner-series.test.mjs test/planner-persistence.test.mjs test/planner-briefs.test.mjs functions/planner/brief-email.test.js functions/planner/pco-form-webhook.test.js",
     "test:planner-rules": "firebase emulators:exec --project crosspointe-central-planner-rules --only firestore \"node --test test/planner-security-rules.test.mjs\"",
     "test:change-request-rules": "firebase emulators:exec --project crosspointe-central-change-request-rules --only firestore \"node --test test/change-request-security-rules.test.mjs\"",
     "test:analytics": "node --test test/central-analytics.test.cjs",

@@ -66,6 +66,7 @@ The target is the existing Standard edition, Firestore Native `(default)` databa
 | `centralPromotionPlaybooks` | Current playbook metadata and current-version pointer |
 | `centralPromotionPlaybookVersions` | Immutable snapshots of editable week/play definitions |
 | `centralPromotionCampaigns` | Event, original submission, timeliness, status, and stored playbook version |
+| `centralPromotionCampaignSeries` | Event recurrence, pinned playbook, shared defaults, relative deadline, and save/revision state |
 | `centralPromotionScheduledPlays` | Independent dated records used by Calendar and Campaign detail |
 | `centralPromotionCapacityRules` | Editable promotional inventory and allocation configuration |
 | `centralPromotionStandingLanes` | Editable recurring Level 2 coverage configuration |
@@ -81,7 +82,21 @@ the campaign. General Promotion submissions always require manual date review;
 Event/Promo submissions use conservative free-text parsing and retain the
 original date answer.
 
-The initial Scheduled Play query is bounded from 70 days before today through 400 days after today and ordered by `scheduledDate`. That uses a Standard edition single-field index; no new composite index is required.
+Scheduled Plays are loaded in `scheduledDate` order without the former -70/+400-day cutoff. A saved yearly occurrence and every competing campaign must be available to reports, exceptions, and capacity evaluation. This still uses a Standard edition single-field index. If inventory grows substantially, replace this full-workspace read with coordinated range queries for every consumer; do not reintroduce a calendar-only horizon that silently drops saved promotions.
+
+## Recurring event campaigns
+
+`src/planner/recurrence.js` expands event dates. `src/planner/series.js` turns each event into an independent campaign using the existing backward-counting playbook. The calendar never expands virtual repeat events on its own.
+
+- Weekly patterns select weekdays and an interval. Monthly patterns select a date, last day, or one or more ordinal weekdays (for example, first and third Wednesday). Yearly patterns use the first event's month. Month-end behavior explicitly skips missing dates or uses the last day; missing fifth weekdays are skipped.
+- Every series ends on a date or after a count, with at most 100 event occurrences within five years of its start. There is no unattended, indefinite generation job.
+- A series pins its playbook version and stores shared brief copy plus a registration deadline offset in days. Existing campaigns can become the first occurrence without changing campaign or promotion IDs.
+- Each occurrence has `seriesId`, an immutable original `occurrenceKey` (timestamp in Firestore, date key in JavaScript), `seriesRevision`, and `recurrenceException`. A moved event retains its occurrence key. A skipped occurrence is retained as an archived exception, preventing accidental regeneration.
+- Future edits preserve previous events and explicit exceptions. Completed, past, locked, manually adjusted, and Smuggle-linked promotions retain their history during recalculation. Explicit Skip and End cancel all affected future, uncompleted promotions, including locked and manually moved ones. Occurrence edits preview recalculated promotions. Ending a series archives affected future occurrences rather than deleting history.
+- Explicit global playbook regeneration can advance an occurrence's version. Later series edits preserve those upgraded occurrences; the series' pinned version continues to control new dates.
+- Series previews evaluate the combined workspace, reserve protected promotions, and include changes to competing campaigns in the save plan. Reports continue to group by occurrence campaign ID and show its actual event date.
+- Persistence checks preview dependencies before saving, then saves at most five records per optimistic transaction. Expected prior records prevent overwriting concurrent edits; identical completed writes are accepted on retry. A `saving` series remains marked until all records finish, and must be resumed before another revision begins. Its cutoff and original campaign ID persist for recovery. Limits also cap each save at 5,000 records.
+- Existing Planning Center request conversion remains one event per reviewed request. Its resulting campaign can be made recurring through **Repeat campaign**; free-text dates are not automatically interpreted as recurrence.
 
 ## Starter configuration
 
@@ -106,7 +121,7 @@ The PDFs remain reference material. The authenticated UI shows starter configura
 - Active Central admins with Planner access may read.
 - `view` is read-only.
 - `propose`, `edit`, `approve`, and `admin` may create/update Planner data.
-- Browser deletes are denied.
+- One-off campaigns and their promotions may be deleted together by Planner editors. Recurring occurrences must be skipped; series deletion is denied.
 - Browser creation and deletion of Planning Center form requests are denied;
   only review-owned fields can be updated by Planner editors.
 - Playbook versions are immutable.

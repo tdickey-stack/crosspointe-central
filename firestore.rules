@@ -13,6 +13,11 @@ service cloud.firestore {
     // centralPromotionCampaigns/{campaignId}: event and submission timestamps,
     // stored timeliness, immutable playbook/version reference, bounded brief
     // content, notes, status, creator/updater UIDs, and timestamps.
+    // Optional seriesId, immutable occurrenceKey timestamp, seriesRevision,
+    // and recurrenceException link a campaign to a recurring event series.
+    // centralPromotionCampaignSeries/{seriesId}: bounded recurrence selectors,
+    // pinned playbook and request provenance, shared copy, relative deadline,
+    // revision, active/ended state, resumable save state, and author timestamps.
     // centralPromotionScheduledPlays/{playId}: independent original/current
     // schedule timestamps, campaign/playbook references, status, late/conflict
     // handling, manual/lock flags, optional Smuggle relationship, UIDs, and
@@ -1103,6 +1108,72 @@ service cloud.firestore {
         data.createdAt is timestamp && data.updatedAt is timestamp;
     }
 
+    function validPlannerRecurrence(data) {
+      return data is map && data.keys().hasAll([
+        "frequency", "interval", "startDate", "endType", "count", "until",
+        "weekdays", "monthlyMode", "monthDay", "ordinals", "missingDate"
+      ]) && data.keys().hasOnly([
+        "frequency", "interval", "startDate", "endType", "count", "until",
+        "weekdays", "monthlyMode", "monthDay", "ordinals", "missingDate"
+      ]) && data.frequency in ["weekly", "monthly", "yearly"] &&
+        data.interval is int && data.interval >= 1 && data.interval <= 12 &&
+        data.startDate is timestamp && data.endType in ["count", "date"] &&
+        data.count is int && data.count >= 1 && data.count <= 100 &&
+        (data.until == null || (data.until is timestamp && data.until >= data.startDate &&
+          data.until <= data.startDate + duration.value(1830, "d"))) &&
+        (data.endType != "date" || data.until is timestamp) &&
+        data.weekdays is list && data.weekdays.size() <= 7 &&
+        ((data.frequency == "weekly" || (data.frequency == "monthly" && data.monthlyMode == "weekday")) ?
+          data.weekdays.size() >= 1 : data.weekdays.size() == 0) &&
+        data.weekdays.hasOnly([0, 1, 2, 3, 4, 5, 6]) &&
+        data.weekdays.toSet().size() == data.weekdays.size() &&
+        data.monthlyMode in ["date", "weekday"] && data.monthDay is int &&
+        (data.monthDay == -1 || (data.monthDay >= 1 && data.monthDay <= 31)) &&
+        data.ordinals is list && data.ordinals.size() <= 6 &&
+        ((data.frequency == "monthly" && data.monthlyMode == "weekday") ?
+          data.ordinals.size() >= 1 : data.ordinals.size() == 0) &&
+        data.ordinals.hasOnly([-1, 1, 2, 3, 4, 5]) &&
+        data.ordinals.toSet().size() == data.ordinals.size() &&
+        data.missingDate in ["skip", "last-day"];
+    }
+
+    function validPlannerSeries(data) {
+      return data is map && data.keys().hasAll([
+        "schemaVersion", "name", "recurrence", "playbookId", "playbookVersion",
+        "level", "campaignType", "submittedAt", "sourceEventId", "eventDetails",
+        "sampleAnnouncement", "notes", "deadlineOffsetDays", "status", "revision",
+        "saveState", "saveFromDate", "seedCampaignId", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.keys().hasOnly([
+        "schemaVersion", "name", "recurrence", "playbookId", "playbookVersion",
+        "level", "campaignType", "submittedAt", "sourceEventId", "eventDetails",
+        "sampleAnnouncement", "notes", "deadlineOffsetDays", "status", "revision",
+        "saveState", "saveFromDate", "seedCampaignId", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
+      ]) && data.schemaVersion == 1 && validPlannerString(data.name, 140) && data.name.size() > 0 &&
+        validPlannerRecurrence(data.recurrence) && validPlannerId(data.playbookId) &&
+        data.playbookVersion is int && data.playbookVersion >= 1 && validPlannerLevel(data.level) &&
+        validPlannerString(data.campaignType, 80) && data.submittedAt is timestamp &&
+        validPlannerString(data.sourceEventId, 100) && validPlannerString(data.eventDetails, 3000) &&
+        validPlannerString(data.sampleAnnouncement, 3000) && validPlannerString(data.notes, 3000) &&
+        (data.deadlineOffsetDays == null || (data.deadlineOffsetDays is int &&
+          data.deadlineOffsetDays >= 0 && data.deadlineOffsetDays <= 365)) &&
+        data.status in ["active", "ended"] && data.revision is int && data.revision >= 1 &&
+        data.saveState in ["saving", "ready"] && data.saveFromDate is timestamp &&
+        (data.seedCampaignId == "" || validPlannerId(data.seedCampaignId)) && validPlannerString(data.createdByUid, 128) &&
+        data.createdByUid.size() > 0 && data.updatedByUid == request.auth.uid &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function validPlannerOccurrence(data) {
+      return !data.keys().hasAny(["seriesId", "occurrenceKey", "seriesRevision", "recurrenceException"]) || (
+        data.keys().hasAll(["seriesId", "occurrenceKey", "seriesRevision", "recurrenceException"]) &&
+        validPlannerId(data.seriesId) && data.occurrenceKey is timestamp &&
+        data.seriesRevision is int && data.seriesRevision >= 1 && data.recurrenceException is bool &&
+        existsAfter(/databases/$(database)/documents/centralPromotionCampaignSeries/$(data.seriesId)) &&
+        getAfter(/databases/$(database)/documents/centralPromotionCampaignSeries/$(data.seriesId)).data.playbookId == data.playbookId &&
+        getAfter(/databases/$(database)/documents/centralPromotionCampaignSeries/$(data.seriesId)).data.revision >= data.seriesRevision
+      );
+    }
+
     function validPlannerCampaign(data) {
       return data is map && data.keys().hasAll([
         "schemaVersion", "name", "eventDate", "registrationDeadline",
@@ -1117,8 +1188,9 @@ service cloud.firestore {
         "weeksLate", "level", "campaignType", "playbookId",
         "playbookVersion", "durationWeeks", "sourceEventId", "eventDetails",
         "sampleAnnouncement", "notes",
-        "status", "createdByUid", "updatedByUid", "createdAt", "updatedAt"
-      ]) && data.schemaVersion == 1 && validPlannerString(data.name, 140) &&
+        "status", "createdByUid", "updatedByUid", "createdAt", "updatedAt",
+        "seriesId", "occurrenceKey", "seriesRevision", "recurrenceException"
+      ]) && validPlannerOccurrence(data) && data.schemaVersion == 1 && validPlannerString(data.name, 140) &&
         data.name.size() > 0 && data.eventDate is timestamp &&
         (data.registrationDeadline == null || data.registrationDeadline is timestamp) &&
         data.submittedAt is timestamp && data.recommendedStartDate is timestamp &&
@@ -1838,6 +1910,27 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /centralPromotionCampaignSeries/{seriesId} {
+      allow read: if canReadPlanner();
+      allow create: if canEditPlanner() && validPlannerId(seriesId) &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time &&
+        request.resource.data.revision == 1 && validPlannerSeries(request.resource.data);
+      allow update: if canEditPlanner() && validPlannerId(seriesId) &&
+        request.resource.data.schemaVersion == resource.data.schemaVersion &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.submittedAt == resource.data.submittedAt &&
+        request.resource.data.sourceEventId == resource.data.sourceEventId &&
+        request.resource.data.playbookId == resource.data.playbookId &&
+        request.resource.data.playbookVersion == resource.data.playbookVersion &&
+        request.resource.data.seedCampaignId == resource.data.seedCampaignId &&
+        request.resource.data.revision >= resource.data.revision &&
+        request.resource.data.revision <= resource.data.revision + 1 &&
+        request.resource.data.updatedAt == request.time && validPlannerSeries(request.resource.data);
+      allow delete: if false;
+    }
+
     match /centralPromotionCampaigns/{campaignId} {
       allow read: if canReadPlanner();
       allow create: if canEditPlanner() && validPlannerId(campaignId) &&
@@ -1846,6 +1939,12 @@ service cloud.firestore {
         request.resource.data.updatedAt == request.time &&
         validPlannerCampaign(request.resource.data);
       allow update: if canEditPlanner() && validPlannerId(campaignId) &&
+        (!resource.data.keys().hasAny(["seriesId"]) || (
+          request.resource.data.keys().hasAll(["seriesId", "occurrenceKey", "seriesRevision"]) &&
+          request.resource.data.seriesId == resource.data.seriesId &&
+          request.resource.data.occurrenceKey == resource.data.occurrenceKey &&
+          request.resource.data.seriesRevision >= resource.data.seriesRevision
+        )) &&
         request.resource.data.schemaVersion == resource.data.schemaVersion &&
         request.resource.data.createdByUid == resource.data.createdByUid &&
         request.resource.data.createdAt == resource.data.createdAt &&
@@ -1861,7 +1960,7 @@ service cloud.firestore {
         request.resource.data.sourceEventId == resource.data.sourceEventId &&
         request.resource.data.updatedAt == request.time &&
         validPlannerCampaign(request.resource.data);
-      allow delete: if canEditPlanner();
+      allow delete: if canEditPlanner() && !resource.data.keys().hasAny(["seriesId"]);
     }
 
     match /centralPromotionScheduledPlays/{playId} {

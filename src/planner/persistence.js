@@ -8,11 +8,13 @@ import {
   startOfSundayWeek,
 } from "./domain.js";
 import {cloneStarterData, isStarterPlaybookId} from "./seed-data.js";
+import {normalizeRecurrence, expandRecurrence} from "./recurrence.js";
 
 export const PLANNER_COLLECTIONS = {
   playbooks: "centralPromotionPlaybooks",
   versions: "centralPromotionPlaybookVersions",
   campaigns: "centralPromotionCampaigns",
+  series: "centralPromotionCampaignSeries",
   plays: "centralPromotionScheduledPlays",
   capacityRules: "centralPromotionCapacityRules",
   standingLanes: "centralPromotionStandingLanes",
@@ -129,9 +131,74 @@ function normalizeCampaign(data) {
     registrationDeadline: timestampToDateKey(data.registrationDeadline),
     recommendedStartDate: timestampToDateKey(data.recommendedStartDate),
     submittedAt: timestampToIso(data.submittedAt),
+    ...(data.seriesId ? {occurrenceKey: timestampToDateKey(data.occurrenceKey)} : {}),
     createdAt: timestampToIso(data.createdAt),
     updatedAt: timestampToIso(data.updatedAt),
   };
+}
+
+function normalizeSeries(data) {
+  return {
+    ...normalizePlannerDocument(data),
+    submittedAt: timestampToIso(data.submittedAt),
+    saveFromDate: timestampToDateKey(data.saveFromDate),
+    recurrence: {
+      ...data.recurrence,
+      startDate: timestampToDateKey(data.recurrence.startDate),
+      until: timestampToDateKey(data.recurrence.until),
+    },
+  };
+}
+
+function seriesForCloud(series, ownerUid, timestamp) {
+  const recurrence = normalizeRecurrence(series.recurrence);
+  expandRecurrence(recurrence);
+  if (!String(series.name || "").trim() || !Number.isInteger(series.revision) || series.revision < 1) {
+    throw new Error("A recurring campaign needs a name and a valid revision.");
+  }
+  if (series.deadlineOffsetDays != null && (!Number.isInteger(series.deadlineOffsetDays) ||
+      series.deadlineOffsetDays < 0 || series.deadlineOffsetDays > 365)) {
+    throw new Error("Registration deadlines must be 0–365 days before each event.");
+  }
+  return {
+    schemaVersion: 1,
+    name: String(series.name).trim().slice(0, 140),
+    recurrence: {...recurrence, startDate: dateTimestamp(recurrence.startDate), until: dateTimestamp(recurrence.until)},
+    playbookId: String(series.playbookId || "").slice(0, 100),
+    playbookVersion: Number(series.playbookVersion || 1),
+    level: Number(series.level),
+    campaignType: String(series.campaignType || "").slice(0, 80),
+    submittedAt: instantTimestamp(series.submittedAt),
+    sourceEventId: String(series.sourceEventId || "").slice(0, 100),
+    eventDetails: String(series.eventDetails || "").slice(0, 3000),
+    sampleAnnouncement: String(series.sampleAnnouncement || "").slice(0, 3000),
+    notes: String(series.notes || "").slice(0, 3000),
+    deadlineOffsetDays: series.deadlineOffsetDays ?? null,
+    status: series.status === "ended" ? "ended" : "active",
+    revision: series.revision,
+    saveFromDate: dateTimestamp(series.saveFromDate || recurrence.startDate),
+    seedCampaignId: String(series.seedCampaignId || ""),
+    saveState: series.saveState === "saving" ? "saving" : "ready",
+    createdByUid: String(series.createdByUid || ownerUid),
+    updatedByUid: ownerUid,
+    createdAt: series.createdAt ? instantTimestamp(series.createdAt) : timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+// Compare persisted business fields, independent of timestamp sentinels and object key order.
+function comparablePlannerPayload(payload) {
+  const ignored = new Set(["id", "createdAt", "updatedAt", "createdByUid", "updatedByUid", "saveState"]);
+  const canonical = (value) => {
+    if (value?.toDate) return value.toDate().toISOString();
+    if (value instanceof Date) return value.toISOString();
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object") return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, canonical(value[key])]),
+    );
+    return value;
+  };
+  return JSON.stringify(canonical(Object.fromEntries(Object.entries(payload).filter(([key]) => !ignored.has(key)))));
 }
 
 function normalizePlay(data) {
@@ -238,6 +305,12 @@ function campaignForCloud(campaign, ownerUid, timestamp) {
     updatedByUid: ownerUid,
     createdAt: campaign.createdAt ? instantTimestamp(campaign.createdAt) : timestamp,
     updatedAt: timestamp,
+    ...(campaign.seriesId ? {
+      seriesId: String(campaign.seriesId),
+      occurrenceKey: dateTimestamp(campaign.occurrenceKey),
+      seriesRevision: Number(campaign.seriesRevision),
+      recurrenceException: campaign.recurrenceException === true,
+    } : {}),
   };
 }
 
@@ -449,6 +522,8 @@ function createPreviewWorkspace() {
     : capacity.plays;
   return {
     ...starter,
+    campaignSeries: [],
+    playbookVersions: starter.playbooks.map((playbook) => ({...deepClone(playbook), playbookId: playbook.id})),
     campaigns,
     scheduledPlays: plays,
     promotionRequests: [
@@ -514,22 +589,20 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
   async function loadWorkspace() {
     if (preview) return deepClone(previewWorkspace);
     if (!firestore || !user) throw new Error("Planner is not connected to Firebase.");
-    const now = new Date();
-    const rangeStart = addDays(dateKey(now), -70);
-    const rangeEnd = addDays(dateKey(now), 400);
-    const [playbookSnapshot, versionSnapshot, campaignSnapshot, playSnapshot, ruleSnapshot, laneSnapshot, requestSnapshot] =
+    const [playbookSnapshot, versionSnapshot, campaignSnapshot, playSnapshot, ruleSnapshot, laneSnapshot, requestSnapshot, seriesSnapshot] =
       await Promise.all([
         firestore.collection(PLANNER_COLLECTIONS.playbooks).get(),
         firestore.collection(PLANNER_COLLECTIONS.versions).get(),
         firestore.collection(PLANNER_COLLECTIONS.campaigns).get(),
+        // Series can extend beyond the former 400-day window. Load their full
+        // inventory (and competing campaigns) so previews and reports agree.
         firestore.collection(PLANNER_COLLECTIONS.plays)
-          .where("scheduledDate", ">=", dateTimestamp(rangeStart))
-          .where("scheduledDate", "<=", dateTimestamp(rangeEnd))
           .orderBy("scheduledDate", "asc")
           .get(),
         firestore.collection(PLANNER_COLLECTIONS.capacityRules).get(),
         firestore.collection(PLANNER_COLLECTIONS.standingLanes).get(),
         firestore.collection(PLANNER_COLLECTIONS.requests).get(),
+        firestore.collection(PLANNER_COLLECTIONS.series).get(),
       ]);
     const metadata = playbookSnapshot.docs.map((doc) => normalizePlannerDocument(documentData(doc)));
     const versions = versionSnapshot.docs.map((doc) => normalizePlaybookVersion(documentData(doc)));
@@ -542,6 +615,9 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     const starter = cloneStarterData();
     return {
       playbooks: playbooks.length ? playbooks : starter.playbooks,
+      playbookVersions: versions.length ? versions.map((version) => ({...version, id: version.playbookId})) :
+        starter.playbooks.map((playbook) => ({...playbook, playbookId: playbook.id})),
+      campaignSeries: seriesSnapshot.docs.map((doc) => normalizeSeries(documentData(doc))),
       capacityRules: ruleSnapshot.empty
         ? starter.capacityRules
         : ruleSnapshot.docs.map((doc) => normalizePlannerDocument(documentData(doc))),
@@ -605,6 +681,7 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
       const index = previewWorkspace.playbooks.findIndex((item) => item.id === next.id);
       if (index === -1) previewWorkspace.playbooks.push(next);
       else previewWorkspace.playbooks[index] = next;
+      previewWorkspace.playbookVersions.push({...deepClone(next), playbookId: next.id});
       return deepClone(next);
     }
     const batch = firestore.batch();
@@ -633,17 +710,19 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     if (preview) {
       const campaignUsesPlaybook = previewWorkspace.campaigns.some((item) => item.playbookId === id);
       const laneUsesPlaybook = previewWorkspace.standingLanes.some((item) => item.fallbackPlaybookId === id);
-      if (campaignUsesPlaybook || laneUsesPlaybook) {
+      const seriesUsesPlaybook = previewWorkspace.campaignSeries.some((item) => item.playbookId === id);
+      if (campaignUsesPlaybook || laneUsesPlaybook || seriesUsesPlaybook) {
         throw new Error("This playbook is still used by a campaign or standing lane and cannot be deleted.");
       }
       previewWorkspace.playbooks = previewWorkspace.playbooks.filter((item) => item.id !== id);
       return {playbookId: id};
     }
-    const [campaignSnapshot, laneSnapshot] = await Promise.all([
+    const [campaignSnapshot, laneSnapshot, seriesSnapshot] = await Promise.all([
       firestore.collection(PLANNER_COLLECTIONS.campaigns).where("playbookId", "==", id).limit(1).get(),
       firestore.collection(PLANNER_COLLECTIONS.standingLanes).where("fallbackPlaybookId", "==", id).limit(1).get(),
+      firestore.collection(PLANNER_COLLECTIONS.series).where("playbookId", "==", id).limit(1).get(),
     ]);
-    if (!campaignSnapshot.empty || !laneSnapshot.empty) {
+    if (!campaignSnapshot.empty || !laneSnapshot.empty || !seriesSnapshot.empty) {
       throw new Error("This playbook is still used by a campaign or standing lane and cannot be deleted.");
     }
     await firestore.collection(PLANNER_COLLECTIONS.playbooks).doc(id).delete();
@@ -841,6 +920,133 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     return next;
   }
 
+  async function saveSeriesPlan(plan) {
+    const next = deepClone(plan);
+    if (next.series) next.series = {...next.series,
+      saveFromDate: next.fromDate || next.series.saveFromDate || next.series.recurrence.startDate,
+      seedCampaignId: next.seedCampaignId || next.series.seedCampaignId || "",
+    };
+    if (!Array.isArray(next.campaigns) || !Array.isArray(next.plays) ||
+        next.campaigns.length + next.plays.length > 5000) {
+      throw new Error("This plan is too large to save at once. Choose fewer occurrences (up to 5,000 records per save).");
+    }
+    const mergeById = (existing, updates) => {
+      const records = new Map(existing.map((record) => [record.id, record]));
+      updates.forEach((record) => records.set(record.id, record));
+      return [...records.values()];
+    };
+    if (preview) {
+      if (next.series) {
+        const existing = previewWorkspace.campaignSeries.find((record) => record.id === next.series.id);
+        next.series = {...existing, ...next.series, saveState: "ready"};
+        previewWorkspace.campaignSeries = mergeById(previewWorkspace.campaignSeries, [next.series]);
+      }
+      previewWorkspace.campaigns = mergeById(previewWorkspace.campaigns, next.campaigns);
+      previewWorkspace.scheduledPlays = mergeById(previewWorkspace.scheduledPlays, next.plays);
+      return deepClone(next);
+    }
+    const expectedCampaigns = new Map((next.expectedCampaigns || []).map((item) => [item.id, item]));
+    const expectedPlays = new Map((next.expectedPlays || []).map((item) => [item.id, item]));
+    const operations = [
+      ...next.campaigns.map((record) => ({record, collection: PLANNER_COLLECTIONS.campaigns,
+        expected: expectedCampaigns.get(record.id), serialize: campaignForCloud, normalize: normalizeCampaign})),
+      ...next.plays.map((record) => ({record, collection: PLANNER_COLLECTIONS.plays,
+        expected: expectedPlays.get(record.id), serialize: playForCloud, normalize: normalizePlay})),
+    ];
+    const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
+    const seriesReference = next.series && firestore.collection(PLANNER_COLLECTIONS.series).doc(next.series.id);
+    const verifyWorkspace = async () => {
+      if (!next.expectedWorkspace) return;
+      const snapshots = await Promise.all([
+        firestore.collection(PLANNER_COLLECTIONS.campaigns).get(),
+        firestore.collection(PLANNER_COLLECTIONS.plays).get(),
+        firestore.collection(PLANNER_COLLECTIONS.capacityRules).get(),
+      ]);
+      const checks = [
+        {records: snapshots[0].docs.map((doc) => normalizeCampaign(documentData(doc))),
+          expected: next.expectedWorkspace.campaigns, desired: next.campaigns, serialize: campaignForCloud},
+        {records: snapshots[1].docs.map((doc) => normalizePlay(documentData(doc))),
+          expected: next.expectedWorkspace.plays, desired: next.plays, serialize: playForCloud},
+        {records: snapshots[2].empty ? cloneStarterData().capacityRules : snapshots[2].docs.map((doc) => normalizePlannerDocument(documentData(doc))),
+          expected: next.expectedWorkspace.capacityRules, desired: [], serialize: capacityRuleForCloud},
+      ];
+      for (const {records, expected = [], desired, serialize} of checks) {
+        const baseline = new Map(expected.map((record) => [record.id, record]));
+        const planned = new Map(desired.map((record) => [record.id, record]));
+        const current = new Map(records.map((record) => [record.id, record]));
+        const equal = (left, right) => right && comparablePlannerPayload(serialize(left, user.uid, timestamp)) ===
+          comparablePlannerPayload(serialize(right, user.uid, timestamp));
+        if (records.some((record) => !equal(record, baseline.get(record.id)) && !equal(record, planned.get(record.id))) ||
+            [...baseline.keys()].some((id) => !current.has(id))) {
+          throw new Error("Campaigns or promotional capacity changed since this preview. Reload Planner and review the schedule again.");
+        }
+      }
+    };
+    // The series is visible while a large save is in progress. An interrupted
+    // save remains clearly marked; retrying the same plan is safe and completes
+    // missing records without replacing completed writes or creation metadata.
+    const writeSeries = async (saveState) => {
+      if (!seriesReference) return;
+      await firestore.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(seriesReference);
+        const existing = snapshot.exists ? normalizeSeries(documentData(snapshot)) : null;
+        const desired = seriesForCloud({...existing, ...next.series, saveState,
+          createdAt: existing?.createdAt, createdByUid: existing?.createdByUid}, user.uid, timestamp);
+        if (existing) {
+          const identical = comparablePlannerPayload(seriesForCloud(existing, user.uid, timestamp)) === comparablePlannerPayload(desired);
+          if (!identical && existing.saveState === "saving") {
+            throw new Error("Finish the interrupted series save before changing its schedule. Reload Planner and choose Finish saving.");
+          }
+          if (!identical && (saveState === "ready" || existing.revision !== next.series.revision - 1)) {
+            throw new Error("This recurring campaign changed in another session. Reload Planner and review your changes again.");
+          }
+        } else if (saveState === "ready" || next.series.revision !== 1) {
+          throw new Error("The recurring campaign could not be found. Reload Planner before saving.");
+        }
+        transaction.set(seriesReference, desired);
+      });
+    };
+    try {
+      await verifyWorkspace();
+      await writeSeries("saving");
+      for (let index = 0; index < operations.length; index += PLANNER_RULES_SAFE_BATCH_SIZE) {
+        const chunk = operations.slice(index, index + PLANNER_RULES_SAFE_BATCH_SIZE);
+        await firestore.runTransaction(async (transaction) => {
+          const refs = chunk.map((operation) => firestore.collection(operation.collection).doc(operation.record.id));
+          const snapshots = await Promise.all(refs.map((reference) => transaction.get(reference)));
+          if (seriesReference) {
+            const seriesSnapshot = await transaction.get(seriesReference);
+            if (!seriesSnapshot.exists || comparablePlannerPayload(seriesSnapshot.data()) !==
+                comparablePlannerPayload(seriesForCloud(next.series, user.uid, timestamp))) {
+              throw new Error("This recurring campaign changed during the save. Reload Planner to review it.");
+            }
+          }
+          chunk.forEach((operation, offset) => {
+            const snapshot = snapshots[offset];
+            const existing = snapshot.exists ? operation.normalize(documentData(snapshot)) : null;
+            const desired = operation.serialize({...operation.record,
+              createdAt: existing?.createdAt, createdByUid: existing?.createdByUid}, user.uid, timestamp);
+            if (existing) {
+              const current = comparablePlannerPayload(operation.serialize(existing, user.uid, timestamp));
+              if (current === comparablePlannerPayload(desired)) return;
+              if (!operation.expected || current !== comparablePlannerPayload(operation.serialize(operation.expected, user.uid, timestamp))) {
+                throw new Error("A campaign or promotion changed in another session. Reload Planner and review the remaining changes.");
+              }
+            } else if (operation.expected) {
+              throw new Error("A campaign or promotion was removed in another session. Reload Planner before saving.");
+            }
+            transaction.set(refs[offset], desired);
+          });
+        });
+      }
+      await writeSeries("ready");
+    } catch (error) {
+      throw new Error(`${error.message || "The recurring campaign could not be saved."} Some records may have saved. Retry this preview to finish, or reload to review the saved occurrences.`);
+    }
+    if (seriesReference) next.series = normalizeSeries(documentData(await seriesReference.get()));
+    return next;
+  }
+
   async function regenerateCampaignSchedules(regeneration) {
     const nextCampaigns = (regeneration?.campaigns || []).map(deepClone);
     const nextPlays = (regeneration?.plays || []).map(deepClone);
@@ -886,12 +1092,19 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     const id = String(campaignId || "").trim();
     if (!id) throw new Error("A campaign ID is required for deletion.");
     if (preview) {
+      if (previewWorkspace.campaigns.find((item) => item.id === id)?.seriesId) {
+        throw new Error("Skip this recurring occurrence instead of deleting its history.");
+      }
       const deletedPlayIds = previewWorkspace.scheduledPlays
         .filter((item) => item.campaignId === id)
         .map((item) => item.id);
       previewWorkspace.campaigns = previewWorkspace.campaigns.filter((item) => item.id !== id);
       previewWorkspace.scheduledPlays = previewWorkspace.scheduledPlays.filter((item) => item.campaignId !== id);
       return {campaignId: id, deletedPlayIds};
+    }
+    const campaignSnapshot = await firestore.collection(PLANNER_COLLECTIONS.campaigns).doc(id).get();
+    if (campaignSnapshot.exists && campaignSnapshot.data().seriesId) {
+      throw new Error("Skip this recurring occurrence instead of deleting its history.");
     }
     const playSnapshot = await firestore.collection(PLANNER_COLLECTIONS.plays)
       .where("campaignId", "==", id)
@@ -941,6 +1154,7 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     saveCampaignDetails,
     convertPromotionRequest,
     saveScheduledPlay,
+    saveSeriesPlan,
     regenerateCampaignSchedules,
     deleteCampaign,
     updatePromotionRequest,
@@ -949,6 +1163,8 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
 
 export const plannerPersistenceInternals = {
   campaignForCloud,
+  seriesForCloud,
+  normalizeSeries,
   playForCloud,
   playbookMetaForCloud,
   playbookVersionForCloud,

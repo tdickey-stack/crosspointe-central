@@ -14,9 +14,13 @@ import test from "node:test";
 
 import {
   PLANNER_COLLECTIONS,
+  createPlannerStore,
   plannerPersistenceInternals,
 } from "../src/planner/persistence.js";
 import {cloneStarterData} from "../src/planner/seed-data.js";
+import {defaultRecurrence} from "../src/planner/recurrence.js";
+import {generateCampaignSchedule} from "../src/planner/domain.js";
+import {buildSeriesPlan, buildOccurrencePlan, skipOccurrencePlan} from "../src/planner/series.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..");
@@ -236,7 +240,7 @@ test.beforeEach(async () => {
   ]);
 });
 
-test.after(async () => environment.cleanup());
+test.after(async () => environment?.cleanup());
 
 test("anonymous, inactive, and missing admin users cannot read planner data", async () => {
   await environment.withSecurityRulesDisabled(async (context) => {
@@ -659,3 +663,216 @@ test("PCO request date-review fields must remain internally consistent", async (
     updatedAt: serverTime(),
   }));
 });
+
+function recurringSeries(overrides = {}) {
+  return {
+    id: "series-breakfast", name: "Monthly Breakfast",
+    recurrence: {...defaultRecurrence("2026-10-17"), count: 3},
+    playbookId: "level-4-standard", playbookVersion: 1, level: 4,
+    campaignType: "standard", submittedAt: "2026-09-01T12:00:00.000Z",
+    sourceEventId: "", eventDetails: "Shared details", sampleAnnouncement: "Welcome!",
+    notes: "", deadlineOffsetDays: 2, status: "active", revision: 1,
+    ...overrides,
+  };
+}
+
+async function withPlannerFirebase(callback) {
+  const previous = globalThis.window;
+  globalThis.window = {firebase};
+  try { return await callback(); } finally { globalThis.window = previous; }
+}
+
+function recurrenceCloud(series = recurringSeries()) {
+  return plannerPersistenceInternals.seriesForCloud(series, "editor", serverTime());
+}
+
+test("recurring series enforce Planner access and strict nested schemas", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const reference = db.doc("centralPromotionCampaignSeries/series-breakfast");
+  await assertSucceeds(reference.set(recurrenceCloud()));
+  await assertSucceeds(environment.authenticatedContext("viewer").firestore().collection(PLANNER_COLLECTIONS.series).get());
+  for (const identity of ["viewer", "inactive", "missing"]) {
+    await assertFails(environment.authenticatedContext(identity).firestore().doc(reference.path).set(recurrenceCloud()));
+  }
+  await assertFails(environment.unauthenticatedContext().firestore().collection(PLANNER_COLLECTIONS.series).get());
+  await assertFails(reference.update({"recurrence.weekdays": [9], updatedAt: serverTime()}));
+  await assertFails(reference.update({"recurrence.ordinals": [1, 1], updatedAt: serverTime()}));
+  await assertFails(reference.update({"recurrence.count": 101, updatedAt: serverTime()}));
+  await assertFails(reference.update({"recurrence.interval": 1.5, updatedAt: serverTime()}));
+  await assertFails(reference.update({"recurrence.startDate": "2026-10-17", updatedAt: serverTime()}));
+  await assertFails(reference.update({"recurrence.unexpected": true, updatedAt: serverTime()}));
+  await assertFails(reference.update({notes: "x".repeat(3001), updatedAt: serverTime()}));
+  await assertFails(reference.update({deadlineOffsetDays: -1, updatedAt: serverTime()}));
+  await assertFails(reference.update({createdByUid: "viewer", updatedAt: serverTime()}));
+  await assertFails(reference.update({submittedAt: date("2026-01-01"), updatedAt: serverTime()}));
+  await assertFails(reference.update({playbookVersion: 2, updatedAt: serverTime()}));
+  await assertFails(reference.update({revision: 3, updatedAt: serverTime()}));
+  await assertSucceeds(reference.update({revision: 2, status: "ended", updatedAt: serverTime()}));
+  await assertFails(reference.delete());
+}));
+
+test("existing campaigns can join a series once and retain immutable occurrence identity", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  await db.doc("centralPromotionCampaignSeries/series-breakfast").set(recurrenceCloud());
+  const reference = db.doc("centralPromotionCampaigns/campaign-a");
+  await reference.set(campaignPayload());
+  const link = {seriesId: "series-breakfast", occurrenceKey: date("2026-10-17"), seriesRevision: 1, recurrenceException: false};
+  await assertFails(reference.update({seriesId: "series-breakfast", updatedAt: serverTime()}));
+  await assertFails(reference.update({...link, seriesId: "missing-series", updatedAt: serverTime()}));
+  await assertSucceeds(reference.update({...link, updatedAt: serverTime()}));
+  await assertSucceeds(reference.update({eventDate: date("2026-10-24"), recurrenceException: true, updatedAt: serverTime()}));
+  await assertFails(reference.update({occurrenceKey: date("2026-10-24"), updatedAt: serverTime()}));
+  await assertFails(reference.update({seriesId: "another-series", updatedAt: serverTime()}));
+  await assertFails(reference.update({seriesId: firebase.firestore.FieldValue.delete(), updatedAt: serverTime()}));
+  await assertFails(reference.delete());
+  await assertSucceeds(reference.update({status: "archived", recurrenceException: true, updatedAt: serverTime()}));
+}));
+
+test("series store saves bounded transactions, reloads distant occurrences, and retries without duplicates", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const store = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  const series = recurringSeries({recurrence: {...defaultRecurrence("2028-10-17"), count: 3}});
+  const playbook = cloneStarterData().playbooks.find((item) => item.id === series.playbookId);
+  const schedules = ["2028-10-17", "2028-11-17", "2028-12-17"].map((eventDate) => generateCampaignSchedule({
+    campaign: {...series, id: `${series.id}_${eventDate}`, eventDate, registrationDeadline: "",
+      seriesId: series.id, occurrenceKey: eventDate, seriesRevision: 1, recurrenceException: false},
+    playbook, generatedAt: new Date("2026-09-15T12:00:00Z"),
+  }));
+  const plan = {series, campaigns: schedules.map((item) => item.campaign), plays: schedules.flatMap((item) => item.plays)};
+  const first = await store.saveSeriesPlan(plan);
+  assert.equal(first.series.saveState, "ready");
+  const workspace = await store.loadWorkspace();
+  assert.equal(workspace.campaignSeries.length, 1);
+  assert.equal(workspace.campaigns.length, 3);
+  assert.equal(workspace.scheduledPlays.length, plan.plays.length);
+  assert.equal(workspace.campaigns[0].occurrenceKey, "2028-10-17");
+  assert.equal(workspace.campaignSeries[0].recurrence.startDate, "2028-10-17");
+  const created = (await db.doc(`centralPromotionCampaigns/${plan.campaigns[0].id}`).get()).data().createdAt;
+  await store.saveSeriesPlan(plan);
+  assert.equal((await db.collection(PLANNER_COLLECTIONS.plays).get()).size, plan.plays.length);
+  assert.ok(created.isEqual((await db.doc(`centralPromotionCampaigns/${plan.campaigns[0].id}`).get()).data().createdAt));
+  await assert.rejects(() => store.deleteCampaign(plan.campaigns[0].id), /Skip this recurring occurrence/);
+  const play = workspace.scheduledPlays[0];
+  await store.saveScheduledPlay({...play, notes: "ignored", status: "completed"});
+  const stale = {...play, scheduledDate: "2028-10-10", manuallyAdjusted: true};
+  await assert.rejects(() => store.saveSeriesPlan({series: null, campaigns: [], plays: [stale], expectedPlays: [play]}), /changed in another session/);
+  assert.equal((await db.doc(`centralPromotionScheduledPlays/${play.id}`).get()).data().status, "completed");
+}));
+
+test("an interrupted series save must finish before another revision can start", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const series = recurringSeries();
+  const playbook = cloneStarterData().playbooks.find((item) => item.id === series.playbookId);
+  const schedules = ["2026-10-17", "2026-11-17", "2026-12-17"].map((eventDate) => generateCampaignSchedule({
+    campaign: {...series, id: `${series.id}_${eventDate}`, eventDate, registrationDeadline: "",
+      seriesId: series.id, occurrenceKey: eventDate, seriesRevision: 1, recurrenceException: false},
+    playbook, generatedAt: new Date("2026-09-15T12:00:00Z"),
+  }));
+  const plan = {series, campaigns: schedules.map((item) => item.campaign), plays: schedules.flatMap((item) => item.plays)};
+  let attempts = 0;
+  const interrupted = createPlannerStore({user: {uid: "editor"}, firestore: {
+    collection: (name) => db.collection(name),
+    runTransaction: (callback) => ++attempts === 3 ? Promise.reject(new Error("Simulated connection loss")) : db.runTransaction(callback),
+  }});
+  await assert.rejects(() => interrupted.saveSeriesPlan(plan), /Simulated connection loss/);
+  assert.equal((await db.doc(`centralPromotionCampaignSeries/${series.id}`).get()).data().saveState, "saving");
+  const normal = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  await assert.rejects(() => normal.saveSeriesPlan({...plan, series: {...series, revision: 2, name: "Changed after partial save"}, campaigns: [], plays: []}), /Finish the interrupted series save/);
+  await normal.saveSeriesPlan(plan);
+  assert.equal((await db.doc(`centralPromotionCampaignSeries/${series.id}`).get()).data().saveState, "ready");
+  assert.equal((await db.collection(PLANNER_COLLECTIONS.campaigns).get()).size, 3);
+  assert.equal((await db.collection(PLANNER_COLLECTIONS.plays).get()).size, plan.plays.length);
+}));
+
+test("occurrence provenance rejects mismatched playbooks and future revisions", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  await db.doc("centralPromotionCampaignSeries/series-breakfast").set(recurrenceCloud());
+  const occurrence = {...campaignPayload(), seriesId: "series-breakfast", occurrenceKey: date("2026-10-17"), seriesRevision: 1, recurrenceException: false};
+  const reference = db.doc("centralPromotionCampaigns/campaign-a");
+  await assertFails(reference.set({...occurrence, playbookId: "another-playbook"}));
+  await assertFails(reference.set({...occurrence, seriesRevision: 2}));
+  await assertSucceeds(reference.set(occurrence));
+  await assertFails(reference.update({seriesRevision: 2, updatedAt: serverTime()}));
+  await db.doc("centralPromotionPlaybooks/level-4-standard").set({...playbookPayload(), currentVersion: 2});
+  await assertSucceeds(reference.update({playbookVersion: 2, updatedAt: serverTime()}));
+}));
+
+test("real series plans survive reload, occurrence edits, future edits, skips, and ending", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const store = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  const generatedAt = new Date("2026-09-15T12:00:00Z");
+  const context = (workspace) => ({campaigns: workspace.campaigns, plays: workspace.scheduledPlays,
+    capacityRules: workspace.capacityRules, playbook: workspace.playbookVersions.find((item) => item.id === "level-4-standard"), generatedAt});
+  let workspace = await store.loadWorkspace();
+  await store.saveSeriesPlan(buildSeriesPlan({...context(workspace), series: recurringSeries()}));
+  workspace = await store.loadWorkspace();
+  assert.equal(workspace.campaigns.length, 3);
+  const november = workspace.campaigns.find((item) => item.eventDate === "2026-11-17");
+  await store.saveSeriesPlan(buildOccurrencePlan({...context(workspace), campaign: november, updates: {eventDate: "2026-11-24"}}));
+  workspace = await store.loadWorkspace();
+  assert.equal(workspace.campaigns.find((item) => item.id === november.id).registrationDeadline, "2026-11-22");
+  await store.saveSeriesPlan(buildSeriesPlan({...context(workspace), series: {...workspace.campaignSeries[0], revision: 2, name: "Updated breakfast"}}));
+  workspace = await store.loadWorkspace();
+  assert.equal(workspace.campaigns.find((item) => item.id === november.id).eventDate, "2026-11-24");
+  const december = workspace.campaigns.find((item) => item.eventDate === "2026-12-17");
+  await store.saveSeriesPlan(skipOccurrencePlan({campaign: december, plays: workspace.scheduledPlays, generatedAt}));
+  workspace = await store.loadWorkspace();
+  assert.ok(workspace.scheduledPlays.filter((item) => item.campaignId === december.id).every((item) => item.status === "skipped"));
+  await store.saveSeriesPlan(buildSeriesPlan({...context(workspace), fromDate: "2026-11-01",
+    series: {...workspace.campaignSeries[0], revision: 3, status: "ended"}}));
+  workspace = await store.loadWorkspace();
+  assert.equal(workspace.campaignSeries[0].saveFromDate, "2026-11-01");
+  assert.ok(workspace.scheduledPlays.filter((item) => item.campaignId === november.id).every((item) => item.status === "skipped"));
+  assert.equal(workspace.campaigns.find((item) => item.eventDate === "2026-10-17").status, "active");
+}));
+
+test("series preview rejects changes to competing campaigns before writing", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const store = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  const workspace = await store.loadWorkspace();
+  const series = recurringSeries();
+  const plan = buildSeriesPlan({series, playbook: workspace.playbooks.find((item) => item.id === series.playbookId),
+    campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules,
+    generatedAt: new Date("2026-09-15T12:00:00Z")});
+  await db.doc("centralPromotionCampaigns/competing-campaign").set(campaignPayload());
+  await assert.rejects(() => store.saveSeriesPlan(plan), /capacity changed since this preview/);
+  assert.equal((await db.collection(PLANNER_COLLECTIONS.series).get()).size, 0);
+}));
+
+test("converted series can resume an interrupted end after reloading its saved scope", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const store = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  await db.doc("centralPromotionCampaigns/campaign-a").set(campaignPayload());
+  const generatedAt = new Date("2026-09-15T12:00:00Z");
+  const context = (workspace) => ({campaigns: workspace.campaigns, plays: workspace.scheduledPlays,
+    capacityRules: workspace.capacityRules, playbook: workspace.playbooks.find((item) => item.id === "level-4-standard"), generatedAt});
+  let workspace = await store.loadWorkspace();
+  const startDate = workspace.campaigns[0].eventDate;
+  const conversion = buildSeriesPlan({...context(workspace), seedCampaignId: "campaign-a",
+    series: recurringSeries({submittedAt: workspace.campaigns[0].submittedAt,
+      recurrence: {...defaultRecurrence(startDate), count: 3}})});
+  await store.saveSeriesPlan(conversion);
+  // The exact original preview is also safe to retry after all its writes landed.
+  await store.saveSeriesPlan(conversion);
+  workspace = await store.loadWorkspace();
+  const cutoff = workspace.campaigns.map((item) => item.eventDate).sort()[1];
+  const ending = buildSeriesPlan({...context(workspace), fromDate: cutoff,
+    series: {...workspace.campaignSeries[0], revision: 2, status: "ended"}});
+  let transactions = 0;
+  const interrupted = createPlannerStore({user: {uid: "editor"}, firestore: {
+    collection: (name) => db.collection(name),
+    runTransaction: (callback) => ++transactions === 3 ? Promise.reject(new Error("Interrupted ending")) : db.runTransaction(callback),
+  }});
+  await assert.rejects(() => interrupted.saveSeriesPlan(ending), /Interrupted ending/);
+  workspace = await store.loadWorkspace();
+  const savedSeries = workspace.campaignSeries[0];
+  assert.equal(savedSeries.saveState, "saving");
+  assert.equal(savedSeries.seedCampaignId, "campaign-a");
+  assert.equal(savedSeries.saveFromDate, cutoff);
+  await store.saveSeriesPlan(buildSeriesPlan({...context(workspace), series: savedSeries,
+    fromDate: savedSeries.saveFromDate, seedCampaignId: savedSeries.seedCampaignId}));
+  workspace = await store.loadWorkspace();
+  assert.equal(workspace.campaignSeries[0].saveState, "ready");
+  assert.equal(workspace.campaigns.find((item) => item.id === "campaign-a").status, "active");
+  assert.ok(workspace.campaigns.filter((item) => item.eventDate >= cutoff).every((item) => item.status === "archived"));
+}));

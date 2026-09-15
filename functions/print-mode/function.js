@@ -147,15 +147,29 @@ export function createPrintModeHandler(options) {
       let sourceData = request.body && typeof request.body === "object" ?
         request.body :
         {};
-      if (!Object.prototype.hasOwnProperty.call(sourceData, "bulletinLayout")) {
+      const hasBulletinLayout = Object.prototype.hasOwnProperty.call(
+          sourceData,
+          "bulletinLayout",
+      );
+      const hasLayout3 = Object.prototype.hasOwnProperty.call(
+          sourceData,
+          "layout3",
+      );
+      if (!hasBulletinLayout || !hasLayout3) {
         const existingSnapshot = await firestore
             .doc(PRINT_MODE_SETTINGS_DOC_PATH)
             .get();
+        const existingData = existingSnapshot.exists ?
+          existingSnapshot.data() :
+          {};
         sourceData = {
           ...sourceData,
-          bulletinLayout: existingSnapshot.exists ?
-            existingSnapshot.data().bulletinLayout :
-            undefined,
+          ...(!hasBulletinLayout ? {
+            bulletinLayout: existingData.bulletinLayout,
+          } : {}),
+          ...(!hasLayout3 ? {
+            layout3: existingData.layout3,
+          } : {}),
         };
       }
       const config = normalizePrintModePayload(sourceData);

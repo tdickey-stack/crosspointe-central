@@ -14,6 +14,7 @@ test("Print Mode payload defaults preserve the public contract", () => {
   assert.equal(payload.printFormat, "half-letter");
   assert.equal(payload.printColorMode, "color");
   assert.equal(payload.bulletinLayout, "classic");
+  assert.equal(payload.layout3, null);
   assert.equal(payload.showCutLine, false);
   assert.equal(payload.heroSource, "featured");
   assert.equal(payload.frontContentSource, "mixed");
@@ -180,6 +181,125 @@ test("Print Mode payload falls back from unknown bulletin layouts", () => {
           .bulletinLayout,
       "classic",
   );
+});
+
+test("Print Mode accepts the readable bulletin layout", () => {
+  assert.equal(
+      normalizePrintModePayload({bulletinLayout: "readable"})
+          .bulletinLayout,
+      "readable",
+  );
+});
+
+test("Print Mode round-trips a normalized Layout 3 arrangement", () => {
+  const layout3 = {
+    items: [
+      {key: "campaign:campaign-1", side: "front", size: 2},
+      {key: "serve:serve-1", side: "back", size: 1},
+      {key: "custom:custom-1", side: "off", size: 2},
+      {key: "event:event-1", side: "back", size: 1},
+    ],
+  };
+
+  const payload = normalizePrintModePayload({layout3: layout3});
+
+  assert.deepEqual(payload.layout3, layout3);
+  assert.deepEqual(
+      normalizePrintModePayload(payload).layout3,
+      layout3,
+  );
+});
+
+test("Layout 3 arrangement does not alter legacy layout fields", () => {
+  const source = {
+    printFormat: "full-page",
+    bulletinLayout: "scannable",
+    campaignIds: ["campaign-1"],
+    serveNeedIds: ["serve-1"],
+    events: [{id: "event-1", title: "Event", included: false}],
+    fallbackBlocks: [{
+      id: "custom-1",
+      title: "Custom",
+      size: 3,
+      includeOnFront: true,
+      includeOnBack: false,
+    }],
+    layout3: {
+      items: [
+        {key: "campaign:campaign-1", side: "back", size: 2},
+        {key: "serve:serve-1", side: "off", size: 2},
+        {key: "event:event-1", side: "front", size: 2},
+        {key: "custom:custom-1", side: "back", size: 1},
+      ],
+    },
+  };
+
+  const payload = normalizePrintModePayload(source);
+
+  assert.equal(payload.printFormat, "full-page");
+  assert.equal(payload.bulletinLayout, "scannable");
+  assert.deepEqual(payload.campaignIds, ["campaign-1"]);
+  assert.deepEqual(payload.serveNeedIds, ["serve-1"]);
+  assert.equal(payload.events[0].included, false);
+  assert.equal(payload.fallbackBlocks[0].size, 3);
+  assert.equal(payload.fallbackBlocks[0].includeOnFront, true);
+  assert.equal(payload.fallbackBlocks[0].includeOnBack, false);
+  assert.deepEqual(payload.layout3.items, [
+    {key: "campaign:campaign-1", side: "back", size: 2},
+    {key: "serve:serve-1", side: "off", size: 2},
+    {key: "event:event-1", side: "back", size: 1},
+    {key: "custom:custom-1", side: "back", size: 1},
+  ]);
+});
+
+test("Layout 3 safely normalizes invalid and duplicate items", () => {
+  const overlongId = "x".repeat(161);
+  const payload = normalizePrintModePayload({
+    layout3: {
+      items: [
+        null,
+        "campaign:not-an-object",
+        {key: 42, side: "front", size: 2},
+        {key: "unknown:item", side: "front", size: 2},
+        {key: "campaign:", side: "front", size: 2},
+        {key: "campaign:   ", side: "front", size: 2},
+        {key: "campaign:" + overlongId, side: "front", size: 2},
+        {key: " campaign: first ", side: "front", size: 2},
+        {key: "campaign:first", side: "back", size: 1},
+        {key: "serve:second", side: "somewhere", size: 7},
+        {key: "event:event-1", side: "front", size: 2},
+        {key: "event:event-2", side: "off", size: 2},
+      ],
+    },
+  });
+
+  assert.deepEqual(payload.layout3, {
+    items: [
+      {key: "campaign:first", side: "front", size: 2},
+      {key: "serve:second", side: "off", size: 1},
+      {key: "event:event-1", side: "back", size: 1},
+      {key: "event:event-2", side: "off", size: 1},
+    ],
+  });
+  assert.equal(normalizePrintModePayload({layout3: []}).layout3, null);
+  assert.deepEqual(
+      normalizePrintModePayload({layout3: {items: "invalid"}}).layout3,
+      {items: []},
+  );
+});
+
+test("Layout 3 preserves overflow drafts up to its safety cap", () => {
+  const items = Array.from({length: 251}, (_unused, index) => ({
+    key: "campaign:campaign-" + String(index + 1),
+    side: index % 2 === 0 ? "front" : "back",
+    size: index % 3 === 0 ? 2 : 1,
+  }));
+
+  const payload = normalizePrintModePayload({layout3: {items: items}});
+
+  assert.equal(payload.layout3.items.length, 250);
+  assert.deepEqual(payload.layout3.items[11], items[11]);
+  assert.deepEqual(payload.layout3.items[249], items[249]);
 });
 
 test("Print Mode bounds sparse description overrides", () => {

@@ -6,7 +6,9 @@ import vm from "node:vm";
 const source = fs.readFileSync(new URL("../public/admin.js", import.meta.url), "utf8");
 
 function loadFunctions(names, globals = {}) {
-  const context = vm.createContext(globals);
+  const context = vm.createContext(Object.assign({
+    getBulletinLayout_: () => "classic",
+  }, globals));
   for (const name of names) {
     const start = source.indexOf(`  function ${name}(`);
     assert.notEqual(start, -1, `Missing function ${name}`);
@@ -14,6 +16,31 @@ function loadFunctions(names, globals = {}) {
     assert.notEqual(end, -1, `Missing end of function ${name}`);
     vm.runInContext(source.slice(start, end + 4), context);
   }
+  return context;
+}
+
+function loadBulletinMarkdownRenderers(context) {
+  const start = source.indexOf("  function renderAdminMarkdownLite_(value) {");
+  const end = source.lastIndexOf("\n}());");
+  assert.notEqual(start, -1, "Missing Print Mode Markdown renderer");
+  assert.notEqual(end, -1, "Missing admin module boundary");
+  vm.runInContext(source.slice(start, end), context);
+}
+
+function customBlockRendererContext() {
+  const context = loadFunctions([
+    "escapeHtml_",
+    "escapeAttr_",
+    "renderBulletinFallbackBlock_",
+    "renderBulletinBackCustomBlock_",
+  ], {
+    getBulletinFallbackImageUrl_: (value) => value || "",
+    normalizeBulletinBlockSize_: (value) => Number(value) || 2,
+    getBulletinBackCustomBlockLayoutWeight_: () => 1,
+    getBulletinEventDescriptionFitSize_: () => "0.1in",
+    getBulletinEventDescriptionLengthClass_: () => "",
+  });
+  loadBulletinMarkdownRenderers(context);
   return context;
 }
 
@@ -82,6 +109,38 @@ test("resizing a custom block changes neither announcement count nor page densit
   assert.equal(context.getBulletinFrontContentSelectionState_().totalCount, 3);
   assert.equal(context.getBulletinFrontDensityClass_(), empty);
 });
+
+for (const [name, renderer] of [
+  ["front", "renderBulletinFallbackBlock_"],
+  ["back", "renderBulletinBackCustomBlock_"],
+]) {
+  test(`${name} custom blocks render escaped lightweight Markdown without invalid paragraph nesting`, () => {
+    const context = customBlockRendererContext();
+    const html = context[renderer]({
+      id: "custom",
+      eyebrow: "News",
+      title: "<script>keep title text safe</script>",
+      description: [
+        "# **Welcome**",
+        "",
+        "*Read* the <img src=x onerror=alert(1)> details.",
+        "",
+        "1. First",
+        "   - Nested **second**",
+      ].join("\n"),
+      size: 2,
+    });
+
+    assert.match(html, /central-bulletin-markdown/);
+    assert.match(html, /central-bulletin-custom-description|central-bulletin-event-description/);
+    assert.match(html, /&lt;script&gt;keep title text safe&lt;\/script&gt;/);
+    assert.doesNotMatch(html, /<script>keep title text safe<\/script>/);
+    assert.match(html, /<h3 class="whats-new-heading level-1"><strong>Welcome<\/strong><\/h3>/);
+    assert.match(html, /<p><em>Read<\/em> the &lt;img src=x onerror=alert\(1\)&gt; details\.<\/p>/);
+    assert.match(html, /<ol><li>First<ul><li>Nested <strong>second<\/strong><\/li><\/ul><\/li><\/ol>/);
+    assert.doesNotMatch(html, /<p[^>]*>\s*<(?:h3|ol|ul)/);
+  });
+}
 
 function measureFit({footerBottom = 880, totalCount = 4, format = "half-letter", heights = [200]} = {}) {
   let attached = false;
@@ -222,4 +281,32 @@ test("first adaptation preserves Large custom copy while shortening supporting c
   assert.equal(fit.level, 1);
   assert.deepEqual(Array.from(fit.copyLines), [6, 1]);
   assert.ok(content.scrollHeight <= content.clientHeight);
+});
+
+test("front fitting applies one line budget to the custom Markdown wrapper, not its nested blocks", () => {
+  const applied = [];
+  const nestedParagraph = {style: {removeProperty() { applied.push("nested"); }}};
+  const wrapper = {style: {
+    removeProperty() {},
+    setProperty(name, value) { applied.push([name, value]); },
+  }};
+  const panel = {
+    setAttribute() {},
+    querySelectorAll(selector) {
+      assert.match(selector, /fallback-copy > \.central-bulletin-custom-description/);
+      return [wrapper];
+    },
+  };
+  const context = loadFunctions([
+    "setBulletinAdaptiveCopyLines_",
+    "applyBulletinFrontFit_",
+  ], {
+    appEl: {querySelectorAll: () => [panel]},
+  });
+  context.applyBulletinFrontFit_({level: 2, copyLines: [3]});
+  assert.deepEqual(applied, [
+    ["display", "-webkit-box"],
+    ["-webkit-line-clamp", "3"],
+  ]);
+  assert.equal(typeof nestedParagraph.style.removeProperty, "function");
 });

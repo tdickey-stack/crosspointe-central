@@ -8,6 +8,10 @@ const PRINT_MODE_MAX_SERVE_NEEDS = 3;
 const PRINT_MODE_MAX_CUSTOM_BLOCKS = 8;
 const PRINT_MODE_DESCRIPTION_OVERRIDE_LIMIT = 12;
 const PRINT_MODE_DESCRIPTION_MAX_CHARACTERS = 140;
+const PRINT_MODE_LAYOUT3_ITEM_LIMIT = 250;
+const PRINT_MODE_LAYOUT3_KEY_MAX_CHARACTERS = 170;
+const PRINT_MODE_LAYOUT3_ID_MAX_CHARACTERS = 160;
+const PRINT_MODE_LAYOUT3_KEY_PATTERN = /^(campaign|serve|custom|event):(.+)$/;
 const PRINT_MODE_CAMPAIGN_ICON_IDS = new Set([
   "general",
   "gift",
@@ -174,14 +178,17 @@ export function normalizePrintModePayload(sourceData) {
       source.backContentOrder,
       normalizedFallbackBlocks,
   );
+  const normalizedLayout3 = normalizePrintModeLayout3_(source.layout3);
 
   return {
     serviceDate: normalizePrintModeDate_(source.serviceDate),
     printFormat: source.printFormat === "full-page" ?
       "full-page" : "half-letter",
     printColorMode: source.printColorMode === "bw" ? "bw" : "color",
-    bulletinLayout: source.bulletinLayout === "scannable" ?
-      "scannable" : "classic",
+    bulletinLayout: ["scannable", "readable"].includes(
+        source.bulletinLayout,
+    ) ? source.bulletinLayout : "classic",
+    layout3: normalizedLayout3,
     showCutLine: source.showCutLine === true,
     heroSource: source.heroSource === "manual" ? "manual" : "featured",
     frontContentSource: "mixed",
@@ -280,6 +287,72 @@ export function normalizePrintModePayload(sourceData) {
     serveNeedIds: normalizedServeNeedIds,
     serveNeedDescriptionOverrides: serveNeedDescriptionOverrides,
     serveNeedId: normalizedServeNeedIds[0] || "",
+  };
+}
+
+function normalizePrintModeLayout3_(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return null;
+  }
+
+  const items = [];
+  const seenKeys = new Set();
+
+  (Array.isArray(source.items) ? source.items : []).forEach((item) => {
+    if (items.length >= PRINT_MODE_LAYOUT3_ITEM_LIMIT) {
+      return;
+    }
+
+    const normalizedItem = normalizePrintModeLayout3Item_(item);
+    if (!normalizedItem || seenKeys.has(normalizedItem.key)) {
+      return;
+    }
+
+    seenKeys.add(normalizedItem.key);
+    items.push(normalizedItem);
+  });
+
+  return {items: items};
+}
+
+function normalizePrintModeLayout3Item_(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return null;
+  }
+
+  if (typeof source.key !== "string") {
+    return null;
+  }
+
+  const sourceKey = source.key.trim();
+  if (!sourceKey || sourceKey.length > PRINT_MODE_LAYOUT3_KEY_MAX_CHARACTERS) {
+    return null;
+  }
+
+  const keyMatch = sourceKey.match(PRINT_MODE_LAYOUT3_KEY_PATTERN);
+  const id = keyMatch ? keyMatch[2].trim() : "";
+  if (
+    !keyMatch ||
+    !id ||
+    id.length > PRINT_MODE_LAYOUT3_ID_MAX_CHARACTERS
+  ) {
+    return null;
+  }
+  const key = keyMatch[1] + ":" + id;
+
+  let side = ["front", "back", "off"].includes(source.side) ?
+    source.side : "off";
+  let size = Number(source.size) === 2 ? 2 : 1;
+
+  if (keyMatch[1] === "event") {
+    side = side === "front" ? "back" : side;
+    size = 1;
+  }
+
+  return {
+    key: key,
+    side: side,
+    size: size,
   };
 }
 

@@ -133,6 +133,7 @@ test("Print Mode POST preserves settings and audit write paths", async () => {
       serviceDate: "2026-07-26",
       printFormat: "full-page",
       bulletinLayout: "scannable",
+      layout3: null,
       showCutLine: true,
       campaignDescriptionOverrides: [{
         id: "campaign-1",
@@ -243,50 +244,99 @@ test("GET and POST preserve selections regardless of custom size", async () => {
   assert.equal(writes[0].fallbackBlocks[0].includeOnFront, true);
 });
 
-test("Print Mode POST preserves layout from a stale client", async () => {
-  const documentWrites = [];
-  const firestore = {
-    doc: (path) => {
-      if (path === "centralAdmin/root/users/user-1") {
-        return {
-          get: async () => createSnapshot_({
-            active: true,
-            pageAccess: {settings: "admin"},
-          }),
-        };
-      }
-      if (path === "centralAdmin/root/public/bulletinMode") {
-        return {
-          get: async () => createSnapshot_({
-            bulletinLayout: "scannable",
-          }),
-          set: async (value) => documentWrites.push(value),
-        };
-      }
-      throw new Error("Unexpected document path: " + path);
+test("Print Mode POST preserves fields omitted by stale clients", async (t) => {
+  const existingLayout3 = {items: [
+    {key: "campaign:campaign-1", side: "front", size: 2},
+    {key: "event:event-1", side: "back", size: 1},
+  ]};
+  const cases = [
+    {
+      name: "omitted Layout 3 arrangement",
+      body: {serviceDate: "2026-07-26", bulletinLayout: "classic"},
+      expectedBulletinLayout: "classic",
+      expectedLayout3: existingLayout3,
     },
-    collection: () => ({
-      add: async () => {},
-    }),
-  };
-  const response = createResponse_();
-  const handler = createPrintModeHandler({
-    admin: createAdmin_(),
-    firestore,
-    allowedAdminEmails: [],
-    allowedAdminEmailDomains: ["crosspointe.tv"],
-  });
+    {
+      name: "explicit null Layout 3 arrangement",
+      body: {serviceDate: "2026-07-26", layout3: null},
+      expectedBulletinLayout: "readable",
+      expectedLayout3: null,
+    },
+    {
+      name: "both migration-sensitive fields omitted",
+      body: {serviceDate: "2026-07-26"},
+      expectedBulletinLayout: "readable",
+      expectedLayout3: existingLayout3,
+    },
+  ];
 
-  await handler({
-    method: "POST",
-    headers: {authorization: "Bearer valid-token"},
-    body: {serviceDate: "2026-07-26"},
-  }, response);
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      const documentWrites = [];
+      let settingsReads = 0;
+      const firestore = {
+        doc: (path) => {
+          if (path === "centralAdmin/root/users/user-1") {
+            return {
+              get: async () => createSnapshot_({
+                active: true,
+                pageAccess: {settings: "admin"},
+              }),
+            };
+          }
+          if (path === "centralAdmin/root/public/bulletinMode") {
+            return {
+              get: async () => {
+                settingsReads += 1;
+                return createSnapshot_({
+                  bulletinLayout: "readable",
+                  layout3: existingLayout3,
+                });
+              },
+              set: async (value) => documentWrites.push(value),
+            };
+          }
+          throw new Error("Unexpected document path: " + path);
+        },
+        collection: () => ({
+          add: async () => {},
+        }),
+      };
+      const response = createResponse_();
+      const handler = createPrintModeHandler({
+        admin: createAdmin_(),
+        firestore,
+        allowedAdminEmails: [],
+        allowedAdminEmailDomains: ["crosspointe.tv"],
+      });
 
-  assert.equal(response.statusCode, 200);
-  assert.equal(documentWrites.length, 1);
-  assert.equal(documentWrites[0].bulletinLayout, "scannable");
-  assert.equal(response.body.config.bulletinLayout, "scannable");
+      await handler({
+        method: "POST",
+        headers: {authorization: "Bearer valid-token"},
+        body: scenario.body,
+      }, response);
+
+      assert.equal(response.statusCode, 200);
+      assert.equal(settingsReads, 1);
+      assert.equal(documentWrites.length, 1);
+      assert.equal(
+          documentWrites[0].bulletinLayout,
+          scenario.expectedBulletinLayout,
+      );
+      assert.deepEqual(
+          documentWrites[0].layout3,
+          scenario.expectedLayout3,
+      );
+      assert.equal(
+          response.body.config.bulletinLayout,
+          scenario.expectedBulletinLayout,
+      );
+      assert.deepEqual(
+          response.body.config.layout3,
+          scenario.expectedLayout3,
+      );
+    });
+  }
 });
 
 function createAdmin_() {

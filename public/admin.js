@@ -1912,6 +1912,23 @@
         return;
       }
 
+      if (action === "set-bulletin-layout3") {
+        event.preventDefault();
+        if (setBulletinLayout3Placement_(button.getAttribute("data-admin-doc-id"),
+            button.getAttribute("data-admin-layout3-field"), button.getAttribute("data-admin-layout3-value"))) {
+          markAdminDirtyScope_("bulletin");
+        }
+        renderAdmin_();
+        return;
+      }
+
+      if (action === "move-bulletin-layout3") {
+        event.preventDefault();
+        moveBulletinLayout3Item_(button.getAttribute("data-admin-doc-id"), button.getAttribute("data-admin-move-direction"));
+        renderAdmin_();
+        return;
+      }
+
       if (action === "print-bulletin") {
         event.preventDefault();
         printBulletin_();
@@ -6635,6 +6652,7 @@
     var editing = !!adminState.bulletinFallbackBlockEditingId;
     var errorHeading = getBulletinErrorHeading_();
     var fullPage = getBulletinPrintFormat_() === "full-page";
+    var readable = getBulletinLayout_() === "readable";
 
     return [
       "<div class=\"central-admin-modal central-admin-bulletin-block-modal\" role=\"presentation\">",
@@ -6649,7 +6667,7 @@
       "<h3 id=\"central-admin-bulletin-block-modal-title\">",
       editing ? "Edit Custom Block" : "Add Custom Block",
       "</h3><p>",
-      fullPage ?
+      readable ? "Edit shared copy. Placement and size apply only to Layout 3." : fullPage ?
         "Create reusable content for the front of this full-page print." :
         "Create reusable content and choose whether it appears on the front, back, or both.",
       "</p>",
@@ -6678,6 +6696,7 @@
       renderAdminTextareaField_({
         label: "Description",
         field: "bulletin-block.description",
+        hint: readable ? "Use **bold**, *italics*, headings, and lists. Overflow must be edited before printing; text stays at least 12pt." : "Use **bold**, *italics*, headings, and lists. Front-page copy may shorten to fit.",
         value: draft.description,
         rows: 4,
         maxLength: 800,
@@ -6685,7 +6704,7 @@
       }),
       "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-block-size\">",
       "<legend>Printed Size</legend>",
-      [1, 2, 3].map(function(size) {
+      (readable ? [2, 3] : [1, 2, 3]).map(function(size) {
         var active = Number(draft.size || 2) === size;
         var descriptions = [
           "A compact card with a smaller footprint.",
@@ -6701,7 +6720,7 @@
           "><span><strong>", escapeHtml_(
               getBulletinBlockSizeLabel_(size),
           ), "</strong><small>",
-          escapeHtml_(descriptions[size - 1]),
+          escapeHtml_(readable ? (size === 3 ? "Uses 2 slots." : "Uses 1 slot.") : descriptions[size - 1]),
           "</small></span></label>",
         ].join("");
       }).join(""),
@@ -6739,6 +6758,11 @@
       ].join("") : "",
       "<small>JPEG, PNG, or WebP up to 10 MB.</small>",
       "</div></div>",
+      readable ? '<fieldset class="central-admin-bulletin-block-placement"><legend>Placement</legend>' +
+        [["off", "Not included"], ["front", "Front"], ["back", "Back"]].map(function(option) {
+          return '<label class="central-admin-checkbox"><input type="radio" name="bulletin-block-layout3-side" data-admin-field="bulletin-block.layout3Side" value="' + option[0] +
+            '"' + (draft.layout3Side === option[0] ? ' checked' : '') + '><span>' + option[1] + '</span></label>';
+        }).join('') + '</fieldset>' : [
       "<fieldset class=\"central-admin-bulletin-block-placement\">",
       "<legend>Include On</legend>",
       "<label class=\"central-admin-checkbox central-admin-modal-checkbox\"><input type=\"checkbox\" data-admin-field=\"bulletin-block.includeOnFront\"",
@@ -6750,6 +6774,7 @@
         "><span>Back page</span></label>",
       ].join(""),
       "</fieldset>",
+      ].join(""),
       "</div>",
       "<div class=\"central-admin-action-row central-admin-modal-actions\">",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"close-bulletin-fallback-block-editor\">Cancel</button>",
@@ -7797,6 +7822,8 @@
   }
 
   function getPrintModeStepDefinition_(step) {
+    if (getBulletinLayout_() === "readable" && Number(step) === 3) return {label: "Front Content", description: "Reserve the hero and generosity, then choose content for two flexible front slots."};
+    if (getBulletinLayout_() === "readable" && Number(step) === 4) return {label: "Back Content", description: "Choose individual events and flexible content for six back slots."};
     var definition =
       PRINT_MODE_STEPS[Math.max(0, getPrintModeStepIndex_(step))] ||
       PRINT_MODE_STEPS[0];
@@ -8068,6 +8095,12 @@
       }
     }
 
+    if (getBulletinLayout_() === "readable") {
+      var placement = getBulletinLayout3_().items.find(function(item) { return item.key === "custom:" + (block && block.id); });
+      nextDraft.size = placement && placement.size === 2 ? 3 : 2;
+      nextDraft.layout3Side = placement ? placement.side : getPrintModeStep_() === 4 ? "back" : "front";
+    }
+
     adminState.bulletinFallbackBlockEditingId = block ? block.id : "";
     adminState.bulletinFallbackBlockDraft = nextDraft;
     adminState.bulletinFallbackBlockEditorOpen = true;
@@ -8125,6 +8158,34 @@
       includeOnBack: includeOnBack,
       enabled: blockWillBeEnabled,
     };
+    if (getBulletinLayout_() === "readable") {
+      nextBlock.size = existingBlock ? existingBlock.size : 2;
+      nextBlock.includeOnFront = existingBlock ? existingBlock.includeOnFront : false;
+      nextBlock.includeOnBack = existingBlock ? existingBlock.includeOnBack : false;
+      nextBlock.enabled = existingBlock ? existingBlock.enabled : false;
+      // Temporarily expose a new block to capacity checks, without changing legacy selection.
+      var previousBlocks = adminState.bulletinDraft.fallbackBlocks;
+      if (!existingBlock) adminState.bulletinDraft.fallbackBlocks = blocks.concat([nextBlock]);
+      var layout = getBulletinLayout3_();
+      var previousItems = layout.items.slice();
+      var key = "custom:" + nextBlock.id;
+      var prior = layout.items.find(function(item) { return item.key === key; });
+      // Apply both fields atomically so moving a Large block can release its old slots.
+      layout.items = layout.items.filter(function(item) { return item.key !== key; });
+      var target = {key: key, side: draft.layout3Side || "off", size: size === 3 ? 2 : 1};
+      layout.items.splice(prior ? previousItems.indexOf(prior) : layout.items.length, 0, target);
+      var usage = getBulletinLayout3Capacity_();
+      var growing = target.side !== "off" && (!prior || target.side !== prior.side || target.size > prior.size);
+      var invalid = growing && (usage[target.side] > (target.side === "front" ? 2 : 6) ||
+        (target.side === "back" && !packBulletinLayout3Back_(getBulletinLayout3Entries_("back"))));
+      adminState.bulletinDraft.fallbackBlocks = previousBlocks;
+      if (invalid) {
+        layout.items = previousItems;
+        adminState.bulletinError = "Not enough slots on the " + target.side + ". Choose Not included to save this block, or free space first. The back allows at most two Large blocks.";
+        renderAdmin_();
+        return;
+      }
+    }
     var existingIndex = blocks.findIndex(function(block) {
       return block.id === editingId;
     });
@@ -8317,6 +8378,11 @@
               .filter(function(item) {
                 return item.id !== blockId;
               });
+        if (adminState.bulletinDraft.layout3) {
+          adminState.bulletinDraft.layout3.items = adminState.bulletinDraft.layout3.items.filter(function(item) {
+            return item.key !== "custom:" + blockId;
+          });
+        }
         adminState.bulletinDraft.frontContentOrder =
           normalizeBulletinFrontContentOrder_(
               adminState.bulletinDraft.frontContentOrder,
@@ -8350,7 +8416,7 @@
         var stepNumber = index + 1;
         var targetStep = stepNumber === 4 ? stepFourTarget : stepNumber;
         var displayStepNumber = stepNumber;
-        var displayLabel = stepNumber === 4 && fullPage ?
+        var displayLabel = stepNumber === 4 && getBulletinLayout_() === "readable" ? "Back" : stepNumber === 4 && fullPage ?
           PRINT_MODE_STEPS[4].shortLabel :
           step.shortLabel;
         var isActive = targetStep === activeStep;
@@ -8498,6 +8564,7 @@
   }
 
   function renderPrintModeFrontStep_(canSave) {
+    if (getBulletinLayout_() === "readable") return renderBulletinLayout3Step_(canSave, "front");
     var data = adminState.bulletinCentralData || {};
     var giving = adminState.bulletinDraft.giving || {};
     var campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
@@ -8861,6 +8928,7 @@
   }
 
   function renderPrintModeEventsStep_(canSave) {
+    if (getBulletinLayout_() === "readable") return renderBulletinLayout3Step_(canSave, "back");
     var headings = adminState.bulletinDraft.headings || {};
     var events = getBulletinEventDraftsInWindow_();
     var visibleEvents = getFilteredBulletinEventDrafts_(events);
@@ -8915,6 +8983,7 @@
   }
 
   function renderPrintModeReviewStep_(canSave) {
+    if (getBulletinLayout_() === "readable") return renderBulletinLayout3Review_(canSave);
     var fullPage = getBulletinPrintFormat_() === "full-page";
     var selectedEventCount = getBulletinEventDraftsInWindow_().filter(
         function(item) {
@@ -9029,6 +9098,11 @@
       bulletinLayout === "scannable" ? " checked" : "",
       !canSave ? " disabled" : "",
       "><span><strong>Layout 2 — Scannable</strong><small>A stronger featured event, larger type, and clearly separated sections.</small></span></label>",
+      "<label class=\"", bulletinLayout === "readable" ? "is-active" : "",
+      "\"><input type=\"radio\" name=\"bulletin-layout\" value=\"readable\" data-admin-field=\"bulletin.bulletinLayout\"",
+      bulletinLayout === "readable" ? " checked" : "",
+      !canSave ? " disabled" : "",
+      "><span><strong>Layout 3 — Readable</strong><small>12pt minimum, two flexible front slots, and six back slots. Half-letter only.</small></span></label>",
       "</fieldset>",
       "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-print-format\">",
       "<legend>Insert Size</legend>",
@@ -9042,7 +9116,7 @@
       printFormat === "full-page" ? "is-active" : "",
       "\"><input type=\"radio\" name=\"bulletin-print-format\" value=\"full-page\" data-admin-field=\"bulletin.printFormat\"",
       printFormat === "full-page" ? " checked" : "",
-      !canSave ? " disabled" : "",
+      !canSave || bulletinLayout === "readable" ? " disabled" : "",
       "><span><strong>Full-Page Insert</strong><small>One portrait page with the hero, campaigns, serve opportunity, and QR footer.</small></span></label>",
       "</fieldset>",
       "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-print-color\">",
@@ -9422,12 +9496,12 @@
     ].join("");
   }
 
-  function renderBulletinChoice_(type, id, label, checked, radio) {
+  function renderBulletinChoice_(type, id, label, checked, radio, disabled) {
     return [
       "<label class=\"central-admin-checkbox\">",
       "<input type=\"", radio ? "radio" : "checkbox", "\" data-admin-bulletin-choice=\"",
       escapeAttr_(type), "\" data-admin-doc-id=\"", escapeAttr_(String(id || "")), "\"",
-      checked ? " checked" : "", ">",
+      checked ? " checked" : "", disabled ? " disabled" : "", ">",
       "<span>", escapeHtml_(label), "</span></label>",
     ].join("");
   }
@@ -9506,7 +9580,9 @@
     return /ministry$/i.test(ministry) ? ministry : ministry + " Ministry";
   }
 
-  function renderBulletinEventEditor_(item) {
+  function renderBulletinEventEditor_(item, options) {
+    var readable = !!(options && options.readable);
+    var canSave = !readable || options.canSave;
     return [
       "<article class=\"central-admin-bulletin-event-editor",
       item.included ? "" : " is-excluded",
@@ -9519,30 +9595,388 @@
       "<strong>", escapeHtml_(item.time || "Time unavailable"), "</strong>",
       item.location ? "<small>" + escapeHtml_(item.location) + "</small>" : "",
       "</div>",
-      renderBulletinChoice_("event", item.id, "Include", item.included, false),
+      renderBulletinChoice_(readable ? "layout3-event" : "event", item.id, "Include", item.included, false, !canSave),
       "</div>",
       "<div class=\"central-admin-bulletin-event-copy\">",
       "<h4>", escapeHtml_(item.title || "Untitled Event"), "</h4>",
       item.description ?
         "<p>" + escapeHtml_(item.description) + "</p>" :
         "<p class=\"is-empty\">No description from Planning Center.</p>",
-      renderBulletinEventDescriptionGuidance_(item),
+      readable ? "" : renderBulletinEventDescriptionGuidance_(item),
       "</div>",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-event-edit\" data-admin-action=\"edit-bulletin-event\" data-admin-bulletin-event-id=\"",
-      escapeAttr_(item.id), "\">Edit Print Copy</button>",
+      escapeAttr_(item.id), "\"", canSave ? "" : " disabled", ">Edit Print Copy</button>",
       "</article>",
     ].join("");
   }
 
+  // Layout 3 stores placement separately so trying it never rearranges legacy layouts.
+  function normalizeBulletinLayout3_(source) {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+    var seen = {};
+    var items = [];
+    (Array.isArray(source.items) ? source.items : []).forEach(function(item) {
+      if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.key !== "string" || items.length >= 250) return;
+      var raw = item.key.trim();
+      var match = raw.match(/^(campaign|serve|custom|event):(.+)$/);
+      if (!match || raw.length > 170 || !match[2].trim() || match[2].trim().length > 160) return;
+      var key = match[1] + ":" + match[2].trim();
+      if (seen[key]) return;
+      seen[key] = true;
+      var side = ["front", "back"].indexOf(item.side) >= 0 ? item.side : "off";
+      var isEvent = match[1] === "event";
+      items.push({key: key, side: isEvent && side === "front" ? "back" : side,
+        size: !isEvent && Number(item.size) === 2 ? 2 : 1});
+    });
+    return {items: items};
+  }
+
+  function getBulletinLayout3ForSave_() {
+    var source = adminState.bulletinDraft.layout3;
+    if (!source) return null;
+    var eventKeys = getBulletinEventDraftsInWindow_().map(function(item) { return "event:" + item.id; });
+    var customKeys = (adminState.bulletinDraft.fallbackBlocks || []).map(function(item) { return "custom:" + item.id; });
+    // Prune before applying the safety cap so old weeks cannot crowd out new choices.
+    return normalizeBulletinLayout3_({items: (source.items || []).filter(function(item) {
+      return item.key.indexOf("event:") === 0 ? eventKeys.indexOf(item.key) >= 0 :
+        item.key.indexOf("custom:") !== 0 || customKeys.indexOf(item.key) >= 0;
+    })});
+  }
+
+  function getBulletinLayout3_() {
+    var draft = adminState.bulletinDraft;
+    if (draft.layout3) return draft.layout3;
+    var items = [];
+    (draft.campaignIds || []).forEach(function(id) {
+      items.push({key: "campaign:" + id, side: "front", size: 1});
+    });
+    (draft.serveNeedIds || []).forEach(function(id) {
+      items.push({key: "serve:" + id, side: "front", size: 1});
+    });
+    (draft.fallbackBlocks || []).forEach(function(block) {
+      items.push({key: "custom:" + block.id, size: Number(block.size) === 3 ? 2 : 1,
+        side: block.enabled === false ? "off" : block.includeOnFront ? "front" :
+          block.includeOnBack ? "back" : "off"});
+    });
+    (draft.events || []).forEach(function(item) {
+      items.push({key: "event:" + item.id, side: item.included ? "back" : "off", size: 1});
+    });
+    draft.layout3 = normalizeBulletinLayout3_({items: items});
+    return draft.layout3;
+  }
+
+  function getBulletinLayout3Catalog_() {
+    var data = adminState.bulletinCentralData || {};
+    var catalog = [];
+    [["campaign", data.campaigns], ["serve", data.serveNeeds],
+      ["custom", adminState.bulletinDraft.fallbackBlocks],
+      ["event", getBulletinEventDraftsInWindow_()]].forEach(function(group) {
+      (group[1] || []).forEach(function(item) {
+        var copy = group[0] === "campaign" || group[0] === "serve" ?
+          applyBulletinDescriptionOverride_(group[0] === "serve" ? "serve-need" : "campaign", item) : item;
+        if (group[0] === "serve") copy = Object.assign({}, copy, {title: copy.need || copy.title || "Serve at CrossPointe"});
+        catalog.push({key: group[0] + ":" + item.id, type: group[0], item: copy});
+      });
+    });
+    return catalog;
+  }
+
+  function getBulletinLayout3Entries_(side) {
+    var catalog = getBulletinLayout3Catalog_();
+    return getBulletinLayout3_().items.filter(function(placement) {
+      return placement.side === side;
+    }).map(function(placement) {
+      var entry = catalog.find(function(item) { return item.key === placement.key; });
+      return entry ? Object.assign({}, entry, placement) : null;
+    }).filter(Boolean);
+  }
+
+  function getBulletinLayout3Capacity_() {
+    return {front: getBulletinLayout3Entries_("front").reduce(function(n, item) { return n + item.size; }, 0),
+      back: getBulletinLayout3Entries_("back").reduce(function(n, item) { return n + item.size; }, 0)};
+  }
+
+  // Fit whole cards into two three-slot columns. Backtracking avoids avoidable gaps.
+  function packBulletinLayout3Back_(entries) {
+    var result = [];
+    function place(index, heights) {
+      if (index === entries.length) return true;
+      for (var column = 0; column < 2; column += 1) {
+        var size = entries[index].size;
+        if (heights[column] + size > 3) continue;
+        result[index] = {column: column + 1, row: heights[column] + 1};
+        heights[column] += size;
+        if (place(index + 1, heights)) return true;
+        heights[column] -= size;
+      }
+      return false;
+    }
+    return place(0, [0, 0]) ? result : null;
+  }
+
+  function setBulletinLayout3Placement_(key, field, value) {
+    var layout = getBulletinLayout3_();
+    var old = layout.items.find(function(item) { return item.key === key; });
+    var next = Object.assign({key: key, side: "off", size: 1}, old || {});
+    next[field] = field === "size" ? (Number(value) === 2 ? 2 : 1) : value;
+    next = normalizeBulletinLayout3_({items: [next]}).items[0];
+    if (!next) return false;
+    if (old && old.side === next.side && old.size === next.size) return false;
+    var before = layout.items;
+    layout.items = before.filter(function(item) { return item.key !== key; });
+    var index = old ? before.indexOf(old) : before.length;
+    layout.items.splice(index, 0, next);
+    var usage = getBulletinLayout3Capacity_();
+    var addsSpace = next.side !== "off" && (!old || old.side !== next.side || next.size > old.size);
+    var error = "";
+    if (addsSpace && usage[next.side] > (next.side === "front" ? 2 : 6)) {
+      error = "The " + next.side + " is full. Move or remove another item before adding this " +
+        (next.size === 2 ? "Large block (2 slots)." : "item (1 slot).");
+    } else if (addsSpace && next.side === "back" && !packBulletinLayout3Back_(getBulletinLayout3Entries_("back"))) {
+      error = "The back has room for at most two Large blocks: each needs two stacked slots in one column. Choose Standard or remove a Large block.";
+    }
+    if (error) {
+      layout.items = before;
+      adminState.bulletinError = error;
+      return false;
+    }
+    adminState.bulletinError = "";
+    adminState.bulletinMessage = "";
+    return true;
+  }
+
+  function getBulletinLayout3DisplayEntries_(side) {
+    var entries = getBulletinLayout3Entries_(side);
+    if (side !== "back") return entries;
+    var positions = packBulletinLayout3Back_(entries);
+    if (!positions) return entries;
+    return entries.map(function(entry, index) {
+      return {entry: entry, position: positions[index]};
+    }).sort(function(a, b) {
+      return a.position.column - b.position.column || a.position.row - b.position.row;
+    }).map(function(card) { return card.entry; });
+  }
+
+  function moveBulletinLayout3Item_(key, direction) {
+    var layout = getBulletinLayout3_();
+    var current = layout.items.find(function(item) { return item.key === key; });
+    if (!current) return;
+    var entries = getBulletinLayout3DisplayEntries_(current.side);
+    var index = entries.findIndex(function(item) { return item.key === key; });
+    var target = index + (direction === "up" ? -1 : 1);
+    if (!entries[target]) return;
+    var swap = entries[index];
+    entries[index] = entries[target];
+    entries[target] = swap;
+    if (current.side === "back") {
+      var positions = packBulletinLayout3Back_(entries);
+      var visualOrder = positions && positions.map(function(position, i) {
+        return {index: i, position: position};
+      }).sort(function(a, b) {
+        return a.position.column - b.position.column || a.position.row - b.position.row;
+      });
+      if (!visualOrder || visualOrder.some(function(item, i) { return item.index !== i; })) {
+        adminState.bulletinError = "That order leaves a gap too small for a Large block. Move a Standard block first, or change a block to Standard.";
+        return;
+      }
+    }
+    var keys = entries.map(function(entry) { return entry.key; });
+    var ordered = entries.map(function(entry) {
+      return layout.items.find(function(item) { return item.key === entry.key; });
+    });
+    var nextIndex = 0;
+    layout.items = layout.items.map(function(item) {
+      return keys.indexOf(item.key) >= 0 ? ordered[nextIndex++] : item;
+    });
+    adminState.bulletinError = "";
+    markAdminDirtyScope_("bulletin");
+  }
+
+  function renderBulletinLayout3Budget_() {
+    var usage = getBulletinLayout3Capacity_();
+    return '<div class="b3-editor-budget"><strong>Front: ' + usage.front +
+      '/2 slots · Back: ' + usage.back + '/6 slots</strong><p>Select items below. Standard uses 1 slot; Large uses 2.</p></div>';
+  }
+
+  function renderBulletinLayout3Segments_(key, field, value, options, canSave) {
+    return '<div class="b3-choice-segments" role="group" aria-label="' + (field === "side" ? "Placement" : "Size") + '">' +
+      options.map(function(option) {
+        return '<button type="button" data-admin-action="set-bulletin-layout3" data-admin-doc-id="' + escapeAttr_(key) +
+          '" data-admin-layout3-field="' + field + '" data-admin-layout3-value="' + option[0] +
+          '" aria-pressed="' + (String(value) === String(option[0])) + '"' + (canSave ? '' : ' disabled') + '>' + option[1] + '</button>';
+      }).join('') + '</div>';
+  }
+
+  function renderBulletinLayout3EditorRow_(entry, canSave) {
+    var placement = getBulletinLayout3_().items.find(function(item) { return item.key === entry.key; }) || {side: "off", size: 1};
+    var type = entry.type;
+    var item = entry.item;
+    var selected = placement.side !== "off";
+    var title = item.title || item.name || "Untitled";
+    var image = type === "custom" ? getBulletinFallbackImageUrl_(item.imageUrl) : "";
+    var edit = type === "custom" ? 'data-admin-action="edit-bulletin-fallback-block" data-admin-doc-id="' + escapeAttr_(item.id) + '"' :
+      'data-admin-action="edit-bulletin-front-content" data-admin-bulletin-front-content-type="' + (type === "serve" ? "serve-need" : "campaign") + '" data-admin-doc-id="' + escapeAttr_(item.id) + '"';
+    return '<div class="central-admin-bulletin-serve-choice b3-choice' + (selected ? ' is-selected' : '') + '">' +
+      '<label class="central-admin-checkbox"><input type="checkbox" data-admin-bulletin-choice="layout3-' + type +
+      '" data-admin-doc-id="' + escapeAttr_(item.id) + '"' + (selected ? ' checked' : '') + (canSave ? '' : ' disabled') + '>' +
+      (image ? '<img class="b3-choice-image" src="' + escapeAttr_(image) + '" alt="">' : '') +
+      '<span>' + (type === "serve" ? '<small>' + escapeHtml_(formatBulletinServeMinistryLabel_(item.ministry)) + '</small>' : '') +
+      '<strong>' + escapeHtml_(title) + '</strong></span></label>' +
+      '<div class="b3-choice-tools">' + (selected ?
+        renderBulletinLayout3Segments_(entry.key, "side", placement.side, [["front", "Front"], ["back", "Back"]], canSave) +
+        renderBulletinLayout3Segments_(entry.key, "size", placement.size, [[1, "Standard"], [2, "Large · 2 slots"]], canSave) : '') +
+      '<button type="button" class="central-admin-link-button is-secondary central-admin-bulletin-print-copy-button" ' + edit +
+        (canSave ? '' : ' disabled') + '>' + (type === "custom" ? 'Edit Block' : 'Edit Print Copy') + '</button></div></div>';
+  }
+
+  function renderBulletinLayout3Order_(side, canSave) {
+    var entries = getBulletinLayout3DisplayEntries_(side);
+    return '<div class="b3-editor-order"><h3>' + (side === "front" ? "Front" : "Back") + ' order</h3>' + entries.map(function(entry, index) {
+      return '<div class="b3-editor-row"><strong>' + escapeHtml_(entry.item.title || entry.item.name) + '</strong><div>' +
+        [["up", "↑", index === 0], ["down", "↓", index === entries.length - 1]].map(function(action) {
+          return '<button type="button" data-admin-action="move-bulletin-layout3" data-admin-doc-id="' + escapeAttr_(entry.key) +
+            '" data-admin-move-direction="' + action[0] + '" aria-label="Move ' + escapeAttr_(entry.item.title || entry.item.name) + ' ' + action[0] + '"' +
+            (!canSave || action[2] ? ' disabled' : '') + '>' + action[1] + '</button>';
+        }).join('') + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function renderBulletinLayout3Events_(canSave) {
+    var selected = getBulletinLayout3Entries_("back").map(function(entry) { return entry.key; });
+    var events = getBulletinEventDraftsInWindow_().map(function(item) {
+      return Object.assign({}, item, {included: selected.indexOf("event:" + item.id) >= 0});
+    });
+    var visibleEvents = getFilteredBulletinEventDrafts_(events);
+    var counts = getBulletinEventWeekCounts_(events);
+    var filters = ["week1", "week2", "week3", "week4", "included", "all"];
+    return '<div class="central-admin-item"><h3>Events</h3><div class="central-admin-bulletin-event-filters" role="group" aria-label="Filter bulletin events">' +
+      filters.map(function(filter, index) {
+        var count = index < 4 ? counts[index] : filter === "included" ? events.filter(function(item) { return item.included; }).length : events.length;
+        return '<button type="button" class="central-admin-bulletin-filter' + (adminState.bulletinEventFilter === filter ? ' is-active' : '') +
+          '" data-admin-action="filter-bulletin-events" data-admin-bulletin-filter="' + filter + '" aria-pressed="' + (adminState.bulletinEventFilter === filter) + '">' +
+          (index < 4 ? 'Week ' + (index + 1) : filter === "included" ? 'Included' : 'All 28 Days') + ' <span>' + count + '</span></button>';
+      }).join('') + '</div>' +
+      '<div class="central-admin-bulletin-events-grid">' + visibleEvents.map(function(item) {
+        return renderBulletinEventEditor_(item, {readable: true, canSave: canSave});
+      }).join('') + '</div>' + (!visibleEvents.length ? '<p>No events match this view.</p>' : '') + '</div>';
+  }
+
+  function renderBulletinLayout3Step_(canSave, side) {
+    var catalog = getBulletinLayout3Catalog_();
+    var giving = adminState.bulletinDraft.giving || {};
+    var headings = adminState.bulletinDraft.headings || {};
+    return renderBulletinLayout3Budget_() +
+      (side === "front" ? '<div class="central-admin-item"><h3>Generosity</h3><div class="central-admin-form-grid">' +
+        renderBulletinMoneyInput_("Monthly Budget", "monthlyBudget", giving.monthlyBudget) +
+        renderBulletinMoneyInput_(getBulletinGivingPeriodInputLabel_(), "monthToDateGiving", giving.monthToDateGiving) +
+        renderBulletinMoneyInput_("Annual Budget", "annualBudget", giving.annualBudget) +
+        renderBulletinMoneyInput_("Year-to-Date Giving", "yearToDateGiving", giving.yearToDateGiving) + '</div></div>' :
+        '<div class="central-admin-item">' + renderAdminInputField_({label: "Back Page Heading", field: "bulletin.headings.backHeading", value: headings.backHeading, maxLength: 80, disabled: !canSave}) + '</div>') +
+      (side === "back" ? renderBulletinLayout3Events_(canSave) : '') +
+      '<div class="central-admin-item central-admin-bulletin-front-content">' +
+      [["campaign", "Campaigns"], ["serve", "Serve Needs"], ["custom", "Custom Blocks"]].map(function(group) {
+        var entries = catalog.filter(function(entry) { return entry.type === group[0]; });
+        return '<div class="central-admin-print-mode-live-content-heading"><h3>' + group[1] + '</h3>' +
+          (group[0] === "custom" ? '' : renderPrintModeQuickAddAction_(group[0] === "campaign" ? "campaigns" : "serveNeeds")) + '</div>' +
+          '<div class="central-admin-bulletin-choice-list">' + entries.map(function(entry) {
+            return renderBulletinLayout3EditorRow_(entry, canSave);
+          }).join('') + (!entries.length ? '<p>No items available.</p>' : '') + '</div>';
+      }).join('') +
+      (canSave && (adminState.bulletinDraft.fallbackBlocks || []).length < PRINT_MODE_MAX_CUSTOM_BLOCKS ?
+        '<button type="button" class="central-admin-link-button is-secondary" data-admin-action="open-bulletin-fallback-block-editor">+ Add Custom Block</button>' : '') +
+      '</div><details class="central-admin-item"><summary>Arrange ' + (side === "front" ? 'front' : 'back') + ' items</summary>' +
+      renderBulletinLayout3Order_(side, canSave) + '</details>';
+  }
+
+  function renderBulletinLayout3Review_(canSave) {
+    return renderBulletinLayout3Budget_() + '<div class="central-admin-item"><h3>Print check</h3><p>Review both sides. Any overflowing card must be shortened, resized, or removed before printing. You can save an unfinished draft.</p><p>Print two-sided, flip on the short edge, at 100% scale. Check a paper proof for readability.</p>' +
+      renderAdminCheckboxField_({label: "Show center cut guide", field: "bulletin.showCutLine", checked: adminState.bulletinDraft.showCutLine === true, disabled: !canSave}) + '</div>';
+  }
+
+  function renderBulletinLayout3Meta_(item) {
+    var lines = [item.date ? formatBulletinLongDate_(item.date) : "", item.time || "", item.location || "",
+      item.doors_open_time ? "Doors open " + item.doors_open_time : ""].filter(Boolean);
+    return lines.length ? '<div class="b3-meta">' + lines.map(function(line) { return '<p>' + escapeHtml_(line) + '</p>'; }).join('') + '</div>' : '';
+  }
+
+  function renderBulletinLayout3Card_(entry, position) {
+    var item = entry.item;
+    var image = entry.type === "custom" ? getBulletinFallbackImageUrl_(item.imageUrl) : "";
+    var label = entry.type === "custom" ? item.eyebrow : entry.type === "campaign" ? "Campaign" : entry.type === "serve" ? "Serve" : "";
+    var title = item.title || item.name || "Untitled";
+    return '<article class="b3-card' + (entry.size === 2 ? ' is-large' : '') +
+      (image ? ' is-image-' + (item.imageSide === "left" ? "left" : "right") : '') +
+      '" data-b3-region="' + escapeAttr_(title) + '" data-bulletin-preview-key="' + escapeAttr_(entry.key) + '"' +
+      (position ? ' style="grid-column:' + position.column + ';grid-row:' + position.row + ' / span ' + entry.size + '"' : '') + '>' +
+      (image ? '<img class="b3-card-image" src="' + escapeAttr_(image) + '" alt="">' : '') +
+      (label ? '<p class="b3-eyebrow">' + escapeHtml_(label) + '</p>' : '') + '<h2>' + escapeHtml_(title) + '</h2>' +
+      (entry.type === "event" ? renderBulletinLayout3Meta_(item) : '') +
+      (item.description && item.includeDescription !== false ? '<div class="b3-copy">' + renderAdminMarkdownLite_(item.description) + '</div>' : '') + '</article>';
+  }
+
+  function renderBulletinLayout3_(side) {
+    var draft = adminState.bulletinDraft;
+    var headings = draft.headings || {};
+    var header = '<header class="b3-header" data-b3-region="Page heading"><div class="b3-brand"><img src="/favicon.svg" alt=""><h1>' +
+      escapeHtml_((side === "front" ? headings.frontHeading : headings.backHeading) || "CrossPointe") +
+      '</h1></div><p class="b3-service-date">Sunday, ' + escapeHtml_(formatBulletinLongDate_(draft.serviceDate)) + '</p></header>';
+    var entries = getBulletinLayout3Entries_(side);
+    if (side === "back") {
+      var positions = packBulletinLayout3Back_(entries);
+      var ordered = entries.map(function(entry, index) { return {entry: entry, position: positions && positions[index]}; });
+      if (positions) ordered.sort(function(a, b) { return a.position.column - b.position.column || a.position.row - b.position.row; });
+      return header + '<div class="b3-back-slots" data-b3-region="Back slots">' + ordered.map(function(card) {
+        return renderBulletinLayout3Card_(card.entry, card.position);
+      }).join('') + '</div><footer class="b3-footer" data-b3-region="Details footer"><img class="b3-qr" src="/central-bulletin-qr.png" alt="QR code for central.crosspointe.tv"><p>Full details and next steps<br><strong>central.crosspointe.tv</strong></p></footer>';
+    }
+    var hero = getBulletinFrontHero_();
+    var heroImage = hero.source === "featured" ? getBulletinFeaturedPrintImageUrl_(hero) : getBulletinFallbackImageUrl_(hero.image_url);
+    var giving = draft.giving || {};
+    return header + '<section class="b3-hero" data-b3-region="Hero">' +
+      (heroImage ? '<img class="b3-hero-image" src="' + escapeAttr_(heroImage) + '" alt="">' : '') +
+      '<div class="b3-hero-copy"><p class="b3-eyebrow">' + escapeHtml_(hero.eyebrow) + '</p><h2>' + escapeHtml_(hero.title) + '</h2>' +
+      (hero.source === "featured" ? renderBulletinLayout3Meta_(hero) : '') +
+      (hero.includeDescription && hero.description ? '<div class="b3-copy">' + renderAdminMarkdownLite_(hero.description) + '</div>' : '') +
+      '</div></section><section class="b3-front-slots" data-b3-region="Front slots">' + entries.map(function(entry) { return renderBulletinLayout3Card_(entry); }).join('') +
+      '</section><section class="b3-giving" data-b3-region="Generosity"><h2>Generosity at a Glance</h2><div class="b3-giving-grid">' +
+      renderBulletinGivingStat_("Monthly Budget", giving.monthlyBudget) + renderBulletinGivingStat_(getBulletinGivingPeriodLabel_(), giving.monthToDateGiving) +
+      renderBulletinGivingStat_("Annual Budget", giving.annualBudget) + renderBulletinGivingStat_("YTD Giving", giving.yearToDateGiving) +
+      '</div><p class="b3-giving-link">Give securely at <strong>crosspointe.tv/give</strong></p></section>';
+  }
+
+  function measureBulletinLayout3Fit_() {
+    var holder = document.createElement("div");
+    holder.setAttribute("aria-hidden", "true");
+    holder.style.cssText = "position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none;";
+    holder.innerHTML = renderBulletinPanel_("front", false) + renderBulletinPanel_("back", false);
+    appEl.appendChild(holder);
+    var problems = [];
+    var usage = getBulletinLayout3Capacity_();
+    if (usage.front > 2) problems.push("Front uses " + usage.front + "/2 slots");
+    if (usage.back > 6) problems.push("Back uses " + usage.back + "/6 slots");
+    if (usage.back <= 6 && !packBulletinLayout3Back_(getBulletinLayout3Entries_("back"))) problems.push("Back allows at most two Large blocks");
+    try {
+      Array.prototype.forEach.call(holder.querySelectorAll("[data-b3-region]"), function(region) {
+        if (region.scrollHeight > region.clientHeight + 1 || region.scrollWidth > region.clientWidth + 1) {
+          var side = region.closest(".central-bulletin-panel-back") ? "Back" : "Front";
+          problems.push(side + ": " + region.getAttribute("data-b3-region"));
+        }
+      });
+    } finally { holder.remove(); }
+    return {fits: !problems.length, level: 0, copyLines: [], overflow: problems.length,
+      message: problems.length ? "Needs attention — " + problems.join("; ") + ". Shorten copy, remove an optional image, or change the selection before printing. Text stays at 12pt or larger." :
+        "Both sides fit at 12pt or larger. Print at 100% scale and check a paper proof."};
+  }
+
   function renderPrintModePreview_() {
     var fullPage = getBulletinPrintFormat_() === "full-page";
-    var layoutLabel = getBulletinLayout_() === "scannable" ?
+    var layoutLabel = getBulletinLayout_() === "readable" ? "Layout 3 · Readable" : getBulletinLayout_() === "scannable" ?
       "Scannable" : "Classic";
     var side = !fullPage && adminState.printModePreviewSide === "back" ?
       "back" : "front";
     var previewLabel = fullPage ?
       "Full Page · " + layoutLabel :
-      (side === "back" ? "Half Letter · Shared Back" :
+      (side === "back" && getBulletinLayout_() !== "readable" ? "Half Letter · Shared Back" :
         "Half Letter · " + layoutLabel);
     var direction = adminState.printModePreviewDirection;
     var previewPanel = side === "back" ?
@@ -9629,7 +10063,9 @@
 
   function renderBulletinPanel_(side, preview) {
     var className = "central-bulletin-panel central-bulletin-panel-" + side;
-    if (side === "front") {
+    if (getBulletinLayout_() === "readable") {
+      className += " is-bulletin-layout-readable";
+    } else if (side === "front") {
       className += " " + getBulletinFrontDensityClass_();
       if (getBulletinLayout_() === "scannable") {
         className += " is-bulletin-layout-scannable";
@@ -9644,7 +10080,8 @@
 
     return [
       "<article class=\"", className, "\">",
-      side === "front" ? renderSelectedBulletinFront_() : renderBulletinBack_(),
+      getBulletinLayout_() === "readable" ? renderBulletinLayout3_(side) :
+        side === "front" ? renderSelectedBulletinFront_() : renderBulletinBack_(),
       "</article>",
     ].join("");
   }
@@ -9896,8 +10333,8 @@
       "<h3>", escapeHtml_(block && block.title || "Connect at CrossPointe"),
       "</h3>",
       block && block.description ?
-        "<p class=\"central-bulletin-body-copy\">" +
-          escapeHtml_(block.description) + "</p>" :
+        "<div class=\"central-bulletin-body-copy central-bulletin-markdown central-bulletin-custom-description\">" +
+          renderAdminMarkdownLite_(block.description) + "</div>" :
         "",
       "</div></section>",
     ].join("");
@@ -10388,6 +10825,7 @@
   }
 
   function renderBulletinHeroDescriptionGuidance_(value, guidanceKey) {
+    if (getBulletinLayout_() === "readable") return '<p class="central-admin-note">Use a short introduction. The hero has a fixed space; the live fit check will flag copy that needs shortening at 12pt.</p>';
     var state = getBulletinHeroDescriptionGuidanceState_(value);
     var limits = getBulletinHeroDescriptionGuidanceLimits_();
     return [
@@ -10411,6 +10849,7 @@
   }
 
   function syncBulletinHeroDescriptionGuidance_(guidanceKey, value) {
+    if (getBulletinLayout_() === "readable") return;
     var state = getBulletinHeroDescriptionGuidanceState_(value);
     document.querySelectorAll(
         "[data-admin-bulletin-hero-description-guidance]",
@@ -10448,6 +10887,7 @@
   }
 
   function renderBulletinEventDescriptionGuidance_(item) {
+    if (getBulletinLayout_() === "readable") return '<p class="central-admin-note">Keep descriptions brief. The fit check includes the complete title, date, time, and location at 12pt. Uncheck the description if only essential details are needed.</p>';
     var source = item || {};
     var state = getBulletinEventDescriptionGuidanceState_(
         source.description,
@@ -10644,11 +11084,11 @@
       "<h3>", escapeHtml_(block && block.title || "Connect at CrossPointe"),
       "</h3>",
       block && block.description ?
-        "<p class=\"central-bulletin-event-description central-bulletin-body-copy" +
+        "<div class=\"central-bulletin-event-description central-bulletin-body-copy central-bulletin-markdown" +
           descriptionLengthClass +
           "\" style=\"--bulletin-event-description-fit-size:" +
           escapeAttr_(fitSize) + "\">" +
-          escapeHtml_(block.description) + "</p>" :
+          renderAdminMarkdownLite_(block.description) + "</div>" :
         "",
       "</div></article>",
     ].join("");
@@ -19346,6 +19786,7 @@
       printFormat: "half-letter",
       printColorMode: "color",
       bulletinLayout: "classic",
+      layout3: null,
       showCutLine: false,
       heroSource: "featured",
       frontContentSource: "mixed",
@@ -19421,8 +19862,9 @@
       "full-page" : "half-letter";
     draft.printColorMode = source.printColorMode === "bw" ?
       "bw" : "color";
-    draft.bulletinLayout = source.bulletinLayout === "scannable" ?
-      "scannable" : "classic";
+    draft.bulletinLayout = source.bulletinLayout === "readable" ? "readable" :
+      source.bulletinLayout === "scannable" ? "scannable" : "classic";
+    draft.layout3 = normalizeBulletinLayout3_(source.layout3);
     draft.showCutLine = source.showCutLine === true;
     draft.heroSource = source.heroSource === "manual" || !currentFeatured ?
       "manual" : "featured";
@@ -19789,11 +20231,13 @@
   }
 
   function getBulletinPrintFormat_() {
+    if (getBulletinLayout_() === "readable") return "half-letter";
     return adminState.bulletinDraft.printFormat === "full-page" ?
       "full-page" : "half-letter";
   }
 
   function getBulletinLayout_() {
+    if (adminState.bulletinDraft.bulletinLayout === "readable") return "readable";
     return adminState.bulletinDraft.bulletinLayout === "scannable" ?
       "scannable" : "classic";
   }
@@ -20257,6 +20701,13 @@
   }
 
   function updateBulletinDraftField_(fieldName, value) {
+    if (fieldName.indexOf("layout3.") === 0) {
+      var parts = fieldName.split(".");
+      setBulletinLayout3Placement_(decodeURIComponent(parts.slice(2).join(".")), parts[1], value);
+      return;
+    }
+    if (fieldName === "bulletinLayout" && value === "readable") getBulletinLayout3_();
+    if (fieldName === "printFormat" && getBulletinLayout_() === "readable") return;
     if (
       fieldName === "printFormat" &&
       value !== adminState.bulletinDraft.printFormat
@@ -20310,6 +20761,16 @@
   function updateBulletinChoice_(input) {
     var choiceType = input.getAttribute("data-admin-bulletin-choice") || "";
     var id = input.getAttribute("data-admin-doc-id") || "";
+
+    if (choiceType.indexOf("layout3-") === 0) {
+      var type = choiceType.slice(8);
+      var key = type + ":" + id;
+      var placement = getBulletinLayout3_().items.find(function(item) { return item.key === key; });
+      var side = type === "event" || getPrintModeStep_() === 4 ? "back" : "front";
+      var changed = setBulletinLayout3Placement_(key, "side", input.checked ? side : "off");
+      if (!changed) input.checked = !!placement && placement.side !== "off";
+      return changed;
+    }
 
     if (choiceType === "campaign") {
       var centralData = adminState.bulletinCentralData || {};
@@ -20400,8 +20861,8 @@
       printFormat: draft.printFormat === "full-page" ?
         "full-page" : "half-letter",
       printColorMode: draft.printColorMode === "bw" ? "bw" : "color",
-      bulletinLayout: draft.bulletinLayout === "scannable" ?
-        "scannable" : "classic",
+      bulletinLayout: getBulletinLayout_(),
+      layout3: getBulletinLayout3ForSave_(),
       showCutLine: draft.showCutLine === true,
       heroSource: draft.heroSource === "manual" ? "manual" : "featured",
       frontContentSource: "mixed",
@@ -20729,6 +21190,7 @@
   }
 
   function measureBulletinFrontFit_() {
+    if (getBulletinLayout_() === "readable") return measureBulletinLayout3Fit_();
     var holder = document.createElement("div");
     holder.setAttribute("aria-hidden", "true");
     holder.style.cssText = "position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none;";
@@ -20770,7 +21232,7 @@
     var copyLines = [];
     if (overflow <= 1 && level > 0 && content && content.querySelectorAll) {
       var paragraphs = Array.prototype.slice.call(content.querySelectorAll(
-          ".central-bulletin-fallback-copy p, .central-bulletin-campaign p, .central-bulletin-serve p",
+          ".central-bulletin-fallback-copy > .central-bulletin-custom-description, .central-bulletin-campaign p, .central-bulletin-serve p",
       ));
       copyLines = paragraphs.map(function(paragraph) {
         var block = paragraph.closest(".central-bulletin-fallback-block");
@@ -20803,12 +21265,13 @@
   }
 
   function applyBulletinFrontFit_(fit) {
+    if (getBulletinLayout_() === "readable") return;
     Array.prototype.forEach.call(
         appEl.querySelectorAll(".central-bulletin-panel-front"),
         function(panel) {
           panel.setAttribute("data-front-fit-level", String(fit.level));
           Array.prototype.forEach.call(panel.querySelectorAll(
-              ".central-bulletin-front-content .central-bulletin-fallback-copy p, " +
+              ".central-bulletin-front-content .central-bulletin-fallback-copy > .central-bulletin-custom-description, " +
               ".central-bulletin-front-content .central-bulletin-campaign p, " +
               ".central-bulletin-front-content .central-bulletin-serve p",
           ), function(paragraph, index) {
@@ -20855,7 +21318,7 @@
     }
 
     if (document.fonts) await document.fonts.ready;
-    if (!validateBulletinFrontFit_()) return;
+    if (getBulletinLayout_() !== "readable" && !validateBulletinFrontFit_()) return;
 
     adminState.bulletinSaving = true;
     adminState.bulletinError = "";

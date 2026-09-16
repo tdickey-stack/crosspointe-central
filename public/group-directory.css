@@ -1,4 +1,5 @@
-:root {
+.group-lab-page,
+[data-group-directory] {
   color-scheme: light;
   --groups-ink: #242127;
   --groups-muted: #68646c;
@@ -12,11 +13,14 @@
   font-family: "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
 }
 
-* {
+.group-page,
+.group-page *,
+[data-group-directory],
+[data-group-directory] * {
   box-sizing: border-box;
 }
 
-body {
+.group-lab-page {
   background:
     radial-gradient(circle at 8% -12%, rgba(239, 59, 45, 0.09), transparent 29rem),
     var(--groups-soft);
@@ -26,9 +30,9 @@ body {
   min-height: 100vh;
 }
 
-button,
-input,
-select {
+[data-group-directory] button,
+[data-group-directory] input,
+[data-group-directory] select {
   font: inherit;
 }
 

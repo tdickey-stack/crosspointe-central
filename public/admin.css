@@ -9046,6 +9046,7 @@ button:disabled {
   min-height: 0;
   aspect-ratio: 16 / 9;
   object-fit: contain;
+  border-radius: 0.08in;
 }
 
 .central-bulletin-panel.is-bulletin-layout-readable .b3-hero-copy {
@@ -9225,7 +9226,7 @@ button:disabled {
   min-height: 0;
   aspect-ratio: 16 / 9;
   object-fit: contain;
-  border-radius: 0.04in;
+  border-radius: 0.08in;
   overflow: hidden;
 }
 

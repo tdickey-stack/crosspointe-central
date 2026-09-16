@@ -1,3 +1,5 @@
+import {createPublicGroupsHandler} from "./groups/handler.js";
+import {createPublicGroupsService} from "./groups/service.js";
 import {parseEventDescription} from "./planning-center/event-description.js";
 import crypto from "node:crypto";
 
@@ -2178,6 +2180,18 @@ export const centralEmbedsAdmin = createCentralEmbedsAdminFunction(
 export const centralEmbedPublic = createCentralEmbedPublicFunction(
     centralEmbedsOptions,
 );
+
+const publicGroupsService = createPublicGroupsService({
+  fetchJson: fetchPcoJson_,
+});
+
+export const centralGroupsPublic = onRequest({
+  region: "us-central1",
+  cors: true,
+  secrets: PLANNING_CENTER_SECRETS,
+  timeoutSeconds: 60,
+  maxInstances: 5,
+}, createPublicGroupsHandler({loadGroups: publicGroupsService.loadGroups}));
 
 export const studioPlanningCenterEvents =
   createStudioPlanningCenterEventsFunction({

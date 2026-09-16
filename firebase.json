@@ -41,6 +41,19 @@
     ],
     "headers": [
       {
+        "source": "/group-@(lab|directory).@(html|js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          },
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      },
+      {
         "source": "/index.html",
         "headers": [
           {
@@ -338,6 +351,22 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/group-lab",
+        "destination": "/group-lab.html"
+      },
+      {
+        "source": "/group-lab/",
+        "destination": "/group-lab.html"
+      },
+      {
+        "source": "/api/groups",
+        "function": {
+          "functionId": "centralGroupsPublic",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
       {
         "source": "/about",
         "destination": "/about.html"

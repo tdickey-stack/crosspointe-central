@@ -1,0 +1,387 @@
+const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+function normalizedText(value) {
+  return String(value || "").trim().toLocaleLowerCase();
+}
+
+function validMeetingDays(group) {
+  const values = Array.isArray(group && group.meetingDays) ?
+    group.meetingDays : [];
+  return [...new Set(values.filter((day) =>
+    Number.isInteger(day) && day >= 0 && day <= 6,
+  ))];
+}
+
+function namedOptions(groups, readLabel) {
+  const labels = new Map();
+  groups.forEach((group) => {
+    const label = String(readLabel(group) || "").trim();
+    const value = normalizedText(label);
+    if (value && !labels.has(value)) labels.set(value, label);
+  });
+  return [...labels.entries()]
+      .map(([value, label]) => ({value, label}))
+      .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export function deriveGroupFilterOptions(groups) {
+  const safeGroups = Array.isArray(groups) ? groups : [];
+  const dayValues = new Set();
+  safeGroups.forEach((group) => {
+    validMeetingDays(group).forEach((day) => dayValues.add(day));
+  });
+  return {
+    types: namedOptions(safeGroups, (group) => group && group.type && group.type.name),
+    days: [...dayValues]
+        .sort((left, right) => left - right)
+        .map((value) => ({value: String(value), label: DAY_NAMES[value]})),
+    locations: namedOptions(safeGroups, (group) => group && group.location),
+  };
+}
+
+export function filterGroups(groups, filters = {}) {
+  const query = normalizedText(filters.search);
+  const type = normalizedText(filters.type);
+  const location = normalizedText(filters.location);
+  const requestedDay = filters.day === "" || filters.day == null ?
+    null : Number(filters.day);
+  const hasDayFilter = Number.isInteger(requestedDay) &&
+    requestedDay >= 0 && requestedDay <= 6;
+
+  return (Array.isArray(groups) ? groups : []).filter((group) => {
+    if (!group || typeof group !== "object") return false;
+    const groupType = normalizedText(group.type && group.type.name);
+    const groupLocation = normalizedText(group.location);
+    if (type && groupType !== type) return false;
+    if (location && groupLocation !== location) return false;
+
+    const days = validMeetingDays(group);
+    if (hasDayFilter && !days.includes(requestedDay)) {
+      return false;
+    }
+
+    if (!query) return true;
+    return [
+      group.name,
+      group.type && group.type.name,
+      group.schedule,
+      group.location,
+    ].some((value) => normalizedText(value).includes(query));
+  });
+}
+
+export function getSafeChurchCenterUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const hostname = url.hostname.toLocaleLowerCase();
+    if (url.protocol !== "https:") return "";
+    if (hostname !== "churchcenter.com" &&
+        !hostname.endsWith(".churchcenter.com")) return "";
+    return url.href;
+  } catch (_error) {
+    return "";
+  }
+}
+
+export function getSafeImageUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    return url.protocol === "https:" ? url.href : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function createElement(tagName, className, text) {
+  const node = document.createElement(tagName);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function createSelectField(label, name, allLabel, options) {
+  const field = createElement("label", "group-directory-field");
+  const labelNode = createElement("span", "group-directory-label", label);
+  const select = createElement("select", "group-directory-select");
+  select.name = name;
+  select.setAttribute("data-group-filter", name);
+  select.append(new Option(allLabel, ""));
+  options.forEach((option) => {
+    select.append(new Option(option.label, option.value));
+  });
+  field.append(labelNode, select);
+  return {field, select};
+}
+
+function createIcon(kind) {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  icon.classList.add("group-card-icon");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  path.setAttribute("stroke-width", "1.8");
+  path.setAttribute("d", kind === "location" ?
+    "M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Zm-5.5 0a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z" :
+    "M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z");
+  icon.append(path);
+  return icon;
+}
+
+function createMetaLine(kind, text) {
+  const line = createElement("p", "group-card-meta");
+  line.append(createIcon(kind), document.createTextNode(text));
+  return line;
+}
+
+function createGroupCard(group) {
+  const card = createElement("article", "group-card");
+  const media = createElement("div", "group-card-media is-fallback");
+  const fallback = createElement("span", "group-card-fallback", "CP");
+  fallback.setAttribute("aria-hidden", "true");
+  media.append(fallback);
+
+  const imageUrl = getSafeImageUrl(group.imageUrl);
+  if (imageUrl) {
+    const image = document.createElement("img");
+    image.alt = "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.src = imageUrl;
+    image.addEventListener("load", () => media.classList.remove("is-fallback"));
+    image.addEventListener("error", () => {
+      image.remove();
+      media.classList.add("is-fallback");
+    });
+    media.prepend(image);
+  }
+
+  const attendance = ["Drop-ins welcome", "Connect before visiting"]
+      .includes(group.attendance) ? group.attendance : "";
+  if (attendance) {
+    media.append(createElement("p", "group-card-attendance", attendance));
+  }
+
+  const copy = createElement("div", "group-card-copy");
+  const typeName = String(group.type && group.type.name || "").trim();
+  if (typeName) copy.append(createElement("p", "group-card-type", typeName));
+  copy.append(createElement("h2", "group-card-title", group.name || "Group"));
+
+  const details = createElement("div", "group-card-details");
+  const schedule = String(group.schedule || "").trim();
+  const location = String(group.location || "").trim();
+  if (schedule) details.append(createMetaLine("schedule", schedule));
+  if (location) details.append(createMetaLine("location", location));
+  if (details.childElementCount > 0) copy.append(details);
+
+  const destination = getSafeChurchCenterUrl(group.url);
+  if (destination) {
+    const action = createElement("a", "group-card-action", "View Group Details");
+    action.href = destination;
+    action.target = "_blank";
+    action.rel = "noopener noreferrer";
+    action.setAttribute("aria-label", `View details for ${group.name || "this group"} in Church Center`);
+    const arrow = createElement("span", "group-card-action-arrow", "↗");
+    arrow.setAttribute("aria-hidden", "true");
+    action.append(arrow);
+    copy.append(action);
+  } else {
+    copy.append(createElement("p", "group-card-action-unavailable", "Details unavailable"));
+  }
+
+  card.append(media, copy);
+  return card;
+}
+
+function renderStatus(root, options) {
+  root.replaceChildren();
+  const status = createElement(
+      "div",
+      `group-directory-status is-${options.kind}`,
+  );
+  status.setAttribute("role", options.kind === "error" ? "alert" : "status");
+  const copy = createElement("div");
+  copy.append(
+      createElement("strong", "", options.title),
+      createElement("p", "", options.message),
+  );
+  if (options.kind === "loading") {
+    const spinner = createElement("span", "group-directory-spinner");
+    spinner.setAttribute("aria-hidden", "true");
+    status.prepend(spinner);
+  }
+  status.append(copy);
+  if (typeof options.action === "function") {
+    const button = createElement("button", "group-directory-retry", options.actionLabel || "Try again");
+    button.type = "button";
+    button.addEventListener("click", options.action);
+    status.append(button);
+  }
+  root.append(status);
+}
+
+function renderDirectory(root, groups) {
+  root.replaceChildren();
+  const options = deriveGroupFilterOptions(groups);
+  const toolbar = createElement("div", "group-directory-toolbar");
+  const searchField = createElement("label", "group-directory-field is-search");
+  searchField.append(createElement("span", "group-directory-label", "Search groups"));
+  const search = document.createElement("input");
+  search.type = "search";
+  search.name = "search";
+  search.placeholder = "Search by name, type, or place";
+  search.autocomplete = "off";
+  search.setAttribute("data-group-filter", "search");
+  searchField.append(search);
+
+  const typeField = createSelectField("Group type", "type", "All types", options.types);
+  const dayField = createSelectField("Meeting day", "day", "Any day", options.days);
+  const locationField = createSelectField(
+      "Location",
+      "location",
+      "All locations",
+      options.locations,
+  );
+  locationField.field.hidden = options.locations.length <= 1;
+  toolbar.classList.toggle("has-location-filter", options.locations.length > 1);
+
+  const clearButton = createElement("button", "group-directory-clear", "Clear filters");
+  clearButton.type = "button";
+  clearButton.disabled = true;
+  toolbar.append(
+      searchField,
+      typeField.field,
+      dayField.field,
+      locationField.field,
+      clearButton,
+  );
+
+  const summary = createElement("div", "group-directory-summary");
+  const count = createElement("p", "group-directory-count");
+  count.setAttribute("role", "status");
+  count.setAttribute("aria-live", "polite");
+  count.setAttribute("aria-atomic", "true");
+  const dayHint = createElement(
+      "p",
+      "group-directory-hint",
+      "Days reflect published schedules; see details for groups without a set day.",
+  );
+  summary.append(count, dayHint);
+
+  const results = createElement("div", "group-directory-results");
+  results.setAttribute("aria-label", "Group results");
+  const empty = createElement("div", "group-directory-empty");
+  const filters = {search: "", type: "", day: "", location: ""};
+  const inputs = [search, typeField.select, dayField.select, locationField.select];
+
+  function update() {
+    inputs.forEach((input) => {
+      filters[input.name] = input.value;
+    });
+    const visibleGroups = filterGroups(groups, filters);
+    const hasFilters = Object.values(filters).some(Boolean);
+    clearButton.disabled = !hasFilters;
+    count.textContent = `${visibleGroups.length} ${visibleGroups.length === 1 ? "group" : "groups"}`;
+    results.replaceChildren(...visibleGroups.map(createGroupCard));
+    empty.replaceChildren();
+    if (visibleGroups.length === 0) {
+      empty.append(
+          createElement("h2", "", "No groups match those filters."),
+          createElement("p", "", "Try a different search or clear the filters to see every group."),
+      );
+      const reset = createElement("button", "group-directory-retry", "Clear filters");
+      reset.type = "button";
+      reset.addEventListener("click", clearFilters);
+      empty.append(reset);
+    }
+  }
+
+  function clearFilters() {
+    inputs.forEach((input) => {
+      input.value = "";
+    });
+    update();
+    search.focus();
+  }
+
+  inputs.forEach((input) => input.addEventListener(
+      input === search ? "input" : "change",
+      update,
+  ));
+  clearButton.addEventListener("click", clearFilters);
+
+  root.append(toolbar, summary, results, empty);
+  update();
+}
+
+export async function mountGroupDirectory(root, options = {}) {
+  if (!root) throw new Error("A group directory root element is required.");
+  const endpoint = options.endpoint || "/api/groups";
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+
+  async function load() {
+    renderStatus(root, {
+      kind: "loading",
+      title: "Loading groups",
+      message: "Gathering the latest group details…",
+    });
+    let timeoutId = null;
+    let controller = null;
+    try {
+      if (typeof fetchImpl !== "function") throw new Error("Fetch is unavailable.");
+      if (typeof AbortController === "function") {
+        controller = new AbortController();
+        timeoutId = globalThis.setTimeout(() => controller.abort(), 65000);
+      }
+      const response = await fetchImpl(endpoint, {
+        headers: {Accept: "application/json"},
+        cache: "no-store",
+        ...(controller ? {signal: controller.signal} : {}),
+      });
+      if (!response.ok) throw new Error(`Groups endpoint returned ${response.status}.`);
+      const payload = await response.json();
+      if (!payload || payload.schemaVersion !== 1 || !Array.isArray(payload.groups)) {
+        throw new Error("Groups endpoint returned an unsupported response.");
+      }
+      if (payload.groups.length === 0) {
+        renderStatus(root, {
+          kind: "empty",
+          title: "No groups are listed right now.",
+          message: "Check back soon as new groups and gathering details are added.",
+        });
+        return;
+      }
+      renderDirectory(root, payload.groups);
+    } catch (_error) {
+      renderStatus(root, {
+        kind: "error",
+        title: "We couldn’t load groups.",
+        message: "Check your connection, then try again.",
+        action: load,
+        actionLabel: "Try again",
+      });
+    } finally {
+      if (timeoutId != null) globalThis.clearTimeout(timeoutId);
+    }
+  }
+
+  await load();
+  return {reload: load};
+}
+
+if (typeof document !== "undefined") {
+  document.querySelectorAll("[data-group-directory]").forEach((root) => {
+    mountGroupDirectory(root);
+  });
+}

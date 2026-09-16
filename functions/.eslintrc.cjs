@@ -24,6 +24,7 @@ module.exports = {
         "helpers/**/*.js",
         "scripts/wayfinder-bundles.js",
         "studio/**/*.js",
+        "groups/**/*.js",
         "scripts/generate-studio-image.mjs",
         "scripts/refine-studio-image.mjs",
       ],

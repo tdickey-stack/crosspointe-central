@@ -1,0 +1,509 @@
+:root {
+  color-scheme: light;
+  --groups-ink: #242127;
+  --groups-muted: #68646c;
+  --groups-line: rgba(39, 39, 42, 0.13);
+  --groups-red: #ef3b2d;
+  --groups-red-dark: #c72c21;
+  --groups-surface: #ffffff;
+  --groups-soft: #f4f4f5;
+  --groups-focus: rgba(239, 59, 45, 0.25);
+  --groups-shadow: 0 12px 32px rgba(39, 39, 42, 0.075);
+  font-family: "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background:
+    radial-gradient(circle at 8% -12%, rgba(239, 59, 45, 0.09), transparent 29rem),
+    var(--groups-soft);
+  color: var(--groups-ink);
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.group-page {
+  margin: 0 auto;
+  max-width: 1240px;
+  padding: clamp(42px, 7vw, 94px) clamp(18px, 4vw, 42px) 88px;
+}
+
+.group-page-intro {
+  max-width: 800px;
+}
+
+.group-page-kicker {
+  color: var(--groups-red-dark);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.group-page h1 {
+  font: 700 clamp(3.4rem, 8vw, 6.8rem)/0.84 "League Spartan", sans-serif;
+  letter-spacing: -0.06em;
+  margin: 16px 0 22px;
+}
+
+.group-page-lede {
+  color: #444047;
+  font-size: clamp(1.05rem, 1.8vw, 1.3rem);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 680px;
+}
+
+.group-page-note {
+  color: var(--groups-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  margin: 14px 0 0;
+  max-width: 680px;
+}
+
+[data-group-directory] {
+  display: block;
+  margin-top: clamp(34px, 5vw, 58px);
+}
+
+.group-directory-toolbar {
+  align-items: end;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--groups-line);
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(39, 39, 42, 0.05);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(2, minmax(140px, 0.8fr)) auto;
+  padding: 16px;
+}
+
+.group-directory-toolbar.has-location-filter {
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(140px, 0.8fr)) auto;
+}
+
+.group-directory-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.group-directory-field[hidden] {
+  display: none;
+}
+
+.group-directory-label {
+  color: #4f4a52;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  padding-left: 2px;
+}
+
+.group-directory-field input,
+.group-directory-select {
+  appearance: none;
+  background-color: #fafafa;
+  border: 1px solid rgba(39, 39, 42, 0.17);
+  border-radius: 12px;
+  color: var(--groups-ink);
+  min-height: 46px;
+  min-width: 0;
+  padding: 0 40px 0 13px;
+  width: 100%;
+}
+
+.group-directory-field input {
+  appearance: auto;
+  padding-right: 13px;
+}
+
+.group-directory-select {
+  background-image:
+    linear-gradient(45deg, transparent 50%, #65616a 50%),
+    linear-gradient(135deg, #65616a 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 20px,
+    calc(100% - 12px) 20px;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+}
+
+.group-directory-field input:focus-visible,
+.group-directory-select:focus-visible,
+.group-directory-clear:focus-visible,
+.group-directory-retry:focus-visible,
+.group-card-action:focus-visible {
+  border-color: var(--groups-red);
+  box-shadow: 0 0 0 3px var(--groups-focus);
+  outline: none;
+}
+
+.group-directory-field input::placeholder {
+  color: #98939b;
+}
+
+.group-directory-clear,
+.group-directory-retry {
+  appearance: none;
+  background: var(--groups-surface);
+  border: 1px solid rgba(39, 39, 42, 0.18);
+  border-radius: 999px;
+  color: var(--groups-ink);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 800;
+  min-height: 44px;
+  padding: 0 17px;
+  white-space: nowrap;
+}
+
+.group-directory-clear:hover:not(:disabled),
+.group-directory-retry:hover {
+  border-color: rgba(239, 59, 45, 0.5);
+  color: var(--groups-red-dark);
+}
+
+.group-directory-clear:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.group-directory-summary {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 60px;
+  padding: 0 4px;
+}
+
+.group-directory-count {
+  color: var(--groups-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.group-directory-hint {
+  color: #7c7780;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  margin: 0;
+  text-align: right;
+}
+
+.group-directory-results {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.group-card {
+  background: var(--groups-surface);
+  border: 1px solid rgba(39, 39, 42, 0.105);
+  border-radius: 20px;
+  box-shadow: var(--groups-shadow);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.group-card-media {
+  aspect-ratio: 16 / 9;
+  background:
+    radial-gradient(circle at 72% 26%, rgba(255, 255, 255, 0.26), transparent 22%),
+    linear-gradient(145deg, #5e5b61, #2d2b2f);
+  overflow: hidden;
+  position: relative;
+}
+
+.group-card-media img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  opacity: 1;
+  width: 100%;
+}
+
+.group-card-media.is-fallback img {
+  opacity: 0;
+}
+
+.group-card-fallback {
+  color: rgba(255, 255, 255, 0.9);
+  display: none;
+  font: 700 2.1rem/1 "League Spartan", sans-serif;
+  left: 50%;
+  letter-spacing: -0.06em;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.group-card-media.is-fallback .group-card-fallback {
+  display: block;
+}
+
+.group-card-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+}
+
+.group-card-type {
+  align-self: flex-start;
+  background: rgba(239, 59, 45, 0.09);
+  border-radius: 999px;
+  color: #a6261d;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  margin: 0;
+  padding: 7px 10px 6px;
+  text-transform: uppercase;
+}
+
+.group-card-title {
+  font: 700 clamp(1.5rem, 2.2vw, 1.85rem)/1.02 "League Spartan", sans-serif;
+  letter-spacing: -0.035em;
+  margin: 0;
+}
+
+.group-card-details {
+  display: grid;
+  gap: 9px;
+  margin-top: 0;
+}
+
+.group-card-meta {
+  align-items: flex-start;
+  color: #5e5961;
+  display: flex;
+  font-size: 0.9rem;
+  gap: 9px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.group-card-icon {
+  color: #817b84;
+  flex: 0 0 auto;
+  height: 17px;
+  margin-top: 1px;
+  width: 17px;
+}
+
+.group-card-attendance {
+  background: rgba(24, 24, 27, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  bottom: 12px;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 750;
+  left: 12px;
+  line-height: 1;
+  margin: 0;
+  padding: 8px 10px;
+  position: absolute;
+  z-index: 2;
+}
+
+.group-card-action {
+  align-items: center;
+  align-self: flex-start;
+  background: #27272a;
+  border: 1px solid #27272a;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.84rem;
+  font-weight: 800;
+  gap: 9px;
+  justify-content: center;
+  margin-top: auto;
+  min-height: 43px;
+  padding: 0 17px;
+  text-decoration: none;
+}
+
+.group-card-action:hover {
+  background: var(--groups-red-dark);
+  border-color: var(--groups-red-dark);
+}
+
+.group-card-action-arrow {
+  font-size: 1rem;
+}
+
+.group-card-action-unavailable {
+  color: #8b858e;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin: auto 0 0;
+  padding-top: 0;
+}
+
+.group-directory-empty,
+.group-directory-status,
+.group-directory-noscript {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--groups-line);
+  border-radius: 18px;
+  color: var(--groups-muted);
+  padding: 26px;
+}
+
+.group-directory-empty:empty {
+  display: none;
+}
+
+.group-directory-empty {
+  text-align: center;
+}
+
+.group-directory-empty h2 {
+  color: var(--groups-ink);
+  font: 700 1.45rem/1.1 "League Spartan", sans-serif;
+  margin: 0 0 7px;
+}
+
+.group-directory-empty p {
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+.group-directory-status {
+  align-items: center;
+  display: flex;
+  gap: 15px;
+  min-height: 104px;
+}
+
+.group-directory-status.is-error {
+  border-color: rgba(239, 59, 45, 0.24);
+}
+
+.group-directory-status strong {
+  color: var(--groups-ink);
+  display: block;
+  font-size: 1rem;
+}
+
+.group-directory-status p {
+  line-height: 1.45;
+  margin: 3px 0 0;
+}
+
+.group-directory-status .group-directory-retry {
+  margin-left: auto;
+}
+
+.group-directory-spinner {
+  animation: group-directory-spin 0.75s linear infinite;
+  border: 3px solid rgba(39, 39, 42, 0.13);
+  border-radius: 50%;
+  border-top-color: var(--groups-red);
+  flex: 0 0 auto;
+  height: 28px;
+  width: 28px;
+}
+
+@keyframes group-directory-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1020px) {
+  .group-directory-toolbar,
+  .group-directory-toolbar.has-location-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .group-directory-field.is-search {
+    grid-column: 1 / -1;
+  }
+
+  .group-directory-clear {
+    justify-self: start;
+  }
+
+  .group-directory-results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .group-page {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+
+  .group-page h1 {
+    font-size: clamp(3.2rem, 17vw, 4.8rem);
+  }
+
+  .group-directory-toolbar,
+  .group-directory-toolbar.has-location-filter {
+    border-radius: 17px;
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .group-directory-field.is-search {
+    grid-column: auto;
+  }
+
+  .group-directory-clear {
+    justify-self: stretch;
+  }
+
+  .group-directory-results {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .group-directory-summary {
+    align-items: flex-start;
+    display: grid;
+    gap: 4px;
+    min-height: 0;
+    padding-bottom: 14px;
+    padding-top: 14px;
+  }
+
+  .group-directory-count,
+  .group-directory-hint {
+    text-align: left;
+    width: 100%;
+  }
+
+  .group-directory-status {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .group-directory-status .group-directory-retry {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group-directory-spinner {
+    animation-duration: 1.8s;
+  }
+}

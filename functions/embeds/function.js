@@ -11,16 +11,19 @@ import {
 } from "./errors.js";
 import {
   CENTRAL_EMBED_COLLECTION_PATH,
-  CENTRAL_EMBED_LAYOUT_STANDARD,
   CENTRAL_EMBED_TYPE_EVENTS,
+  CENTRAL_EMBED_TYPE_GROUPS,
+  createCentralEmbedDefaultDraft,
   flattenCentralEmbedSourceEvents,
   normalizeCentralEmbedDraft,
   normalizeCentralEmbedId,
   normalizeCentralEmbedName,
+  normalizeCentralEmbedType,
   serializeCentralEmbedAdminRecord,
 } from "./payload.js";
 import {
   renderCentralEmbedHtml,
+  renderCentralGroupsEmbedHtml,
   resolveCentralEmbedEvents,
 } from "./render.js";
 import {uploadCentralEmbedImage} from "./storage.js";
@@ -137,13 +140,38 @@ export function createCentralEmbedPublicHandler(options) {
         );
       }
 
-      const published = normalizeCentralEmbedDraft(data.published);
+      const embedType = requireCentralEmbedType_(data.type);
+      const published = normalizeCentralEmbedDraft(data.published, embedType);
+      response.set("Cache-Control", "no-store");
+
+      if (embedType === CENTRAL_EMBED_TYPE_GROUPS) {
+        if (requestInfo.format === "html") {
+          const requestOrigin = getRequestOrigin_(request);
+          response.type("html").status(200).send(
+              renderCentralGroupsEmbedHtml(requestInfo.embedId, {
+                includeStyles: requestInfo.includeStyles,
+                theme: published.theme,
+                stylesUrl: requestOrigin + "/embed.css",
+                scriptUrl: requestOrigin + "/embed.js",
+              }),
+          );
+          return;
+        }
+        response.status(200).json({
+          schemaVersion: 1,
+          id: requestInfo.embedId,
+          type: CENTRAL_EMBED_TYPE_GROUPS,
+          theme: published.theme,
+          publishedVersion: Math.max(1, Number(data.publishedVersion) || 1),
+        });
+        return;
+      }
+
       const sourceResult = await loadSourceEvents_(options, false);
       const events = resolveCentralEmbedEvents(
           published,
           sourceResult.data.events,
       );
-      response.set("Cache-Control", "no-store");
 
       if (requestInfo.format === "html") {
         response.type("html").status(200).send(renderCentralEmbedHtml(
@@ -172,8 +200,10 @@ export function createCentralEmbedPublicHandler(options) {
         "public, max-age=30" :
         "no-store");
       response.status(status).json({
-        error: getCentralEmbedErrorMessage(error),
-        code: error && error.code || "",
+        error: status >= 500 ?
+          "Central Embeds are temporarily unavailable. Please try again." :
+          getCentralEmbedErrorMessage(error),
+        code: status >= 500 ? "unavailable" : error && error.code || "",
       });
     }
   };
@@ -186,6 +216,7 @@ async function handleAdminAction_(action, body, actor, options) {
 
   if (action === "create") {
     const name = normalizeCentralEmbedName(body.name);
+    const embedType = requireCentralEmbedType_(body.type);
     if (!name) {
       throw createCentralEmbedError(
           "invalid-payload",
@@ -196,9 +227,9 @@ async function handleAdminAction_(action, body, actor, options) {
     const docRef = collection.doc(embedId);
     await docRef.create({
       schemaVersion: 1,
-      type: CENTRAL_EMBED_TYPE_EVENTS,
+      type: embedType,
       name,
-      draft: {layout: CENTRAL_EMBED_LAYOUT_STANDARD, items: []},
+      draft: createCentralEmbedDefaultDraft(embedType),
       published: null,
       publishedVersion: 0,
       createdAt: options.admin.firestore.FieldValue.serverTimestamp(),
@@ -212,7 +243,8 @@ async function handleAdminAction_(action, body, actor, options) {
     const created = await docRef.get();
     return {
       embed: serializeCentralEmbedAdminRecord(created),
-      message: "Event Embed created.",
+      message: embedType === CENTRAL_EMBED_TYPE_GROUPS ?
+        "Groups Embed created." : "Event Embed created.",
     };
   }
 
@@ -228,8 +260,16 @@ async function handleAdminAction_(action, body, actor, options) {
   if (!snapshot.exists) {
     throw createCentralEmbedError("not-found", "Embed not found.");
   }
+  const embedType = requireCentralEmbedType_(snapshot.get("type"));
+  assertMatchingCentralEmbedType_(body, embedType);
 
   if (action === "uploadImage") {
+    if (embedType !== CENTRAL_EMBED_TYPE_EVENTS) {
+      throw createCentralEmbedError(
+          "invalid-payload",
+          "Custom image uploads are available only for Event Embeds.",
+      );
+    }
     const image = await uploadCentralEmbedImage({
       sourceData: body,
       embedId,
@@ -269,7 +309,7 @@ async function handleAdminAction_(action, body, actor, options) {
     const duplicateRef = collection.doc(duplicateId);
     await duplicateRef.create({
       schemaVersion: 1,
-      type: CENTRAL_EMBED_TYPE_EVENTS,
+      type: source.type,
       name: normalizeCentralEmbedName(source.name + " Copy"),
       draft: source.draft,
       published: null,
@@ -285,7 +325,7 @@ async function handleAdminAction_(action, body, actor, options) {
         actor,
         "duplicateEmbed",
         duplicateId,
-        source.draft.items.length,
+        Array.isArray(source.draft.items) ? source.draft.items.length : 0,
         options,
     );
     const duplicate = await duplicateRef.get();
@@ -297,14 +337,18 @@ async function handleAdminAction_(action, body, actor, options) {
 
   if (action === "saveDraft" || action === "publish") {
     const name = normalizeCentralEmbedName(body.name);
-    const draft = normalizeCentralEmbedDraft(body);
+    const draft = normalizeCentralEmbedDraft(body, embedType);
     if (!name) {
       throw createCentralEmbedError(
           "invalid-payload",
           "Give the embed an internal name.",
       );
     }
-    if (action === "publish" && !draft.items.length) {
+    if (
+      action === "publish" &&
+      embedType === CENTRAL_EMBED_TYPE_EVENTS &&
+      !draft.items.length
+    ) {
       throw createCentralEmbedError(
           "invalid-payload",
           "Select at least one event before publishing.",
@@ -313,7 +357,7 @@ async function handleAdminAction_(action, body, actor, options) {
 
     const nextData = {
       name,
-      type: CENTRAL_EMBED_TYPE_EVENTS,
+      type: embedType,
       draft,
       updatedAt: options.admin.firestore.FieldValue.serverTimestamp(),
       updatedByUid: actor.uid,
@@ -331,7 +375,7 @@ async function handleAdminAction_(action, body, actor, options) {
         actor,
         action === "publish" ? "publishEmbed" : "saveEmbedDraft",
         embedId,
-        draft.items.length,
+        Array.isArray(draft.items) ? draft.items.length : 0,
         options,
     );
     const updated = await docRef.get();
@@ -494,6 +538,28 @@ function getRequestOrigin_(request) {
 
 function createEmbedId_() {
   return "embed_" + crypto.randomBytes(9).toString("hex");
+}
+
+function requireCentralEmbedType_(value) {
+  const embedType = normalizeCentralEmbedType(value);
+  if (!embedType) {
+    throw createCentralEmbedError(
+        "invalid-payload",
+        "Choose a supported Central Embed type.",
+    );
+  }
+  return embedType;
+}
+
+function assertMatchingCentralEmbedType_(body, storedType) {
+  if (!Object.prototype.hasOwnProperty.call(body, "type")) return;
+  const requestedType = requireCentralEmbedType_(body.type);
+  if (requestedType !== storedType) {
+    throw createCentralEmbedError(
+        "invalid-payload",
+        "An existing Central Embed cannot change type.",
+    );
+  }
 }
 
 function getBearerToken_(header) {

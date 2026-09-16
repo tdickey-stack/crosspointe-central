@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   renderCentralEmbedHtml,
+  renderCentralGroupsEmbedHtml,
   resolveCentralEmbedEvents,
 } from "./render.js";
 
@@ -294,4 +295,43 @@ test("compact HTML stays bounded to the concise event fields", () => {
   assert.match(html, /data-central-embed-scroll="-1"/);
   assert.match(html, /data-central-embed-scroll="1"/);
   assert.doesNotMatch(html, /long description/);
+});
+
+test("Groups HTML is a typed shell without serialized group records", () => {
+  const html = renderCentralGroupsEmbedHtml("embed_abc123def456", {
+    includeStyles: false,
+    theme: "responsive",
+  });
+
+  assert.match(html, /^<section class="central-embed-root"/);
+  assert.match(html, /data-central-embed-type="groups"/);
+  assert.match(html, /data-central-embed-theme="responsive"/);
+  assert.match(html, /Loading groups/);
+  assert.match(
+      html,
+      /https:\/\/crosspointetv\.churchcenter\.com\/groups/,
+  );
+  assert.doesNotMatch(html, /data-group-directory/);
+  assert.doesNotMatch(html, /<script|<link/);
+});
+
+test("standalone Groups HTML loads shared styles and deferred loader", () => {
+  const html = renderCentralGroupsEmbedHtml("embed_abc123def456", {
+    theme: "dark",
+    stylesUrl: "https://central.crosspointe.tv/embed.css",
+    scriptUrl: "https://central.crosspointe.tv/embed.js",
+  });
+
+  assert.match(
+      html,
+      /<link[^>]+href="https:\/\/central\.crosspointe\.tv\/embed\.css"/,
+  );
+  assert.match(
+      html,
+      /<div class="central-embed" data-central-embed="embed_abc123def456">/,
+  );
+  assert.match(html, /data-central-embed-theme="dark"/);
+  assert.equal(html.includes(
+      "<script defer src=\"https://central.crosspointe.tv/embed.js\"></script>",
+  ), true);
 });

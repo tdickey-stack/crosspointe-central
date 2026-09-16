@@ -15,6 +15,7 @@ const groups = [
     schedule: "Sundays at 5 PM",
     meetingDays: [0],
     location: "Niceville",
+    locationTags: ["On Campus"],
   },
   {
     id: "2",
@@ -23,6 +24,7 @@ const groups = [
     schedule: "Tuesday mornings",
     meetingDays: [2],
     location: "Crestview",
+    locationTags: ["In Home"],
   },
   {
     id: "3",
@@ -31,6 +33,7 @@ const groups = [
     schedule: "Schedule coming soon",
     meetingDays: [],
     location: " niceville ",
+    locationTags: [" on campus ", "", "Online", "Online"],
   },
   {
     id: "4",
@@ -38,7 +41,7 @@ const groups = [
     type: {id: "", name: ""},
     schedule: "Wednesdays",
     meetingDays: [3, 3, 9],
-    location: "",
+    location: "On Campus",
   },
 ];
 
@@ -49,8 +52,9 @@ test("filter options omit blanks, dedupe case-insensitively, and use real days",
     {value: "women", label: "Women"},
   ]);
   assert.deepEqual(options.locations, [
-    {value: "crestview", label: "Crestview"},
-    {value: "niceville", label: "Niceville"},
+    {value: "in home", label: "In Home"},
+    {value: "on campus", label: "On Campus"},
+    {value: "online", label: "Online"},
   ]);
   assert.deepEqual(options.days, [
     {value: "0", label: "Sunday"},
@@ -63,10 +67,24 @@ test("combined filters match normalized type and location values", () => {
   const result = filterGroups(groups, {
     search: "young",
     type: "LIFE GROUPS",
-    location: "niceville",
+    location: "on campus",
     day: "0",
   });
   assert.deepEqual(result.map((group) => group.id), ["1"]);
+});
+
+test("location filtering uses tags, supports multiple tags, and never infers a venue", () => {
+  assert.deepEqual(filterGroups(groups, {location: "ON CAMPUS"})
+      .map((group) => group.id), ["1", "3"]);
+  assert.deepEqual(filterGroups(groups, {location: "online"})
+      .map((group) => group.id), ["3"]);
+  assert.deepEqual(filterGroups(groups, {location: "niceville"}), []);
+  assert.equal(filterGroups(groups, {}).length, 4);
+  assert.deepEqual(filterGroups(groups, {search: "in home"})
+      .map((group) => group.id), ["2"]);
+  assert.deepEqual(deriveGroupFilterOptions([
+    {location: "Church"}, {locationTags: [null, 12, " "]},
+  ]).locations, []);
 });
 
 test("search checks useful card details and day filters exclude unknown days", () => {

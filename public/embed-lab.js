@@ -2,6 +2,7 @@
   "use strict";
 
   var STANDARD_DEMO_ID = "embed_labstandard1";
+  var GROUPS_DIRECTORY_URL = "https://crosspointetv.churchcenter.com/groups";
   var SOURCE_PATTERN = /embed_[a-z0-9]{12,32}/i;
   var form = document.querySelector("[data-lab-form]");
   var sourceInput = document.querySelector("[data-lab-source]");
@@ -16,6 +17,9 @@
   var copyButton = document.querySelector("[data-lab-copy]");
   var environment = document.querySelector("[data-lab-environment]");
   var emulatorUiLink = document.querySelector("[data-emulator-ui-link]");
+  var typeSummary = document.querySelector("[data-lab-type-summary]");
+  var themeSummary = document.querySelector("[data-lab-theme-summary]");
+  var systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
   var state = {
     id: "",
     width: "1200",
@@ -80,6 +84,7 @@
 
     copyButton.addEventListener("click", copyEmbedCode_);
     window.addEventListener("message", handleFrameMessage_);
+    systemTheme.addEventListener("change", handleSystemThemeChange_);
     loadEmbed_(requestedId);
   }
 
@@ -102,12 +107,14 @@
     state.id = id;
     state.payload = null;
     state.staticHtml = "";
+    applyFrameMode_();
     sourceInput.value = id;
     updateLinks_();
     updateUrl_();
     setStatus_("loading", "Loading " + id, "Checking the public endpoint.");
     payloadOutput.textContent = "Loading public payload…";
-    frame.srcdoc = createHostDocument_(id, "");
+    frame.srcdoc = createHostDocument_(id, "", null);
+    updatePayloadSummary_();
 
     var startedAt = window.performance.now();
     var payloadRequest = fetch(
@@ -146,14 +153,27 @@
       var payload = results[0];
       var staticHtml = results[1];
       state.staticHtml = staticHtml;
-      frame.srcdoc = createHostDocument_(id, staticHtml);
       state.payload = payload;
+      applyFrameMode_();
+      frame.srcdoc = createHostDocument_(id, staticHtml, payload);
       payloadOutput.textContent = JSON.stringify(payload, null, 2);
+      updatePayloadSummary_();
+      var elapsed = Math.round(window.performance.now() - startedAt);
+      var type = getPayloadType_(payload);
+      if (type === "groups") {
+        setStatus_(
+            "success",
+            "Groups embed loaded",
+            themeLabel_(payload.theme) + " theme · live /api/groups directory · v" +
+              String(payload.publishedVersion || 1) + " · " +
+              String(elapsed) + "ms",
+        );
+        return;
+      }
       var events = Array.isArray(payload.events) ? payload.events : [];
       var featuredCount = events.filter(function(event) {
         return event.featured === true;
       }).length;
-      var elapsed = Math.round(window.performance.now() - startedAt);
       setStatus_(
           "success",
           (payload.layout === "compact" ? "Compact" : "Standard") +
@@ -176,16 +196,21 @@
     });
   }
 
-  function createHostDocument_(id, staticHtml) {
+  function createHostDocument_(id, staticHtml, payload) {
     var origin = window.location.origin;
     var endpoint = origin + "/api/embed/" + encodeURIComponent(id) + ".html";
     var palette = getHostPalette_();
-    var snapshot = String(staticHtml || "").trim();
+    var isGroups = getPayloadType_(payload) === "groups";
+    var snapshot = prepareStaticHtml_(staticHtml, payload);
+    var previewThemeScript = createPreviewThemeScript_(payload);
     var initialContent = snapshot ? snapshot +
-      "<p class=\"central-embed-source\"><a href=\"" + endpoint +
-      "\">View the latest CrossPointe events</a></p>" :
-      "<p><a href=\"" + endpoint +
-      "\">View upcoming CrossPointe events</a></p>";
+      "<p class=\"central-embed-source\"><a href=\"" +
+      (isGroups ? GROUPS_DIRECTORY_URL : endpoint) + "\">" +
+      (isGroups ? "Browse all CrossPointe groups" :
+        "View the latest CrossPointe events") + "</a></p>" :
+      "<p><a href=\"" + (isGroups ? GROUPS_DIRECTORY_URL : endpoint) +
+      "\">" + (isGroups ? "Browse all CrossPointe groups" :
+        "View upcoming CrossPointe events") + "</a></p>";
     return [
       "<!doctype html><html lang=\"en\"><head>",
       "<meta charset=\"utf-8\">",
@@ -203,9 +228,11 @@
       ".host-grid{display:grid;grid-template-columns:minmax(0,1fr);min-width:0;}",
       "</style></head><body>",
       "<header class=\"host-heading\"><small>Third-party website</small>",
-      "<h1>Upcoming at CrossPointe</h1></header>",
+      "<h1>", isGroups ? "Your website content" : "Upcoming at CrossPointe",
+      "</h1></header>",
       "<main class=\"host-grid\"><div class=\"central-embed\" data-central-embed=\"",
       id, "\">", initialContent, "</div></main>",
+      previewThemeScript,
       "<script async src=\"", origin, "/embed.js\"></script>",
       "<script>(function(){var host=null;",
       "function report(){parent.postMessage({source:'central-embed-lab',id:'",
@@ -256,7 +283,11 @@
     });
     if (reload && state.id) {
       updateUrl_();
-      frame.srcdoc = createHostDocument_(state.id, state.staticHtml);
+      frame.srcdoc = createHostDocument_(
+          state.id,
+          state.staticHtml,
+          state.payload,
+      );
     }
   }
 
@@ -268,9 +299,55 @@
       data.source !== "central-embed-lab" ||
       data.id !== state.id
     ) return;
+    if (getPayloadType_(state.payload) === "groups") {
+      frame.style.height = "720px";
+      return;
+    }
     var requestedHeight = Number(data.height) || 760;
     frame.style.height = Math.min(1800, Math.max(520, requestedHeight + 2)) +
       "px";
+  }
+
+  function applyFrameMode_() {
+    var isGroups = getPayloadType_(state.payload) === "groups";
+    device.classList.toggle("is-groups-preview", isGroups);
+    frame.style.height = isGroups ? "720px" : "760px";
+  }
+
+  function prepareStaticHtml_(html, payload) {
+    var snapshot = String(html || "").trim();
+    var isResponsiveGroups = getPayloadType_(payload) === "groups" &&
+      payload && payload.theme === "responsive";
+    if (!isResponsiveGroups) return snapshot;
+    var previewTheme = systemTheme.matches ? "dark" : "light";
+    return snapshot.replace(
+        /data-central-embed-theme=(['"])responsive\1/g,
+        "data-central-embed-theme=\"" + previewTheme + "\"",
+    );
+  }
+
+  function createPreviewThemeScript_(payload) {
+    if (getPayloadType_(payload) !== "groups" ||
+      !payload || payload.theme !== "responsive") return "";
+    var previewTheme = systemTheme.matches ? "dark" : "light";
+    return [
+      "<script>(function(){var theme='", previewTheme, "';",
+      "function apply(){document.querySelectorAll(",
+      "'[data-central-embed-type=\\\"groups\\\"]',",
+      ").forEach(function(root){if(root.getAttribute(",
+      "'data-central-embed-theme')==='responsive'){root.setAttribute(",
+      "'data-central-embed-theme',theme);}});}",
+      "new MutationObserver(apply).observe(document.documentElement,",
+      "{subtree:true,childList:true,attributes:true,",
+      "attributeFilter:['data-central-embed-theme']});apply();}());<\/script>",
+    ].join("");
+  }
+
+  function handleSystemThemeChange_() {
+    updatePayloadSummary_();
+    if (getPayloadType_(state.payload) !== "groups" ||
+      !state.payload || state.payload.theme !== "responsive") return;
+    frame.srcdoc = createHostDocument_(state.id, state.staticHtml, state.payload);
   }
 
   function updateLinks_() {
@@ -290,12 +367,15 @@
   function copyEmbedCode_() {
     if (!state.id) return;
     var endpoint = window.location.origin + "/api/embed/" + state.id + ".html";
+    var isGroups = getPayloadType_(state.payload) === "groups";
+    var fallbackUrl = isGroups ? GROUPS_DIRECTORY_URL : endpoint;
+    var fallbackLabel = isGroups ? "Browse all CrossPointe groups" :
+      (state.staticHtml ? "View the latest CrossPointe events" :
+        "View upcoming CrossPointe events");
     var staticContent = state.staticHtml ?
-      indentEmbedHtml_(state.staticHtml) + "\n" +
-        "  <p class=\"central-embed-source\"><a href=\"" + endpoint +
-        "\">View the latest CrossPointe events</a></p>\n" :
-      "  <p><a href=\"" + endpoint +
-        "\">View upcoming CrossPointe events</a></p>\n";
+      indentEmbedHtml_(state.staticHtml) + "\n" : "";
+    staticContent += "  <p class=\"central-embed-source\"><a href=\"" +
+      fallbackUrl + "\">" + fallbackLabel + "</a></p>\n";
     var code = [
       "<link rel=\"stylesheet\" href=\"", window.location.origin,
       "/embed.css\" data-central-embed-styles>\n",
@@ -324,6 +404,33 @@
         .split("\n").map(function(line) {
           return "  " + line;
         }).join("\n");
+  }
+
+  function getPayloadType_(payload) {
+    return payload && payload.type === "groups" ? "groups" : "events";
+  }
+
+  function themeLabel_(theme) {
+    if (theme === "dark") return "Dark";
+    if (theme === "responsive") {
+      return "Responsive (system currently " +
+        (systemTheme.matches ? "dark" : "light") + ")";
+    }
+    return "Light";
+  }
+
+  function updatePayloadSummary_() {
+    var type = getPayloadType_(state.payload);
+    if (typeSummary) {
+      typeSummary.textContent = state.payload ?
+        (type === "groups" ? "Groups directory" : "Events") : "—";
+    }
+    if (themeSummary) {
+      themeSummary.textContent = !state.payload ? "—" :
+        (type === "groups" ? themeLabel_(state.payload.theme) :
+          (state.payload.layout === "compact" ? "Compact cards" :
+            "Standard cards"));
+    }
   }
 
   function setStatus_(tone, title, detail) {

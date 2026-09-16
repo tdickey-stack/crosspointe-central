@@ -5,7 +5,11 @@ import {
   flattenCentralEmbedSourceEvents,
   normalizeCentralEmbedLayout,
   normalizeCentralEmbedDraft,
+  normalizeCentralEmbedTheme,
 } from "./payload.js";
+
+const CHURCH_CENTER_GROUPS_URL =
+  "https://crosspointetv.churchcenter.com/groups";
 
 export function resolveCentralEmbedEvents(publishedConfig, eventGroups) {
   const config = normalizeCentralEmbedDraft(publishedConfig);
@@ -162,6 +166,41 @@ export function renderCentralEmbedHtml(embedId, events, options = {}) {
     controls,
     "</section>",
   ].join("");
+}
+
+export function renderCentralGroupsEmbedHtml(embedId, options = {}) {
+  const safeId = escapeAttr_(embedId);
+  const theme = normalizeCentralEmbedTheme(options.theme);
+  const root = [
+    "<section class=\"central-embed-root\" data-central-embed-type=\"groups\"",
+    " data-central-embed-theme=\"", escapeAttr_(theme), "\"",
+    " data-central-embed-rendered=\"", safeId, "\"",
+    " aria-label=\"CrossPointe groups\">",
+    "<div class=\"central-embed-groups-loading\" role=\"status\">",
+    "<p>Loading groups&hellip;</p>",
+    "<p><a href=\"", escapeAttr_(CHURCH_CENTER_GROUPS_URL),
+    "\" target=\"_blank\" rel=\"noopener noreferrer\">",
+    "Browse groups in Church Center</a></p>",
+    "</div>",
+    "</section>",
+  ].join("");
+  if (options.includeStyles === false) return root;
+
+  const stylesUrl = normalizeHttpsOrLocalUrl_(options.stylesUrl);
+  const scriptUrl = normalizeHttpsOrLocalUrl_(options.scriptUrl);
+  const styles = stylesUrl ?
+    "<link rel=\"stylesheet\" href=\"" + escapeAttr_(stylesUrl) +
+      "\" data-central-embed-styles>" :
+    "";
+  const script = scriptUrl ?
+    "<script defer src=\"" + escapeAttr_(scriptUrl) + "\"></script>" :
+    "";
+  return "<!doctype html><html lang=\"en\"><head>" +
+    "<meta charset=\"utf-8\">" +
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    "<title>CrossPointe Groups</title>" + styles + "</head><body>" +
+    "<div class=\"central-embed\" data-central-embed=\"" + safeId + "\">" +
+    root + "</div>" + script + "</body></html>";
 }
 
 function renderCentralEmbedControls_(layout, eventCount) {

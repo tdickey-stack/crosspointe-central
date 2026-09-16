@@ -17,13 +17,21 @@
       href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500;600;700;800&amp;family=League+Spartan:wght@600;700;800&amp;display=swap"
       rel="stylesheet"
     >
+    <script src="/group-lab-theme.js"></script>
     <link rel="stylesheet" href="/group-directory.css">
-    <script type="module" src="/group-directory.js"></script>
+    <script type="module" src="/group-lab.js"></script>
   </head>
   <body class="group-lab-page">
     <main class="group-page">
       <header class="group-page-intro">
-        <p class="group-page-kicker">Groups directory prototype</p>
+        <div class="group-lab-heading-row">
+          <p class="group-page-kicker">Groups directory prototype</p>
+          <button type="button" class="group-lab-theme-toggle" data-group-theme-toggle
+            role="switch" aria-checked="false" aria-label="Dark mode">
+            <span>Dark mode</span>
+            <span class="group-lab-theme-track" aria-hidden="true"></span>
+          </button>
+        </div>
         <h1>Find your people.</h1>
         <p class="group-page-lede">
           Life is better together. Explore groups by shared interests, life

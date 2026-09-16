@@ -46,8 +46,11 @@ jobs:
       - name: Test Studio client persistence
         run: pnpm run test:studio-client
 
+      - name: Test Groups and Embed clients
+        run: node --test test/group-directory.test.mjs test/group-embed.test.mjs test/embed-groups-editor.test.mjs test/embed-loader.test.mjs
+
       - name: Verify Hosting JavaScript syntax
-        run: node --check public/app.js && node --check public/admin.js && node --check scripts/build-studio.mjs
+        run: node --check public/app.js && node --check public/admin.js && node --check scripts/build-studio.mjs && node --check public/embed.js && node --check public/embeds.js && node --check public/embed-lab.js && node --check public/group-directory.js && node --check public/group-embed.js && node --check public/group-lab.js
 
       - name: Validate hosted What's New JSON
         run: node -e "JSON.parse(require('fs').readFileSync('public/content/whats-new.json', 'utf8'))"

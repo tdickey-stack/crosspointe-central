@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#211f24">
     <meta
       name="description"
-      content="Local testing workspace for Central Event Embeds."
+      content="Local testing workspace for Central Event and Groups Embeds."
     >
     <title>Central Embed Lab</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -74,6 +74,11 @@
                 type="button"
                 data-demo-id="embed_labcompact01"
               >Compact demo</button>
+              <button
+                class="embed-lab-button"
+                type="button"
+                data-demo-id="embed_labgroupsresponsive"
+              >Groups demo</button>
             </div>
             <small>Run <code>npm run seed:embed-lab</code> after startup.</small>
           </div>
@@ -95,6 +100,17 @@
               <button type="button" data-background="dark">Dark</button>
             </div>
           </fieldset>
+
+          <dl class="embed-lab-summary" aria-label="Loaded embed settings">
+            <div>
+              <dt>Content</dt>
+              <dd data-lab-type-summary>—</dd>
+            </div>
+            <div>
+              <dt>Presentation</dt>
+              <dd data-lab-theme-summary>—</dd>
+            </div>
+          </dl>
 
           <div class="embed-lab-control-group">
             <span>Live endpoints</span>
@@ -130,6 +146,7 @@
               </div>
               <iframe
                 title="Central Embed third-party host preview"
+                scrolling="auto"
                 sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                 data-lab-frame
               ></iframe>

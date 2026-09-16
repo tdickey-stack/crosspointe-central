@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attendanceFromTags, createPublicGroupsService, fetchGroupsCollection,
-  meetingDaysFromSchedule, normalizePublicGroup, publicLocation,
+  locationTagsFromTags, meetingDaysFromSchedule, normalizePublicGroup,
+  publicLocation,
 } from "./service.js";
 
 const group = {
@@ -13,6 +14,7 @@ const group = {
     public_church_center_web_url:
       "https://crosspointetv.churchcenter.com/groups/campus-groups/test",
     schedule: "Meets weekly on Sundays from 9-10am", tag_ids: ["100"],
+    description_as_plain_text: "A welcoming group.\n\nCome as you are.",
     location_type_preference: "physical",
     header_image: {medium:
       "https://groups-production.s3.amazonaws.com/uploads/group/header_image/1/a.jpg"},
@@ -38,12 +40,31 @@ const copy = (value) => structuredClone(value);
 
 test("only the explicit public display contract crosses the boundary", () => {
   const result = normalizePublicGroup(group, included, tags);
-  assert.deepEqual(Object.keys(result).sort(), ["attendance", "id", "imageUrl",
-    "location", "meetingDays", "name", "schedule", "type", "url"]);
+  assert.deepEqual(Object.keys(result).sort(), ["attendance", "description",
+    "id", "imageUrl", "location", "locationTags", "meetingDays", "name",
+    "schedule", "type", "url"]);
+  assert.equal(result.description, "A welcoming group.\n\nCome as you are.");
   assert.equal(result.location, "Room 200");
   assert.deepEqual(result.meetingDays, [0]);
   assert.equal(result.attendance, "Drop-ins welcome");
+  assert.deepEqual(result.locationTags, []);
   assert.doesNotMatch(JSON.stringify(result), /private|secret-person|latitude/);
+});
+
+test("description stays plain text, preserves paragraphs, and is bounded", () => {
+  const value = copy(group);
+  value.attributes.description_as_plain_text =
+    "\r\nFirst paragraph.\r\n\r\nSecond paragraph.\r\n";
+  assert.equal(normalizePublicGroup(value, included, tags).description,
+      "First paragraph.\n\nSecond paragraph.");
+
+  value.attributes.description_as_plain_text = "x".repeat(12001);
+  const result = normalizePublicGroup(value, included, tags);
+  assert.equal(result.description.length, 12000);
+  assert.equal(result.description, "x".repeat(12000));
+
+  value.attributes.description_as_plain_text = undefined;
+  assert.equal(normalizePublicGroup(value, included, tags).description, "");
 });
 
 test("unlisted, archived, hidden-type and unknown-type groups fail closed", () => {
@@ -84,6 +105,18 @@ test("attendance requires an exact Central tag mapping, never enrollment", () =>
   assert.equal(normalizePublicGroup(value, included, tags).attendance, null);
 });
 
+test("location tags preserve public labels, support multiples, and dedupe case-insensitively", () => {
+  const mapped = new Map([["200", "North Campus"], ["201", "north campus"],
+    ["202", "Online"]]);
+  assert.deepEqual(locationTagsFromTags(["200", "201", "202", "unknown"], mapped),
+      ["North Campus", "Online"]);
+  const value = copy(group);
+  value.attributes.tag_ids = ["200", "202"];
+  value.attributes.location_type_preference = "virtual";
+  assert.deepEqual(normalizePublicGroup(value, included, tags, mapped).locationTags,
+      ["North Campus", "Online"]);
+});
+
 test("weekday recognition is explicit, plural-aware, and preserves unknowns", () => {
   assert.deepEqual(meetingDaysFromSchedule("Meets monthly on the 1st"), []);
   assert.deepEqual(meetingDaysFromSchedule(""), []);
@@ -122,23 +155,43 @@ test("pagination exhausts pages and rejects credential redirects or cycles", asy
   }
 });
 
-function source({central = true, mapped = true} = {}) {
+function source({central = true, mapped = true, locationType = true,
+  locationPublic = true, duplicateLocationType = false} = {}) {
   return async (value) => {
     const url = new URL(value);
     if (url.pathname === "/groups/v2/groups") {
       assert.equal(url.searchParams.get("include"), "group_type,location");
       assert.match(url.searchParams.get("fields[Group]"), /tag_ids/);
+      assert.match(url.searchParams.get("fields[Group]"),
+          /description_as_plain_text/);
       return {data: [group], included: [type, location]};
     }
     if (url.pathname === "/groups/v2/tag_groups") {
-      return {data: central ? [{id: "9", attributes: {
+      const data = central ? [{id: "9", attributes: {
         name: "Central", display_publicly: false,
-      }}] : []};
+      }}] : [];
+      if (locationType) {
+        data.push({id: "10", attributes: {
+          name: " Location Type ", display_publicly: locationPublic,
+        }});
+      }
+      if (duplicateLocationType) {
+        data.push({id: "11", attributes: {
+          name: "location type", display_publicly: true,
+        }});
+      }
+      return {data};
     }
-    assert.equal(url.pathname, "/groups/v2/tag_groups/9/tags");
-    return {data: mapped ? [{id: "100", attributes: {
-      name: "Drop-ins welcome",
-    }}, {id: "999", attributes: {name: "Internal note"}}] : []};
+    if (url.pathname === "/groups/v2/tag_groups/9/tags") {
+      return {data: mapped ? [{id: "100", attributes: {
+        name: "Drop-ins welcome",
+      }}, {id: "999", attributes: {name: "Internal note"}}] : []};
+    }
+    assert.equal(url.pathname, "/groups/v2/tag_groups/10/tags");
+    return {data: [{id: "200", attributes: {name: "North Campus"}},
+      {id: "201", attributes: {name: "north campus"}},
+      {id: "202", attributes: {name: "Online"}},
+      {id: "203", attributes: {name: "   "}}]};
   };
 }
 
@@ -149,6 +202,25 @@ test("service maps configured tags but absence never hides eligible groups", asy
     assert.equal(rows.length, 1);
     assert.equal(rows[0].attendance, Object.keys(options).length ?
       null : "Drop-ins welcome");
+  }
+});
+
+test("service exposes only public unique Location Type tag labels", async () => {
+  const value = copy(group);
+  value.attributes.tag_ids = ["200", "201", "202", "999"];
+  for (const options of [{}, {locationType: false}, {locationPublic: false},
+    {duplicateLocationType: true}]) {
+    const fetchJson = source(options);
+    const service = createPublicGroupsService({fetchJson: async (url) => {
+      const response = await fetchJson(url);
+      if (new URL(url).pathname === "/groups/v2/groups") {
+        return {...response, data: [value]};
+      }
+      return response;
+    }});
+    const rows = await service.loadGroups();
+    assert.deepEqual(rows[0].locationTags, Object.keys(options).length ? [] :
+      ["North Campus", "Online"]);
   }
 });
 
@@ -165,9 +237,9 @@ test("cache coalesces loads, expires, and never serves stale privacy data", asyn
     },
   });
   await Promise.all([service.loadGroups(), service.loadGroups()]);
-  assert.equal(calls, 3);
+  assert.equal(calls, 4);
   await service.loadGroups();
-  assert.equal(calls, 3);
+  assert.equal(calls, 4);
   time = 60001;
   fail = true;
   await assert.rejects(service.loadGroups(), /Unavailable/);

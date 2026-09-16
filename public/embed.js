@@ -22,13 +22,19 @@
   }
 
   function renderError_(host, embedId) {
+    var isGroups = !!host.querySelector('[data-central-embed-type="groups"]');
     var fallback = embedId ?
-      "<p class=\"central-embed-empty\">Events are temporarily unavailable. " +
+      "<p class=\"central-embed-empty\">This embed is temporarily unavailable. " +
         "<a href=\"" + centralOrigin + "/api/embed/" +
-        encodeURIComponent(embedId) + ".html\">View upcoming events</a>.</p>" :
-      "<p class=\"central-embed-empty\">Events are temporarily unavailable.</p>";
+        encodeURIComponent(embedId) + ".html\">Open the embed</a>.</p>" :
+      "<p class=\"central-embed-empty\">This embed is temporarily unavailable.</p>";
+    if (isGroups) {
+      fallback = '<p class="central-embed-empty">Groups are temporarily unavailable. ' +
+        '<a href="https://crosspointetv.churchcenter.com/groups" target="_blank" ' +
+        'rel="noopener noreferrer">Browse groups in Church Center</a>.</p>';
+    }
     host.innerHTML = [
-      "<section class=\"central-embed-root\" aria-label=\"CrossPointe events\">",
+      "<section class=\"central-embed-root\" aria-label=\"CrossPointe embed\">",
       fallback,
       "</section>",
     ].join("");
@@ -186,10 +192,22 @@
     }
   }
 
-  function enhanceEmbed_(host) {
+  function enhanceEmbed_(host, published) {
     var root = host.querySelector(".central-embed-root");
     if (!root || root.getAttribute("data-central-embed-enhanced") === "true") {
       return;
+    }
+    if (root.getAttribute("data-central-embed-type") === "groups") {
+      // Confirm the published configuration before starting a live directory.
+      // Copied Groups HTML is a shell, never a permanent snapshot of records.
+      if (!published) return;
+      root.setAttribute("data-central-embed-enhanced", "true");
+      return import(centralOrigin + "/group-embed.js").then(function(module) {
+        return module.mountGroupEmbed(root, {
+          origin: centralOrigin,
+          theme: root.getAttribute("data-central-embed-theme") || "light",
+        });
+      });
     }
     var grid = root.querySelector(".central-embed-grid");
     var viewport = root.querySelector(".central-embed-grid-viewport");
@@ -232,11 +250,14 @@
       return response.text();
     }).then(function(html) {
       host.innerHTML = html;
-      enhanceEmbed_(host);
+      return enhanceEmbed_(host, true);
+    }).then(function() {
       host.setAttribute("data-central-embed-loaded", "true");
       host.removeAttribute("aria-busy");
     }).catch(function() {
-      if (!hasStaticHtml) renderError_(host, embedId);
+      if (!hasStaticHtml || host.querySelector('[data-central-embed-type="groups"]')) {
+        renderError_(host, embedId);
+      }
       host.removeAttribute("aria-busy");
     });
   }

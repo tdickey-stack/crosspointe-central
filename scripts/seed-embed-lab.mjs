@@ -77,8 +77,24 @@ batch.set(firestore.doc("centralEmbeds/embed_labcompact01"), {
   publishedAt: admin.firestore.Timestamp.now(),
 });
 
+// Only saved presentation settings are seeded; Groups always load public PCO data.
+for (const theme of ["light", "dark", "responsive"]) {
+  const config = {theme};
+  batch.set(firestore.doc("centralEmbeds/embed_labgroups" + theme), {
+    schemaVersion: 1,
+    type: "groups",
+    name: "Embed Lab Groups " + theme,
+    draft: config,
+    published: config,
+    publishedVersion: 1,
+    createdAt: admin.firestore.Timestamp.now(),
+    updatedAt: admin.firestore.Timestamp.now(),
+    publishedAt: admin.firestore.Timestamp.now(),
+  });
+}
+
 batch.set(
-    firestore.doc("centralCache/planningCenter/calendar/v3-60"),
+    firestore.doc("centralCache/planningCenter/calendar/v4-60"),
     {
       cacheType: "planning-center-calendar-source",
       dateKey: dateKey_(now),
@@ -99,6 +115,8 @@ console.log("  Standard: http://127.0.0.1:5005/embed-lab.html" +
   "?id=embed_labstandard1");
 console.log("  Compact:  http://127.0.0.1:5005/embed-lab.html" +
   "?id=embed_labcompact01");
+
+console.log("  Groups:   /embed-lab.html?id=embed_labgroupsresponsive");
 
 await app.delete();
 

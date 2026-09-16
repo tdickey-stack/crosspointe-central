@@ -13,7 +13,7 @@ test("Central Embeds uses an isolated 60-day calendar window", async () => {
       doc(path) {
         assert.equal(
             path,
-            "centralCache/planningCenter/calendar/v3-60",
+            "centralCache/planningCenter/calendar/v4-60",
         );
         return {
           async get() {

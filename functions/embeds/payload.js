@@ -2,8 +2,12 @@
 
 export const CENTRAL_EMBED_COLLECTION_PATH = "centralEmbeds";
 export const CENTRAL_EMBED_TYPE_EVENTS = "events";
+export const CENTRAL_EMBED_TYPE_GROUPS = "groups";
 export const CENTRAL_EMBED_LAYOUT_STANDARD = "standard";
 export const CENTRAL_EMBED_LAYOUT_COMPACT = "compact";
+export const CENTRAL_EMBED_THEME_LIGHT = "light";
+export const CENTRAL_EMBED_THEME_DARK = "dark";
+export const CENTRAL_EMBED_THEME_RESPONSIVE = "responsive";
 export const CENTRAL_EMBED_ITEM_LIMIT = 100;
 export const CENTRAL_EMBED_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const CENTRAL_EMBED_IMAGE_STORAGE_PREFIX = "central-embeds";
@@ -17,10 +21,37 @@ export function normalizeCentralEmbedId(value) {
   return /^embed_[a-z0-9]{12,32}$/.test(normalized) ? normalized : "";
 }
 
-export function normalizeCentralEmbedDraft(sourceData) {
+export function normalizeCentralEmbedType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return CENTRAL_EMBED_TYPE_EVENTS;
+  return normalized === CENTRAL_EMBED_TYPE_EVENTS ||
+    normalized === CENTRAL_EMBED_TYPE_GROUPS ? normalized : "";
+}
+
+export function normalizeCentralEmbedTheme(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === CENTRAL_EMBED_THEME_DARK) {
+    return CENTRAL_EMBED_THEME_DARK;
+  }
+  if (normalized === CENTRAL_EMBED_THEME_RESPONSIVE) {
+    return CENTRAL_EMBED_THEME_RESPONSIVE;
+  }
+  return CENTRAL_EMBED_THEME_LIGHT;
+}
+
+export function createCentralEmbedDefaultDraft(type) {
+  return normalizeCentralEmbedType(type) === CENTRAL_EMBED_TYPE_GROUPS ?
+    {theme: CENTRAL_EMBED_THEME_LIGHT} :
+    {layout: CENTRAL_EMBED_LAYOUT_STANDARD, items: []};
+}
+
+export function normalizeCentralEmbedDraft(sourceData, type) {
   const source = sourceData && typeof sourceData === "object" ?
     sourceData :
     {};
+  if (normalizeCentralEmbedType(type) === CENTRAL_EMBED_TYPE_GROUPS) {
+    return {theme: normalizeCentralEmbedTheme(source.theme)};
+  }
   const rawItems = Array.isArray(source.items) ? source.items : [];
   const seenSelections = new Set();
   const seenSourceIds = new Set();
@@ -106,16 +137,24 @@ export function serializeCentralEmbedAdminRecord(snapshot) {
   const source = snapshot && typeof snapshot.data === "function" ?
     snapshot.data() || {} :
     {};
-  const draft = normalizeCentralEmbedDraft(source.draft);
+  const type = normalizeCentralEmbedType(source.type);
+  if (!type) {
+    const error = new TypeError("Unsupported Central Embed type.");
+    error.code = "invalid-payload";
+    throw error;
+  }
+  const draft = normalizeCentralEmbedDraft(source.draft, type);
   const published = source.published && typeof source.published === "object" ?
-    normalizeCentralEmbedDraft(source.published) :
+    normalizeCentralEmbedDraft(source.published, type) :
     null;
 
   return {
     id: normalizeCentralEmbedId(snapshot && snapshot.id),
     schemaVersion: 1,
-    type: CENTRAL_EMBED_TYPE_EVENTS,
-    name: normalizeCentralEmbedName(source.name) || "Untitled Event Embed",
+    type,
+    name: normalizeCentralEmbedName(source.name) ||
+      (type === CENTRAL_EMBED_TYPE_GROUPS ?
+        "Untitled Groups Embed" : "Untitled Event Embed"),
     draft,
     published,
     publishedVersion: Math.max(0, Number(source.publishedVersion) || 0),

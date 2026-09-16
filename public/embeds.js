@@ -2,6 +2,7 @@
   "use strict";
 
   var root = document.getElementById("central-embeds-root");
+  var GROUPS_DIRECTORY_URL = "https://crosspointetv.churchcenter.com/groups";
   var state = {
     auth: null,
     user: null,
@@ -17,6 +18,7 @@
     imageUploadingId: "",
     sync: null,
     createOpen: false,
+    createType: "events",
     createName: "CrossPointe.tv Events",
   };
 
@@ -78,8 +80,11 @@
       state.auth.signOut();
     } else if (action === "create") {
       state.createOpen = true;
+      state.createType = "events";
       state.createName = "CrossPointe.tv Events";
       render_();
+    } else if (action === "set-create-type") {
+      setCreateType_(button.getAttribute("data-embed-type") || "events");
     } else if (action === "confirm-create") {
       createEmbed_();
     } else if (action === "cancel-create") {
@@ -107,6 +112,8 @@
       loadWorkspace_(true);
     } else if (action === "set-layout") {
       setLayout_(button.getAttribute("data-embed-layout") || "standard");
+    } else if (action === "set-theme") {
+      setTheme_(button.getAttribute("data-embed-theme") || "light");
     } else if (action === "toggle-event") {
       toggleSelectedEvent_(sourceId);
     } else if (action === "move-event") {
@@ -198,7 +205,8 @@
     state.message = refresh ? "Refreshing Central events…" : "";
     render_();
     apiRequest_("GET", null, refresh ? "?refresh=1" : "").then(function(data) {
-      state.embeds = Array.isArray(data.embeds) ? data.embeds : [];
+      state.embeds = Array.isArray(data.embeds) ?
+        data.embeds.map(normalizeEmbed_) : [];
       state.events = Array.isArray(data.events) ? data.events : [];
       state.embeds.forEach(hydrateEmbedRecurrences_);
       state.sync = data.sync || null;
@@ -222,10 +230,17 @@
       render_();
       return;
     }
-    runAction_({action: "create", name: name}, function(data) {
+    runAction_({
+      action: "create",
+      name: name,
+      type: normalizeEmbedType_(state.createType),
+    }, function(data) {
       state.createOpen = false;
-      state.embeds.unshift(data.embed);
-      state.message = data.message || "Event Embed created.";
+      var created = normalizeEmbed_(data.embed);
+      state.embeds.unshift(created);
+      state.message = data.message ||
+        (created.type === "groups" ? "Groups Embed created." :
+          "Event Embed created.");
       openEmbed_(data.embed.id);
     });
   }
@@ -243,9 +258,10 @@
 
   function duplicateEmbed_(id) {
     runAction_({action: "duplicate", id: id}, function(data) {
-      state.embeds.unshift(data.embed);
+      var duplicate = normalizeEmbed_(data.embed);
+      state.embeds.unshift(duplicate);
       state.message = data.message || "Embed duplicated.";
-      openEmbed_(data.embed.id);
+      openEmbed_(duplicate.id);
     });
   }
 
@@ -268,6 +284,7 @@
     var embed = getActiveEmbed_();
     if (!embed) return;
     var name = String(embed.name || "").trim();
+    var type = getEmbedType_(embed);
     var items = embed.draft && Array.isArray(embed.draft.items) ?
       embed.draft.items : [];
     if (!name) {
@@ -275,19 +292,24 @@
       render_();
       return;
     }
-    if (publish && !items.length) {
+    if (type === "events" && publish && !items.length) {
       state.error = "Select at least one event before publishing.";
       render_();
       return;
     }
-    runAction_({
+    var payload = {
       action: publish ? "publish" : "saveDraft",
       id: embed.id,
       name: name,
-      type: "events",
-      layout: embed.draft && embed.draft.layout || "standard",
-      items: items,
-    }, function(data) {
+      type: type,
+    };
+    if (type === "groups") {
+      payload.theme = getEmbedTheme_(embed);
+    } else {
+      payload.layout = embed.draft && embed.draft.layout || "standard";
+      payload.items = items;
+    }
+    runAction_(payload, function(data) {
       replaceEmbed_(data.embed);
       state.dirty = false;
       state.message = data.message;
@@ -410,6 +432,25 @@
     render_();
   }
 
+  function setTheme_(theme) {
+    var embed = getActiveEmbed_();
+    if (!embed || getEmbedType_(embed) !== "groups") return;
+    var normalized = normalizeTheme_(theme);
+    embed.draft = embed.draft || {theme: "light"};
+    if (embed.draft.theme === normalized) return;
+    embed.draft.theme = normalized;
+    markDirty_();
+    render_();
+  }
+
+  function setCreateType_(type) {
+    var normalized = normalizeEmbedType_(type);
+    state.createType = normalized;
+    state.createName = normalized === "groups" ?
+      "CrossPointe.tv Groups" : "CrossPointe.tv Events";
+    render_();
+  }
+
   function openEmbed_(id) {
     if (state.dirty && !window.confirm("Discard unsaved embed changes?")) return;
     state.activeId = id;
@@ -495,7 +536,7 @@
       "<p class=\"embeds-kicker\">CENTRAL EMBEDS</p>",
       "<h1>", state.loading ? "Preparing Central Embeds" :
         "Publish Central anywhere", "</h1>",
-      "<p>Select Central events, add presentation overrides, and publish a persistent embed without changing Planning Center.</p>",
+      "<p>Publish live Central events or the CrossPointe groups directory on approved websites without changing Planning Center.</p>",
       state.error ? "<p class=\"embeds-alert is-error\">" +
         escapeHtml_(state.error) + "</p>" : "",
       "<div class=\"embeds-access-actions\">",
@@ -536,7 +577,7 @@
 
   function renderDashboard_() {
     return [
-      "<section class=\"embeds-hero\"><div><p class=\"embeds-kicker\">PUBLISHING WORKSPACE</p><h1>Central Embeds</h1><p>Build persistent Event Embeds for CrossPointe.tv and other approved websites.</p></div>",
+      "<section class=\"embeds-hero\"><div><p class=\"embeds-kicker\">PUBLISHING WORKSPACE</p><h1>Central Embeds</h1><p>Build persistent Event and Groups Embeds for CrossPointe.tv and other approved websites.</p></div>",
       "<button type=\"button\" class=\"embeds-button is-primary\" data-embeds-action=\"create\">Create Embed</button></section>",
       state.createOpen ? renderCreateStep_() : "",
       "<section class=\"embeds-panel\"><div class=\"embeds-panel-heading\"><div><h2>Saved embeds</h2><p>",
@@ -545,31 +586,54 @@
       state.working ? " disabled" : "", ">Refresh Central Events</button></div>",
       state.embeds.length ? "<div class=\"embeds-list\">" +
         state.embeds.map(renderEmbedRow_).join("") + "</div>" :
-        "<div class=\"embeds-empty\"><h3>No embeds yet</h3><p>Create the first Event Embed, then publish it when it is ready for a website.</p></div>",
+        "<div class=\"embeds-empty\"><h3>No embeds yet</h3><p>Create an Event or Groups Embed, then publish it when it is ready for a website.</p></div>",
       "</section>",
     ].join("");
   }
 
   function renderCreateStep_() {
+    var isGroups = state.createType === "groups";
     return [
-      "<section class=\"embeds-panel embeds-create-step\"><div><p class=\"embeds-kicker\">NEW EVENT EMBED</p><h2>Name this embed</h2><p>This internal name helps your Central team find it later and does not appear publicly.</p></div><label><span>Internal name</span><input maxlength=\"100\" data-embed-create-name value=\"",
+      "<section class=\"embeds-panel embeds-create-step\"><div><p class=\"embeds-kicker\">NEW EMBED</p><h2>Choose what to publish</h2><p>The embed type cannot change after creation. Its internal name helps your Central team find it later and does not appear publicly.</p></div>",
+      "<div class=\"embeds-create-fields\"><div class=\"embeds-type-options\" role=\"group\" aria-label=\"Embed type\">",
+      renderCreateTypeOption_("events", "Events", "Choose and customize Central event cards.", state.createType),
+      renderCreateTypeOption_("groups", "Groups", "Publish the live Planning Center groups directory.", state.createType),
+      "</div><label><span>Internal name</span><input maxlength=\"100\" data-embed-create-name value=\"",
       escapeAttr_(state.createName),
-      "\" placeholder=\"CrossPointe.tv Events\"></label><div><button type=\"button\" class=\"embeds-button\" data-embeds-action=\"cancel-create\">Cancel</button><button type=\"button\" class=\"embeds-button is-primary\" data-embeds-action=\"confirm-create\"",
+      "\" placeholder=\"", isGroups ? "CrossPointe.tv Groups" :
+        "CrossPointe.tv Events", "\"></label></div><div><button type=\"button\" class=\"embeds-button\" data-embeds-action=\"cancel-create\">Cancel</button><button type=\"button\" class=\"embeds-button is-primary\" data-embeds-action=\"confirm-create\"",
       state.working ? " disabled" : "",
-      ">", state.working ? "Creating…" : "Create Event Embed", "</button></div></section>",
+      ">", state.working ? "Creating…" :
+        (isGroups ? "Create Groups Embed" : "Create Event Embed"),
+      "</button></div></section>",
+    ].join("");
+  }
+
+  function renderCreateTypeOption_(value, title, description, selected) {
+    return [
+      "<button type=\"button\" class=\"embeds-type-option",
+      selected === value ? " is-selected" : "",
+      "\" data-embeds-action=\"set-create-type\" data-embed-type=\"",
+      value, "\" aria-pressed=\"", selected === value ? "true" : "false",
+      "\"><strong>", title, "</strong><small>", description,
+      "</small></button>",
     ].join("");
   }
 
   function renderEmbedRow_(embed) {
     var isPublished = !!embed.published;
+    var type = getEmbedType_(embed);
+    var detail = type === "groups" ?
+      "Groups · " + themeLabel_(getEmbedTheme_(embed)) + " theme" :
+      (embed.draft.layout === "compact" ? "Compact" : "Standard") +
+        " · " + String(embed.draft.items.length) + " selected event" +
+        (embed.draft.items.length === 1 ? "" : "s");
     return [
       "<article class=\"embeds-row\"><button class=\"embeds-row-main\" type=\"button\" data-embeds-action=\"open\" data-embed-id=\"",
       escapeAttr_(embed.id), "\"><span class=\"embeds-status ",
       isPublished ? "is-published\">PUBLISHED" : "\">DRAFT",
       "</span><h3>", escapeHtml_(embed.name), "</h3><p>",
-      escapeHtml_(embed.id), " · ", embed.draft.layout === "compact" ?
-        "Compact" : "Standard", " · ", String(embed.draft.items.length), " selected event",
-      embed.draft.items.length === 1 ? "" : "s", "</p></button>",
+      escapeHtml_(embed.id), " · ", escapeHtml_(detail), "</p></button>",
       "<div class=\"embeds-row-actions\">",
       isPublished ? "<button type=\"button\" data-embeds-action=\"copy-code\" data-embed-id=\"" + escapeAttr_(embed.id) + "\">Copy Code</button>" : "",
       "<button type=\"button\" data-embeds-action=\"rename\" data-embed-id=\"", escapeAttr_(embed.id), "\">Rename</button>",
@@ -581,6 +645,11 @@
 
   function renderEditor_() {
     var embed = getActiveEmbed_();
+    if (getEmbedType_(embed) === "groups") return renderGroupsEditor_(embed);
+    return renderEventsEditor_(embed);
+  }
+
+  function renderEventsEditor_(embed) {
     var items = getActiveItems_();
     var search = state.search.trim().toLowerCase();
     var filteredEvents = state.events.filter(function(item) {
@@ -608,13 +677,48 @@
         return renderSelectedEvent_(item, index, items.length);
       }).join("") : "<div class=\"embeds-panel embeds-empty\"><h3>Select an event to begin</h3><p>The event stays connected to Central unless you override a field for this embed.</p></div>",
       "</section></div>",
-      "<footer class=\"embeds-savebar\"><div><strong>", state.dirty ? "Unsaved draft changes" : "Draft is saved", "</strong><span>Publishing updates every existing copy of this embed.</span></div><div><button type=\"button\" class=\"embeds-button\" data-embeds-action=\"save-draft\"", state.working ? " disabled" : "", ">", state.working ? "Working…" : "Save Draft", "</button><button type=\"button\" class=\"embeds-button is-primary\" data-embeds-action=\"publish\"", state.working ? " disabled" : "", ">Publish</button></div></footer>",
+      renderSavebar_(),
+    ].join("");
+  }
+
+  function renderGroupsEditor_(embed) {
+    return [
+      "<section class=\"embeds-editor-heading\"><button type=\"button\" class=\"embeds-back\" data-embeds-action=\"back\">← All Embeds</button><div class=\"embeds-editor-title\"><div><p class=\"embeds-kicker\">GROUPS EMBED · ", escapeHtml_(embed.id), "</p><input data-embed-name maxlength=\"100\" aria-label=\"Embed name\" value=\"", escapeAttr_(embed.name), "\"></div>",
+      "<span class=\"embeds-status ", embed.published ?
+        "is-published\">PUBLISHED" : "\">DRAFT", "</span></div></section>",
+      embed.published ? renderPublishTools_(embed) : "",
+      renderThemePicker_(embed),
+      "<section class=\"embeds-panel embeds-groups-info\"><div><p class=\"embeds-kicker\">LIVE DIRECTORY</p><h2>Groups stay connected to Planning Center</h2><p>The directory loads current public groups, filters, meeting details, and Church Center links automatically. There are no group selections, manual event cards, or image uploads to maintain here.</p></div><a class=\"embeds-button\" href=\"", GROUPS_DIRECTORY_URL, "\" target=\"_blank\" rel=\"noopener\">View Groups in Church Center</a></section>",
+      renderSavebar_(),
+    ].join("");
+  }
+
+  function renderSavebar_() {
+    return [
+      "<footer class=\"embeds-savebar\"><div><strong>",
+      state.dirty ? "Unsaved draft changes" : "Draft is saved",
+      "</strong><span>Publishing updates every existing copy of this embed.</span></div><div><button type=\"button\" class=\"embeds-button\" data-embeds-action=\"save-draft\"",
+      state.working ? " disabled" : "", ">",
+      state.working ? "Working…" : "Save Draft",
+      "</button><button type=\"button\" class=\"embeds-button is-primary\" data-embeds-action=\"publish\"",
+      state.working ? " disabled" : "", ">Publish</button></div></footer>",
     ].join("");
   }
 
   function renderPublishTools_(embed) {
+    var isGroups = getEmbedType_(embed) === "groups";
+    var heading = isGroups ? "Live directory with automatic updates" :
+      "Crawlable HTML with live updates";
+    var description = isGroups ?
+      "Copied code includes the Groups Embed shell and a public Church Center fallback. The loader retrieves the current directory from Central whenever the page opens." :
+      "Copied code includes the current semantic event HTML for bots and no-JavaScript visitors. The loader refreshes it from Central for browsers. For always-current HTML in the host page source itself, configure that site’s server or build to fetch the HTML endpoint.";
+    var buttonLabel = isGroups ? "Copy Groups Embed Code" :
+      "Copy Crawlable Embed Code";
+    var placeholder = isGroups ?
+      "<!-- The live groups directory loads here. -->" :
+      "<!-- Current published event cards are inserted here when copied. -->";
     return [
-      "<section class=\"embeds-panel embeds-publish-tools\"><div><p class=\"embeds-kicker\">LIVE EMBED</p><h2>Crawlable HTML with live updates</h2><p>Copied code includes the current semantic event HTML for bots and no-JavaScript visitors. The loader refreshes it from Central for browsers. For always-current HTML in the host page source itself, configure that site’s server or build to fetch the HTML endpoint.</p></div><div class=\"embeds-publish-actions\"><button class=\"embeds-button is-primary\" type=\"button\" data-embeds-action=\"copy-code\" data-embed-id=\"", escapeAttr_(embed.id), "\"", state.working ? " disabled" : "", ">", state.working ? "Preparing…" : "Copy Crawlable Embed Code", "</button><a class=\"embeds-button\" href=\"/embed-lab.html?id=", encodeURIComponent(embed.id), "\">Test in Embed Lab</a><button class=\"embeds-button\" type=\"button\" data-embeds-action=\"copy-html-url\" data-embed-id=\"", escapeAttr_(embed.id), "\">Copy HTML Endpoint</button><a class=\"embeds-button\" href=\"", escapeAttr_(getHtmlEndpoint_(embed.id)), "\" target=\"_blank\" rel=\"noopener\">Preview Live</a></div><pre>", escapeHtml_(getEmbedCode_(embed.id, "<!-- Current published event cards are inserted here when copied. -->")), "</pre></section>",
+      "<section class=\"embeds-panel embeds-publish-tools\"><div><p class=\"embeds-kicker\">LIVE EMBED</p><h2>", heading, "</h2><p>", description, "</p></div><div class=\"embeds-publish-actions\"><button class=\"embeds-button is-primary\" type=\"button\" data-embeds-action=\"copy-code\" data-embed-id=\"", escapeAttr_(embed.id), "\"", state.working ? " disabled" : "", ">", state.working ? "Preparing…" : buttonLabel, "</button><a class=\"embeds-button\" href=\"/embed-lab.html?id=", encodeURIComponent(embed.id), "\">Test in Embed Lab</a><button class=\"embeds-button\" type=\"button\" data-embeds-action=\"copy-html-url\" data-embed-id=\"", escapeAttr_(embed.id), "\">Copy HTML Endpoint</button><a class=\"embeds-button\" href=\"", escapeAttr_(getHtmlEndpoint_(embed.id)), "\" target=\"_blank\" rel=\"noopener\">Preview Live</a></div><pre>", escapeHtml_(getEmbedCode_(embed.id, placeholder, getEmbedType_(embed))), "</pre></section>",
     ].join("");
   }
 
@@ -639,6 +743,29 @@
       "<span class=\"embeds-layout-swatch is-", value, "\" aria-hidden=\"true\"><i></i><i></i></span>",
       "<span><strong>", escapeHtml_(title), "</strong><small>",
       escapeHtml_(description), "</small></span></button>",
+    ].join("");
+  }
+
+  function renderThemePicker_(embed) {
+    var theme = getEmbedTheme_(embed);
+    return [
+      "<section class=\"embeds-panel embeds-layout-panel embeds-theme-panel\"><div><p class=\"embeds-kicker\">COLOR THEME</p><h2>Choose the directory colors</h2><p>The groups layout is always responsive to its available width. This setting controls colors: Responsive follows each visitor’s light or dark system preference and updates when that preference changes.</p></div><div class=\"embeds-layout-options embeds-theme-options\">",
+      renderThemeOption_("light", "Light", "Always use the light color palette.", theme),
+      renderThemeOption_("dark", "Dark", "Always use the dark color palette.", theme),
+      renderThemeOption_("responsive", "Responsive", "Follow the visitor’s system color preference.", theme),
+      "</div></section>",
+    ].join("");
+  }
+
+  function renderThemeOption_(value, title, description, selected) {
+    return [
+      "<button type=\"button\" class=\"embeds-layout-option embeds-theme-option is-",
+      value, selected === value ? " is-selected" : "",
+      "\" data-embeds-action=\"set-theme\" data-embed-theme=\"", value,
+      "\" aria-pressed=\"", selected === value ? "true" : "false", "\">",
+      "<span class=\"embeds-theme-swatch\" aria-hidden=\"true\"><i></i><i></i><i></i></span>",
+      "<span><strong>", title, "</strong><small>", description,
+      "</small></span></button>",
     ].join("");
   }
 
@@ -692,15 +819,17 @@
     ].join("");
   }
 
-  function getEmbedCode_(id, staticHtml) {
+  function getEmbedCode_(id, staticHtml, type) {
     var htmlEndpoint = getHtmlEndpoint_(id);
     var publishedHtml = String(staticHtml || "").trim();
-    var staticContent = publishedHtml ?
-      indentEmbedHtml_(publishedHtml) + "\n" +
-        "  <p class=\"central-embed-source\"><a href=\"" +
-        htmlEndpoint + "\">View the latest CrossPointe events</a></p>\n" :
-      "  <p><a href=\"" + htmlEndpoint +
-        "\">View upcoming CrossPointe events</a></p>\n";
+    var isGroups = normalizeEmbedType_(type) === "groups";
+    var fallbackUrl = isGroups ? GROUPS_DIRECTORY_URL : htmlEndpoint;
+    var fallbackLabel = isGroups ? "Browse all CrossPointe groups" :
+      (publishedHtml ? "View the latest CrossPointe events" :
+        "View upcoming CrossPointe events");
+    var staticContent = publishedHtml ? indentEmbedHtml_(publishedHtml) + "\n" : "";
+    staticContent += "  <p class=\"central-embed-source\"><a href=\"" +
+      fallbackUrl + "\">" + fallbackLabel + "</a></p>\n";
     return [
       "<link rel=\"stylesheet\" href=\"", window.location.origin,
       "/embed.css\" data-central-embed-styles>\n",
@@ -731,14 +860,16 @@
     }
     state.working = true;
     state.error = "";
-    state.message = "Preparing crawlable event HTML…";
+    var type = getEmbedType_(embed);
+    state.message = type === "groups" ? "Preparing Groups Embed code…" :
+      "Preparing crawlable event HTML…";
     render_();
     fetch(getHtmlEndpoint_(id) + "?styles=0", {
       cache: "no-store",
       headers: {Accept: "text/html"},
     }).then(function(response) {
       if (!response.ok) {
-        throw new Error("The published event HTML could not be loaded.");
+        throw new Error("The published embed HTML could not be loaded.");
       }
       return response.text();
     }).then(function(html) {
@@ -746,8 +877,9 @@
         throw new Error("The published event HTML was incomplete.");
       }
       return copyText_(
-          getEmbedCode_(id, html),
-          "Crawlable embed code copied with the current event HTML.",
+          getEmbedCode_(id, html, type),
+          type === "groups" ? "Groups Embed code copied." :
+            "Crawlable embed code copied with the current event HTML.",
       );
     }).catch(showError_).finally(function() {
       state.working = false;
@@ -792,9 +924,49 @@
   }
 
   function replaceEmbed_(embed) {
+    var normalized = normalizeEmbed_(embed);
     state.embeds = state.embeds.map(function(item) {
-      return item.id === embed.id ? embed : item;
+      return item.id === normalized.id ? normalized : item;
     });
+  }
+
+  function normalizeEmbed_(embed) {
+    var normalized = embed && typeof embed === "object" ? embed : {};
+    normalized.type = normalizeEmbedType_(normalized.type);
+    if (normalized.type === "groups") {
+      normalized.draft = normalized.draft &&
+        typeof normalized.draft === "object" ? normalized.draft : {};
+      normalized.draft.theme = normalizeTheme_(normalized.draft.theme);
+      return normalized;
+    }
+    normalized.draft = normalized.draft &&
+      typeof normalized.draft === "object" ? normalized.draft : {};
+    normalized.draft.layout = normalized.draft.layout === "compact" ?
+      "compact" : "standard";
+    normalized.draft.items = Array.isArray(normalized.draft.items) ?
+      normalized.draft.items : [];
+    return normalized;
+  }
+
+  function normalizeEmbedType_(type) {
+    return type === "groups" ? "groups" : "events";
+  }
+
+  function getEmbedType_(embed) {
+    return normalizeEmbedType_(embed && embed.type);
+  }
+
+  function normalizeTheme_(theme) {
+    return theme === "dark" || theme === "responsive" ? theme : "light";
+  }
+
+  function getEmbedTheme_(embed) {
+    return normalizeTheme_(embed && embed.draft && embed.draft.theme);
+  }
+
+  function themeLabel_(theme) {
+    var normalized = normalizeTheme_(theme);
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
   }
 
   function getActiveItems_() {
@@ -815,6 +987,7 @@
   }
 
   function hydrateEmbedRecurrences_(embed) {
+    if (getEmbedType_(embed) !== "events") return;
     var items = embed && embed.draft && Array.isArray(embed.draft.items) ?
       embed.draft.items : [];
     items.forEach(function(item) {

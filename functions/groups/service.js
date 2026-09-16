@@ -11,6 +11,14 @@ function text(value, limit = 240) {
       .replace(/\s+/g, " ").trim().slice(0, limit);
 }
 
+// This field is already plain text in the Groups API. Keep its line breaks so
+// the public detail view can retain authored paragraphs; consumers must render
+// it as text, never HTML.
+function publicDescription(value, limit = 12000) {
+  return typeof value === "string" ?
+    value.replace(/\r\n?/g, "\n").trim().slice(0, limit) : "";
+}
+
 function relationshipId(record, key) {
   const relation = record.relationships && record.relationships[key];
   return String(relation && relation.data && relation.data.id || "");
@@ -71,7 +79,22 @@ export function attendanceFromTags(ids, attendanceTags) {
   return labels.size === 1 ? [...labels][0] : null;
 }
 
-export function normalizePublicGroup(group, included, attendanceTags) {
+export function locationTagsFromTags(ids, locationTags) {
+  const labels = [];
+  const seen = new Set();
+  for (const id of Array.isArray(ids) ? ids : []) {
+    const label = locationTags.get(String(id));
+    const key = text(label).toLocaleLowerCase();
+    if (label && key && !seen.has(key)) {
+      seen.add(key);
+      labels.push(label);
+    }
+  }
+  return labels;
+}
+
+export function normalizePublicGroup(group, included, attendanceTags,
+    locationTags = new Map()) {
   const attrs = group.attributes || {};
   if (!group.id || attrs.listed !== true || attrs.archived_at) return null;
   const typeId = relationshipId(group, "group_type");
@@ -90,6 +113,7 @@ export function normalizePublicGroup(group, included, attendanceTags) {
     id: String(group.id),
     name,
     type: {id: typeId, name: text(groupType.attributes.name, 100)},
+    description: publicDescription(attrs.description_as_plain_text),
     schedule,
     meetingDays: meetingDaysFromSchedule(schedule),
     location: publicLocation(group,
@@ -97,6 +121,7 @@ export function normalizePublicGroup(group, included, attendanceTags) {
     imageUrl: imageUrl(header.medium || header.thumbnail || header.original),
     url,
     attendance: attendanceFromTags(attrs.tag_ids, attendanceTags),
+    locationTags: locationTagsFromTags(attrs.tag_ids, locationTags),
   };
 }
 
@@ -140,8 +165,9 @@ export function createPublicGroupsService({fetchJson, now = Date.now}) {
     url.searchParams.set("per_page", "100");
     url.searchParams.set("order", "name");
     url.searchParams.set("fields[Group]", ["name", "listed", "archived_at",
-      "schedule", "header_image", "public_church_center_web_url", "tag_ids",
-      "location_type_preference", "group_type", "location"].join(","));
+      "description_as_plain_text", "schedule", "header_image",
+      "public_church_center_web_url", "tag_ids", "location_type_preference",
+      "group_type", "location"].join(","));
     url.searchParams.set("fields[GroupType]", "name,church_center_visible");
     url.searchParams.set("fields[Location]", "name,display_preference");
     const [groups, tagGroups] = await Promise.all([
@@ -149,10 +175,12 @@ export function createPublicGroupsService({fetchJson, now = Date.now}) {
       fetchGroupsCollection(fetchJson,
           API_ORIGIN + "/groups/v2/tag_groups?per_page=100"),
     ]);
-    const central = tagGroups.data.filter((item) =>
-      text(item.attributes && item.attributes.name).toLowerCase() ===
-        "central");
+    const tagGroupsNamed = (name) => tagGroups.data.filter((item) =>
+      text(item.attributes && item.attributes.name).toLowerCase() === name);
+    const central = tagGroupsNamed("central");
+    const locationType = tagGroupsNamed("location type");
     const attendanceTags = new Map();
+    const locationTags = new Map();
     // The user explicitly authorizes these two Central tags as public pills,
     // even if the tag group itself is hidden from Church Center filters.
     if (central.length === 1 && /^\d+$/.test(String(central[0].id))) {
@@ -165,11 +193,24 @@ export function createPublicGroupsService({fetchJson, now = Date.now}) {
         if (label) attendanceTags.set(String(tag.id), label);
       });
     }
+    // Location filters use only labels explicitly published in the unique
+    // Location Type tag group. Physical-location privacy never affects them.
+    if (locationType.length === 1 &&
+        locationType[0].attributes.display_publicly === true &&
+        /^\d+$/.test(String(locationType[0].id))) {
+      const tags = await fetchGroupsCollection(fetchJson, API_ORIGIN +
+        "/groups/v2/tag_groups/" + locationType[0].id + "/tags?per_page=100");
+      tags.data.forEach((tag) => {
+        const label = text(tag.attributes && tag.attributes.name);
+        if (label) locationTags.set(String(tag.id), label);
+      });
+    }
     const included = new Map(groups.included.map((item) =>
       [item.type + ":" + item.id, item]));
     const unique = new Map();
     groups.data.forEach((group) => {
-      const normalized = normalizePublicGroup(group, included, attendanceTags);
+      const normalized = normalizePublicGroup(group, included, attendanceTags,
+          locationTags);
       if (normalized) unique.set(normalized.id, normalized);
     });
     const result = [...unique.values()]

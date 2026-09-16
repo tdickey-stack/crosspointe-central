@@ -12,6 +12,12 @@ function normalizedText(value) {
   return String(value || "").trim().toLocaleLowerCase();
 }
 
+function locationTags(group) {
+  return (Array.isArray(group && group.locationTags) ? group.locationTags : [])
+      .filter((label) => typeof label === "string" && label.trim())
+      .map((label) => label.trim());
+}
+
 function validMeetingDays(group) {
   const values = Array.isArray(group && group.meetingDays) ?
     group.meetingDays : [];
@@ -43,7 +49,7 @@ export function deriveGroupFilterOptions(groups) {
     days: [...dayValues]
         .sort((left, right) => left - right)
         .map((value) => ({value: String(value), label: DAY_NAMES[value]})),
-    locations: namedOptions(safeGroups, (group) => group && group.location),
+    locations: namedOptions(safeGroups.flatMap(locationTags), (label) => label),
   };
 }
 
@@ -59,9 +65,9 @@ export function filterGroups(groups, filters = {}) {
   return (Array.isArray(groups) ? groups : []).filter((group) => {
     if (!group || typeof group !== "object") return false;
     const groupType = normalizedText(group.type && group.type.name);
-    const groupLocation = normalizedText(group.location);
+    const groupLocations = locationTags(group).map(normalizedText);
     if (type && groupType !== type) return false;
-    if (location && groupLocation !== location) return false;
+    if (location && !groupLocations.includes(location)) return false;
 
     const days = validMeetingDays(group);
     if (hasDayFilter && !days.includes(requestedDay)) {
@@ -74,6 +80,7 @@ export function filterGroups(groups, filters = {}) {
       group.type && group.type.name,
       group.schedule,
       group.location,
+      ...locationTags(group),
     ].some((value) => normalizedText(value).includes(query));
   });
 }
@@ -145,8 +152,7 @@ function createMetaLine(kind, text) {
   return line;
 }
 
-function createGroupCard(group) {
-  const card = createElement("article", "group-card");
+function createGroupMedia(group, eager = false) {
   const media = createElement("div", "group-card-media is-fallback");
   const fallback = createElement("span", "group-card-fallback", "CP");
   fallback.setAttribute("aria-hidden", "true");
@@ -156,7 +162,7 @@ function createGroupCard(group) {
   if (imageUrl) {
     const image = document.createElement("img");
     image.alt = "";
-    image.loading = "lazy";
+    image.loading = eager ? "eager" : "lazy";
     image.decoding = "async";
     image.src = imageUrl;
     image.addEventListener("load", () => media.classList.remove("is-fallback"));
@@ -170,9 +176,18 @@ function createGroupCard(group) {
   const attendance = ["Drop-ins welcome", "Connect before visiting"]
       .includes(group.attendance) ? group.attendance : "";
   if (attendance) {
-    media.append(createElement("p", "group-card-attendance", attendance));
+    const pill = createElement("p", "group-card-attendance", attendance);
+    pill.classList.add(attendance === "Drop-ins welcome" ?
+      "is-drop-in" : "is-connect-first");
+    media.append(pill);
   }
 
+  return media;
+}
+
+function createGroupCard(group, openDetails) {
+  const card = createElement("article", "group-card");
+  const media = createGroupMedia(group);
   const copy = createElement("div", "group-card-copy");
   const typeName = String(group.type && group.type.name || "").trim();
   if (typeName) copy.append(createElement("p", "group-card-type", typeName));
@@ -185,23 +200,153 @@ function createGroupCard(group) {
   if (location) details.append(createMetaLine("location", location));
   if (details.childElementCount > 0) copy.append(details);
 
-  const destination = getSafeChurchCenterUrl(group.url);
-  if (destination) {
-    const action = createElement("a", "group-card-action", "View Group Details");
-    action.href = destination;
-    action.target = "_blank";
-    action.rel = "noopener noreferrer";
-    action.setAttribute("aria-label", `View details for ${group.name || "this group"} in Church Center`);
-    const arrow = createElement("span", "group-card-action-arrow", "↗");
-    arrow.setAttribute("aria-hidden", "true");
-    action.append(arrow);
-    copy.append(action);
-  } else {
-    copy.append(createElement("p", "group-card-action-unavailable", "Details unavailable"));
-  }
+  const action = createElement("button", "group-card-action", "View Group Details");
+  action.type = "button";
+  action.setAttribute("aria-label", `View details for ${group.name || "this group"}`);
+  action.setAttribute("aria-haspopup", "dialog");
+  action.addEventListener("click", () => openDetails(group, action));
+  copy.append(action);
 
   card.append(media, copy);
   return card;
+}
+
+let dialogSequence = 0;
+
+function createGroupDialog(root) {
+  const dialog = createElement("dialog", "group-dialog");
+  const panel = createElement("div", "group-dialog-panel");
+  const titleId = `group-dialog-title-${++dialogSequence}`;
+  dialog.setAttribute("aria-labelledby", titleId);
+  const header = createElement("div", "group-dialog-header");
+  header.append(createElement("span", "group-dialog-eyebrow", "Group details"));
+  const close = createElement("button", "group-dialog-close", "×");
+  close.type = "button";
+  close.setAttribute("aria-label", "Close group details");
+  close.autofocus = true;
+  header.append(close);
+  const scroll = createElement("div", "group-dialog-scroll");
+  const footer = createElement("div", "group-dialog-footer");
+  panel.append(header, scroll, footer);
+  dialog.append(panel);
+  root.append(dialog);
+  let opener = null;
+  let previousOverflow = "";
+  let locked = false;
+  let closeTimer = null;
+
+  function resetClosing() {
+    if (closeTimer !== null) window.clearTimeout(closeTimer);
+    closeTimer = null;
+    dialog.classList.remove("is-closing");
+  }
+
+  function release() {
+    resetClosing();
+    if (locked) document.documentElement.style.overflow = previousOverflow;
+    locked = false;
+    if (opener && opener.isConnected) opener.focus({preventScroll: true});
+    opener = null;
+  }
+  function finishClose() {
+    if (dialog.open) dialog.close();
+    release();
+  }
+
+  function requestClose() {
+    if (!dialog.open || dialog.classList.contains("is-closing")) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finishClose();
+      return;
+    }
+    dialog.classList.add("is-closing");
+    // Match Central's event-details modal, including its completion fallback.
+    closeTimer = window.setTimeout(finishClose, 1150);
+  }
+
+  panel.addEventListener("animationend", (event) => {
+    if (event.target === panel && event.animationName === "groupDialogCardLiftOut") {
+      finishClose();
+    }
+  });
+  close.addEventListener("click", requestClose);
+  dialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    requestClose();
+  });
+  dialog.addEventListener("close", () => {
+    if (!dialog.open) release();
+  });
+  let startedOnBackdrop = false;
+  const outside = (event) => {
+    const rect = panel.getBoundingClientRect();
+    return event.clientX < rect.left || event.clientX > rect.right ||
+      event.clientY < rect.top || event.clientY > rect.bottom;
+  };
+  dialog.addEventListener("pointerdown", (event) => {
+    startedOnBackdrop = event.target === dialog && outside(event);
+  });
+  dialog.addEventListener("click", (event) => {
+    if (startedOnBackdrop && event.target === dialog && outside(event)) requestClose();
+    startedOnBackdrop = false;
+  });
+
+  function open(group, trigger) {
+    resetClosing();
+    const name = group.name || "Group";
+    const copy = createElement("div", "group-dialog-copy");
+    const typeName = String(group.type && group.type.name || "").trim();
+    if (typeName) copy.append(createElement("p", "group-card-type", typeName));
+    const title = createElement("h2", "group-dialog-title", name);
+    title.id = titleId;
+    copy.append(title);
+    const details = createElement("div", "group-card-details");
+    if (group.schedule) details.append(createMetaLine("schedule", group.schedule));
+    if (group.location) details.append(createMetaLine("location", group.location));
+    if (details.childElementCount) copy.append(details);
+    const attendanceMessage = group.attendance === "Drop-ins welcome" ?
+      "You’re welcome to drop in. You don’t need online roster approval to attend." :
+      group.attendance === "Connect before visiting" ?
+        "Please connect with the group before attending. Open Church Center below to get in touch." : "";
+    if (attendanceMessage) {
+      copy.append(createElement("p", "group-dialog-attendance-note", attendanceMessage));
+    }
+    copy.append(createElement("h3", "group-dialog-section-title", "About this group"));
+    const description = String(group.description || "").trim();
+    copy.append(createElement("p", "group-dialog-description", description ||
+      "More information is available on this group’s Church Center page."));
+    scroll.replaceChildren(createGroupMedia(group, true), copy);
+    footer.replaceChildren();
+    const destination = getSafeChurchCenterUrl(group.url);
+    if (destination) {
+      footer.append(createElement("p", "group-dialog-handoff-note",
+        "Contact the group or request access to its online roster in Church Center. Roster approval is separate from attending."));
+      const action = createElement("a", "group-card-action group-dialog-action", "Open in Church Center");
+      action.href = destination;
+      action.target = "_blank";
+      action.rel = "noopener noreferrer";
+      const arrow = createElement("span", "group-card-action-arrow", "↗");
+      arrow.setAttribute("aria-hidden", "true");
+      action.append(arrow);
+      const newTab = createElement("span", "group-directory-sr-only", " (opens in a new tab)");
+      action.append(newTab);
+      footer.append(action);
+    } else {
+      footer.append(createElement("p", "group-dialog-handoff-note",
+        "This group’s Church Center link is currently unavailable."));
+    }
+    opener = trigger;
+    previousOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    locked = true;
+    dialog.showModal();
+    scroll.scrollTop = 0;
+  }
+
+  return {open, destroy() {
+    finishClose();
+    dialog.remove();
+  }};
 }
 
 function renderStatus(root, options) {
@@ -216,6 +361,16 @@ function renderStatus(root, options) {
       createElement("strong", "", options.title),
       createElement("p", "", options.message),
   );
+  const fallbackUrl = getSafeChurchCenterUrl(options.fallbackUrl);
+  if (fallbackUrl) {
+    const paragraph = createElement("p");
+    const link = createElement("a", "group-directory-fallback", "Browse groups in Church Center");
+    link.href = fallbackUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    paragraph.append(link);
+    copy.append(paragraph);
+  }
   if (options.kind === "loading") {
     const spinner = createElement("span", "group-directory-spinner");
     spinner.setAttribute("aria-hidden", "true");
@@ -248,13 +403,13 @@ function renderDirectory(root, groups) {
   const typeField = createSelectField("Group type", "type", "All types", options.types);
   const dayField = createSelectField("Meeting day", "day", "Any day", options.days);
   const locationField = createSelectField(
-      "Location",
+      "Location type",
       "location",
       "All locations",
       options.locations,
   );
-  locationField.field.hidden = options.locations.length <= 1;
-  toolbar.classList.toggle("has-location-filter", options.locations.length > 1);
+  locationField.field.hidden = options.locations.length === 0;
+  toolbar.classList.toggle("has-location-filter", options.locations.length > 0);
 
   const clearButton = createElement("button", "group-directory-clear", "Clear filters");
   clearButton.type = "button";
@@ -293,7 +448,8 @@ function renderDirectory(root, groups) {
     const hasFilters = Object.values(filters).some(Boolean);
     clearButton.disabled = !hasFilters;
     count.textContent = `${visibleGroups.length} ${visibleGroups.length === 1 ? "group" : "groups"}`;
-    results.replaceChildren(...visibleGroups.map(createGroupCard));
+    results.replaceChildren(...visibleGroups.map((group) =>
+      createGroupCard(group, modal.open)));
     empty.replaceChildren();
     if (visibleGroups.length === 0) {
       empty.append(
@@ -322,27 +478,39 @@ function renderDirectory(root, groups) {
   clearButton.addEventListener("click", clearFilters);
 
   root.append(toolbar, summary, results, empty);
+  const modal = createGroupDialog(root);
   update();
+  return () => modal.destroy();
 }
 
 export async function mountGroupDirectory(root, options = {}) {
   if (!root) throw new Error("A group directory root element is required.");
   const endpoint = options.endpoint || "/api/groups";
   const fetchImpl = options.fetchImpl || globalThis.fetch;
+  let dispose = null;
+  let controller = null;
+  let generation = 0;
+  let destroyed = false;
 
   async function load() {
+    if (destroyed) return;
+    const current = ++generation;
+    if (controller) controller.abort();
+    if (dispose) dispose();
+    dispose = null;
     renderStatus(root, {
       kind: "loading",
       title: "Loading groups",
       message: "Gathering the latest group details…",
     });
     let timeoutId = null;
-    let controller = null;
+    controller = null;
     try {
       if (typeof fetchImpl !== "function") throw new Error("Fetch is unavailable.");
       if (typeof AbortController === "function") {
         controller = new AbortController();
-        timeoutId = globalThis.setTimeout(() => controller.abort(), 65000);
+        const requestController = controller;
+        timeoutId = globalThis.setTimeout(() => requestController.abort(), 65000);
       }
       const response = await fetchImpl(endpoint, {
         headers: {Accept: "application/json"},
@@ -351,6 +519,7 @@ export async function mountGroupDirectory(root, options = {}) {
       });
       if (!response.ok) throw new Error(`Groups endpoint returned ${response.status}.`);
       const payload = await response.json();
+      if (destroyed || current !== generation) return;
       if (!payload || payload.schemaVersion !== 1 || !Array.isArray(payload.groups)) {
         throw new Error("Groups endpoint returned an unsupported response.");
       }
@@ -362,14 +531,16 @@ export async function mountGroupDirectory(root, options = {}) {
         });
         return;
       }
-      renderDirectory(root, payload.groups);
+      dispose = renderDirectory(root, payload.groups);
     } catch (_error) {
+      if (destroyed || current !== generation) return;
       renderStatus(root, {
         kind: "error",
         title: "We couldn’t load groups.",
         message: "Check your connection, then try again.",
         action: load,
         actionLabel: "Try again",
+        fallbackUrl: options.fallbackUrl,
       });
     } finally {
       if (timeoutId != null) globalThis.clearTimeout(timeoutId);
@@ -377,11 +548,11 @@ export async function mountGroupDirectory(root, options = {}) {
   }
 
   await load();
-  return {reload: load};
-}
-
-if (typeof document !== "undefined") {
-  document.querySelectorAll("[data-group-directory]").forEach((root) => {
-    mountGroupDirectory(root);
-  });
+  return {reload: load, destroy() {
+    destroyed = true;
+    generation++;
+    if (controller) controller.abort();
+    if (dispose) dispose();
+    root.replaceChildren();
+  }};
 }

@@ -5,13 +5,29 @@ entry and changes neither ChurchCo nor the event Embeds admin. The standalone
 `public/group-directory.js` module exports `mountGroupDirectory(root, options)`
 for later embed reuse; `public/group-directory.css` scopes directory styles.
 
+The directory follows Central's ancestor `data-theme="light"` or
+`data-theme="dark"` setting. The lab-only `public/group-lab-theme.js` controller
+provides a preview switch, uses Central's saved theme preference, and defaults
+to the system theme. Switching themes preserves the current filters. Attendance
+pill colors and image positioning stay consistent in both themes.
+
+View Group Details opens a native modal in Central. It includes the public
+description, schedule, public location name, artwork, and attendance guidance.
+Open in Church Center opens the group's public URL in a new tab for contact
+and roster requests. Escape, Close, or the backdrop dismisses the modal and
+returns focus to its card without changing filters.
+Opening and closing match Central's event-details modal: a 0.4-second fade/lift
+in and 0.75-second fade/lift out, with motion disabled for reduced-motion users.
+
 ## Source and privacy
 
 `GET /api/groups` → `centralGroupsPublic` uses the existing secret-bound PCO
 transport and request gate. The service adapts Studio's group/image
 normalization and Wayfinder's published/listed/archived checks without exposing
 either authenticated endpoint. Only the public display contract is serialized:
-id, name, type, schedule, meetingDays, location, imageUrl, url, attendance.
+id, name, description, type, schedule, meetingDays, location, locationTags,
+imageUrl, url, attendance. The description comes only from `description_as_plain_text`, is
+bounded to 12,000 characters, and is rendered as text with its paragraph breaks.
 
 Groups must be published, explicitly listed, unarchived, in a visible group
 type, and have a CrossPointe Church Center detail URL. No membership, person,
@@ -23,7 +39,15 @@ Locations use **display_preference**, never staff-level **strategy**. Only
 physical locations explicitly marked `exact` return the location **name**.
 Approximate/hidden/missing visibility returns no location. This intentionally
 omits some room names until PCO's public visibility permits them; full addresses
-are never serialized. Nonblank names are deduplicated in the location filter.
+are never serialized. This public location name is used for card/modal details,
+not for filtering.
+
+The Location type filter uses only assigned tags from the public PCO tag group
+named **Location Type**. Labels are discovered automatically; options include
+only nonblank labels assigned to eligible groups and are deduplicated. Groups
+without these tags remain under All locations. Missing, hidden, or ambiguous
+Location Type tag groups produce no location options. Physical location names,
+addresses, group types, and enrollment never determine these categories.
 
 The API exposes `schedule` as text, with no structured regular weekday field.
 Meeting-day filtering recognizes full weekday words (singular/plural), without

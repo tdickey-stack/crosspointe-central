@@ -3,9 +3,15 @@ import test from "node:test";
 
 import {
   CENTRAL_EMBED_LAYOUT_COMPACT,
+  CENTRAL_EMBED_TYPE_EVENTS,
+  CENTRAL_EMBED_TYPE_GROUPS,
+  createCentralEmbedDefaultDraft,
   flattenCentralEmbedSourceEvents,
   normalizeCentralEmbedDraft,
   normalizeCentralEmbedId,
+  normalizeCentralEmbedTheme,
+  normalizeCentralEmbedType,
+  serializeCentralEmbedAdminRecord,
 } from "./payload.js";
 
 test("Central Embed IDs and event items are strictly normalized", () => {
@@ -102,4 +108,58 @@ test("source event Featured values default false and accept booleans", () => {
   });
 
   assert.deepEqual(events.map((event) => event.featured), [false, true]);
+});
+
+test("embed types preserve legacy Events and reject unknown values", () => {
+  assert.equal(normalizeCentralEmbedType(), CENTRAL_EMBED_TYPE_EVENTS);
+  assert.equal(normalizeCentralEmbedType(""), CENTRAL_EMBED_TYPE_EVENTS);
+  assert.equal(
+      normalizeCentralEmbedType(" EVENTS "),
+      CENTRAL_EMBED_TYPE_EVENTS,
+  );
+  assert.equal(normalizeCentralEmbedType("Groups"), CENTRAL_EMBED_TYPE_GROUPS);
+  assert.equal(normalizeCentralEmbedType("pages"), "");
+});
+
+test("Groups drafts contain only a normalized theme", () => {
+  assert.deepEqual(createCentralEmbedDefaultDraft("groups"), {theme: "light"});
+  assert.deepEqual(normalizeCentralEmbedDraft({
+    theme: "responsive",
+    layout: "compact",
+    items: [{sourceEventId: "event-1"}],
+  }, "groups"), {theme: "responsive"});
+  assert.deepEqual(normalizeCentralEmbedDraft({theme: "DARK"}, "groups"), {
+    theme: "dark",
+  });
+  assert.equal(normalizeCentralEmbedTheme("system"), "light");
+});
+
+test("admin serialization preserves types and legacy Event defaults", () => {
+  const snapshot = (id, data) => ({id, data: () => data});
+  const groups = serializeCentralEmbedAdminRecord(snapshot(
+      "embed_abc123def456",
+      {
+        type: "groups",
+        name: "Directory",
+        draft: {theme: "dark", items: [{sourceEventId: "ignored"}]},
+        published: {theme: "responsive"},
+      },
+  ));
+  assert.equal(groups.type, "groups");
+  assert.deepEqual(groups.draft, {theme: "dark"});
+  assert.deepEqual(groups.published, {theme: "responsive"});
+
+  const legacy = serializeCentralEmbedAdminRecord(snapshot(
+      "embed_def456abc123",
+      {draft: {items: []}},
+  ));
+  assert.equal(legacy.type, "events");
+  assert.equal(legacy.draft.layout, "standard");
+  assert.throws(
+      () => serializeCentralEmbedAdminRecord(snapshot(
+          "embed_bad123bad123",
+          {type: "unsupported", draft: {}},
+      )),
+      /Unsupported Central Embed type/,
+  );
 });

@@ -10,7 +10,53 @@
   --groups-soft: #f4f4f5;
   --groups-focus: rgba(239, 59, 45, 0.25);
   --groups-shadow: 0 12px 32px rgba(39, 39, 42, 0.075);
-  font-family: "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+  --groups-lede: #444047;
+  --groups-toolbar: rgba(255, 255, 255, 0.92);
+  --groups-label: #4f4a52;
+  --groups-input: #fafafa;
+  --groups-control-border: rgba(39, 39, 42, 0.17);
+  --groups-placeholder: #76717a;
+  --groups-hint: #7c7780;
+  --groups-card-border: rgba(39, 39, 42, 0.105);
+  --groups-type-bg: rgba(239, 59, 45, 0.09);
+  --groups-type-ink: #a6261d;
+  --groups-meta: #5e5961;
+  --groups-icon: #817b84;
+  --groups-action: #27272a;
+  --groups-action-ink: #ffffff;
+  --groups-action-hover: #c72c21;
+  color: var(--groups-ink);
+  font-family: var(--groups-body-font, "Google Sans Flex"), "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Central owns data-theme; embedded directories inherit its live theme. */
+:root[data-theme="dark"] .group-lab-page,
+[data-theme="dark"] [data-group-directory]:not([data-theme]),
+[data-group-directory][data-theme="dark"] {
+  color-scheme: dark;
+  --groups-ink: #e8edf5;
+  --groups-muted: #a1a1aa;
+  --groups-line: #3f3f46;
+  --groups-red-dark: #ff9187;
+  --groups-surface: #232326;
+  --groups-soft: #18181b;
+  --groups-focus: rgba(239, 59, 45, 0.4);
+  --groups-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  --groups-lede: #d4d4d8;
+  --groups-toolbar: #232326;
+  --groups-label: #d4d4d8;
+  --groups-input: #1f1f22;
+  --groups-control-border: #52525b;
+  --groups-placeholder: #a1a1aa;
+  --groups-hint: #a1a1aa;
+  --groups-card-border: #3f3f46;
+  --groups-type-bg: rgba(239, 59, 45, 0.14);
+  --groups-type-ink: #ffaaa2;
+  --groups-meta: #c4c4cc;
+  --groups-icon: #a1a1aa;
+  --groups-action: #eef3f8;
+  --groups-action-ink: #0d131c;
+  --groups-action-hover: #ffd4cf;
 }
 
 .group-page,
@@ -56,13 +102,13 @@
 }
 
 .group-page h1 {
-  font: 700 clamp(3.4rem, 8vw, 6.8rem)/0.84 "League Spartan", sans-serif;
+  font: 700 clamp(3.4rem, 8vw, 6.8rem)/0.84 var(--groups-heading-font, "League Spartan"), sans-serif;
   letter-spacing: -0.06em;
   margin: 16px 0 22px;
 }
 
 .group-page-lede {
-  color: #444047;
+  color: var(--groups-lede);
   font-size: clamp(1.05rem, 1.8vw, 1.3rem);
   line-height: 1.55;
   margin: 0;
@@ -79,12 +125,18 @@
 
 [data-group-directory] {
   display: block;
+  container: group-directory / inline-size;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: left;
   margin-top: clamp(34px, 5vw, 58px);
 }
 
 .group-directory-toolbar {
   align-items: end;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--groups-toolbar);
   border: 1px solid var(--groups-line);
   border-radius: 20px;
   box-shadow: 0 8px 24px rgba(39, 39, 42, 0.05);
@@ -109,7 +161,7 @@
 }
 
 .group-directory-label {
-  color: #4f4a52;
+  color: var(--groups-label);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.035em;
@@ -119,8 +171,8 @@
 .group-directory-field input,
 .group-directory-select {
   appearance: none;
-  background-color: #fafafa;
-  border: 1px solid rgba(39, 39, 42, 0.17);
+  background-color: var(--groups-input);
+  border: 1px solid var(--groups-control-border);
   border-radius: 12px;
   color: var(--groups-ink);
   min-height: 46px;
@@ -136,8 +188,8 @@
 
 .group-directory-select {
   background-image:
-    linear-gradient(45deg, transparent 50%, #65616a 50%),
-    linear-gradient(135deg, #65616a 50%, transparent 50%);
+    linear-gradient(45deg, transparent 50%, var(--groups-muted) 50%),
+    linear-gradient(135deg, var(--groups-muted) 50%, transparent 50%);
   background-position:
     calc(100% - 17px) 20px,
     calc(100% - 12px) 20px;
@@ -156,14 +208,14 @@
 }
 
 .group-directory-field input::placeholder {
-  color: #98939b;
+  color: var(--groups-placeholder);
 }
 
 .group-directory-clear,
 .group-directory-retry {
   appearance: none;
   background: var(--groups-surface);
-  border: 1px solid rgba(39, 39, 42, 0.18);
+  border: 1px solid var(--groups-control-border);
   border-radius: 999px;
   color: var(--groups-ink);
   cursor: pointer;
@@ -201,7 +253,7 @@
 }
 
 .group-directory-hint {
-  color: #7c7780;
+  color: var(--groups-hint);
   font-size: 0.76rem;
   line-height: 1.4;
   margin: 0;
@@ -216,7 +268,7 @@
 
 .group-card {
   background: var(--groups-surface);
-  border: 1px solid rgba(39, 39, 42, 0.105);
+  border: 1px solid var(--groups-card-border);
   border-radius: 20px;
   box-shadow: var(--groups-shadow);
   display: flex;
@@ -249,7 +301,7 @@
 .group-card-fallback {
   color: rgba(255, 255, 255, 0.9);
   display: none;
-  font: 700 2.1rem/1 "League Spartan", sans-serif;
+  font: 700 2.1rem/1 var(--groups-heading-font, "League Spartan"), sans-serif;
   left: 50%;
   letter-spacing: -0.06em;
   position: absolute;
@@ -271,9 +323,9 @@
 
 .group-card-type {
   align-self: flex-start;
-  background: rgba(239, 59, 45, 0.09);
+  background: var(--groups-type-bg);
   border-radius: 999px;
-  color: #a6261d;
+  color: var(--groups-type-ink);
   font-size: 0.67rem;
   font-weight: 800;
   letter-spacing: 0.075em;
@@ -283,7 +335,7 @@
 }
 
 .group-card-title {
-  font: 700 clamp(1.5rem, 2.2vw, 1.85rem)/1.02 "League Spartan", sans-serif;
+  font: 700 clamp(1.5rem, 2.2vw, 1.85rem)/1.02 var(--groups-heading-font, "League Spartan"), sans-serif;
   letter-spacing: -0.035em;
   margin: 0;
 }
@@ -296,7 +348,7 @@
 
 .group-card-meta {
   align-items: flex-start;
-  color: #5e5961;
+  color: var(--groups-meta);
   display: flex;
   font-size: 0.9rem;
   gap: 9px;
@@ -305,7 +357,7 @@
 }
 
 .group-card-icon {
-  color: #817b84;
+  color: var(--groups-icon);
   flex: 0 0 auto;
   height: 17px;
   margin-top: 1px;
@@ -313,14 +365,14 @@
 }
 
 .group-card-attendance {
-  background: rgba(24, 24, 27, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 999px;
-  bottom: 12px;
-  color: #ffffff;
+  /* Cover the artwork's lower-right CTA at every responsive image size. */
+  bottom: 2%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   font-size: 0.7rem;
   font-weight: 750;
-  left: 12px;
+  right: 3%;
   line-height: 1;
   margin: 0;
   padding: 8px 10px;
@@ -328,13 +380,24 @@
   z-index: 2;
 }
 
+.group-card-attendance.is-drop-in {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.group-card-attendance.is-connect-first {
+  background: #fef08a;
+  color: #713f12;
+}
+
 .group-card-action {
+  cursor: pointer;
   align-items: center;
   align-self: flex-start;
-  background: #27272a;
-  border: 1px solid #27272a;
+  background: var(--groups-action);
+  border: 1px solid var(--groups-action);
   border-radius: 999px;
-  color: #ffffff;
+  color: var(--groups-action-ink);
   display: inline-flex;
   font-size: 0.84rem;
   font-weight: 800;
@@ -347,8 +410,13 @@
 }
 
 .group-card-action:hover {
-  background: var(--groups-red-dark);
-  border-color: var(--groups-red-dark);
+  background: var(--groups-action-hover);
+  border-color: var(--groups-action-hover);
+}
+
+[data-group-directory] button.group-card-action {
+  font-size: 0.84rem;
+  font-weight: 800;
 }
 
 .group-card-action-arrow {
@@ -356,7 +424,7 @@
 }
 
 .group-card-action-unavailable {
-  color: #8b858e;
+  color: var(--groups-muted);
   font-size: 0.78rem;
   font-weight: 700;
   margin: auto 0 0;
@@ -366,7 +434,7 @@
 .group-directory-empty,
 .group-directory-status,
 .group-directory-noscript {
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--groups-toolbar);
   border: 1px solid var(--groups-line);
   border-radius: 18px;
   color: var(--groups-muted);
@@ -383,7 +451,7 @@
 
 .group-directory-empty h2 {
   color: var(--groups-ink);
-  font: 700 1.45rem/1.1 "League Spartan", sans-serif;
+  font: 700 1.45rem/1.1 var(--groups-heading-font, "League Spartan"), sans-serif;
   margin: 0 0 7px;
 }
 
@@ -414,13 +482,18 @@
   margin: 3px 0 0;
 }
 
+.group-directory-fallback {
+  color: var(--groups-red-dark);
+  text-decoration: underline;
+}
+
 .group-directory-status .group-directory-retry {
   margin-left: auto;
 }
 
 .group-directory-spinner {
   animation: group-directory-spin 0.75s linear infinite;
-  border: 3px solid rgba(39, 39, 42, 0.13);
+  border: 3px solid var(--groups-line);
   border-radius: 50%;
   border-top-color: var(--groups-red);
   flex: 0 0 auto;
@@ -432,7 +505,7 @@
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 1020px) {
+@container group-directory (max-width: 1020px) {
   .group-directory-toolbar,
   .group-directory-toolbar.has-location-filter {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -460,7 +533,9 @@
   .group-page h1 {
     font-size: clamp(3.2rem, 17vw, 4.8rem);
   }
+}
 
+@container group-directory (max-width: 650px) {
   .group-directory-toolbar,
   .group-directory-toolbar.has-location-filter {
     border-radius: 17px;
@@ -510,4 +585,278 @@
   .group-directory-spinner {
     animation-duration: 1.8s;
   }
+}
+
+/* Preview controls belong only to the lab shell, never to an embedded directory. */
+.group-lab-heading-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.group-lab-theme-toggle {
+  align-items: center;
+  background: var(--groups-surface);
+  border: 1px solid var(--groups-control-border);
+  border-radius: 999px;
+  color: var(--groups-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: 600 0.8rem var(--groups-body-font, "Google Sans Flex"), "Helvetica Neue", Arial, sans-serif;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 14px;
+}
+
+.group-lab-theme-toggle:focus-visible {
+  outline: 3px solid var(--groups-focus);
+  outline-offset: 3px;
+}
+
+.group-lab-theme-track {
+  background: var(--groups-line);
+  border-radius: 999px;
+  height: 18px;
+  position: relative;
+  width: 32px;
+}
+
+.group-lab-theme-track::after {
+  background: var(--groups-ink);
+  border-radius: 50%;
+  content: "";
+  height: 12px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  width: 12px;
+}
+
+.group-lab-theme-toggle[aria-checked="true"] .group-lab-theme-track {
+  background: var(--groups-red);
+}
+
+.group-lab-theme-toggle[aria-checked="true"] .group-lab-theme-track::after {
+  transform: translateX(14px);
+}
+
+.group-directory-sr-only {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.group-dialog {
+  background: transparent;
+  border: 0;
+  color: var(--groups-ink);
+  height: 100%;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  outline: none;
+  overflow: hidden;
+  padding: 0;
+  width: 100%;
+}
+
+.group-dialog-panel {
+  background: var(--groups-surface);
+  border: 1px solid var(--groups-line);
+  border-radius: 24px;
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.35);
+  color: var(--groups-ink);
+  display: flex;
+  flex-direction: column;
+  margin: auto;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  padding: 0;
+  width: 640px;
+}
+
+.group-dialog[open] {
+  display: flex;
+  animation: groupDialogFadeIn 0.4s ease both;
+}
+
+/* Match styles.css event-details modal motion, including its layered fade. */
+.group-dialog[open] .group-dialog-panel {
+  animation: groupDialogCardLiftIn 0.4s var(--cp-ease, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+.group-dialog::backdrop {
+  background: rgba(9, 9, 11, 0.7);
+  backdrop-filter: blur(5px);
+  animation: groupDialogFadeIn 0.4s ease both;
+}
+
+.group-dialog[open].is-closing,
+.group-dialog.is-closing::backdrop {
+  animation: groupDialogFadeOut 0.75s ease both;
+}
+
+.group-dialog[open].is-closing .group-dialog-panel {
+  pointer-events: none;
+  animation: groupDialogCardLiftOut 0.75s var(--cp-ease, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+@keyframes groupDialogFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes groupDialogCardLiftIn {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes groupDialogFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes groupDialogCardLiftOut {
+  from { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 0; transform: translate3d(0, 18px, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group-dialog[open],
+  .group-dialog[open] .group-dialog-panel,
+  .group-dialog::backdrop,
+  .group-dialog[open].is-closing,
+  .group-dialog[open].is-closing .group-dialog-panel,
+  .group-dialog.is-closing::backdrop {
+    animation: none;
+  }
+}
+
+.group-dialog-header {
+  align-items: center;
+  border-bottom: 1px solid var(--groups-line);
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  padding: 8px 16px 8px 24px;
+}
+
+.group-dialog-eyebrow {
+  color: var(--groups-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.group-dialog-close {
+  background: var(--groups-input);
+  border: 1px solid var(--groups-control-border);
+  border-radius: 50%;
+  color: var(--groups-ink);
+  cursor: pointer;
+  height: 44px;
+  width: 44px;
+}
+
+[data-group-directory] .group-dialog-close {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.group-dialog-close:focus-visible {
+  outline: 3px solid var(--groups-focus);
+  outline-offset: 2px;
+}
+
+.group-dialog-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.group-dialog-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-wrap: anywhere;
+  padding: 28px;
+}
+
+.group-dialog-title {
+  font: 700 clamp(1.8rem, 5vw, 2.5rem)/1.08 var(--groups-heading-font, "League Spartan"), sans-serif;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.group-dialog-section-title {
+  font-size: 1rem;
+  margin: 8px 0 -8px;
+}
+
+.group-dialog-description {
+  color: var(--groups-meta);
+  font-size: 0.96rem;
+  line-height: 1.65;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.group-dialog-attendance-note {
+  background: var(--groups-input);
+  border: 1px solid var(--groups-line);
+  border-radius: 12px;
+  color: var(--groups-meta);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  margin: 0;
+  padding: 14px 16px;
+}
+
+.group-dialog-footer {
+  border-top: 1px solid var(--groups-line);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 28px;
+}
+
+.group-dialog-handoff-note {
+  color: var(--groups-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.group-dialog-action {
+  justify-content: center;
+  min-height: 44px;
+}
+
+@media (max-width: 650px) {
+  .group-dialog-panel {
+    border-radius: 20px;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    max-width: calc(100% - 20px);
+  }
+  .group-dialog-copy { padding: 22px; }
+  .group-dialog-footer { padding: 16px 22px; }
+  .group-dialog-action { width: 100%; }
+}
+
+/* Embedded directories start directly with the controls, without lab spacing. */
+[data-group-directory][data-group-embedded] {
+  --groups-body-font: "Central Groups Body";
+  --groups-heading-font: "Central Groups Heading";
+  margin: 0;
 }

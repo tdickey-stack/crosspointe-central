@@ -248,6 +248,37 @@ a {
   padding: 0;
 }
 
+.embed-lab-summary {
+  border-bottom: 1px solid var(--lab-line);
+  border-top: 1px solid var(--lab-line);
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 16px 0;
+}
+
+.embed-lab-summary div {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.embed-lab-summary dt {
+  color: var(--lab-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.embed-lab-summary dd {
+  font-size: 0.84rem;
+  font-weight: 700;
+  margin: 0;
+  text-align: right;
+}
+
 .embed-lab-control-group small {
   color: var(--lab-muted);
   line-height: 1.4;
@@ -401,6 +432,10 @@ a {
   height: 760px;
   transition: height 300ms var(--lab-ease);
   width: 100%;
+}
+
+.embed-lab-device.is-groups-preview iframe {
+  height: 720px;
 }
 
 .embed-lab-payload {

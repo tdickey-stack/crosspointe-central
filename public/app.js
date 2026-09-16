@@ -8,6 +8,8 @@ var centralRefreshInterval = null;
 var centralEventVisibilityInterval = null;
 var countdownInterval = null;
 var previousCountdownDigits = {};
+var centralInitialSectionHash = "";
+var centralInitialSectionFrame = 0;
 
 var sundayNotesStorageKey = "";
 var sundayNotesSeed = {};
@@ -138,6 +140,7 @@ var SUNDAY_STREAM_PLAYER_CONNECT_MAX_ATTEMPTS = 24;
 
 if (!CENTRAL_IS_ADMIN_ROUTE) {
   document.addEventListener("DOMContentLoaded", function() {
+    initializeCentralSectionNavigation_();
     initializeCentralTheme_();
     bindCalendarMenuListeners_();
     initializeCentralAppNavigation_();
@@ -1321,6 +1324,7 @@ function renderCentral(data) {
     maybeShowWhatsNew_(data);
     syncCentralAnalyticsAfterRender_("sunday_mode");
     finalizeCentralLoader_();
+    scheduleInitialSectionNavigation_();
     return;
   }
 
@@ -1374,6 +1378,7 @@ function renderCentral(data) {
   maybeShowWhatsNew_(data);
   syncCentralAnalyticsAfterRender_("homepage");
   finalizeCentralLoader_();
+  scheduleInitialSectionNavigation_();
 }
 
 function trackCentralAnalytics_(eventName, parameters) {
@@ -5161,15 +5166,66 @@ function buildLinkAttrs_(url) {
 function resolveSectionSelector_(selector) {
   var aliases = {
     "#sermon-notes": "#notes",
+    "#events": "#upcoming-events",
   };
 
   return aliases[selector] || selector;
 }
 
+function findSectionTarget_(selector) {
+  var resolved = resolveSectionSelector_(selector);
+  if (!resolved || resolved.charAt(0) !== "#") return null;
+
+  try {
+    return document.getElementById(decodeURIComponent(resolved.slice(1)));
+  } catch (error) {
+    return null;
+  }
+}
+
+function initializeCentralSectionNavigation_() {
+  centralInitialSectionHash = window.location.hash;
+  if (!centralInitialSectionHash) return;
+
+  // A visitor's own navigation takes precedence over a delayed data response.
+  ["wheel", "touchstart", "pointerdown", "keydown", "hashchange"].forEach(function(type) {
+    window.addEventListener(type, cancelInitialSectionNavigation_, {passive: true});
+  });
+}
+
+function cancelInitialSectionNavigation_() {
+  centralInitialSectionHash = "";
+  if (centralInitialSectionFrame) {
+    window.cancelAnimationFrame(centralInitialSectionFrame);
+    centralInitialSectionFrame = 0;
+  }
+  ["wheel", "touchstart", "pointerdown", "keydown", "hashchange"].forEach(function(type) {
+    window.removeEventListener(type, cancelInitialSectionNavigation_);
+  });
+}
+
+function scheduleInitialSectionNavigation_() {
+  if (!centralInitialSectionHash || centralInitialSectionFrame) return;
+
+  // Sections are inserted asynchronously, after native fragment navigation ran.
+  // Resolve the current element after layout; cached content may be replaced first.
+  centralInitialSectionFrame = window.requestAnimationFrame(function() {
+    centralInitialSectionFrame = window.requestAnimationFrame(function() {
+      centralInitialSectionFrame = 0;
+      var target = findSectionTarget_(centralInitialSectionHash);
+      if (!target) return;
+
+      cancelInitialSectionNavigation_();
+      target.scrollIntoView({behavior: "instant", block: "start"});
+    });
+  });
+}
+
 function scrollToSection(event, selector) {
   if (event) event.preventDefault();
+  cancelInitialSectionNavigation_();
 
-  var target = document.querySelector(resolveSectionSelector_(selector));
+  var target = findSectionTarget_(selector);
   if (!target) return;
 
   target.scrollIntoView({

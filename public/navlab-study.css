@@ -1,0 +1,41 @@
+.lab-study{--lab-study-radius:22px;min-width:0}
+.lab-study-switcher{display:none}
+.lab-study-workspace{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:18px;align-items:stretch}
+.lab-study-panel{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--lab-study-radius);box-shadow:var(--shadow);padding:24px}
+.lab-study-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.lab-study-panel-head>div{min-width:0}
+.lab-study-kicker{margin:0 0 7px;color:var(--red);font-size:10px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase}
+.lab-study-title{margin:0;font-size:24px;overflow-wrap:anywhere}
+.lab-study-reference{display:inline-flex;max-width:46%;flex:0 0 auto;padding:6px 10px;border-radius:999px;background:var(--tint);color:var(--red);font-size:10px;font-weight:800;line-height:1.35;text-align:center;overflow-wrap:anywhere}
+.lab-study-toolbar{display:flex;flex-wrap:wrap;gap:7px;padding:9px;border:1px solid var(--border);border-bottom:0;border-radius:14px 14px 0 0;background:var(--soft)}
+.lab-study-format,.lab-study-tool{min-height:38px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);padding:8px 11px;font-size:11px;font-weight:750;line-height:1.25}
+.lab-study-format:hover,.lab-study-tool:hover{border-color:var(--red);color:var(--red)}
+.lab-study-format.is-active,.lab-study-format[aria-pressed=true]{background:var(--text);border-color:var(--text);color:var(--surface)}
+.lab-study-editor{min-height:360px;padding:18px;border:1px solid var(--border);border-radius:0 0 14px 14px;background:var(--surface);color:var(--text);font:15px/1.72 Montserrat,Arial,sans-serif;overflow-wrap:anywhere;outline:none;touch-action:pan-y}
+.lab-study-editor:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.lab-study-editor:empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none}
+.lab-study-editor p,.lab-study-editor div{margin:0 0 .7em}.lab-study-editor ul,.lab-study-editor ol{margin:.6em 0 .9em;padding-left:1.6em}
+.lab-study-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:13px}
+.lab-study-clear{color:var(--muted)}
+.lab-study-google{background:var(--accent);border-color:var(--accent);color:#fff}
+.lab-study-google:hover{filter:brightness(.94);color:#fff}.lab-study-google:disabled{cursor:wait;opacity:.66}
+.lab-study-open-doc{display:inline-flex;align-items:center;text-decoration:none}
+.lab-study-status{flex:1 0 100%;color:var(--muted);font-size:10px;line-height:1.45}
+.lab-study-bible{display:flex;flex-direction:column}
+.lab-study-bible-mount{min-width:0;flex:1;min-height:430px;overflow:hidden;border-radius:14px;touch-action:pan-y}
+.lab-study-bible-mount .yv-reader-shell{height:100%}.lab-study-bible-mount .yv-reader-host{height:100%;min-height:430px}
+.lab-study-loading,.lab-study-reader-error{display:grid;place-items:center;align-content:center;gap:14px;min-height:430px;margin:0;padding:28px;border:1px dashed var(--border);border-radius:14px;color:var(--muted);font-size:13px;text-align:center}
+@media(max-width:760px){
+  .lab-study{margin-inline:-4px}
+  .lab-study-switcher{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:14px;padding:5px;background:var(--soft);border:1px solid var(--border);border-radius:14px;position:sticky;top:-10px;z-index:3}
+  .lab-study-switch{min-height:42px;border-radius:10px;background:transparent;color:var(--muted);font-size:12px;font-weight:800}
+  .lab-study-switch[aria-selected=true]{background:var(--surface);color:var(--red);box-shadow:0 2px 7px #0000000d}
+  .lab-study-workspace{display:block}
+  .lab-study-panel{padding:19px;border-radius:20px}
+  .lab-study-title{font-size:21px}.lab-study-reference{font-size:9px;max-width:42%}
+  .lab-study-toolbar{gap:5px;padding:7px}.lab-study-format{flex:1 1 auto;padding-inline:8px;font-size:10px}
+  .lab-study-editor{min-height:50dvh;padding:15px;font-size:16px}
+  .lab-study-tool{min-height:42px}.lab-study-google{flex:1 0 100%}
+  .lab-study-bible-mount,.lab-study-bible-mount .yv-reader-host,.lab-study-loading,.lab-study-reader-error{min-height:58dvh}
+}
+@media(prefers-reduced-motion:reduce){.lab-study *{scroll-behavior:auto!important}}

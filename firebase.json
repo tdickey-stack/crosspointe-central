@@ -41,7 +41,7 @@
     ],
     "headers": [
       {
-        "source": "/navlab{,/**,.html,.css,.js,-content.js}",
+        "source": "/navlab{,/**,.html,.css,.js,-*.js,-*.css}",
         "headers": [{"key": "Cache-Control", "value": "no-store"}]
       },
       {

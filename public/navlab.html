@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#f4f4f5">
+  <title>Navigation Lab · CrossPointe Central</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/group-directory.css">
+  <link rel="stylesheet" href="/navlab.css?v=7">
+  <script type="module" src="/navlab.js?v=11"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="lab-note"><span>Navigation lab</span> Design preview · Live Central content.</div>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#home" aria-label="CrossPointe Central home"><img src="/favicon.svg" alt=""><span>CrossPointe<strong>Central</strong></span></a>
+      <nav class="navigation" aria-label="Main navigation">
+        <a href="#home" data-destination="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3Z M9 20v-7h6v7"/></svg><span>Home</span></a>
+        <a href="#next-steps" data-destination="next-steps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h5v-5h5v-5h6 M14 4h6v6"/></svg><span>Next Steps</span></a>
+        <a href="#groups" data-destination="groups"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3 M16 5a3 3 0 0 1 0 6 M18 15a5 5 0 0 1 3 5"/></svg><span>Groups</span></a>
+        <a href="#events" data-destination="events"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v5 M17 3v5 M3 11h18 M8 16h2 M14 16h2"/></svg><span>Events</span></a>
+      </nav>
+      <button class="theme-button" id="theme-toggle" type="button" aria-label="Dark mode" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.5A9 9 0 0 1 8.5 4 9 9 0 1 0 20 15.5Z"/></svg><span>Dark mode</span></button>
+    </div>
+  </header>
+  <main id="main" class="main" tabindex="-1">
+    <div id="page-track" class="page-track">
+    <section id="home" class="view" aria-labelledby="home-title">
+      <div id="home-content"><div class="page-heading"><p class="eyebrow">Welcome to Central</p><h1 id="home-title" tabindex="-1">Stay Connected. Every Day.</h1></div><div class="live-status card" role="status">Loading the latest from Central…</div></div>
+    </section>
+    <section id="next-steps" class="view" aria-labelledby="next-steps-title" hidden>
+      <div class="page-heading"><p class="eyebrow">Keep growing</p><h1 id="next-steps-title" tabindex="-1">Your next step starts here.</h1><p>Find ways to connect, grow in your faith, and make a difference.</p></div>
+      <div id="next-steps-content"><div class="live-status card" role="status">Loading next steps from Central…</div></div>
+    </section>
+    <section id="groups" class="view" aria-labelledby="groups-title" hidden>
+      <div class="page-heading"><p class="eyebrow">Life is better together</p><h1 id="groups-title" tabindex="-1">Find your people.</h1><p>Explore groups by shared interests, life stage, and the schedule that works for you.</p></div>
+      <div data-group-directory id="live-groups"><div class="live-status card" role="status">Loading groups…</div></div>
+    </section>
+    <section id="events" class="view" aria-labelledby="events-title" hidden>
+      <div class="page-heading"><p class="eyebrow">See you there</p><h1 id="events-title" tabindex="-1">What’s happening.</h1><p>Upcoming events and open registrations, all in one place.</p></div>
+      <div id="events-content"><div class="live-status card" role="status">Loading events from Central…</div></div>
+    </section>
+    </div>
+    <footer class="page-footer"><span>CrossPointe Central</span><span>Design preview · Public Central content</span></footer>
+  </main>
+  <dialog id="detail-dialog" aria-labelledby="detail-title"><button class="dialog-close" aria-label="Close details">×</button><p class="eyebrow" id="detail-kicker"></p><h2 id="detail-title"></h2><p id="detail-meta" class="detail-meta"></p><p id="detail-copy"></p><div id="detail-links" class="hero-actions"></div><button class="button" id="detail-done">Back to browsing</button></dialog>
+  <noscript><p>This navigation preview needs JavaScript to switch views.</p></noscript>
+</body>
+</html>

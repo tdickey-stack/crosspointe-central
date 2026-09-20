@@ -4733,6 +4733,11 @@
     if (field.indexOf("bulletin-block.") === 0) {
       var fallbackBlockField = field.replace("bulletin-block.", "");
       adminState.bulletinFallbackBlockDraft[fallbackBlockField] = nextValue;
+      var copyField = event.target.closest(".central-admin-field");
+      if (copyField) {
+        syncBulletinFrontContentDescriptionGuidance_(nextValue,
+            copyField.querySelector("[data-admin-bulletin-front-copy-guidance]"));
+      }
       if (
         fallbackBlockField === "imageSide" ||
         fallbackBlockField === "size"
@@ -6682,6 +6687,9 @@
       renderAdminInputField_({
         label: "Eyebrow",
         field: "bulletin-block.eyebrow",
+        guidanceHtml: renderBulletinFrontContentDescriptionGuidance_(
+            draft.eyebrow, {maximum: 80, recommended: null},
+        ),
         value: draft.eyebrow,
         maxLength: 80,
         placeholder: "New Here?",
@@ -6689,6 +6697,9 @@
       renderAdminInputField_({
         label: "Title",
         field: "bulletin-block.title",
+        guidanceHtml: renderBulletinFrontContentDescriptionGuidance_(
+            draft.title, {maximum: 180, recommended: null},
+        ),
         value: draft.title,
         maxLength: 180,
         placeholder: "We'd Love to Help You Get Connected",
@@ -6696,7 +6707,10 @@
       renderAdminTextareaField_({
         label: "Description",
         field: "bulletin-block.description",
-        hint: readable ? "Use **bold**, *italics*, headings, and lists. Overflow must be edited before printing; text stays at least 12pt." : "Use **bold**, *italics*, headings, and lists. Front-page copy may shorten to fit.",
+        guidanceHtml: renderBulletinFrontContentDescriptionGuidance_(
+            draft.description, {maximum: 800, recommended: null},
+        ),
+        hint: "Spaces and Markdown count toward the limit. Print fit depends on block size, title, and image. " + (readable ? "Check the preview after saving; text stays at least 12pt." : "Front-page copy may shorten to fit.") + " Use **bold**, *italics*, headings, and lists.",
         value: draft.description,
         rows: 4,
         maxLength: 800,
@@ -10968,20 +10982,24 @@
     });
   }
 
-  function getBulletinFrontContentDescriptionGuidanceState_(value) {
+  function getBulletinFrontContentDescriptionGuidanceState_(value, limits) {
+    limits = limits || {
+      maximum: PRINT_MODE_DESCRIPTION_MAX_CHARACTERS,
+      recommended: PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS,
+    };
     var characterCount = String(value || "").length;
     var state = {
       characterCount: characterCount,
       className: "",
-      message: characterCount ? "Recommended length" :
-        "Description will be hidden",
+      message: limits.recommended === null ? "Within character limit" :
+        (characterCount ? "Recommended length" : "Description will be hidden"),
     };
 
-    if (characterCount > PRINT_MODE_DESCRIPTION_MAX_CHARACTERS) {
+    if (characterCount > limits.maximum) {
       state.className = " is-over-limit";
       state.message = "Shorten before saving";
     } else if (
-      characterCount > PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS
+      limits.recommended !== null && characterCount > limits.recommended
     ) {
       state.className = " is-warning";
       state.message = "Shorten for the best print fit";
@@ -10990,34 +11008,45 @@
     return state;
   }
 
-  function renderBulletinFrontContentDescriptionGuidance_(value) {
-    var state = getBulletinFrontContentDescriptionGuidanceState_(value);
+  function renderBulletinFrontContentDescriptionGuidance_(value, limits) {
+    limits = limits || {
+      maximum: PRINT_MODE_DESCRIPTION_MAX_CHARACTERS,
+      recommended: PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS,
+    };
+    var state = getBulletinFrontContentDescriptionGuidanceState_(value, limits);
     return [
       "<span class=\"central-admin-bulletin-description-guidance",
       state.className,
-      "\" data-admin-bulletin-front-copy-guidance aria-live=\"polite\">",
+      '" data-admin-bulletin-front-copy-guidance data-copy-maximum="',
+      String(limits.maximum),
+      '" data-copy-recommended="',
+      limits.recommended === null ? "" : String(limits.recommended),
+      '" aria-live="polite">',
       "<span data-admin-bulletin-description-character-value>",
       escapeHtml_(String(state.characterCount)),
       " characters</span><span aria-hidden=\"true\">·</span><span ",
       "data-admin-bulletin-description-character-message>",
       escapeHtml_(state.message),
       "</span><small>",
-      String(PRINT_MODE_DESCRIPTION_RECOMMENDED_CHARACTERS),
-      " recommended · ",
-      String(PRINT_MODE_DESCRIPTION_MAX_CHARACTERS),
+      limits.recommended === null ? "" : String(limits.recommended) + " recommended · ",
+      String(limits.maximum),
       " maximum</small></span>",
     ].join("");
   }
 
-  function syncBulletinFrontContentDescriptionGuidance_(value) {
-    var element = document.querySelector(
+  function syncBulletinFrontContentDescriptionGuidance_(value, element) {
+    element = element || document.querySelector(
         "[data-admin-bulletin-front-copy-guidance]",
     );
     if (!element) {
       return;
     }
 
-    var state = getBulletinFrontContentDescriptionGuidanceState_(value);
+    var state = getBulletinFrontContentDescriptionGuidanceState_(value, {
+      maximum: Number(element.getAttribute("data-copy-maximum")),
+      recommended: element.getAttribute("data-copy-recommended") === "" ? null :
+        Number(element.getAttribute("data-copy-recommended")),
+    });
     element.classList.toggle("is-warning", state.className === " is-warning");
     element.classList.toggle(
         "is-over-limit",
@@ -15169,6 +15198,7 @@
       config.placeholder ? " placeholder=\"" + escapeAttr_(config.placeholder) + "\"" : "",
       config.disabled ? " disabled" : "",
       " value=\"", escapeAttr_(config.value || ""), "\">",
+      config.guidanceHtml || "",
       "</label>",
     ].join("");
   }
@@ -15202,6 +15232,7 @@
       ">",
       escapeHtml_(config.value || ""),
       "</textarea>",
+      config.guidanceHtml || "",
       config.hint ? "<small class=\"central-admin-field-hint\">" +
         escapeHtml_(config.hint) + "</small>" : "",
       "</label>",

@@ -9944,6 +9944,32 @@
       '</div><p class="b3-giving-link">Give securely at <strong>crosspointe.tv/give</strong></p></section>';
   }
 
+  function bulletinLayout3ContentOverflows_(region) {
+    // scrollHeight includes trailing padding, even when every printed line fits.
+    // Only inspect content after a region reports vertical scroll overflow.
+    var top = region.getBoundingClientRect().top + region.clientTop;
+    var bottom = top + region.clientHeight;
+    var measured = false;
+    function outside(rect) {
+      if (!rect.width || !rect.height) return false;
+      measured = true;
+      return rect.top < top - 1 || rect.bottom > bottom + 1;
+    }
+    var walker = document.createTreeWalker(region, 4); // SHOW_TEXT
+    var range = document.createRange();
+    var node;
+    while ((node = walker.nextNode())) {
+      if (!node.nodeValue.trim()) continue;
+      range.selectNodeContents(node);
+      if (Array.prototype.some.call(range.getClientRects(), outside)) return true;
+    }
+    if (Array.prototype.some.call(region.querySelectorAll("img, svg, canvas"), function(image) {
+      return outside(image.getBoundingClientRect());
+    })) return true;
+    // Keep an unmeasurable overflow blocked rather than silently allowing it.
+    return !measured;
+  }
+
   function measureBulletinLayout3Fit_() {
     var holder = document.createElement("div");
     holder.setAttribute("aria-hidden", "true");
@@ -9957,7 +9983,8 @@
     if (usage.back <= 6 && !packBulletinLayout3Back_(getBulletinLayout3Entries_("back"))) problems.push("Back allows at most two Large blocks");
     try {
       Array.prototype.forEach.call(holder.querySelectorAll("[data-b3-region]"), function(region) {
-        if (region.scrollHeight > region.clientHeight + 1 || region.scrollWidth > region.clientWidth + 1) {
+        if (region.scrollWidth > region.clientWidth + 1 ||
+          (region.scrollHeight > region.clientHeight + 1 && bulletinLayout3ContentOverflows_(region))) {
           var side = region.closest(".central-bulletin-panel-back") ? "Back" : "Front";
           problems.push(side + ": " + region.getAttribute("data-b3-region"));
         }

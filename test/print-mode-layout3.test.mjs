@@ -133,7 +133,11 @@ function fallbackSaveContext(adminState) {
   return {context, effects};
 }
 
-function measureLayout3({regions = [], usage = {front: 0, back: 0}} = {}) {
+function measureLayout3({
+  regions = [],
+  usage = {front: 0, back: 0},
+  documentOverrides = {},
+} = {}) {
   let removed = false;
   let appended = false;
   const holder = {
@@ -151,9 +155,17 @@ function measureLayout3({regions = [], usage = {front: 0, back: 0}} = {}) {
   );
   const context = loadFunctions([
     "packBulletinLayout3Back_",
+    "bulletinLayout3ContentOverflows_",
     "measureBulletinLayout3Fit_",
   ], {
-    document: {createElement: () => holder},
+    document: Object.assign({
+      createElement: () => holder,
+      createTreeWalker: () => ({nextNode: () => null}),
+      createRange: () => ({
+        selectNodeContents() {},
+        getClientRects: () => [],
+      }),
+    }, documentOverrides),
     appEl: {appendChild(node) {
       assert.equal(node, holder);
       appended = true;
@@ -166,6 +178,51 @@ function measureLayout3({regions = [], usage = {front: 0, back: 0}} = {}) {
   assert.equal(appended, true);
   assert.equal(removed, true);
   return result;
+}
+
+function layout3ContentOverflowContext({textRects = [], imageRects = []} = {}) {
+  const textNodes = textRects.map((rects) => ({
+    nodeValue: "Visible copy",
+    rects,
+  }));
+  const images = imageRects.map((rect) => ({
+    getBoundingClientRect: () => rect,
+  }));
+  const region = {
+    clientTop: 2,
+    clientHeight: 96,
+    getBoundingClientRect: () => ({top: 100, bottom: 200}),
+    querySelectorAll(selector) {
+      assert.equal(selector, "img, svg, canvas");
+      return images;
+    },
+  };
+  const context = loadFunctions(["bulletinLayout3ContentOverflows_"], {
+    document: {
+      createTreeWalker(root, whatToShow) {
+        assert.equal(root, region);
+        assert.equal(whatToShow, 4);
+        let index = 0;
+        return {
+          nextNode() {
+            return textNodes[index++] || null;
+          },
+        };
+      },
+      createRange() {
+        let selectedNode = null;
+        return {
+          selectNodeContents(node) {
+            selectedNode = node;
+          },
+          getClientRects() {
+            return selectedNode.rects;
+          },
+        };
+      },
+    },
+  });
+  return {context, region};
 }
 
 test("client and backend normalize Layout 3 keys and limits consistently", () => {
@@ -775,11 +832,101 @@ test("Layout 3 fit measurement catches back overflow without false positives", (
     clientWidth: 200,
     closest: () => ({}),
     getAttribute: () => "Event card",
+    clientTop: 0,
+    getBoundingClientRect: () => ({top: 0, bottom: 100}),
+    querySelectorAll: () => [],
   };
   const overflow = measureLayout3({regions: [overflowingBackRegion]});
   assert.equal(overflow.fits, false);
   assert.equal(overflow.overflow, 1);
   assert.match(overflow.message, /Back: Event card/);
+});
+
+test("Layout 3 ignores clipped trailing card and hero padding when content fits", () => {
+  for (const [name, scrollHeight, clientHeight, contentBottom] of [
+    ["hero", 245, 239, 333],
+    ["card", 198, 192, 287],
+  ]) {
+    const {context, region} = layout3ContentOverflowContext({
+      textRects: [[{
+        top: 120,
+        bottom: contentBottom,
+        width: 100,
+        height: contentBottom - 120,
+      }]],
+    });
+    region.clientHeight = clientHeight;
+    assert.equal(
+        context.bulletinLayout3ContentOverflows_(region),
+        false,
+        `${name} content should fit despite ${scrollHeight - clientHeight}px of trailing padding`,
+    );
+  }
+});
+
+test("Layout 3 preflight permits a region whose only scroll overflow is padding", () => {
+  const textNode = {nodeValue: "Visible copy", rects: [{
+    top: 120,
+    bottom: 287,
+    width: 100,
+    height: 167,
+  }]};
+  const region = {
+    scrollHeight: 198,
+    clientHeight: 192,
+    scrollWidth: 200,
+    clientWidth: 200,
+    clientTop: 2,
+    closest: () => null,
+    getAttribute: () => "Padded card",
+    getBoundingClientRect: () => ({top: 100, bottom: 292}),
+    querySelectorAll: () => [],
+  };
+  const result = measureLayout3({
+    regions: [region],
+    documentOverrides: {
+      createTreeWalker: () => {
+        let used = false;
+        return {nextNode: () => (used ? null : (used = true, textNode))};
+      },
+      createRange: () => ({
+        selectNodeContents() {},
+        getClientRects: () => textNode.rects,
+      }),
+    },
+  });
+  assert.equal(result.fits, true);
+});
+
+test("Layout 3 blocks text or image content clipped beyond a region", () => {
+  const text = layout3ContentOverflowContext({
+    textRects: [[{top: 120, bottom: 201, width: 100, height: 81}]],
+  });
+  assert.equal(text.context.bulletinLayout3ContentOverflows_(text.region), true);
+
+  const image = layout3ContentOverflowContext({
+    imageRects: [{top: 120, bottom: 201, width: 100, height: 81}],
+  });
+  assert.equal(image.context.bulletinLayout3ContentOverflows_(image.region), true);
+});
+
+test("Layout 3 treats unmeasurable vertical overflow as unsafe", () => {
+  const {context, region} = layout3ContentOverflowContext();
+  assert.equal(context.bulletinLayout3ContentOverflows_(region), true);
+});
+
+test("Layout 3 retains the strict horizontal overflow check", () => {
+  const region = {
+    scrollHeight: 100,
+    clientHeight: 100,
+    scrollWidth: 203,
+    clientWidth: 200,
+    closest: () => null,
+    getAttribute: () => "Wide title",
+  };
+  const result = measureLayout3({regions: [region]});
+  assert.equal(result.fits, false);
+  assert.match(result.message, /Front: Wide title/);
 });
 
 test("Readable events retain the familiar checked and disabled card UI", () => {

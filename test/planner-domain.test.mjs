@@ -13,6 +13,7 @@ import {
   evaluateCapacity,
   generateCampaignSchedule,
   groupCalendarCampaignDays,
+  isCampaignExpired,
   nextPlanningWeekStart,
   recommendSmuggleOpportunities,
   recurringContentDates,
@@ -45,6 +46,70 @@ function campaign(overrides = {}) {
     ...overrides,
   };
 }
+
+test("campaign expiry honors an explicit campaign end date over legacy scheduling fields", () => {
+  const value = campaign({
+    eventDate: "2026-10-17",
+    durationWeeks: 2,
+    campaignEndDate: "2026-10-31",
+  });
+
+  assert.equal(isCampaignExpired(value, new Date("2026-10-30T18:00:00-05:00")), false);
+  assert.equal(isCampaignExpired(value, new Date("2026-11-01T12:00:00-06:00")), true);
+});
+
+test("campaign expiry keeps campaigns visible through their end day in Chicago", () => {
+  const value = campaign({campaignEndDate: "2026-11-01"});
+
+  // The fall-back transition has already occurred: 05:59Z is 11:59 PM CST on Nov. 1.
+  assert.equal(isCampaignExpired(value, new Date("2026-11-02T05:59:00.000Z")), false);
+  assert.equal(isCampaignExpired(value, new Date("2026-11-02T06:00:00.000Z")), true);
+
+  const daylightValue = campaign({campaignEndDate: "2026-03-08"});
+  // The spring-forward transition has already occurred: 04:59Z is 11:59 PM CDT on Mar. 8.
+  assert.equal(isCampaignExpired(daylightValue, new Date("2026-03-09T04:59:00.000Z")), false);
+  assert.equal(isCampaignExpired(daylightValue, new Date("2026-03-09T05:00:00.000Z")), true);
+});
+
+test("campaign expiry falls back to the legacy event window when no end is stored", () => {
+  const legacyCampaign = campaign({
+    eventDate: "2026-10-17",
+    durationWeeks: 4,
+  });
+
+  assert.equal(isCampaignExpired(legacyCampaign, new Date("2026-10-16T12:00:00-05:00")), false);
+  assert.equal(isCampaignExpired(legacyCampaign, new Date("2026-10-17T12:00:00-05:00")), true);
+
+  const blankLegacyEnd = campaign({eventDate: "2026-10-17", campaignEndDate: ""});
+  assert.equal(isCampaignExpired(blankLegacyEnd, new Date("2026-10-17T12:00:00-05:00")), true);
+});
+
+test("campaign expiry ignores malformed or absent dates and leaves the campaign unchanged", () => {
+  const values = [
+    campaign({campaignEndDate: "not-a-date"}),
+    campaign({campaignEndDate: "2026-02-30"}),
+    campaign({campaignEndDate: "", eventDate: "not-a-date"}),
+    campaign({campaignEndDate: undefined, eventDate: "not-a-date"}),
+    campaign({campaignEndDate: undefined, eventDate: undefined}),
+  ];
+
+  values.forEach((value) => {
+    const before = structuredClone(value);
+    assert.equal(isCampaignExpired(value, new Date("2026-12-01T12:00:00-06:00")), false);
+    assert.deepEqual(value, before);
+  });
+});
+
+test("campaign expiry follows a recurrence's moved actual end rather than its immutable occurrence key", () => {
+  const movedOccurrence = campaign({
+    occurrenceKey: "2026-10-17",
+    eventDate: "2026-11-15",
+    campaignEndDate: "2026-11-14",
+  });
+
+  assert.equal(isCampaignExpired(movedOccurrence, new Date("2026-11-14T12:00:00-06:00")), false);
+  assert.equal(isCampaignExpired(movedOccurrence, new Date("2026-11-15T12:00:00-06:00")), true);
+});
 
 test("report date presets follow the upcoming planning Sunday", () => {
   const reference = new Date("2026-08-16T12:00:00-05:00");

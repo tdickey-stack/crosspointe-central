@@ -135,6 +135,19 @@ export function campaignWindow(eventDate, durationWeeks) {
   };
 }
 
+export function isCampaignExpired(campaign, now = new Date()) {
+  try {
+    // Older campaigns derive their end date from the event's promotion window.
+    const endDate = campaign?.campaignEndDate
+      ? Temporal.PlainDate.from(campaign.campaignEndDate).toString()
+      : campaignWindow(Temporal.PlainDate.from(campaign?.eventDate).toString(), campaign?.durationWeeks).campaignEndDate;
+    return endDate < dateKey(now);
+  } catch (_error) {
+    // Keep incomplete records visible so they can still be repaired.
+    return false;
+  }
+}
+
 export function calculateTimeliness({eventDate, durationWeeks, submittedAt}) {
   const {recommendedStartDate} = campaignWindow(eventDate, durationWeeks);
   const submittedDate = dateKey(submittedAt);

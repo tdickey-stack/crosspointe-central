@@ -23,6 +23,7 @@ import {
   evaluateCapacity,
   generateCampaignSchedule,
   groupCalendarCampaignDays,
+  isCampaignExpired,
   nextPlanningWeekStart,
   recommendSmuggleOpportunities,
   recurringContentDates,
@@ -1077,20 +1078,39 @@ function FilterSelect({label, value, onChange, options}) {
   );
 }
 
+function useBusinessDate() {
+  const [today, setToday] = useState(() => dateKey(new Date()));
+  useEffect(() => {
+    const refresh = () => setToday(dateKey(new Date()));
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    refresh();
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+  return today;
+}
+
 function CampaignsView({workspace, onNewCampaign, onOpenCampaign, onEditSeries, canEdit}) {
   const [expandedSeries, setExpandedSeries] = useState(() => new Set());
+  const today = useBusinessDate();
+  const campaigns = workspace.campaigns.filter((campaign) => !isCampaignExpired(campaign, today));
   const series = (workspace.campaignSeries || []).filter((item) => item && item.id);
   const seriesIds = new Set(series.map((item) => item.id));
-  const oneOffs = workspace.campaigns
+  const oneOffs = campaigns
     .filter((campaign) => !isStandaloneContent(campaign) && (!campaign.seriesId || !seriesIds.has(campaign.seriesId)))
     .sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate)));
-  const today = dateKey(new Date());
   const seriesRows = series.map((item) => {
-    const occurrences = workspace.campaigns.filter((campaign) => campaign.seriesId === item.id)
+    const occurrences = campaigns.filter((campaign) => campaign.seriesId === item.id)
       .sort((left, right) => occurrenceDate(left).localeCompare(occurrenceDate(right)));
     const upcoming = occurrences.find((campaign) => occurrenceDate(campaign) >= today && campaign.status !== "archived") || occurrences.at(-1);
     return {series: item, occurrences, upcoming};
-  }).sort((left, right) => occurrenceDate(left.upcoming).localeCompare(occurrenceDate(right.upcoming)));
+  }).filter((row) => row.occurrences.length || row.series.saveState === "saving")
+    .sort((left, right) => occurrenceDate(left.upcoming).localeCompare(occurrenceDate(right.upcoming)));
   const hasCampaigns = seriesRows.length || oneOffs.length;
   return (
     <>
@@ -1134,7 +1154,7 @@ function CampaignsView({workspace, onNewCampaign, onOpenCampaign, onEditSeries, 
               );
             })}
           </div>
-        ) : <EmptyState title="No campaigns yet" copy="Create the first campaign to generate an explainable schedule." action={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>New campaign</button>} />}
+        ) : <EmptyState title="No current campaigns" copy="Campaigns leave this list after their end date. Create a new campaign to plan upcoming promotions." action={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>New campaign</button>} />}
       </section>
     </>
   );

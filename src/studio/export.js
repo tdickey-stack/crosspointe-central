@@ -52,7 +52,7 @@ function getLayoutSignature(elements) {
         )
         .join(",");
       const fittedText = Array.from(
-        element.querySelectorAll("[data-auto-fit-lines]"),
+        element.querySelectorAll("[data-auto-fit-lines], [data-auto-fit-scale]"),
       )
         .map((textElement) => {
           const textBounds = textElement.getBoundingClientRect();
@@ -224,6 +224,8 @@ async function renderExactPng(
   await waitForPreparedBrandMarks(element);
   await waitForRenderedImages(element);
   await waitForStableLayout([element]);
+  const layoutError = element.querySelector("[data-studio-layout-error]")?.dataset.studioLayoutError;
+  if (layoutError) throw new Error(layoutError);
   const bounds = element.getBoundingClientRect();
   if (!bounds.width || !bounds.height) {
     throw new Error("The Studio preview has no measurable export size.");

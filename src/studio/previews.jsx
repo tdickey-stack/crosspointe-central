@@ -1514,7 +1514,89 @@ function SocialPostContent({
   onEditField,
   usesDarkCopy,
   usesLogoHero,
+  simpleStatement = false,
+  onLayoutWarning,
 }) {
+  const layoutRef = useRef(null);
+  const warningCallback = useRef(onLayoutWarning);
+  warningCallback.current = onLayoutWarning;
+  useLayoutEffect(() => {
+    if (!simpleStatement || !layoutRef.current) return undefined;
+    const root = layoutRef.current;
+    let frame = 0;
+    let disposed = false;
+    const fit = () => {
+      frame = 0;
+      if (disposed) return;
+      const overflowing = [];
+      root.querySelectorAll("[data-statement-fit]").forEach((slot) => {
+        const element = slot.firstElementChild;
+        if (!element) return;
+        element.style.removeProperty("font-size");
+        element.dataset.autoFitScale = "1";
+        if (
+          !element.textContent.trim() ||
+          element.classList.contains("is-optional-hidden")
+        ) return;
+        const baseSize = Number.parseFloat(window.getComputedStyle(element).fontSize);
+        const bounds = slot.getBoundingClientRect();
+        if (!baseSize || !bounds.width || !bounds.height) return;
+        const fits = () => {
+          const textBounds = element.getBoundingClientRect();
+          return (
+            textBounds.height <= bounds.height + 0.5 &&
+            element.scrollWidth <= bounds.width + 1
+          );
+        };
+        if (fits()) return;
+        // Preserve the approved size until it no longer fits. Stop at 70%
+        // rather than making dense slides unreadably small.
+        const floor = 0.7;
+        element.style.fontSize = `${baseSize * floor}px`;
+        let lower = floor;
+        let upper = 1;
+        if (fits()) {
+          for (let step = 0; step < 10; step += 1) {
+            const scale = (lower + upper) / 2;
+            element.style.fontSize = `${baseSize * scale}px`;
+            if (fits()) lower = scale;
+            else upper = scale;
+          }
+        }
+        const scale = Math.floor(lower * 1000) / 1000;
+        element.style.fontSize = `${baseSize * scale}px`;
+        element.dataset.autoFitScale = String(scale);
+        if (!fits()) overflowing.push(slot.dataset.statementFit);
+      });
+      const warning = overflowing.length
+        ? `Shorten ${overflowing.join(" and ")} or remove extra line breaks to fit this slide.`
+        : "";
+      if (warning) root.dataset.studioLayoutError = warning;
+      else delete root.dataset.studioLayoutError;
+      warningCallback.current?.(warning);
+    };
+    const schedule = () => {
+      if (disposed) return;
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(fit);
+    };
+    const observer = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(schedule);
+    observer?.observe(root);
+    root.querySelectorAll("[data-statement-fit]").forEach((slot) => {
+      observer?.observe(slot);
+    });
+    root.addEventListener("input", schedule);
+    fit();
+    document.fonts?.ready.then(schedule).catch(() => {});
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      root.removeEventListener("input", schedule);
+    };
+  }, [simpleStatement, content, editorMode]);
   const editableProps = {
     editorMode,
     fieldOptions: SOCIAL_EDITABLE_FIELDS,
@@ -1522,50 +1604,84 @@ function SocialPostContent({
     onSelectField,
     selectedField,
   };
+  const eyebrow = (
+    <EditableEventText
+      as="span"
+      className="event-eyebrow social-post-eyebrow"
+      field="eyebrow"
+      visible={content.eyebrowVisible !== false}
+      {...editableProps}
+    >
+      {content.eyebrow}
+    </EditableEventText>
+  );
+  const message = usesLogoHero ? (
+    <div className="event-hero-logo-wrap social-post-hero-logo-wrap">
+      {content.heroLogo ? (
+        <EventHeroLogo source={content.heroLogo} name={content.heroLogoName} />
+      ) : (
+        <span className="event-hero-logo-placeholder">Choose a hero logo</span>
+      )}
+    </div>
+  ) : (
+    <EditableEventText
+      as="h2"
+      className="social-post-title"
+      field="title"
+      {...editableProps}
+    >
+      {content.title}
+    </EditableEventText>
+  );
+  const attribution = (
+    <EditableEventText
+      as="p"
+      className="social-post-attribution"
+      field="subtitle"
+      visible={content.subtitleVisible !== false}
+      {...editableProps}
+    >
+      {content.subtitle}
+    </EditableEventText>
+  );
+  const hasAttribution =
+    content.subtitleVisible !== false && hasText(content.subtitle);
+  const footerText = content.cta ? (
+    <EditableEventText as="span" field="cta" {...editableProps}>
+      {content.cta}
+    </EditableEventText>
+  ) : null;
   return (
-    <div className="event-graphic-layout social-post-layout">
-      <div className="event-graphic-copy social-post-copy">
-        <EditableEventText
-          as="span"
-          className="event-eyebrow social-post-eyebrow"
-          field="eyebrow"
-          visible={content.eyebrowVisible !== false}
-          {...editableProps}
-        >
-          {content.eyebrow}
-        </EditableEventText>
-        {usesLogoHero ? (
-          <div className="event-hero-logo-wrap social-post-hero-logo-wrap">
-            {content.heroLogo ? (
-              <EventHeroLogo
-                source={content.heroLogo}
-                name={content.heroLogoName}
-              />
-            ) : (
-              <span className="event-hero-logo-placeholder">
-                Choose a hero logo
-              </span>
-            )}
-          </div>
+    <div ref={layoutRef} className="event-graphic-layout social-post-layout">
+      <div
+        className={`event-graphic-copy social-post-copy${
+          simpleStatement && hasAttribution ? " has-statement-attribution" : ""
+        }`}
+      >
+        {simpleStatement ? (
+          <>
+            <div
+              className="simple-statement-eyebrow-slot"
+              data-statement-fit="the context label"
+            >
+              {eyebrow}
+            </div>
+            <div
+              className="simple-statement-message-slot"
+              data-statement-fit={usesLogoHero ? undefined : "the main text"}
+            >
+              {message}
+            </div>
+            <div
+              className="simple-statement-attribution-slot"
+              data-statement-fit={hasAttribution ? "the supporting text" : undefined}
+            >
+              {attribution}
+            </div>
+          </>
         ) : (
-          <EditableEventText
-            as="h2"
-            className="social-post-title"
-            field="title"
-            {...editableProps}
-          >
-            {content.title}
-          </EditableEventText>
+          <>{eyebrow}{message}{attribution}</>
         )}
-        <EditableEventText
-          as="p"
-          className="social-post-attribution"
-          field="subtitle"
-          visible={content.subtitleVisible !== false}
-          {...editableProps}
-        >
-          {content.subtitle}
-        </EditableEventText>
       </div>
       <footer className="event-graphic-footer social-post-footer">
         <BrandMark
@@ -1573,15 +1689,11 @@ function SocialPostContent({
           color={content.brandColor}
           usesDarkCopy={usesDarkCopy}
         />
-        {content.cta ? (
-          <EditableEventText
-            as="span"
-            field="cta"
-            {...editableProps}
-          >
-            {content.cta}
-          </EditableEventText>
-        ) : null}
+        {simpleStatement && footerText ? (
+          <div className="simple-statement-footer-slot" data-statement-fit="the footer text">
+            {footerText}
+          </div>
+        ) : footerText}
       </footer>
     </div>
   );
@@ -1695,6 +1807,7 @@ export function EventPreview({
   selectedField = "",
   onSelectField = () => {},
   onEditField = () => {},
+  onLayoutWarning,
 }) {
   const template = getTemplateById(templateId);
   const isSocial = template.kind === "social";
@@ -1848,6 +1961,8 @@ export function EventPreview({
           onEditField={onEditField}
           usesDarkCopy={usesDarkCopy}
           usesLogoHero={usesLogoHero}
+          simpleStatement={template.variant === "simple-statement"}
+          onLayoutWarning={onLayoutWarning}
         />
       ) : (
       <div className="event-graphic-layout">

@@ -5450,12 +5450,12 @@ function EventStudioEditor({
     useCreativeFilenamePreference();
   const [exportState, setExportState] = useState({status: "", message: ""});
   const [activeSlideId, setActiveSlideId] = useState("primary");
+  const [layoutWarnings, setLayoutWarnings] = useState({});
   const eventExportRefs = useRef(new Map());
   const latestProjectRef = useRef(project);
   latestProjectRef.current = project;
   const workspacePanelFrameRef = useRef(null);
   const workspacePanelTimerRef = useRef(null);
-  const warnings = getProjectWarnings(project);
   const template = getTemplateById(project.templateId);
   const isSocial = template.kind === "social";
   const isCarousel = isSocial && project.postMode === "carousel";
@@ -5463,6 +5463,15 @@ function EventStudioEditor({
   const exportSlides = isCarousel
     ? slides
     : [{id: "primary", content: project.content}];
+  const warnings = [
+    ...getProjectWarnings(project),
+    ...(template.variant === "simple-statement"
+      ? exportSlides.flatMap((slide, index) => {
+          const warning = layoutWarnings[`${project.id}:${slide.id}`];
+          return warning ? [`${isCarousel ? `Slide ${index + 1}: ` : ""}${warning}`] : [];
+        })
+      : []),
+  ];
   const activeSlide = isCarousel
     ? slides.find((slide) => slide.id === activeSlideId) || slides[0]
     : slides[0];
@@ -6029,6 +6038,14 @@ function EventStudioEditor({
               else eventExportRefs.current.delete(slide.id);
             }}
             templateId={project.templateId}
+            onLayoutWarning={(warning) => {
+              const key = `${project.id}:${slide.id}`;
+              setLayoutWarnings((current) =>
+                (current[key] || "") === warning
+                  ? current
+                  : {...current, [key]: warning},
+              );
+            }}
           />
         ))}
       </div>

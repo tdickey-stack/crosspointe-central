@@ -76,6 +76,7 @@ functions/.secret.local
 
 # Local Central Studio prototype generations
 output/studio/
+output/simple-statement-audit/
 
 # OS files
 .DS_Store

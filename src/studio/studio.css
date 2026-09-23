@@ -3715,6 +3715,70 @@ a {
   font-size: 0.51rem;
 }
 
+.studio-event-canvas-region.has-hidden-text {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.studio-hidden-text-controls {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-self: stretch;
+  gap: 8px;
+  margin: 56px 18px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--studio-line);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--studio-charcoal);
+  font-size: 0.75rem;
+}
+
+.studio-hidden-text-controls > span {
+  color: var(--studio-muted);
+  font-weight: 750;
+}
+
+.studio-hidden-text-controls > button {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--studio-line);
+  border-radius: 8px;
+  background: var(--studio-soft);
+  color: inherit;
+  font: inherit;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-hidden-text-controls > button:hover,
+.studio-hidden-text-controls > button:focus-visible {
+  border-color: var(--studio-red);
+  outline: 2px solid var(--studio-red);
+  outline-offset: 2px;
+}
+
+.studio-event-canvas-region.has-hidden-text .studio-event-canvas-stage {
+  container-type: size;
+  padding-top: 16px;
+}
+
+.has-hidden-text .studio-event-canvas-stage.is-square .studio-event-graphic {
+  width: min(70vh, 100%, 720px, 100cqh);
+}
+
+.has-hidden-text .studio-event-canvas-stage.is-portrait .studio-event-graphic {
+  width: min(55vh, 100%, 610px, 80cqh);
+}
+
+.has-hidden-text .studio-event-canvas-stage.is-screen .studio-event-graphic {
+  width: min(108vh, 100%, 980px, 177.77cqh);
+}
+
 .studio-event-canvas-stage {
   position: relative;
   z-index: 2;
@@ -4714,29 +4778,6 @@ a {
   text-transform: inherit;
 }
 
-.studio-event-graphic.is-editor-canvas
-  .event-optional-field.is-optional-hidden {
-  width: 0 !important;
-  min-width: 0;
-  max-width: 0;
-  height: 0;
-  min-height: 0;
-  max-height: 0;
-  margin: 0 !important;
-  padding: 0 !important;
-  border-color: transparent !important;
-  background: transparent !important;
-  overflow: visible;
-}
-
-.studio-event-graphic.is-editor-canvas
-  .event-optional-field.is-optional-hidden
-  > .event-editable-field {
-  opacity: 0;
-  pointer-events: none;
-  user-select: none;
-}
-
 .event-field-visibility-toggle {
   position: absolute;
   z-index: 8;
@@ -4781,18 +4822,6 @@ a {
     0 0.45cqw 1.5cqw rgba(24, 24, 27, 0.22);
   opacity: 1;
   transform: translate(-68%, -68%) scale(1.06);
-}
-
-.event-optional-field.is-optional-hidden
-  > .event-field-visibility-toggle {
-  opacity: 0;
-}
-
-.event-optional-field.is-optional-hidden:hover
-  > .event-field-visibility-toggle,
-.event-optional-field.is-optional-hidden
-  > .event-field-visibility-toggle:focus-visible {
-  opacity: 1;
 }
 
 .studio-event-graphic.is-editor-canvas .event-editable-field:hover {

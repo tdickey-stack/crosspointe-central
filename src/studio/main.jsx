@@ -5476,6 +5476,14 @@ function EventStudioEditor({
     ? slides.find((slide) => slide.id === activeSlideId) || slides[0]
     : slides[0];
   const activeContent = activeSlide?.content || project.content;
+  const textFieldOptions = template.variant === "small-group-leader"
+    ? SMALL_GROUP_TEXT_FIELD_OPTIONS
+    : isSocial
+      ? SOCIAL_TEXT_FIELD_OPTIONS
+      : EVENT_TEXT_FIELD_OPTIONS;
+  const hiddenTextFields = ["eyebrow", "subtitle"].filter(
+    (field) => activeContent[`${field}Visible`] === false,
+  );
   const activeSlideIndex = slides.findIndex(
     (slide) => slide.id === activeSlide?.id,
   );
@@ -5957,7 +5965,7 @@ function EventStudioEditor({
         </div>
 
         <section
-          className={`studio-event-canvas-region${isCarousel ? " has-carousel-rail" : ""}`}
+          className={`studio-event-canvas-region${isCarousel ? " has-carousel-rail" : ""}${hiddenTextFields.length ? " has-hidden-text" : ""}`}
           onPointerDownCapture={() => setMenuOpen(false)}
         >
           <div className="studio-event-canvas-meta">
@@ -5968,6 +5976,24 @@ function EventStudioEditor({
             ) : null}
             <p>Click any text to edit it. Template positions remain fixed.</p>
           </div>
+          {hiddenTextFields.length ? (
+            <div className="studio-hidden-text-controls" role="group" aria-label="Hidden text">
+              <span>Hidden text</span>
+              {hiddenTextFields.map((field) => (
+                <button
+                  key={field}
+                  type="button"
+                  onClick={() => {
+                    updateContent({[`${field}Visible`]: true});
+                    setSelectedField(field);
+                    setActivePanel("");
+                  }}
+                >
+                  Show {textFieldOptions[field].label.toLowerCase()}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {isCarousel ? (
             <SocialCarouselRail
               slides={slides}

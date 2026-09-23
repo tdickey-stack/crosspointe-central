@@ -1234,12 +1234,11 @@ const SOCIAL_EDITABLE_FIELDS = {
   cta: {label: "Footer text", maximum: 44},
 };
 
-function VisibilityEyeIcon({hidden}) {
+function VisibilityEyeIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M2.5 12s3.4-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.4 5.5-9.5 5.5S2.5 12 2.5 12Z" />
       <circle cx="12" cy="12" r="2.6" />
-      {hidden ? <path d="m4 4 16 16" /> : null}
     </svg>
   );
 }
@@ -1367,8 +1366,11 @@ function EditableEventText({
     editorMode,
   ]);
 
+  // Restore hidden fields from the editor controls outside the artwork.
+  if (isOptionalHidden) return null;
+
   if (!editorMode) {
-    if (isOptionalEmpty || isOptionalHidden) return null;
+    if (isOptionalEmpty) return null;
     return (
       <Tag
         ref={textRef}
@@ -1400,25 +1402,22 @@ function EditableEventText({
       ]
         .filter(Boolean)
         .join(" ")}
-      contentEditable={!isOptionalHidden}
+      contentEditable
       suppressContentEditableWarning
-      spellCheck={!isOptionalHidden}
-      role={isOptionalHidden ? undefined : "textbox"}
-      aria-hidden={isOptionalHidden || undefined}
-      aria-label={isOptionalHidden ? undefined : `Edit ${config.label}`}
-      aria-multiline={
-        !isOptionalHidden && config.multiline ? true : undefined
-      }
+      spellCheck
+      role="textbox"
+      aria-label={`Edit ${config.label}`}
+      aria-multiline={config.multiline ? true : undefined}
       data-event-field={field}
       data-placeholder={config.label}
       onClick={(event) => {
         event.stopPropagation();
-        if (!isOptionalHidden) onSelectField(field);
+        onSelectField(field);
       }}
       onFocus={() => {
-        if (!isOptionalHidden) onSelectField(field);
+        onSelectField(field);
       }}
-      onBlur={isOptionalHidden ? undefined : commitValue}
+      onBlur={commitValue}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.currentTarget.blur();
@@ -1440,27 +1439,25 @@ function EditableEventText({
           className,
           "event-optional-field",
           isOptionalEmpty ? "is-optional-empty" : "",
-          isOptionalHidden ? "is-optional-hidden" : "",
         ]
           .filter(Boolean)
           .join(" ")}
         data-event-field={field}
-        data-field-visible={!isOptionalHidden ? "true" : "false"}
+        data-field-visible="true"
       >
         {editableText}
         <button
           className="event-field-visibility-toggle"
           type="button"
-          aria-label={`${isOptionalHidden ? "Show" : "Hide"} ${config.label}`}
-          aria-pressed={!isOptionalHidden}
-          title={`${isOptionalHidden ? "Show" : "Hide"} ${config.label}`}
+          aria-label={`Hide ${config.label}`}
+          title={`Hide ${config.label}`}
           onClick={(event) => {
             event.stopPropagation();
-            onEditField(`${field}Visible`, isOptionalHidden);
-            onSelectField(isOptionalHidden ? field : "");
+            onEditField(`${field}Visible`, false);
+            onSelectField("");
           }}
         >
-          <VisibilityEyeIcon hidden={isOptionalHidden} />
+          <VisibilityEyeIcon />
         </button>
       </Tag>
     );
@@ -1534,10 +1531,7 @@ function SocialPostContent({
         if (!element) return;
         element.style.removeProperty("font-size");
         element.dataset.autoFitScale = "1";
-        if (
-          !element.textContent.trim() ||
-          element.classList.contains("is-optional-hidden")
-        ) return;
+        if (!element.textContent.trim()) return;
         const baseSize = Number.parseFloat(window.getComputedStyle(element).fontSize);
         const bounds = slot.getBoundingClientRect();
         if (!baseSize || !bounds.width || !bounds.height) return;

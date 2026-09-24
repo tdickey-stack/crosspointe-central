@@ -4,9 +4,11 @@ import {createRoot} from "react-dom/client";
 import {flushSync} from "react-dom";
 import {getGraphicTextFields} from "./text-fields.js";
 import {createLatestRequest, readStudioImage} from "./uploads.js";
-import {DOCUMENT_FIELD_LIMITS} from "./document-fields.js";
+import {DOCUMENT_FIELD_LIMITS, DOCUMENT_LINE_LIST_LIMITS} from "./document-fields.js";
+import {StudioConflictMessage} from "./conflict-message.jsx";
 import {markStudioProjectPending, applyStudioSaveSuccess, applyStudioSaveFailure, reconcileStudioProjects, createStudioSaveCoordinator} from "./save-coordinator.js";
-const loadStudioExports = () => import("./export.js");
+import {createStudioBrowserCache} from "./browser-cache.js";
+import {loadStudioExports} from "./export-loader.js";
 const waitForPreviewMount = (timeoutMs = 8000) => new Promise((resolve, reject) => {
   let settled = false;
   const timeout = window.setTimeout(() => {
@@ -376,6 +378,10 @@ function browserProjectIdentity(project) {
   );
 }
 
+function browserProjectKey(project) {
+  return `${browserProjectIdentity(project)}:${project.id}:${project._studioSync?.changeId || ""}`;
+}
+
 function isRecoverableBrowserProject(project, actorUid) {
   const identity = browserProjectIdentity(project);
   return identity === "unattributed" || identity === actorUid;
@@ -392,7 +398,7 @@ function dedupeBrowserProjects(projects, {includeIdentity = true} = {}) {
   for (const project of projects) {
     if (!project?.id) continue;
     const key = includeIdentity
-      ? `${browserProjectIdentity(project)}:${project.id}`
+      ? browserProjectKey(project)
       : project.id;
     byKey.set(key, byKey.has(key) ? newerProject(byKey.get(key), project) : project);
   }
@@ -431,6 +437,7 @@ function recoveredProjectCopy(project) {
   recovered.shared = false;
   delete recovered.ownerUid;
   delete recovered._studioSync;
+  delete recovered._cloudRevision;
 
   const clearProjectAssets = (content) => {
     if (!content) return;
@@ -1046,12 +1053,14 @@ function LineListField({
       onChange={(nextValue) =>
         onChange({
           draftValue: nextValue,
-          items: textToLines(nextValue, maximum),
+          items: textToLines(nextValue),
         })
       }
       rows={rows}
       maxLength={maxLength}
-      hint={hint}
+      hint={maximum && textToLines(value).length > maximum
+        ? `This layout supports ${maximum} items. Remove the extra lines before exporting.`
+        : hint}
     />
   );
 }
@@ -2473,7 +2482,7 @@ function OnePagerInspector({content, updateContent}) {
           onChange={({draftValue, items}) =>
             updateContent({primaryItemsText: draftValue, primaryItems: items})
           }
-          maximum={7}
+          maximum={DOCUMENT_LINE_LIST_LIMITS["document-one-pager"].primaryItems.maximum}
           rows={7}
           hint="One item per line; up to 7 items."
         />
@@ -2500,7 +2509,7 @@ function OnePagerInspector({content, updateContent}) {
               secondaryItems: items,
             })
           }
-          maximum={7}
+          maximum={DOCUMENT_LINE_LIST_LIMITS["document-one-pager"].secondaryItems.maximum}
           rows={7}
           hint="One item per line; up to 7 items."
         />
@@ -2524,7 +2533,7 @@ function OnePagerInspector({content, updateContent}) {
           onChange={({draftValue, items}) =>
             updateContent({ownerItemsText: draftValue, ownerItems: items})
           }
-          maximum={3}
+          maximum={DOCUMENT_LINE_LIST_LIMITS["document-one-pager"].ownerItems.maximum}
           rows={5}
           hint="Exactly three concise responsibilities work best."
         />
@@ -2551,7 +2560,7 @@ function OnePagerInspector({content, updateContent}) {
           onChange={({draftValue, items}) =>
             updateContent({processStepsText: draftValue, processSteps: items})
           }
-          maximum={8}
+          maximum={DOCUMENT_LINE_LIST_LIMITS["document-one-pager"].processSteps.maximum}
           rows={6}
           hint="One short process step per line; up to 8 steps."
         />
@@ -5569,6 +5578,7 @@ function StudioApp() {
   const [cloudMessage, setCloudMessage] = useState("");
   const [projectSessionUid, setProjectSessionUid] = useState("");
   const coordinatorRef = useRef(null);
+  const browserCacheRef = useRef(null);
   const storageKeyRef = useRef("");
   const recoveryProjectsRef = useRef([]);
   const projectsRef = useRef(projects);
@@ -5577,12 +5587,15 @@ function StudioApp() {
   const [exportBusy, setExportBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [cloudLoading, setCloudLoading] = useState(false);
+  const [resolvingConflict, setResolvingConflict] = useState(false);
   const replaceProjects = (next) => {
+    const previous = projectsRef.current;
     projectsRef.current = next;
     setProjects(next);
     if (!storageKeyRef.current) return true;
     try {
-      persistProjects(next, storageKeyRef.current);
+      if (browserCacheRef.current) browserCacheRef.current.write(next, previous);
+      else persistProjects(next, storageKeyRef.current);
       return true;
     } catch (error) {
       setCloudMessage("Browser storage is full or unavailable. Keep Studio open until Central finishes syncing.");
@@ -5631,7 +5644,12 @@ function StudioApp() {
     if (authState.status !== "ready" || cloud) return undefined;
     const actorUid = authState.user.uid;
     storageKeyRef.current = STUDIO_STORAGE_KEY;
-    const browserProjects = loadProjects(STUDIO_STORAGE_KEY);
+    const browserCache = createStudioBrowserCache({storage: localStorage, key: STUDIO_STORAGE_KEY,
+      actorUid, prepare: prepareProjectForStorage, migrate: migrateLegacyStudioProject});
+    browserCacheRef.current = browserCache;
+    let browserProjects;
+    try { browserProjects = browserCache.read().projects; }
+    catch { browserProjects = loadProjects(STUDIO_STORAGE_KEY); }
     projectsRef.current = browserProjects;
     setProjects(browserProjects);
     setProjectSessionUid(actorUid);
@@ -5639,6 +5657,7 @@ function StudioApp() {
     return () => {
       if (storageKeyRef.current === STUDIO_STORAGE_KEY) {
         storageKeyRef.current = "";
+        browserCacheRef.current = null;
       }
     };
   }, [authState.status, authState.user, cloud]);
@@ -5651,11 +5670,18 @@ function StudioApp() {
     setCurrentProjectId("");
     const accountStorageKey = studioAccountStorageKey(actorUid);
     storageKeyRef.current = accountStorageKey;
+    const browserCache = createStudioBrowserCache({storage: localStorage, key: accountStorageKey,
+      actorUid, prepare: prepareProjectForStorage, migrate: migrateLegacyStudioProject});
+    browserCacheRef.current = browserCache;
+    let cached;
+    try { cached = browserCache.read(); }
+    catch (error) {
+      cached = {projects: loadProjects(accountStorageKey), recoveryProjects: [], migrationError: error};
+    }
     const partitionedCache = partitionBrowserProjects(
       [
-        ...loadProjects(accountStorageKey),
+        ...cached.projects,
         ...loadProjects(),
-        ...loadProjects(STUDIO_RECOVERY_STORAGE_KEY),
       ],
       actorUid,
     );
@@ -5666,11 +5692,15 @@ function StudioApp() {
       (project) => !currentCache.some((current) => current.id === project.id),
     );
     const initialRecovery = dedupeBrowserProjects([
+      ...loadProjects(STUDIO_RECOVERY_STORAGE_KEY),
       ...partitionedCache.foreign,
       ...legacyCandidates,
+      ...cached.recoveryProjects,
     ]);
     recoveryProjectsRef.current = initialRecovery;
-    setRecoverableCount(legacyCandidates.length);
+    setRecoverableCount(initialRecovery.filter((project) => isRecoverableBrowserProject(project, actorUid)).length);
+    try { persistProjects(initialRecovery, STUDIO_RECOVERY_STORAGE_KEY); }
+    catch { setCloudMessage("Studio could not update the recovery list. Keep this tab open until your work is saved."); }
     replaceProjects(currentCache);
     setSaveStatuses({});
     const coordinator = createStudioSaveCoordinator({
@@ -5685,7 +5715,7 @@ function StudioApp() {
       },
       onSaveError: (result) => {
         replaceProjects(projectsRef.current.map((item) => item.id === result.projectId ? applyStudioSaveFailure(item, result) : item));
-        setCloudMessage(result.error.message);
+        if (result.error?.code !== "studio/conflict") setCloudMessage(result.error.message);
       },
       onStateChange: (state) => {
         setSaveState("");
@@ -5720,14 +5750,17 @@ function StudioApp() {
         }
         const cloudProjects = await cloud.loadProjects();
         if (!active) return;
+        try { browserCache.restore(cloudProjects); }
+        catch { setCloudMessage("Studio loaded, but browser storage is unavailable. Keep this tab open until your work is synced."); }
         const result = reconcileStudioProjects({
           cloudProjects,
           browserProjects: [...currentCache, ...legacyCandidates],
           actorUid,
         });
         const recoveryProjects = dedupeBrowserProjects([
-          ...partitionedCache.foreign,
+          ...initialRecovery,
           ...result.preservedBrowserProjects,
+          ...cached.recoveryProjects,
         ]);
         recoveryProjectsRef.current = recoveryProjects;
         setRecoverableCount(
@@ -5776,6 +5809,7 @@ function StudioApp() {
       coordinator.dispose();
       if (coordinatorRef.current === coordinator) coordinatorRef.current = null;
       if (storageKeyRef.current === accountStorageKey) storageKeyRef.current = "";
+      if (browserCacheRef.current === browserCache) browserCacheRef.current = null;
       window.removeEventListener("online", retryPending);
     };
   }, [authState.status, cloud]);
@@ -5816,13 +5850,13 @@ function StudioApp() {
     );
     const recoveredKeys = new Set(
       recoverable.map(
-        (project) => `${browserProjectIdentity(project)}:${project.id}`,
+        (project) => browserProjectKey(project),
       ),
     );
     const remainingRecovery = recoveryProjectsRef.current.filter(
       (project) =>
         !recoveredKeys.has(
-          `${browserProjectIdentity(project)}:${project.id}`,
+          browserProjectKey(project),
         ),
     );
     const browserStored = replaceProjects([
@@ -5834,6 +5868,11 @@ function StudioApp() {
       recoveryProjectsRef.current = remainingRecovery;
       try {
         persistProjects(remainingRecovery, STUDIO_RECOVERY_STORAGE_KEY);
+        recoverable.forEach((project) => {
+          browserCacheRef.current?.retireDraft(project);
+          browserCacheRef.current?.retireRecovery(project);
+          if (!projectsRef.current.some((current) => current.id === project.id)) browserCacheRef.current?.remove(project.id);
+        });
         recoveryStored = true;
       } catch (error) {
         setCloudMessage("The recovered projects are syncing, but Studio could not update the browser recovery list.");
@@ -5856,7 +5895,8 @@ function StudioApp() {
   const statuses = Object.values(saveStatuses);
   const activeStatus = saveStatuses[currentProjectId];
   const effectiveSaveState = cloud
-    ? (activeStatus === "error" || statuses.includes("error") ? "Browser saved · Central sync needs attention"
+    ? (activeStatus === "conflict" || statuses.includes("conflict") ? "Your edits are kept · Resolve save conflict"
+      : activeStatus === "error" || statuses.includes("error") ? "Browser saved · Central sync needs attention"
       : statuses.some((status) => ["pending", "saving", "retrying"].includes(status)) ? "Saving to Central…" : saveState || "Saved to Central")
     : saveState;
 
@@ -5886,12 +5926,16 @@ function StudioApp() {
     setDeleteBusy(true);
     try {
       if (cloud) await coordinatorRef.current.delete(project);
+      let cacheRemoved = true;
+      try { browserCacheRef.current?.remove(projectId); }
+      catch { cacheRemoved = false; }
       const nextProjects = projectsRef.current.filter((item) => item.id !== projectId);
       replaceProjects(nextProjects);
       setSaveState(cloud ? "Saved to Central" : "Saved in this browser");
       if (currentProjectId === projectId) {
         setCurrentProjectId("");
       }
+      if (!cacheRemoved) setCloudMessage("The project was removed, but Studio could not clear its browser cache. Reconnect before opening an older tab.");
     } catch (error) {
       setCloudMessage(error.message);
     } finally {setDeleteBusy(false);}
@@ -5917,9 +5961,62 @@ function StudioApp() {
     }
   };
 
+  const loadLatestProject = async (projectId, {preserve = true, open = true} = {}) => {
+    const browserCache = browserCacheRef.current;
+    const latest = await cloud.loadProject(projectId);
+    if (browserCacheRef.current !== browserCache) return;
+    const local = projectsRef.current.find((project) => project.id === projectId);
+    if (!local) return;
+    if (preserve) {
+      // Persist a separate recovery record before replacing the visible draft.
+      browserCache.preserveForRecovery(local);
+      recoveryProjectsRef.current = dedupeBrowserProjects([...recoveryProjectsRef.current, local]);
+      setRecoverableCount(recoveryProjectsRef.current.filter((project) => isRecoverableBrowserProject(project, authState.user.uid)).length);
+    }
+    coordinatorRef.current.reset(projectId);
+    if (latest) {
+      browserCache.restore([latest]);
+      replaceProjects(projectsRef.current.map((project) => project.id === projectId ? latest : project));
+    } else {
+      browserCache.remove(projectId);
+      replaceProjects(projectsRef.current.filter((project) => project.id !== projectId));
+    }
+    browserCache.retireDraft(local);
+    setSaveStatuses((current) => { const next = {...current}; delete next[projectId]; return next; });
+    if (open) setCurrentProjectId(latest ? projectId : "");
+    setCloudMessage(!latest ? "The original project is no longer available. Your local edits have been kept for recovery."
+      : preserve ? "Loaded the latest saved version. Your previous edits are available as a recovery copy." : "Your changes are saved as a separate copy. The original now has the latest saved version.");
+  };
+  const resolveProjectConflict = async (projectId, keepCopy) => {
+    const local = projectsRef.current.find((project) => project.id === projectId);
+    if (!local || !cloud) return;
+    setResolvingConflict(true);
+    try {
+      if (keepCopy) {
+        const copy = markStudioProjectPending(recoveredProjectCopy(local), authState.user.uid);
+        copy.name = `${String(local.name || "Untitled project").slice(0, 72)} (Copy)`;
+        const stored = replaceProjects([copy, ...projectsRef.current]);
+        coordinatorRef.current.schedule(copy);
+        setCurrentProjectId(copy.id);
+        if (!stored) {
+          await coordinatorRef.current.flush(copy.id);
+          if (projectsRef.current.find((project) => project.id === copy.id)?._studioSync?.pending) {
+            throw new Error("Keep this tab open until your copy finishes saving. Your original edits have been retained.");
+          }
+        }
+        await loadLatestProject(projectId, {preserve: false, open: false});
+        setCloudMessage("Your changes are kept in a separate copy. Uploaded project images must be added again.");
+      } else {
+        await loadLatestProject(projectId);
+      }
+    } catch (error) { setCloudMessage(error.message); }
+    finally { setResolvingConflict(false); }
+  };
+  const conflictedProjects = visibleProjects.filter((project) => project._studioSync?.conflict || saveStatuses[project.id] === "conflict");
+
   return (
     <>
-    <div className="studio-app" inert={exportBusy || deleteBusy || cloudLoading ? true : undefined}>
+    <div className="studio-app" inert={exportBusy || deleteBusy || cloudLoading || resolvingConflict ? true : undefined}>
       {!currentProject || isDocumentProject(currentProject) ? (
         <StudioHeader
           authState={authState}
@@ -5947,6 +6044,11 @@ function StudioApp() {
           </button>
         </div>
       ) : null}
+      {conflictedProjects.filter((project) => !currentProject || project.id === currentProject.id).map((project) => (
+        <StudioConflictMessage key={project.id} projectName={project.name}
+          onKeepCopy={() => resolveProjectConflict(project.id, true)}
+          onLoadLatest={() => resolveProjectConflict(project.id, false)} />
+      ))}
       {currentProject ? (
         <StudioEditor
           key={currentProject.id}
@@ -5976,7 +6078,7 @@ function StudioApp() {
         />
       )}
     </div>
-    {exportBusy || deleteBusy || cloudLoading ? <div className="studio-busy-overlay" role="status">{exportBusy ? "Preparing your export…" : deleteBusy ? "Deleting your project…" : "Loading your projects…"}</div> : null}
+    {exportBusy || deleteBusy || cloudLoading || resolvingConflict ? <div className="studio-busy-overlay" role="status">{exportBusy ? "Preparing your export…" : deleteBusy ? "Deleting your project…" : resolvingConflict ? "Preserving your work…" : "Loading your projects…"}</div> : null}
     </>
   );
 }

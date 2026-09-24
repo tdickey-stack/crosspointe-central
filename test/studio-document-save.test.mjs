@@ -69,6 +69,8 @@ function projectOperationHarness() {
       return {
         exists: Boolean(value),
         data: () => structuredClone(value),
+        id: this.path.split("/").at(-1),
+        ref: this,
       };
     }
 
@@ -106,6 +108,23 @@ function projectOperationHarness() {
     firestore: {
       doc(path) {
         return new Reference(path);
+      },
+      async runTransaction(run) {
+        return run({
+          get(reference) {
+            return reference.get();
+          },
+          set(reference, value) {
+            return reference.set(value);
+          },
+          update(reference, value) {
+            return reference.update(value);
+          },
+          delete(reference) {
+            actions.push(`delete:${reference.path}`);
+            records.delete(reference.path);
+          },
+        });
       },
     },
   };
@@ -157,7 +176,7 @@ test("new document root and pages commit as one atomic batch", async () => {
   });
 });
 
-test("directory cards commit only after their root and page batch", async () => {
+test("directory cards commit atomically with their root and page", async () => {
   await withFirebaseTimestamp(async () => {
     const harness = firestoreHarness();
     const cloud = createStudioCloud({
@@ -184,17 +203,15 @@ test("directory cards commit only after their root and page batch", async () => 
 
     await cloud.saveProject(project);
 
-    assert.equal(harness.commits.length, 2);
+    assert.equal(harness.commits.length, 1);
     assert.deepEqual(
-      harness.commits[0].map((write) => write.path),
+      harness.commits[0].map((write) => [write.type, write.path]),
       [
-        "centralStudioProjects/directory-a",
-        `centralStudioProjects/directory-a/pages/${project.pages[0].id}`,
-      ],
-    );
-    assert.deepEqual(
-      harness.commits[1].map((write) => [write.type, write.path]),
-      [
+        ["set", "centralStudioProjects/directory-a"],
+        [
+          "set",
+          `centralStudioProjects/directory-a/pages/${project.pages[0].id}`,
+        ],
         [
           "set",
           `centralStudioProjects/directory-a/pages/${project.pages[0].id}/cards/card-a`,
@@ -230,12 +247,194 @@ test("concurrent saves for a new project serialize and the second updates", asyn
     assert.deepEqual(harness.actions, [
       "set:centralStudioProjects/serialized-project",
       "get:centralStudioProjects/serialized-project",
+      "get:centralStudioProjects/serialized-project",
       "update:centralStudioProjects/serialized-project",
     ]);
+    assert.equal(firstSaved._cloudRevision, 1);
+    assert.equal(secondSaved._cloudRevision, 2);
     assert.equal(
       harness.records.get("centralStudioProjects/serialized-project").content.title,
       "Newest title",
     );
+  });
+});
+
+test("a stale cloud writer conflicts instead of overwriting a newer save", async () => {
+  await withFirebaseTimestamp(async () => {
+    const harness = projectOperationHarness();
+    const makeCloud = () => createStudioCloud({
+      auth: {},
+      firestore: harness.firestore,
+      storage: {},
+      user: {uid: "studio-user"},
+    });
+    const firstCloud = makeCloud();
+    const secondCloud = makeCloud();
+    const project = createStudioProject("event-signal-stack");
+    project.id = "conflicted-project";
+    const created = await firstCloud.saveProject(project);
+    const firstWriter = {...created, content: {...created.content, title: "First"}};
+    const staleWriter = {...created, content: {...created.content, title: "Stale"}};
+
+    const saved = await firstCloud.saveProject(firstWriter);
+    await assert.rejects(
+      secondCloud.saveProject(staleWriter),
+      (error) => error.code === "studio/conflict" &&
+        error.expectedRevision === 1 && error.actualRevision === 2,
+    );
+
+    assert.equal(saved._cloudRevision, 2);
+    assert.equal(
+      harness.records.get("centralStudioProjects/conflicted-project").content.title,
+      "First",
+    );
+  });
+});
+
+test("loading latest clears older remembered metadata in the same cloud instance", async () => {
+  await withFirebaseTimestamp(async () => {
+    const harness = projectOperationHarness();
+    const makeCloud = () => createStudioCloud({
+      auth: {},
+      firestore: harness.firestore,
+      storage: {},
+      user: {uid: "studio-user"},
+    });
+    const firstCloud = makeCloud();
+    const secondCloud = makeCloud();
+    const project = createStudioProject("event-signal-stack");
+    project.id = "load-latest-project";
+    const created = await firstCloud.saveProject(project);
+    await secondCloud.saveProject({
+      ...created,
+      content: {...created.content, title: "Other writer"},
+    });
+
+    const latest = await firstCloud.loadProject(project.id);
+    const saved = await firstCloud.saveProject({
+      ...latest,
+      content: {...latest.content, title: "Edit after loading latest"},
+    });
+
+    assert.equal(latest._cloudRevision, 2);
+    assert.equal(saved._cloudRevision, 3);
+    assert.equal(
+      harness.records.get("centralStudioProjects/load-latest-project").content.title,
+      "Edit after loading latest",
+    );
+  });
+});
+
+test("an upload rechecks the server after another client advances the revision", async () => {
+  await withFirebaseTimestamp(async () => {
+    const harness = projectOperationHarness();
+    const storageWrites = [];
+    const storage = {
+      ref(path) {
+        return {
+          async put() {
+            storageWrites.push(path);
+          },
+          async getDownloadURL() {
+            return `https://example.test/${path}`;
+          },
+        };
+      },
+    };
+    const firstCloud = createStudioCloud({
+      auth: {}, firestore: harness.firestore, storage, user: {uid: "studio-user"},
+    });
+    const secondCloud = createStudioCloud({
+      auth: {}, firestore: harness.firestore, storage, user: {uid: "studio-user"},
+    });
+    const project = createStudioProject("event-signal-stack");
+    project.id = "stale-upload";
+    const created = await firstCloud.saveProject(project);
+    await secondCloud.saveProject({
+      ...created,
+      content: {...created.content, title: "Remote edit"},
+    });
+
+    await assert.rejects(
+      firstCloud.uploadBackground(created, {
+        type: "image/jpeg",
+        size: 1024,
+        name: "background.jpg",
+      }),
+      (error) => error.code === "studio/conflict" &&
+        error.expectedRevision === 1 && error.actualRevision === 2,
+    );
+    assert.deepEqual(storageWrites, []);
+  });
+});
+
+test("a cloud-backed project without a revision marker cannot save or upload", async () => {
+  await withFirebaseTimestamp(async () => {
+    const harness = projectOperationHarness();
+    const cloud = createStudioCloud({
+      auth: {},
+      firestore: harness.firestore,
+      storage: {},
+      user: {uid: "studio-user"},
+    });
+    const project = createStudioProject("event-signal-stack");
+    project.id = "unmarked-project";
+    const created = await cloud.saveProject(project);
+    const restartedCloud = createStudioCloud({
+      auth: {},
+      firestore: harness.firestore,
+      storage: {},
+      user: {uid: "studio-user"},
+    });
+    const unmarked = {...created, cloudBacked: true};
+    delete unmarked._cloudRevision;
+
+    await assert.rejects(
+      restartedCloud.saveProject(unmarked),
+      (error) => error.code === "studio/conflict" &&
+        error.expectedRevision === null && error.actualRevision === 1,
+    );
+    await assert.rejects(
+      restartedCloud.uploadBackground(unmarked, {
+        type: "image/jpeg",
+        size: 1024,
+        name: "background.jpg",
+      }),
+      (error) => error.code === "studio/conflict" &&
+        error.expectedRevision === null && error.actualRevision === 1,
+    );
+  });
+});
+
+test("a stale cloud-backed save cannot recreate a remotely deleted project", async () => {
+  await withFirebaseTimestamp(async () => {
+    const harness = projectOperationHarness();
+    const cloud = createStudioCloud({
+      auth: {},
+      firestore: harness.firestore,
+      storage: {},
+      user: {uid: "studio-user"},
+    });
+    const project = createStudioProject("event-signal-stack");
+    project.id = "remotely-deleted";
+    const saved = await cloud.saveProject(project);
+    harness.records.delete("centralStudioProjects/remotely-deleted");
+
+    const restartedCloud = createStudioCloud({
+      auth: {},
+      firestore: harness.firestore,
+      storage: {},
+      user: {uid: "studio-user"},
+    });
+    await assert.rejects(
+      restartedCloud.saveProject({
+        ...saved,
+        content: {...saved.content, title: "Must not recreate"},
+      }),
+      (error) => error.code === "studio/conflict" &&
+        error.expectedRevision === 1 && error.actualRevision === null,
+    );
+    assert.equal(harness.records.has("centralStudioProjects/remotely-deleted"), false);
   });
 });
 

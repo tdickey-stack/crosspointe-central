@@ -72,6 +72,13 @@ function nextLayoutFrame() {
   });
 }
 
+export function waitForLayoutFrame(
+  timeoutMs = RESOURCE_TIMEOUT_MS,
+  message = "Studio timed out while applying an export image. Please try again.",
+) {
+  return waitForPromiseWithTimeout(nextLayoutFrame(), timeoutMs, message);
+}
+
 function getLayoutSignature(elements) {
   return elements
     .map((element) => {
@@ -374,13 +381,17 @@ async function renderExactCanvas(
   return canvas;
 }
 
-function canvasToPngBlob(canvas) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error("Studio could not create the exported PNG."));
-    }, "image/png");
-  });
+export function canvasToPngBlob(canvas, timeoutMs = RENDER_TIMEOUT_MS) {
+  return waitForPromiseWithTimeout(
+    new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Studio could not create the exported PNG."));
+      }, "image/png");
+    }),
+    timeoutMs,
+    "Studio timed out while creating the exported PNG. Please try again.",
+  );
 }
 
 function downloadBlob(blob, filename) {
@@ -428,7 +439,10 @@ async function prepareDirectoryImages(element, resolvePlanningCenterImage) {
         timeoutMessage:
           "The Planning Center image is still loading. Please try the export again.",
       });
-      await nextLayoutFrame();
+      await waitForLayoutFrame(
+        RESOURCE_TIMEOUT_MS,
+        "Studio timed out while applying a Planning Center image. Please try again.",
+      );
     }
   } catch (error) {
     restorers.reverse().forEach((restore) => restore());

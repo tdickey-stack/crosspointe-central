@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: firebase-hosting-${{ github.ref }}
-  cancel-in-progress: true
+  group: firebase-crosspointe-central
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -34,8 +34,17 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Install web dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Studio Functions dependencies
+        run: npm ci --prefix studio-functions
 
       - name: Restore generated YouVersion bundle
         run: pnpm run build:youversion
@@ -45,6 +54,12 @@ jobs:
 
       - name: Test Studio client persistence
         run: pnpm run test:studio-client
+
+      - name: Test Studio backend
+        run: pnpm run test:studio-backend
+
+      - name: Test Studio security rules
+        run: pnpm run test:studio-rules
 
       - name: Test Groups and Embed clients
         run: node --test test/group-directory.test.mjs test/group-embed.test.mjs test/embed-groups-editor.test.mjs test/embed-loader.test.mjs

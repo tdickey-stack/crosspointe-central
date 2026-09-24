@@ -53,6 +53,7 @@ function policyContent() {
 function projectPayload(ownerUid = "owner") {
   return {
     schemaVersion: 1,
+    revision: 1,
     ownerUid,
     templateId: "policy-document",
     name: "Policy Project",
@@ -67,6 +68,7 @@ function projectPayload(ownerUid = "owner") {
 function eventProjectPayload(ownerUid = "owner") {
   return {
     schemaVersion: 1,
+    revision: 1,
     ownerUid,
     templateId: "event-promotion",
     name: "Event Project",
@@ -163,9 +165,11 @@ function socialSlidePayload(content) {
 async function createSocialProject(db, projectId, payload) {
   const reference = db.doc(`centralStudioProjects/${projectId}`);
   const {content, ...rootPayload} = payload;
-  await assertSucceeds(reference.set(rootPayload));
   const primaryReference = reference.collection("slides").doc("primary");
-  await assertSucceeds(primaryReference.set(socialSlidePayload(content)));
+  const batch = db.batch();
+  batch.set(reference, rootPayload);
+  batch.set(primaryReference, socialSlidePayload(content));
+  await assertSucceeds(batch.commit());
   return {reference, primaryReference};
 }
 
@@ -191,6 +195,7 @@ function documentProjectPayload(
 ) {
   return {
     schemaVersion: 2,
+    revision: 1,
     ownerUid,
     templateId: "document-project",
     name: "Ministry Playbook",
@@ -404,6 +409,21 @@ test("owner can create, read, update, and delete a strictly valid project", asyn
   await assertSucceeds(
     reference.update({
       name: "Updated Policy",
+      revision: 2,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      name: "Stale Policy",
+      revision: 2,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    reference.update({
+      name: "Skipped Revision",
+      revision: 4,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -492,6 +512,10 @@ test("owner can create and edit a multi-page document atomically", async () => {
   const pageOne = db.doc("centralStudioProjects/document-a/pages/page-one");
   await assertSucceeds(root.get());
   await assertSucceeds(pageOne.get());
+  await assertFails(pageOne.update({
+    "content.subtitle": "A standalone child write must fail.",
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }));
 
   const addPageBatch = db.batch();
   addPageBatch.update(root, {
@@ -502,6 +526,7 @@ test("owner can create and edit a multi-page document atomically", async () => {
       "directory-one",
       "content-one",
     ],
+    revision: 2,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
   addPageBatch.set(
@@ -522,19 +547,31 @@ test("owner can create and edit a multi-page document atomically", async () => {
   );
   await assertSucceeds(addPageBatch.commit());
 
-  await assertSucceeds(
-    db.doc("centralStudioProjects/document-a/pages/checklist-one").update({
+  const firstChecklistUpdate = db.batch();
+  firstChecklistUpdate.update(root, {
+    revision: 3,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  firstChecklistUpdate.update(
+    db.doc("centralStudioProjects/document-a/pages/checklist-one"), {
       "content.calloutText": "Verify the owner and due date.",
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }),
+    },
   );
-  await assertSucceeds(
-    db.doc("centralStudioProjects/document-a/pages/checklist-one").update({
+  await assertSucceeds(firstChecklistUpdate.commit());
+  const secondChecklistUpdate = db.batch();
+  secondChecklistUpdate.update(root, {
+    revision: 4,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  secondChecklistUpdate.update(
+    db.doc("centralStudioProjects/document-a/pages/checklist-one"), {
       "content.footerNote":
         "For questions or issues, contact Riley Baker at rbaker@crosspointe.tv. For emergencies, call (918) 497-9557. If Riley is unavailable during an emergency, call Tyler Dickey at (580) 579-3526.",
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }),
+    },
   );
+  await assertSucceeds(secondChecklistUpdate.commit());
   await assertFails(
     db.doc("centralStudioProjects/document-a/pages/checklist-one").update({
       "content.footerNote": "x".repeat(501),
@@ -545,6 +582,7 @@ test("owner can create and edit a multi-page document atomically", async () => {
   const removePageBatch = db.batch();
   removePageBatch.update(root, {
     pageOrder: ["page-one", "signup-one", "directory-one", "content-one"],
+    revision: 5,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
   removePageBatch.delete(
@@ -597,6 +635,129 @@ test("the Studio client can atomically save a document at the 20-page limit", as
   }
 });
 
+test("the Studio client can atomically save 20 directory pages with eight cards each", async () => {
+  const context = environment.authenticatedContext("owner");
+  const project = createStudioProject("document-directory");
+  project.id = "maximum-directory-document";
+  const seedPage = project.pages[0];
+  project.pages = Array.from({length: 20}, (_, pageIndex) => ({
+    ...structuredClone(seedPage),
+    id: `directory-page-${pageIndex + 1}`,
+    content: {
+      ...structuredClone(seedPage.content),
+      documentNumber: `DIR ${pageIndex + 1}`,
+      cards: Array.from({length: 8}, (_, cardIndex) => ({
+        ...structuredClone(seedPage.content.cards[0]),
+        id: `card-${pageIndex + 1}-${cardIndex + 1}`,
+        name: `Group ${pageIndex + 1}-${cardIndex + 1}`,
+      })),
+    },
+  }));
+  const cloud = createStudioCloud({
+    auth: {},
+    firestore: context.firestore(),
+    storage: context.storage(),
+    user: {uid: "owner"},
+  });
+  const previousWindow = globalThis.window;
+  globalThis.window = {firebase};
+  try {
+    const saved = await assertSucceeds(cloud.saveProject(project));
+    assert.equal(saved._cloudRevision, 1);
+    const cards = await Promise.all(
+      project.pages.flatMap((page) => page.content.cards.map((card) =>
+        context.firestore().doc(
+          `centralStudioProjects/${project.id}/pages/${page.id}/cards/${card.id}`,
+        ).get(),
+      )),
+    );
+    assert.equal(cards.filter((card) => card.exists).length, 160);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("two Studio clients cannot overwrite the same cloud revision", async () => {
+  const context = environment.authenticatedContext("owner");
+  const makeCloud = () => createStudioCloud({
+    auth: {},
+    firestore: context.firestore(),
+    storage: context.storage(),
+    user: {uid: "owner"},
+  });
+  const firstCloud = makeCloud();
+  const secondCloud = makeCloud();
+  const project = createStudioProject("event-signal-stack");
+  project.id = "revision-conflict";
+  const previousWindow = globalThis.window;
+  globalThis.window = {firebase};
+  try {
+    await firstCloud.saveProject(project);
+    const firstCopy = await firstCloud.loadProject(project.id);
+    const staleCopy = await secondCloud.loadProject(project.id);
+    const saved = await firstCloud.saveProject({
+      ...firstCopy,
+      content: {...firstCopy.content, title: "First writer wins"},
+    });
+    await assert.rejects(
+      secondCloud.saveProject({
+        ...staleCopy,
+        content: {...staleCopy.content, title: "Stale overwrite"},
+      }),
+      (error) => error.code === "studio/conflict" &&
+        error.expectedRevision === 1 && error.actualRevision === 2,
+    );
+    const latest = await secondCloud.loadProject(project.id);
+    assert.equal(saved._cloudRevision, 2);
+    assert.equal(latest._cloudRevision, 2);
+    assert.equal(latest.content.title, "First writer wins");
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("a stale client cannot recreate a project deleted on another device", async () => {
+  const context = environment.authenticatedContext("owner");
+  const cloud = createStudioCloud({
+    auth: {},
+    firestore: context.firestore(),
+    storage: context.storage(),
+    user: {uid: "owner"},
+  });
+  const project = createStudioProject("event-signal-stack");
+  project.id = "remotely-deleted-conflict";
+  const previousWindow = globalThis.window;
+  globalThis.window = {firebase};
+  try {
+    const saved = await cloud.saveProject(project);
+    await environment.withSecurityRulesDisabled((adminContext) =>
+      adminContext.firestore().doc(
+        "centralStudioProjects/remotely-deleted-conflict",
+      ).delete(),
+    );
+    const restartedCloud = createStudioCloud({
+      auth: {},
+      firestore: context.firestore(),
+      storage: context.storage(),
+      user: {uid: "owner"},
+    });
+    await assert.rejects(
+      restartedCloud.saveProject({
+        ...saved,
+        content: {...saved.content, title: "Must not return"},
+      }),
+      (error) => error.code === "studio/conflict" &&
+        error.expectedRevision === 1 && error.actualRevision === null,
+    );
+    assert.equal(await restartedCloud.loadProject(project.id), null);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 test("document pages reject orphan writes and malformed content", async () => {
   const db = environment.authenticatedContext("owner").firestore();
   await assertFails(
@@ -616,6 +777,7 @@ test("document pages reject orphan writes and malformed content", async () => {
   const invalidBatch = db.batch();
   invalidBatch.update(db.doc("centralStudioProjects/document-a"), {
     pageOrder: ["page-one", "unsafe-content"],
+    revision: 2,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
   invalidBatch.set(
@@ -643,6 +805,7 @@ test("document pages reject orphan writes and malformed content", async () => {
   const invalidSignupBatch = db.batch();
   invalidSignupBatch.update(db.doc("centralStudioProjects/document-a"), {
     pageOrder: ["page-one", "invalid-signup"],
+    revision: 2,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
   invalidSignupBatch.set(
@@ -655,6 +818,7 @@ test("document pages reject orphan writes and malformed content", async () => {
   const invalidDirectoryBatch = db.batch();
   invalidDirectoryBatch.update(db.doc("centralStudioProjects/document-a"), {
     pageOrder: ["page-one", "invalid-directory"],
+    revision: 2,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
   invalidDirectoryBatch.set(
@@ -680,37 +844,45 @@ test("a full eight-card directory stays within the rules budget", async () => {
     (_, index) => `directory-card-${index + 1}`,
   );
   const fullDirectory = directoryPagePayload(cardIds);
-  await assertSucceeds(
-    db.doc("centralStudioProjects/document-a").update({
+  const batch = db.batch();
+  batch.update(db.doc("centralStudioProjects/document-a"), {
     pageOrder: ["page-one", "full-directory"],
+    revision: 2,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }),
-  );
-  await assertSucceeds(
-    db
-      .doc("centralStudioProjects/document-a/pages/full-directory")
-      .set(fullDirectory),
+  });
+  batch.set(
+    db.doc("centralStudioProjects/document-a/pages/full-directory"),
+    fullDirectory,
   );
   for (const cardId of cardIds) {
-    await assertSucceeds(
-      db
-        .doc(
-          `centralStudioProjects/document-a/pages/full-directory/cards/${cardId}`,
-        )
-        .set(directoryCardPayload(cardId)),
+    batch.set(
+      db.doc(
+        `centralStudioProjects/document-a/pages/full-directory/cards/${cardId}`,
+      ),
+      directoryCardPayload(cardId),
     );
   }
+  await assertSucceeds(batch.commit());
 });
 
 test("a legacy policy can migrate to a document project in one batch", async () => {
   const db = environment.authenticatedContext("owner").firestore();
   const root = db.doc("centralStudioProjects/legacy-policy");
-  await assertSucceeds(root.set(projectPayload()));
+  const legacyPayload = projectPayload();
+  delete legacyPayload.revision;
+  await environment.withSecurityRulesDisabled((context) =>
+    context.firestore().doc("centralStudioProjects/legacy-policy").set({
+      ...legacyPayload,
+      createdAt: firebase.firestore.Timestamp.now(),
+      updatedAt: firebase.firestore.Timestamp.now(),
+    }),
+  );
   const existing = await root.get();
 
   const migration = db.batch();
   migration.set(root, {
     ...documentProjectPayload("owner", ["legacy-page"]),
+    revision: 1,
     createdAt: existing.data().createdAt,
   });
   migration.set(
@@ -718,6 +890,47 @@ test("a legacy policy can migrate to a document project in one batch", async () 
     onePagerPagePayload(),
   );
   await assertSucceeds(migration.commit());
+});
+
+test("the Studio client assigns revision one while migrating a legacy Social Post", async () => {
+  const context = environment.authenticatedContext("owner");
+  const legacy = socialProjectPayload("social-scripture");
+  legacy.schemaVersion = 1;
+  delete legacy.revision;
+  delete legacy.postMode;
+  delete legacy.slideOrder;
+  await environment.withSecurityRulesDisabled((adminContext) =>
+    adminContext.firestore().doc(
+      "centralStudioProjects/legacy-social",
+    ).set({
+      ...legacy,
+      createdAt: firebase.firestore.Timestamp.now(),
+      updatedAt: firebase.firestore.Timestamp.now(),
+    }),
+  );
+  const cloud = createStudioCloud({
+    auth: {},
+    firestore: context.firestore(),
+    storage: context.storage(),
+    user: {uid: "owner"},
+  });
+  const previousWindow = globalThis.window;
+  globalThis.window = {firebase};
+  try {
+    const loaded = await cloud.loadProject("legacy-social");
+    assert.equal(loaded._cloudRevision, 0);
+    const saved = await cloud.saveProject(loaded);
+    assert.equal(saved._cloudRevision, 1);
+    const root = await context.firestore().doc(
+      "centralStudioProjects/legacy-social",
+    ).get({source: "server"});
+    assert.equal(root.data().schemaVersion, 3);
+    assert.equal(root.data().revision, 1);
+    await assertSucceeds(root.ref.collection("slides").doc("primary").get());
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });
 
 test("event projects accept valid sources and reject cross-project upload paths", async () => {
@@ -863,6 +1076,7 @@ test("event projects accept valid sources and reject cross-project upload paths"
   await assertSucceeds(
     reference.update({
       "content.optionalTextVisibility": "none",
+      revision: 2,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -883,6 +1097,7 @@ test("event projects accept valid sources and reject cross-project upload paths"
       "content.backgroundImageSource": "upload",
       "content.backgroundImageStoragePath":
         "studio-projects/event-a/background.png",
+      revision: 3,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -920,6 +1135,7 @@ test("event projects accept valid sources and reject cross-project upload paths"
   await assertSucceeds(
     reference.update({
       "content.backgroundImageOpacity": 0.45,
+      revision: 4,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -932,6 +1148,7 @@ test("event projects accept valid sources and reject cross-project upload paths"
   await assertSucceeds(
     reference.update({
       "content.backgroundImageRotation": 225,
+      revision: 5,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -958,6 +1175,7 @@ test("event projects accept valid sources and reject cross-project upload paths"
       "content.fontWeight": "black",
       "content.brandMark": "heart",
       "content.brandColor": "red",
+      revision: 6,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -980,6 +1198,7 @@ test("event projects accept valid sources and reject cross-project upload paths"
       "content.heroLogoStoragePath":
         "studio-projects/event-a/logo-event.png",
       "content.heroLogoName": "Event logo",
+      revision: 7,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -997,6 +1216,7 @@ test("event projects accept valid sources and reject cross-project upload paths"
       "content.heroLogoStoragePath":
         "studio-library/logos/bids-for-kids/source.webp",
       "content.heroLogoName": "Bids for Kids",
+      revision: 8,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -1010,6 +1230,7 @@ test("event projects accept valid sources and reject cross-project upload paths"
   await assertSucceeds(
     reference.update({
       "content.heroLogoScale": 2,
+      revision: 9,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -1103,8 +1324,14 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
-  await assertSucceeds(
-    simpleStatementReference.update({
+  const simpleStatementUpdate = db.batch();
+  simpleStatementUpdate.update(
+    db.doc("centralStudioProjects/social-simple-statement"), {
+      revision: 2,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    },
+  );
+  simpleStatementUpdate.update(simpleStatementReference, {
       "content.backgroundImageSource": "unsplash",
       "content.backgroundImageUrl":
         "https://images.unsplash.com/photo-simple-statement",
@@ -1116,8 +1343,8 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
       "content.unsplashPhotoUrl":
         "https://unsplash.com/photos/photo-simple-statement",
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }),
-  );
+    });
+  await assertSucceeds(simpleStatementUpdate.commit());
   await assertFails(
     simpleStatementReference.update({
       "content.unsplashPhotographerName": "",
@@ -1150,16 +1377,21 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
     "social-carousel",
     carouselPayload,
   );
+  const addCarouselSlides = db.batch();
+  addCarouselSlides.update(carouselReference, {
+    revision: 2,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
   for (let index = 2; index <= 7; index += 1) {
-    await assertSucceeds(
-      carouselReference.collection("slides").doc(`slide-${index}`).set(
-        socialSlidePayload({
-          ...carouselPayload.content,
-          title: `Slide ${index}`,
-        }),
-      ),
+    addCarouselSlides.set(
+      carouselReference.collection("slides").doc(`slide-${index}`),
+      socialSlidePayload({
+        ...carouselPayload.content,
+        title: `Slide ${index}`,
+      }),
     );
   }
+  await assertSucceeds(addCarouselSlides.commit());
   await assertFails(
     carouselReference.collection("slides").doc("not-listed").set(
       socialSlidePayload({...carouselPayload.content, title: "Not listed"}),
@@ -1215,14 +1447,18 @@ test("Social Posts accept their strict layouts and reject event-only state", asy
       oversizedCarousel,
     ),
   );
-  await assertSucceeds(
-    scriptureReference.update({
+  const scriptureUpdate = db.batch();
+  scriptureUpdate.update(db.doc("centralStudioProjects/social-scripture"), {
+    revision: 2,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  scriptureUpdate.update(scriptureReference, {
       "content.title": "A".repeat(220),
       "content.format": "portrait",
       "content.optionalTextVisibility": "none",
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }),
-  );
+    });
+  await assertSucceeds(scriptureUpdate.commit());
   await assertFails(
     scriptureReference.update({
       "content.optionalTextVisibility": {hidden: true},
@@ -1311,6 +1547,7 @@ test("event projects accept light palettes and validated Planning Center sources
       sourceEventId: "",
       sourceUrl: "",
       sourceUpdatedAt: null,
+      revision: 2,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -1461,6 +1698,7 @@ test("a server-issued member can read and edit but cannot delete", async () => {
   await assertSucceeds(
     reference.update({
       name: "Collaborative Edit",
+      revision: 2,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }),
   );
@@ -1491,12 +1729,18 @@ test("a server-issued member can read and edit document pages but cannot orphan 
     "centralStudioProjects/shared-document/pages/page-one",
   );
   await assertSucceeds(page.get());
-  await assertSucceeds(
-    page.update({
+  const memberEdit = memberDb.batch();
+  memberEdit.update(
+    memberDb.doc("centralStudioProjects/shared-document"), {
+      revision: 2,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    },
+  );
+  memberEdit.update(page, {
       "content.subtitle": "Edited by a shared Studio member.",
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }),
-  );
+    });
+  await assertSucceeds(memberEdit.commit());
   await assertFails(page.delete());
 });
 

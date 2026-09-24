@@ -15,9 +15,40 @@ import {planningCenterEventsFromCentralData} from "./planning-center-events.js";
 const PROJECT_COLLECTION = "centralStudioProjects";
 const MEMBERSHIP_COLLECTION = "centralStudioMemberships";
 const LOGO_LIBRARY_COLLECTION = "centralStudioLogoLibrary";
+const SERVER_READ_OPTIONS = {source: "server"};
 
 function stringValue(value) {
   return typeof value === "string" ? value : "";
+}
+
+function cloudRevisionValue(value, fallback = null) {
+  const revision = Number(value);
+  return Number.isSafeInteger(revision) && revision >= 0
+    ? revision
+    : fallback;
+}
+
+function projectCloudRevision(project) {
+  return Object.hasOwn(project || {}, "_cloudRevision")
+    ? cloudRevisionValue(project._cloudRevision)
+    : null;
+}
+
+function studioConflictError(projectId, expectedRevision, actualRevision) {
+  const error = new Error(
+    "This project changed in another Studio session. Save a copy or load the latest version before continuing.",
+  );
+  error.code = "studio/conflict";
+  error.projectId = stringValue(projectId);
+  error.expectedRevision = expectedRevision;
+  error.actualRevision = actualRevision;
+  return error;
+}
+
+function isMissingOrDenied(error) {
+  return ["not-found", "permission-denied"].includes(
+    stringValue(error?.code).replace(/^firestore\//, ""),
+  );
 }
 
 function enumValue(value, allowed, fallback) {
@@ -409,9 +440,11 @@ export function socialSlideForCloud(slide, templateId, projectId) {
 }
 
 export function projectForCloud(project, ownerUid) {
+  const revision = Math.max(1, projectCloudRevision(project) || 1);
   if (isDocumentProject(project)) {
     return {
       schemaVersion: 2,
+      revision,
       ownerUid,
       templateId: DOCUMENT_PROJECT_TEMPLATE_ID,
       name: String(project.name || "").trim(),
@@ -439,6 +472,7 @@ export function projectForCloud(project, ownerUid) {
   const isSocial = isSocialTemplateId(project.templateId);
   return {
     schemaVersion: isSocial ? 3 : 1,
+    revision,
     ownerUid,
     templateId: project.templateId,
     name: String(project.name || "").trim(),
@@ -531,10 +565,10 @@ async function hydrateDocumentPage(snapshot) {
   if (data.templateId === "document-one-pager") {
     content = {
       ...cloudContent,
-      primaryItems: textToLines(cloudContent.primaryItemsText, 7),
-      secondaryItems: textToLines(cloudContent.secondaryItemsText, 7),
-      ownerItems: textToLines(cloudContent.ownerItemsText, 3),
-      processSteps: textToLines(cloudContent.processStepsText, 8),
+      primaryItems: textToLines(cloudContent.primaryItemsText),
+      secondaryItems: textToLines(cloudContent.secondaryItemsText),
+      ownerItems: textToLines(cloudContent.ownerItemsText),
+      processSteps: textToLines(cloudContent.processStepsText),
     };
   } else if (data.templateId === "document-checklist") {
     content = {
@@ -549,7 +583,9 @@ async function hydrateDocumentPage(snapshot) {
       blocks: contentBlocksForCloud(cloudContent.blocks),
     };
   } else if (data.templateId === "document-directory") {
-    const cardSnapshot = await snapshot.ref.collection("cards").get();
+    const cardSnapshot = await snapshot.ref
+      .collection("cards")
+      .get(SERVER_READ_OPTIONS);
     const cardsById = new Map(
       cardSnapshot.docs.map((cardDocument) => [
         cardDocument.id,
@@ -582,7 +618,9 @@ async function hydrateProject(snapshot, storage, shared = false) {
     data.schemaVersion === 2 &&
     data.templateId === DOCUMENT_PROJECT_TEMPLATE_ID
   ) {
-    const pageSnapshot = await snapshot.ref.collection("pages").get();
+    const pageSnapshot = await snapshot.ref
+      .collection("pages")
+      .get(SERVER_READ_OPTIONS);
     const hydratedPages = await Promise.all(
       pageSnapshot.docs.map((page) => hydrateDocumentPage(page)),
     );
@@ -605,6 +643,7 @@ async function hydrateProject(snapshot, storage, shared = false) {
       updatedAt:
         data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
       ownerUid: data.ownerUid,
+      _cloudRevision: cloudRevisionValue(data.revision, 0),
       shared,
       cloudBacked: true,
       documentSettings: data.documentSettings || {showPageNumbers: true},
@@ -621,7 +660,9 @@ async function hydrateProject(snapshot, storage, shared = false) {
     Array.isArray(data.slideOrder) &&
     data.slideOrder.length
   ) {
-    const slideSnapshot = await snapshot.ref.collection("slides").get();
+    const slideSnapshot = await snapshot.ref
+      .collection("slides")
+      .get(SERVER_READ_OPTIONS);
     const slidesById = new Map(
       slideSnapshot.docs.map((slideDocument) => [
         slideDocument.id,
@@ -644,10 +685,10 @@ async function hydrateProject(snapshot, storage, shared = false) {
       data.templateId === "policy-document"
         ? {
             ...cloudContent,
-            primaryItems: textToLines(cloudContent.primaryItemsText, 7),
-            secondaryItems: textToLines(cloudContent.secondaryItemsText, 7),
-            ownerItems: textToLines(cloudContent.ownerItemsText, 3),
-            processSteps: textToLines(cloudContent.processStepsText, 8),
+            primaryItems: textToLines(cloudContent.primaryItemsText),
+            secondaryItems: textToLines(cloudContent.secondaryItemsText),
+            ownerItems: textToLines(cloudContent.ownerItemsText),
+            processSteps: textToLines(cloudContent.processStepsText),
           }
         : await hydrateGraphicContent(cloudContent, storage);
   }
@@ -668,6 +709,7 @@ async function hydrateProject(snapshot, storage, shared = false) {
     updatedAt:
       data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
     ownerUid: data.ownerUid,
+    _cloudRevision: cloudRevisionValue(data.revision, 0),
     shared,
     cloudBacked: true,
     ...(isSocialTemplateId(data.templateId)
@@ -816,51 +858,152 @@ export function createStudioCloud({
   const knownProjectMetadata = new Map();
   const deletedProjectIds = new Set();
 
+  async function hydrateConsistentProject(snapshot, shared) {
+    let candidate = snapshot;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const expectedRevision = cloudRevisionValue(
+        candidate.data().revision,
+        0,
+      );
+      const hydrated = await hydrateProject(candidate, storage, shared);
+      const latest = await candidate.ref.get(SERVER_READ_OPTIONS);
+      if (!latest.exists) return null;
+      const actualRevision = cloudRevisionValue(latest.data().revision, 0);
+      if (actualRevision === expectedRevision) return hydrated;
+      candidate = latest;
+    }
+    throw studioConflictError(
+      candidate.id,
+      cloudRevisionValue(snapshot.data().revision, 0),
+      cloudRevisionValue(candidate.data().revision, 0),
+    );
+  }
+
   async function loadProjects() {
     const ownedSnapshot = await firestore
       .collection(PROJECT_COLLECTION)
       .where("ownerUid", "==", user.uid)
-      .get();
+      .get(SERVER_READ_OPTIONS);
     const membershipSnapshot = await firestore
       .collection(MEMBERSHIP_COLLECTION)
       .where("memberUid", "==", user.uid)
-      .get();
+      .get(SERVER_READ_OPTIONS);
     const ownedIds = new Set(ownedSnapshot.docs.map((document) => document.id));
     const sharedSnapshots = await Promise.all(
       membershipSnapshot.docs
         .map((document) => document.data().projectId)
         .filter((projectId) => projectId && !ownedIds.has(projectId))
         .map((projectId) =>
-          firestore.doc(`${PROJECT_COLLECTION}/${projectId}`).get(),
+          firestore
+            .doc(`${PROJECT_COLLECTION}/${projectId}`)
+            .get(SERVER_READ_OPTIONS),
         ),
     );
-    return Promise.all([
+    const projects = await Promise.all([
       ...ownedSnapshot.docs.map((snapshot) =>
-        hydrateProject(snapshot, storage, false),
+        hydrateConsistentProject(snapshot, false),
       ),
       ...sharedSnapshots
         .filter((snapshot) => snapshot.exists)
-        .map((snapshot) => hydrateProject(snapshot, storage, true)),
+        .map((snapshot) => hydrateConsistentProject(snapshot, true)),
     ]);
+    const loadedProjects = projects.filter(Boolean);
+    for (const project of loadedProjects) {
+      knownProjectMetadata.delete(project.id);
+    }
+    return loadedProjects;
+  }
+
+  async function loadProject(projectId) {
+    const reference = firestore.doc(
+      `${PROJECT_COLLECTION}/${stringValue(projectId)}`,
+    );
+    let snapshot;
+    try {
+      snapshot = await reference.get(SERVER_READ_OPTIONS);
+    } catch (error) {
+      if (isMissingOrDenied(error)) return null;
+      throw error;
+    }
+    if (!snapshot.exists) return null;
+    const project = await hydrateConsistentProject(
+      snapshot,
+      snapshot.data().ownerUid !== user.uid,
+    );
+    if (project) knownProjectMetadata.delete(project.id);
+    return project;
+  }
+
+  async function commitExistingProject(
+    reference,
+    projectId,
+    expectedRevision,
+    applyWrites,
+  ) {
+    if (expectedRevision === null) {
+      const latest = await reference.get(SERVER_READ_OPTIONS);
+      throw studioConflictError(
+        projectId,
+        null,
+        latest.exists ? cloudRevisionValue(latest.data().revision, 0) : null,
+      );
+    }
+    return firestore.runTransaction(async (transaction) => {
+      const latest = await transaction.get(reference);
+      const actualRevision = latest.exists
+        ? cloudRevisionValue(latest.data().revision, 0)
+        : null;
+      if (!latest.exists || actualRevision !== expectedRevision) {
+        throw studioConflictError(
+          projectId,
+          expectedRevision,
+          actualRevision,
+        );
+      }
+      const nextRevision = actualRevision + 1;
+      applyWrites(transaction, latest.data(), nextRevision);
+      return nextRevision;
+    });
   }
 
   async function saveProjectNow(project, {knownExisting = false} = {}) {
     const reference = firestore.doc(`${PROJECT_COLLECTION}/${project.id}`);
-    // A get for a missing project is intentionally denied by the ownership
-    // rules because there is no resource owner to authorize yet. New browser
-    // projects must therefore go straight to create; cloud-backed projects can
-    // safely read their existing timestamps and subcollections before update.
     const shouldLoadExisting = knownExisting || project.cloudBacked === true;
-    const snapshot = shouldLoadExisting ? await reference.get() : null;
+    let snapshot = null;
+    if (shouldLoadExisting) {
+      try {
+        snapshot = await reference.get(SERVER_READ_OPTIONS);
+      } catch (error) {
+        if (isMissingOrDenied(error)) {
+          throw studioConflictError(
+            project.id,
+            projectCloudRevision(project),
+            null,
+          );
+        }
+        throw error;
+      }
+    }
     const projectExists = snapshot?.exists === true;
+    const expectedRevision = projectCloudRevision(project);
+    if (shouldLoadExisting && !projectExists) {
+      throw studioConflictError(project.id, expectedRevision, null);
+    }
+    if (projectExists && expectedRevision === null) {
+      throw studioConflictError(
+        project.id,
+        null,
+        cloudRevisionValue(snapshot.data().revision, 0),
+      );
+    }
     const payload = projectForCloud(
       project,
       projectExists ? snapshot.data().ownerUid : user.uid,
     );
+    const serverTimestamp =
+      window.firebase.firestore.FieldValue.serverTimestamp();
 
     if (isDocumentProject(project)) {
-      const serverTimestamp =
-        window.firebase.firestore.FieldValue.serverTimestamp();
       const previousData = projectExists ? snapshot.data() : null;
       const previousPageIds =
         previousData?.schemaVersion === 2 &&
@@ -876,7 +1019,7 @@ export function createStudioCloud({
         await Promise.all(
           pageIdsToRead.map(async (pageId) => {
             const pageReference = reference.collection("pages").doc(pageId);
-            return [pageId, await pageReference.get()];
+            return [pageId, await pageReference.get(SERVER_READ_OPTIONS)];
           }),
         ),
       );
@@ -892,72 +1035,11 @@ export function createStudioCloud({
                 .collection("pages")
                 .doc(pageId)
                 .collection("cards")
-                .get();
+                .get(SERVER_READ_OPTIONS);
               return [pageId, cards];
             }),
         ),
       );
-
-      // The project root and every page are one atomic snapshot. Directory
-      // cards follow in per-page batches because their existing rules validate
-      // membership against the already-committed parent page.
-      const documentBatch = firestore.batch();
-      if (!projectExists) {
-        documentBatch.set(reference, {
-          ...payload,
-          createdAt: serverTimestamp,
-          updatedAt: serverTimestamp,
-        });
-      } else if (previousData.schemaVersion === 2) {
-        documentBatch.update(reference, {
-          name: payload.name,
-          status: payload.status,
-          sourceType: payload.sourceType,
-          pageOrder: payload.pageOrder,
-          documentSettings: payload.documentSettings,
-          updatedAt: serverTimestamp,
-        });
-      } else {
-        documentBatch.set(reference, {
-          ...payload,
-          createdAt: previousData.createdAt,
-          updatedAt: serverTimestamp,
-        });
-      }
-
-      for (const page of nextPages) {
-        const pageReference = reference.collection("pages").doc(page.id);
-        const pageSnapshot = previousPageSnapshots.get(page.id);
-        const pagePayload = documentPageForCloud(page);
-        if (pageSnapshot?.exists) {
-          documentBatch.update(pageReference, {
-            templateId: pagePayload.templateId,
-            content: pagePayload.content,
-            updatedAt: serverTimestamp,
-          });
-        } else {
-          documentBatch.set(pageReference, {
-            ...pagePayload,
-            createdAt: serverTimestamp,
-            updatedAt: serverTimestamp,
-          });
-        }
-      }
-
-      for (const pageId of previousPageIds) {
-        if (nextPageIds.has(pageId)) continue;
-        const pageReference = reference.collection("pages").doc(pageId);
-        documentBatch.delete(pageReference);
-      }
-      await documentBatch.commit();
-      // The root now exists even if a later directory-card batch fails.
-      rememberSavedProject({
-        ...project,
-        schemaVersion: 2,
-        ownerUid: payload.ownerUid,
-        cloudBacked: true,
-      });
-
       const nextPagesById = new Map(nextPages.map((page) => [page.id, page]));
       const cardPageIds = new Set([
         ...previousCardSnapshots.keys(),
@@ -965,58 +1047,120 @@ export function createStudioCloud({
           .filter((page) => page.templateId === "document-directory")
           .map((page) => page.id),
       ]);
-      for (const pageId of cardPageIds) {
-        const page = nextPagesById.get(pageId);
-        const cards =
-          page?.templateId === "document-directory" &&
-          Array.isArray(page.content?.cards)
-            ? page.content.cards.slice(0, 8)
-            : [];
-        const previousCardIds = new Set(
-          previousCardSnapshots.get(pageId)?.docs.map((card) => card.id) || [],
-        );
-        const nextCardIds = new Set(cards.map((card) => card.id));
-        const cardBatch = firestore.batch();
-        let cardWriteCount = 0;
-        const pageReference = reference.collection("pages").doc(pageId);
-        for (const card of cards) {
-          const cardReference = pageReference.collection("cards").doc(card.id);
-          const cardPayload = directoryCardForCloud(card);
-          if (previousCardIds.has(card.id)) {
-            cardBatch.update(cardReference, {
-              ...cardPayload,
+      const applyWrites = (writer, currentData, nextRevision) => {
+        if (!projectExists) {
+          writer.set(reference, {
+            ...payload,
+            revision: nextRevision,
+            createdAt: serverTimestamp,
+            updatedAt: serverTimestamp,
+          });
+        } else if (currentData.schemaVersion === 2) {
+          writer.update(reference, {
+            revision: nextRevision,
+            name: payload.name,
+            status: payload.status,
+            sourceType: payload.sourceType,
+            pageOrder: payload.pageOrder,
+            documentSettings: payload.documentSettings,
+            updatedAt: serverTimestamp,
+          });
+        } else {
+          writer.set(reference, {
+            ...payload,
+            revision: nextRevision,
+            createdAt: currentData.createdAt,
+            updatedAt: serverTimestamp,
+          });
+        }
+
+        for (const page of nextPages) {
+          const pageReference = reference.collection("pages").doc(page.id);
+          const pageSnapshot = previousPageSnapshots.get(page.id);
+          const pagePayload = documentPageForCloud(page);
+          if (pageSnapshot?.exists) {
+            writer.update(pageReference, {
+              templateId: pagePayload.templateId,
+              content: pagePayload.content,
               updatedAt: serverTimestamp,
             });
           } else {
-            cardBatch.set(cardReference, {
-              ...cardPayload,
+            writer.set(pageReference, {
+              ...pagePayload,
               createdAt: serverTimestamp,
               updatedAt: serverTimestamp,
             });
           }
-          cardWriteCount += 1;
         }
-        for (const cardId of previousCardIds) {
-          if (nextCardIds.has(cardId)) continue;
-          cardBatch.delete(pageReference.collection("cards").doc(cardId));
-          cardWriteCount += 1;
+
+        for (const pageId of cardPageIds) {
+          const page = nextPagesById.get(pageId);
+          const cards =
+            page?.templateId === "document-directory" &&
+            Array.isArray(page.content?.cards)
+              ? page.content.cards.slice(0, 8)
+              : [];
+          const previousCardIds = new Set(
+            previousCardSnapshots.get(pageId)?.docs.map((card) => card.id) || [],
+          );
+          const nextCardIds = new Set(cards.map((card) => card.id));
+          const pageReference = reference.collection("pages").doc(pageId);
+          for (const card of cards) {
+            const cardReference = pageReference.collection("cards").doc(card.id);
+            const cardPayload = directoryCardForCloud(card);
+            if (previousCardIds.has(card.id)) {
+              writer.update(cardReference, {
+                ...cardPayload,
+                updatedAt: serverTimestamp,
+              });
+            } else {
+              writer.set(cardReference, {
+                ...cardPayload,
+                createdAt: serverTimestamp,
+                updatedAt: serverTimestamp,
+              });
+            }
+          }
+          for (const cardId of previousCardIds) {
+            if (!nextCardIds.has(cardId)) {
+              writer.delete(pageReference.collection("cards").doc(cardId));
+            }
+          }
         }
-        if (cardWriteCount) await cardBatch.commit();
+
+        for (const pageId of previousPageIds) {
+          if (!nextPageIds.has(pageId)) {
+            writer.delete(reference.collection("pages").doc(pageId));
+          }
+        }
+      };
+      let nextRevision;
+      if (projectExists) {
+        nextRevision = await commitExistingProject(
+          reference,
+          project.id,
+          expectedRevision,
+          applyWrites,
+        );
+      } else {
+        nextRevision = 1;
+        const batch = firestore.batch();
+        applyWrites(batch, null, nextRevision);
+        await batch.commit();
       }
       return {
         ...project,
         schemaVersion: 2,
         ownerUid: payload.ownerUid,
         cloudBacked: true,
+        _cloudRevision: nextRevision,
       };
     }
 
     if (isSocialTemplateId(project.templateId)) {
-      const serverTimestamp =
-        window.firebase.firestore.FieldValue.serverTimestamp();
       const previousData = projectExists ? snapshot.data() : null;
       const previousSlideSnapshot = projectExists
-        ? await reference.collection("slides").get()
+        ? await reference.collection("slides").get(SERVER_READ_OPTIONS)
         : null;
       const previousSlideIds = new Set(
         previousSlideSnapshot?.docs.map((slide) => slide.id) || [],
@@ -1029,88 +1173,120 @@ export function createStudioCloud({
           : []),
       ];
       const nextSlideIds = new Set(payload.slideOrder);
-      const batch = firestore.batch();
-
-      if (!projectExists) {
-        batch.set(reference, {
-          ...payload,
-          createdAt: serverTimestamp,
-          updatedAt: serverTimestamp,
-        });
-      } else if (previousData.schemaVersion === 3) {
-        batch.update(reference, {
-          schemaVersion: payload.schemaVersion,
-          name: payload.name,
-          status: payload.status,
-          sourceType: payload.sourceType,
-          postMode: payload.postMode,
-          slideOrder: payload.slideOrder,
-          updatedAt: serverTimestamp,
-        });
-      } else {
-        batch.set(reference, {
-          ...payload,
-          createdAt: previousData.createdAt,
-          updatedAt: serverTimestamp,
-        });
-      }
-
-      for (const slide of nextSlides) {
-        const slideId = stringValue(slide?.id).slice(0, 128);
-        if (!nextSlideIds.has(slideId)) continue;
-        const slideReference = reference.collection("slides").doc(slideId);
-        const slidePayload = socialSlideForCloud(
-          slide,
-          project.templateId,
-          project.id,
-        );
-        if (previousSlideIds.has(slideId)) {
-          batch.update(slideReference, {
-            content: slidePayload.content,
-            updatedAt: serverTimestamp,
-          });
-        } else {
-          batch.set(slideReference, {
-            ...slidePayload,
+      const applyWrites = (writer, currentData, nextRevision) => {
+        if (!projectExists) {
+          writer.set(reference, {
+            ...payload,
+            revision: nextRevision,
             createdAt: serverTimestamp,
             updatedAt: serverTimestamp,
           });
+        } else if (currentData.schemaVersion === 3) {
+          writer.update(reference, {
+            revision: nextRevision,
+            schemaVersion: payload.schemaVersion,
+            name: payload.name,
+            status: payload.status,
+            sourceType: payload.sourceType,
+            postMode: payload.postMode,
+            slideOrder: payload.slideOrder,
+            updatedAt: serverTimestamp,
+          });
+        } else {
+          writer.set(reference, {
+            ...payload,
+            revision: nextRevision,
+            createdAt: currentData.createdAt,
+            updatedAt: serverTimestamp,
+          });
         }
-      }
-      for (const slideId of previousSlideIds) {
-        if (!nextSlideIds.has(slideId)) {
-          batch.delete(reference.collection("slides").doc(slideId));
+        for (const slide of nextSlides) {
+          const slideId = stringValue(slide?.id).slice(0, 128);
+          if (!nextSlideIds.has(slideId)) continue;
+          const slideReference = reference.collection("slides").doc(slideId);
+          const slidePayload = socialSlideForCloud(
+            slide,
+            project.templateId,
+            project.id,
+          );
+          if (previousSlideIds.has(slideId)) {
+            writer.update(slideReference, {
+              content: slidePayload.content,
+              updatedAt: serverTimestamp,
+            });
+          } else {
+            writer.set(slideReference, {
+              ...slidePayload,
+              createdAt: serverTimestamp,
+              updatedAt: serverTimestamp,
+            });
+          }
         }
+        for (const slideId of previousSlideIds) {
+          if (!nextSlideIds.has(slideId)) {
+            writer.delete(reference.collection("slides").doc(slideId));
+          }
+        }
+      };
+      let nextRevision;
+      if (projectExists) {
+        nextRevision = await commitExistingProject(
+          reference,
+          project.id,
+          expectedRevision,
+          applyWrites,
+        );
+      } else {
+        nextRevision = 1;
+        const batch = firestore.batch();
+        applyWrites(batch, null, nextRevision);
+        await batch.commit();
       }
-      await batch.commit();
       return {
         ...project,
         schemaVersion: 3,
         ownerUid: payload.ownerUid,
         cloudBacked: true,
+        _cloudRevision: nextRevision,
       };
     }
 
+    let nextRevision;
     if (projectExists) {
-      await reference.update({
-        name: payload.name,
-        status: payload.status,
-        sourceType: payload.sourceType,
-        sourceId: payload.sourceId,
-        sourceEventId: payload.sourceEventId,
-        sourceUrl: payload.sourceUrl,
-        sourceUpdatedAt: payload.sourceUpdatedAt,
-        content: payload.content,
-        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-      });
+      nextRevision = await commitExistingProject(
+        reference,
+        project.id,
+        expectedRevision,
+        (transaction, currentData, revision) => {
+          transaction.update(reference, {
+            revision,
+            name: payload.name,
+            status: payload.status,
+            sourceType: payload.sourceType,
+            sourceId: payload.sourceId,
+            sourceEventId: payload.sourceEventId,
+            sourceUrl: payload.sourceUrl,
+            sourceUpdatedAt: payload.sourceUpdatedAt,
+            content: payload.content,
+            updatedAt: serverTimestamp,
+          });
+        },
+      );
     } else {
+      nextRevision = 1;
       await reference.set({
         ...payload,
-        createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+        revision: nextRevision,
+        createdAt: serverTimestamp,
+        updatedAt: serverTimestamp,
       });
     }
-    return {...project, ownerUid: payload.ownerUid, cloudBacked: true};
+    return {
+      ...project,
+      ownerUid: payload.ownerUid,
+      cloudBacked: true,
+      _cloudRevision: nextRevision,
+    };
   }
 
   function rememberSavedProject(project) {
@@ -1119,6 +1295,7 @@ export function createStudioCloud({
       ownerUid: project.ownerUid,
       cloudBacked: true,
       shared: project.shared === true,
+      _cloudRevision: projectCloudRevision(project),
     });
   }
 
@@ -1133,40 +1310,21 @@ export function createStudioCloud({
       rememberSavedProject(saved);
       return saved;
     } catch (error) {
-      // A document root/pages batch may have committed before a directory-card
-      // batch failed. It can also complete after another caller captured the
-      // project as browser-only. Re-read only after a failed create attempt:
-      // an existing owned project is readable, while a missing project is
-      // intentionally denied by the rules.
       if (knownExisting || candidate.cloudBacked === true) throw error;
-      const committed = knownProjectMetadata.get(project.id);
-      if (committed) {
-        const recovered = await saveProjectNow(
-          {...project, ...committed, cloudBacked: true},
-          {knownExisting: true},
-        );
-        rememberSavedProject(recovered);
-        return recovered;
-      }
       let snapshot;
       try {
         snapshot = await firestore
           .doc(`${PROJECT_COLLECTION}/${project.id}`)
-          .get();
+          .get(SERVER_READ_OPTIONS);
       } catch (readError) {
         throw error;
       }
       if (!snapshot.exists) throw error;
-      const recovered = await saveProjectNow(
-        {
-          ...project,
-          ownerUid: snapshot.data().ownerUid,
-          cloudBacked: true,
-        },
-        {knownExisting: true},
+      throw studioConflictError(
+        project.id,
+        0,
+        cloudRevisionValue(snapshot.data().revision, 0),
       );
-      rememberSavedProject(recovered);
-      return recovered;
     }
   }
 
@@ -1203,21 +1361,41 @@ export function createStudioCloud({
 
   async function ensureProjectExistsNow(project) {
     const known = knownProjectMetadata.get(project.id);
-    if (known) return {...project, ...known, cloudBacked: true};
-    if (project.cloudBacked === true) {
-      const snapshot = await firestore
-        .doc(`${PROJECT_COLLECTION}/${project.id}`)
-        .get();
-      if (!snapshot.exists) throw new Error("This Studio project no longer exists.");
-      const existing = {
-        ...project,
+    const candidate = known
+      ? {...project, ...known, cloudBacked: true}
+      : project;
+    if (candidate.cloudBacked === true) {
+      const expectedRevision = projectCloudRevision(candidate);
+      let snapshot;
+      try {
+        snapshot = await firestore
+          .doc(`${PROJECT_COLLECTION}/${candidate.id}`)
+          .get(SERVER_READ_OPTIONS);
+      } catch (error) {
+        if (isMissingOrDenied(error)) {
+          throw studioConflictError(candidate.id, expectedRevision, null);
+        }
+        throw error;
+      }
+      const actualRevision = snapshot.exists
+        ? cloudRevisionValue(snapshot.data().revision, 0)
+        : null;
+      if (!snapshot.exists || expectedRevision === null ||
+          actualRevision !== expectedRevision) {
+        throw studioConflictError(
+          candidate.id,
+          expectedRevision,
+          actualRevision,
+        );
+      }
+      return {
+        ...candidate,
         ownerUid: snapshot.data().ownerUid,
         cloudBacked: true,
+        _cloudRevision: expectedRevision,
       };
-      rememberSavedProject(existing);
-      return existing;
     }
-    return runProjectSave(project, {});
+    return runProjectSave(candidate, {});
   }
 
   async function uploadBackground(project, file) {
@@ -1429,6 +1607,7 @@ export function createStudioCloud({
 
   return {
     loadProjects,
+    loadProject,
     saveProject,
     uploadBackground,
     uploadHeroLogo,

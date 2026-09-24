@@ -876,9 +876,8 @@ service cloud.firestore {
         data.keys().hasOnly([
           "schemaVersion", "ownerUid", "templateId", "name", "status",
           "sourceType", "sourceId", "sourceEventId", "sourceUrl",
-          "sourceUpdatedAt", "content", "createdAt", "updatedAt"
+          "sourceUpdatedAt", "content", "revision", "createdAt", "updatedAt"
         ]) &&
-        data.schemaVersion == 1 &&
         validStudioString(data.ownerUid, 128) &&
         data.templateId.matches(
           "^(policy-document|event-promotion|event-signal-stack|" +
@@ -901,8 +900,6 @@ service cloud.firestore {
             data.sourceUpdatedAt is timestamp
           )
         ) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp &&
         (
           data.templateId == "policy-document" ?
             validPolicyContent(data.content) :
@@ -919,9 +916,8 @@ service cloud.firestore {
         data.keys().hasOnly([
           "schemaVersion", "ownerUid", "templateId", "name", "status",
           "sourceType", "postMode", "slideOrder",
-          "createdAt", "updatedAt"
+          "revision", "createdAt", "updatedAt"
         ]) &&
-        data.schemaVersion == 3 &&
         validStudioString(data.ownerUid, 128) &&
         isSocialTemplateId(data.templateId) &&
         validStudioString(data.name, 80) && data.name.size() > 0 &&
@@ -929,30 +925,27 @@ service cloud.firestore {
         data.sourceType == "manual" &&
         data.postMode.matches("^(single|carousel)$") &&
         validSocialSlideOrder(data.slideOrder) &&
-        (data.postMode == "carousel" || data.slideOrder.size() == 1) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        (data.postMode == "carousel" || data.slideOrder.size() == 1);
     }
 
     function validDocumentProject(data) {
       return data.keys().hasAll([
           "schemaVersion", "ownerUid", "templateId", "name", "status",
-          "sourceType", "pageOrder", "documentSettings", "createdAt", "updatedAt"
+          "sourceType", "pageOrder", "documentSettings",
+          "createdAt", "updatedAt"
         ]) &&
         data.keys().hasOnly([
           "schemaVersion", "ownerUid", "templateId", "name", "status",
-          "sourceType", "pageOrder", "documentSettings", "createdAt", "updatedAt"
+          "sourceType", "pageOrder", "documentSettings", "revision",
+          "createdAt", "updatedAt"
         ]) &&
-        data.schemaVersion == 2 &&
         validStudioString(data.ownerUid, 128) &&
         data.templateId == "document-project" &&
         validStudioString(data.name, 80) && data.name.size() > 0 &&
         data.status == "draft" &&
         data.sourceType == "manual" &&
         validPageOrder(data.pageOrder) &&
-        validDocumentSettings(data.documentSettings) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        validDocumentSettings(data.documentSettings);
     }
 
     function validStudioProject(data, projectId) {
@@ -961,6 +954,12 @@ service cloud.firestore {
         (data.schemaVersion == 1 && validLegacyStudioProject(data, projectId)) ||
         (data.schemaVersion == 2 && validDocumentProject(data)) ||
         (data.schemaVersion == 3 && validSocialProject(data, projectId))
+      );
+    }
+
+    function studioRevisionAdvances(before, after) {
+      return after.revision == (
+        before.keys().hasAny(["revision"]) ? before.revision + 1 : 1
       );
     }
 
@@ -1653,19 +1652,18 @@ service cloud.firestore {
       allow read: if canReadStudioProject(projectId, resource.data);
       allow create: if canEditStudio() &&
         request.resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.revision == 1 &&
         request.resource.data.createdAt == request.time &&
         request.resource.data.updatedAt == request.time &&
         validStudioProject(request.resource.data, projectId);
       allow update: if canEditStudioProject(projectId, resource.data) &&
-        request.resource.data.ownerUid == resource.data.ownerUid &&
-        request.resource.data.createdAt == resource.data.createdAt &&
         (
           (
-            resource.data.schemaVersion == request.resource.data.schemaVersion &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               "name", "status", "sourceType", "sourceId", "sourceEventId",
               "sourceUrl", "sourceUpdatedAt", "postMode", "slideOrder",
-              "content", "pageOrder", "documentSettings", "updatedAt"
+              "content", "pageOrder", "documentSettings", "revision",
+              "updatedAt"
             ])
           ) ||
           (
@@ -1675,7 +1673,8 @@ service cloud.firestore {
             request.resource.data.templateId == "document-project" &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               "schemaVersion", "templateId", "name", "status", "sourceType",
-              "content", "pageOrder", "documentSettings", "updatedAt"
+              "content", "pageOrder", "documentSettings", "revision",
+              "updatedAt"
             ])
           ) ||
           (
@@ -1686,10 +1685,11 @@ service cloud.firestore {
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               "schemaVersion", "name", "status", "sourceType", "sourceId",
               "sourceEventId", "sourceUrl", "sourceUpdatedAt", "postMode",
-              "slideOrder", "content", "updatedAt"
+              "slideOrder", "content", "revision", "updatedAt"
             ])
           )
         ) &&
+        studioRevisionAdvances(resource.data, request.resource.data) &&
         request.resource.data.updatedAt == request.time &&
         validStudioProject(request.resource.data, projectId);
       allow delete: if canEditStudio() &&
@@ -1729,8 +1729,13 @@ service cloud.firestore {
             canEditStudioProject(projectId, parentProjectAfterWrite());
         }
 
+        function parentRevisionAdvances() {
+          return parentProjectAfterWrite().updatedAt == request.time;
+        }
+
         allow read: if canReadParentProject();
         allow create: if canEditParentProjectAfterWrite() &&
+          parentRevisionAdvances() &&
           parentProjectAfterWrite().schemaVersion == 3 &&
           slideId in parentProjectAfterWrite().slideOrder &&
           request.resource.data.content.format ==
@@ -1743,7 +1748,7 @@ service cloud.firestore {
             parentProjectAfterWrite().templateId
           );
         allow update: if canEditParentProject() &&
-          existsAfter(parentProjectPath()) &&
+          parentRevisionAdvances() &&
           parentProjectAfterWrite().schemaVersion == 3 &&
           slideId in parentProjectAfterWrite().slideOrder &&
           request.resource.data.content.format ==
@@ -1759,6 +1764,7 @@ service cloud.firestore {
             parentProjectAfterWrite().templateId
           );
         allow delete: if canEditParentProject() &&
+          parentRevisionAdvances() &&
           (
             !existsAfter(parentProjectPath()) ||
             !(slideId in parentProjectAfterWrite().slideOrder)
@@ -1788,13 +1794,19 @@ service cloud.firestore {
             );
         }
 
+        function parentRevisionAdvances() {
+          return getAfter(parentProjectPath()).data.updatedAt == request.time;
+        }
+
         allow read: if canReadParentProject();
         allow create: if canEditParentProjectAfterWrite() &&
+          parentRevisionAdvances() &&
           pageId in getAfter(parentProjectPath()).data.pageOrder &&
           request.resource.data.createdAt == request.time &&
           request.resource.data.updatedAt == request.time &&
           validDocumentPage(request.resource.data);
         allow update: if canEditParentProject() &&
+          parentRevisionAdvances() &&
           pageId in get(parentProjectPath()).data.pageOrder &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "templateId", "content", "updatedAt"
@@ -1803,6 +1815,7 @@ service cloud.firestore {
           request.resource.data.updatedAt == request.time &&
           validDocumentPage(request.resource.data);
         allow delete: if canEditParentProject() &&
+          parentRevisionAdvances() &&
           (
             !existsAfter(parentProjectPath()) ||
             !(pageId in getAfter(parentProjectPath()).data.pageOrder)
@@ -1813,26 +1826,30 @@ service cloud.firestore {
             return /databases/$(database)/documents/centralStudioProjects/$(projectId)/pages/$(pageId);
           }
 
-          function isActiveDirectoryPage() {
-            return exists(directoryPagePath()) &&
-              pageId in get(parentProjectPath()).data.pageOrder &&
-              get(directoryPagePath()).data.templateId == "document-directory";
+          function isActiveDirectoryPageAfterWrite() {
+            return existsAfter(directoryPagePath()) &&
+              existsAfter(parentProjectPath()) &&
+              pageId in getAfter(parentProjectPath()).data.pageOrder &&
+              getAfter(directoryPagePath()).data.templateId ==
+                "document-directory";
           }
 
-          function directoryCardIsListed() {
-            return isActiveDirectoryPage() &&
-              cardId in get(directoryPagePath()).data.content.cardOrder;
+          function directoryCardIsListedAfterWrite() {
+            return isActiveDirectoryPageAfterWrite() &&
+              cardId in getAfter(directoryPagePath()).data.content.cardOrder;
           }
 
           allow read: if canReadParentProject();
-          allow create: if canEditParentProject() &&
-            directoryCardIsListed() &&
+          allow create: if canEditParentProjectAfterWrite() &&
+            parentRevisionAdvances() &&
+            directoryCardIsListedAfterWrite() &&
             request.resource.data.id == cardId &&
             request.resource.data.createdAt == request.time &&
             request.resource.data.updatedAt == request.time &&
             validDirectoryCard(request.resource.data, projectId);
           allow update: if canEditParentProject() &&
-            directoryCardIsListed() &&
+            parentRevisionAdvances() &&
+            directoryCardIsListedAfterWrite() &&
             request.resource.data.id == cardId &&
             request.resource.data.createdAt == resource.data.createdAt &&
             request.resource.data.updatedAt == request.time &&
@@ -1842,14 +1859,15 @@ service cloud.firestore {
             ]) &&
             validDirectoryCard(request.resource.data, projectId);
           allow delete: if canEditParentProject() &&
+            parentRevisionAdvances() &&
             (
-              !exists(directoryPagePath()) ||
-              !(pageId in get(parentProjectPath()).data.pageOrder) ||
-              get(directoryPagePath()).data.templateId !=
+              !existsAfter(directoryPagePath()) ||
+              !(pageId in getAfter(parentProjectPath()).data.pageOrder) ||
+              getAfter(directoryPagePath()).data.templateId !=
                 "document-directory" ||
               !(
                 cardId in
-                get(directoryPagePath()).data.content.cardOrder
+                getAfter(directoryPagePath()).data.content.cardOrder
               )
             );
         }

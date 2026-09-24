@@ -22,9 +22,11 @@ import {
   EVENT_TEXT_FIELDS,
   SOCIAL_TEXT_FIELDS,
   SMALL_GROUP_TEXT_FIELDS,
+  insertPlainTextAtSelection,
   normalizeGraphicText,
   validateGraphicTextEdit,
 } from "./text-fields.js";
+import {documentLineListItems} from "./document-fields.js";
 
 const BRAND_MARK_COLOR_HEX = {
   white: "#ffffff",
@@ -400,10 +402,26 @@ export function PolicyPreview({
   pageCount,
   showPageNumbers = true,
 }) {
-  const primaryItems = visibleItems(content.primaryItems);
-  const secondaryItems = visibleItems(content.secondaryItems);
-  const ownerItems = visibleItems(content.ownerItems);
-  const processSteps = visibleItems(content.processSteps);
+  const primaryItems = documentLineListItems(
+    "document-one-pager",
+    content,
+    "primaryItems",
+  );
+  const secondaryItems = documentLineListItems(
+    "document-one-pager",
+    content,
+    "secondaryItems",
+  );
+  const ownerItems = documentLineListItems(
+    "document-one-pager",
+    content,
+    "ownerItems",
+  );
+  const processSteps = documentLineListItems(
+    "document-one-pager",
+    content,
+    "processSteps",
+  );
   const showOperatingRule =
     hasText(content.operatingRuleLabel) || hasText(content.operatingRule);
   const showPrimary =
@@ -1581,20 +1599,9 @@ function EditableEventText({
       event.clipboardData.getData("text/plain"),
       config.multiline,
     );
-    const selection = window.getSelection?.();
-    if (!selection?.rangeCount) return;
-    const range = selection.getRangeAt(0);
-    range.deleteContents();
-    const fragment = document.createDocumentFragment();
-    text.split("\n").forEach((line, index) => {
-      if (index) fragment.append(document.createElement("br"));
-      fragment.append(document.createTextNode(line));
-    });
-    range.insertNode(fragment);
-    range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    acceptInput(event.currentTarget);
+    if (insertPlainTextAtSelection(text, event.currentTarget)) {
+      acceptInput(event.currentTarget);
+    }
   };
 
   const editableProps = {

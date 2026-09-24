@@ -68,6 +68,77 @@ function project(id, changes = {}) {
   };
 }
 
+test("a conflict keeps the latest local edit and never automatically retries or flushes it", async () => {
+  const timers = fakeTimers();
+  const operation = deferred();
+  const notifications = [];
+  let calls = 0;
+  let latest = markStudioProjectPending(project("a", {_cloudRevision: 1}), "studio-user");
+  const coordinator = createStudioSaveCoordinator({
+    actorUid: "studio-user", timers,
+    saveProject: async () => { calls += 1; return operation.promise; },
+    deleteProject: async () => {},
+    onSaveError: (result) => { latest = applyStudioSaveFailure(latest, result); },
+    onStateChange: (state) => notifications.push(state.status),
+  });
+  coordinator.schedule(latest);
+  await timers.advance(500);
+  latest = markStudioProjectPending({...latest, name: "Edited during request"}, "studio-user");
+  coordinator.schedule(latest);
+  operation.reject(Object.assign(new Error("A newer version exists"), {code: "studio/conflict"}));
+  await timers.advance(20_000);
+  await coordinator.flush("a");
+  assert.equal(calls, 1);
+  assert.equal(latest.name, "Edited during request");
+  assert.equal(latest._studioSync.pending, true);
+  assert.equal(latest._studioSync.conflict, true);
+  assert.equal(coordinator.retry("a"), false);
+  assert.equal(notifications.at(-1), "conflict");
+  coordinator.schedule(markStudioProjectPending(latest, "studio-user"));
+  await timers.advance(20_000);
+  assert.equal(calls, 1);
+});
+
+test("a successful in-flight save advances the cloud version of queued edits", async () => {
+  const timers = fakeTimers();
+  const first = deferred();
+  const versions = [];
+  const coordinator = createStudioSaveCoordinator({
+    actorUid: "studio-user", timers,
+    saveProject: async (value) => {
+      versions.push(value._cloudRevision);
+      if (versions.length === 1) await first.promise;
+      return {...value, _cloudRevision: value._cloudRevision + 1};
+    },
+    deleteProject: async () => {},
+  });
+  const draft = markStudioProjectPending(project("a", {_cloudRevision: 3}), "studio-user");
+  coordinator.schedule(draft); await timers.advance(500);
+  coordinator.schedule(markStudioProjectPending({...draft, name: "Later"}, "studio-user"));
+  await timers.advance(500); first.resolve(); await timers.advance(0);
+  await coordinator.flush("a");
+  assert.deepEqual(versions.slice(0, 2), [3, 4]);
+});
+
+test("loading a latest version resets a blocked queue for subsequent edits", async () => {
+  const timers = fakeTimers();
+  const versions = [];
+  const coordinator = createStudioSaveCoordinator({
+    actorUid: "studio-user", timers,
+    saveProject: async (value) => {
+      versions.push(value._cloudRevision);
+      if (value._cloudRevision === 1) throw Object.assign(new Error("Conflict"), {code: "studio/conflict"});
+      return {...value, _cloudRevision: value._cloudRevision + 1};
+    }, deleteProject: async () => {},
+  });
+  coordinator.schedule(markStudioProjectPending(project("a", {_cloudRevision: 1}), "studio-user"));
+  await timers.advance(500);
+  coordinator.reset("a");
+  coordinator.schedule(markStudioProjectPending(project("a", {_cloudRevision: 2}), "studio-user"));
+  await timers.advance(500);
+  assert.deepEqual(versions, [1, 2]);
+});
+
 test("per-project debounce saves A and B independently", async () => {
   const timers = fakeTimers();
   const saves = [];

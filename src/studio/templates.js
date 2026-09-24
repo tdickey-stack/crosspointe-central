@@ -1,4 +1,7 @@
-import {documentFieldWarnings} from "./document-fields.js";
+import {
+  documentFieldWarnings,
+  documentLineListItems,
+} from "./document-fields.js";
 export const STUDIO_STORAGE_KEY = "crosspointeStudioProjectsV1";
 export const DOCUMENT_PROJECT_TEMPLATE_ID = "document-project";
 export const LEGACY_POLICY_TEMPLATE_ID = "policy-document";
@@ -1422,10 +1425,10 @@ export function getProjectWarnings(project) {
         page.templateId === "document-one-pager" &&
         ![
           content.operatingRule,
-          ...(content.primaryItems || []),
-          ...(content.secondaryItems || []),
-          ...(content.ownerItems || []),
-          ...(content.processSteps || []),
+          ...documentLineListItems(page.templateId, content, "primaryItems"),
+          ...documentLineListItems(page.templateId, content, "secondaryItems"),
+          ...documentLineListItems(page.templateId, content, "ownerItems"),
+          ...documentLineListItems(page.templateId, content, "processSteps"),
         ].some((value) => String(value || "").trim())
       ) {
         warnings.push(`${pageLabel} needs at least one guidance section.`);

@@ -57,3 +57,53 @@ export function validateGraphicTextEdit(value, config) {
     maximum,
   };
 }
+
+function selectionBelongsToElement(selection, element) {
+  if (!selection?.rangeCount || !element) return false;
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  const containerElement =
+    container?.nodeType === 3 ? container.parentNode : container;
+  return container === element || element.contains?.(containerElement);
+}
+
+/**
+ * Insert normalized plain text into a contenteditable while preserving the
+ * browser's native edit history when it supports the insertText command.
+ */
+export function insertPlainTextAtSelection(
+  text,
+  element,
+  documentObject = element?.ownerDocument || globalThis.document,
+) {
+  const selection = documentObject?.defaultView?.getSelection?.();
+  if (!selectionBelongsToElement(selection, element)) return false;
+
+  // execCommand is retained here specifically because insertText participates
+  // in the native contenteditable Undo/Redo stack. Range mutations do not.
+  try {
+    if (
+      typeof documentObject.execCommand === "function" &&
+      documentObject.execCommand("insertText", false, String(text || ""))
+    ) {
+      return true;
+    }
+  } catch {
+    // Fall through for browsers that expose but reject insertText.
+  }
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const fragment = documentObject.createDocumentFragment();
+  String(text || "")
+    .split("\n")
+    .forEach((line, index) => {
+      if (index) fragment.append(documentObject.createElement("br"));
+      fragment.append(documentObject.createTextNode(line));
+    });
+  range.insertNode(fragment);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
+}

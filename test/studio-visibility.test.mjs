@@ -163,6 +163,32 @@ test("one-pager cards ignore padding-only scroll metrics", () => {
   assert.equal(documentPageHasOverflow(root, "document-one-pager"), false);
 });
 
+test("one-pager preview renders every retained draft item instead of silently omitting excess copy", () => {
+  const page = createDocumentPage("document-one-pager");
+  page.content.ownerItemsText = [
+    "First responsibility",
+    "Second responsibility",
+    "Third responsibility",
+    "Fourth responsibility",
+  ].join("\n");
+  page.content.ownerItems = [
+    "First responsibility",
+    "Second responsibility",
+    "Third responsibility",
+  ];
+
+  const markup = renderToStaticMarkup(
+    React.createElement(DocumentPagePreview, {
+      page,
+      pageNumber: 1,
+      pageCount: 1,
+    }),
+  );
+
+  assert.match(markup, /Fourth responsibility/u);
+  assert.match(markup, /--policy-owner-columns:4/u);
+});
+
 test("every default document page reaches its distinct SSR renderer", () => {
   const expectedClasses = {
     "document-one-pager": "studio-policy-document",

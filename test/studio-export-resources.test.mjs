@@ -3,12 +3,15 @@ import test from "node:test";
 
 import {
   assertStudioLayoutReady,
+  canvasToPngBlob,
   openDocumentSystemPrint,
   waitForDocumentImages,
   waitForFonts,
   waitForImageElement,
+  waitForLayoutFrame,
   waitForPromiseWithTimeout,
 } from "../src/studio/export.js";
+import {createStudioExportLoader} from "../src/studio/export-loader.js";
 
 function pendingImage() {
   const listeners = new Map();
@@ -33,6 +36,44 @@ test("export resources reject with a bounded timeout", async () => {
     waitForImageElement(pendingImage(), {timeoutMs: 5}),
     /still loading/u,
   );
+});
+
+test("export layout frames and PNG encoding reject with bounded timeouts", async () => {
+  const originalWindow = globalThis.window;
+  globalThis.window = {requestAnimationFrame() {}};
+
+  try {
+    await assert.rejects(
+      waitForLayoutFrame(5),
+      /timed out while applying an export image/u,
+    );
+  } finally {
+    globalThis.window = originalWindow;
+  }
+
+  await assert.rejects(
+    canvasToPngBlob({toBlob() {}}, 5),
+    /timed out while creating the exported PNG/u,
+  );
+});
+
+test("export loader explains a stale chunk and retries after failure", async () => {
+  const expectedModule = {exportEventPng() {}};
+  let attempts = 0;
+  const loadStudioExports = createStudioExportLoader(async () => {
+    attempts += 1;
+    if (attempts === 1) throw new TypeError("Failed to fetch dynamically imported module");
+    return expectedModule;
+  });
+
+  await assert.rejects(
+    loadStudioExports(),
+    /Reload Studio and try the export again/u,
+  );
+  assert.equal(await loadStudioExports(), expectedModule);
+  assert.equal(attempts, 2);
+  assert.equal(await loadStudioExports(), expectedModule);
+  assert.equal(attempts, 2);
 });
 
 test("font readiness retries a failed startup stylesheet request", async () => {

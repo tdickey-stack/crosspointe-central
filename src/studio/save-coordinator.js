@@ -27,6 +27,9 @@ function syncMetadata(project) {
 
 function cloudMetadata(project) {
   return {
+    ...(Object.hasOwn(project || {}, "_cloudRevision")
+      ? {_cloudRevision: project._cloudRevision}
+      : {}),
     ...(Object.hasOwn(project || {}, "schemaVersion")
       ? {schemaVersion: project.schemaVersion}
       : {}),
@@ -62,6 +65,8 @@ export function markStudioProjectPending(
       syncedRevision,
       pending: true,
       changedAt: now(),
+      changeId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+      ...(sameActor && previous.conflict ? {conflict: true} : {}),
       ...(sameActor && stringValue(previous.syncedAt)
         ? {syncedAt: previous.syncedAt}
         : {}),
@@ -93,6 +98,7 @@ export function applyStudioSaveSuccess(
       pending: !isCurrent,
       ...(isCurrent ? {syncedAt: now()} : {}),
       lastError: "",
+      conflict: false,
     },
   };
 }
@@ -106,7 +112,7 @@ export function applyStudioSaveFailure(
   const sync = syncMetadata(latestProject);
   if (
     sync.actorUid !== actor ||
-    integerValue(sync.revision) !== integerValue(revision, -1)
+    (integerValue(sync.revision) !== integerValue(revision, -1) && error?.code !== "studio/conflict")
   ) {
     return latestProject;
   }
@@ -117,6 +123,7 @@ export function applyStudioSaveFailure(
       pending: true,
       failedAt: now(),
       lastError: stringValue(error?.message || error).slice(0, 500),
+      ...(error?.code === "studio/conflict" ? {conflict: true} : {}),
     },
   };
 }
@@ -294,6 +301,7 @@ export function createStudioSaveCoordinator({
         ready: false,
         inFlight: null,
         deleted: false,
+        blocked: false,
         deletePromise: null,
         retryCount: 0,
         idleResolvers: [],
@@ -342,6 +350,7 @@ export function createStudioSaveCoordinator({
     if (
       !active ||
       state.deleted ||
+      state.blocked ||
       state.inFlight ||
       !state.ready ||
       !state.latestProject
@@ -385,7 +394,13 @@ export function createStudioSaveCoordinator({
           error,
         });
       }
-      if (!state.deleted && active) {
+      if (!state.deleted && active && error?.code === "studio/conflict") {
+        state.blocked = true;
+        state.ready = false;
+        if (state.timer) clearTimer(state.timer);
+        state.timer = null;
+        notify(state, "conflict", {revision: state.latestRevision, error});
+      } else if (!state.deleted && active) {
         state.retryCount += 1;
         if (state.retryCount <= maxAutoRetries) {
           const delay = retryDelayMs * 2 ** (state.retryCount - 1);
@@ -427,6 +442,11 @@ export function createStudioSaveCoordinator({
     state.latestProject = project;
     state.latestRevision = revision;
     state.ready = false;
+    if (state.blocked || sync.conflict) {
+      state.blocked = true;
+      notify(state, "conflict", {revision});
+      return revision;
+    }
     scheduleTimer(state, debounceMs);
     notify(state, "pending", {revision});
     return revision;
@@ -434,7 +454,7 @@ export function createStudioSaveCoordinator({
 
   const retry = (projectId) => {
     const state = queues.get(projectId);
-    if (!active || !state || state.deleted || !state.latestProject) return false;
+    if (!active || !state || state.deleted || state.blocked || !state.latestProject) return false;
     state.retryCount = 0;
     state.ready = true;
     if (state.timer) {
@@ -450,7 +470,7 @@ export function createStudioSaveCoordinator({
       ? [queues.get(projectId)].filter(Boolean)
       : [...queues.values()];
     for (const state of states) {
-      if (state.deleted || !state.latestProject) continue;
+      if (state.deleted || state.blocked || !state.latestProject) continue;
       if (state.timer) {
         clearTimer(state.timer);
         state.timer = null;
@@ -517,5 +537,16 @@ export function createStudioSaveCoordinator({
     retry,
     delete: remove,
     dispose,
+    reset(projectId) {
+      const state = queues.get(projectId);
+      if (state?.inFlight || state?.deletePromise) throw new Error("Wait for the current save to finish before loading another version.");
+      if (state?.timer) clearTimer(state.timer);
+      if (state) {
+        state.timer = null;
+        state.ready = false;
+        settleIdle(state);
+      }
+      queues.delete(projectId);
+    },
   };
 }

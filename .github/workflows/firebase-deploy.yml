@@ -65,6 +65,12 @@ jobs:
       - name: Test Studio client persistence
         run: pnpm run test:studio-client
 
+      - name: Test Studio backend
+        run: pnpm run test:studio-backend
+
+      - name: Test Studio security rules
+        run: pnpm run test:studio-rules
+
       - name: Test Studio Planning Center lookup
         run: npm --prefix functions run test:studio
 
@@ -154,6 +160,12 @@ jobs:
 
       - name: Test Studio client persistence
         run: pnpm run test:studio-client
+
+      - name: Test Studio backend
+        run: pnpm run test:studio-backend
+
+      - name: Test Studio security rules
+        run: pnpm run test:studio-rules
 
       - name: Test Studio Planning Center lookup
         run: npm --prefix functions run test:studio

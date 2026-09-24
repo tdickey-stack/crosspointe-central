@@ -11,6 +11,9 @@ const entryFile = path.join(projectRoot, "src", "studio", "main.jsx");
 const outputFile = path.join(projectRoot, "public", "studio.js");
 const outputCssFile = path.join(projectRoot, "public", "studio.css");
 
+// Retain previously published hashed chunks. Tabs opened before a deployment
+// may request their export module for the first time after the new release.
+// Do not clean public/studio-chunks as part of this build or deployment.
 await build({
   entryPoints: {studio: entryFile},
   outdir: path.dirname(outputFile),

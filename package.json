@@ -16,7 +16,7 @@
     "test:change-request-rules": "firebase emulators:exec --project crosspointe-central-change-request-rules --only firestore \"node --test test/change-request-security-rules.test.mjs\"",
     "test:analytics": "node --test test/central-analytics.test.cjs",
     "test:seasonal": "node --test test/seasonal-experience.test.mjs",
-    "test:studio-client": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/studio-persistence.test.mjs test/studio-creative-filename.test.mjs test/studio-carousel-archive.test.mjs test/studio-visibility.test.mjs",
+    "test:studio-client": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/studio-persistence.test.mjs test/studio-creative-filename.test.mjs test/studio-carousel-archive.test.mjs test/studio-visibility.test.mjs test/studio-save-coordinator.test.mjs test/studio-document-save.test.mjs test/studio-export-resources.test.mjs test/studio-input-boundaries.test.mjs",
     "test:studio-backend": "npm --prefix studio-functions test",
     "test:studio-rules": "firebase emulators:exec --project crosspointe-central-studio-rules --only firestore,storage \"node --test test/studio-security-rules.test.mjs\"",
     "wayfinder:validate": "npm --prefix functions run wayfinder:validate",

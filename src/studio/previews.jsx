@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import {createPortal} from "react-dom";
 import {focalMediaStyle, normalizeImageOpacity} from "./focal.js";
 import {
   GRAPHIC_FONT_WEIGHT_OPTIONS,
@@ -17,6 +18,13 @@ import {
   normalizeEventComposition,
   textToLines,
 } from "./templates.js";
+import {
+  EVENT_TEXT_FIELDS,
+  SOCIAL_TEXT_FIELDS,
+  SMALL_GROUP_TEXT_FIELDS,
+  normalizeGraphicText,
+  validateGraphicTextEdit,
+} from "./text-fields.js";
 
 const BRAND_MARK_COLOR_HEX = {
   white: "#ffffff",
@@ -948,34 +956,191 @@ export function ContentPagePreview({
   );
 }
 
-export function DocumentPagePreview({
+const DOCUMENT_OVERFLOW_SELECTORS = {
+  "document-checklist": [
+    ".document-standard-hero",
+    ".document-standard-title",
+    ".checklist-body",
+    ".checklist-instructions",
+    ".checklist-section.is-density-maximum",
+    ".checklist-callout",
+  ],
+  "document-signup-sheet": [
+    ".document-standard-hero",
+    ".document-standard-title",
+    ".signup-sheet-body",
+    ".signup-sheet-instructions",
+    ".signup-sheet-table",
+  ],
+  "document-directory": [
+    ".document-standard-hero",
+    ".document-standard-title",
+    ".directory-body",
+    ".directory-grid",
+  ],
+  "document-content-page": [
+    ".document-standard-hero",
+    ".document-standard-title",
+    ".content-page-body",
+    ".content-page-blocks",
+  ],
+  default: [
+    ".policy-hero",
+    ".policy-title-block",
+    ".policy-body",
+  ],
+};
+
+const POLICY_TEXT_CLIP_SELECTORS = [
+  ".policy-operating-rule",
+  ".policy-list-card",
+  ".policy-owner-card",
+  ".policy-footer",
+];
+const INTENTIONAL_POLICY_TEXT_CLIPS =
+  ".policy-meta-pill, .policy-list-card h3, .policy-owner-card h3";
+
+const DOCUMENT_PREVIEW_RENDERERS = Object.freeze({
+  "document-checklist": ChecklistPreview,
+  "document-signup-sheet": SignupSheetPreview,
+  "document-directory": DirectoryPreview,
+  "document-content-page": ContentPagePreview,
+});
+
+function elementContentOverflows(element) {
+  return (
+    element.scrollHeight > element.clientHeight + 1 ||
+    element.scrollWidth > element.clientWidth + 1
+  );
+}
+
+function elementTextContentOverflows(element) {
+  const ownerDocument = element.ownerDocument;
+  if (!ownerDocument?.createTreeWalker || !ownerDocument.createRange) {
+    return false;
+  }
+  const bounds = element.getBoundingClientRect();
+  const showText = ownerDocument.defaultView?.NodeFilter?.SHOW_TEXT || 4;
+  const walker = ownerDocument.createTreeWalker(element, showText);
+  const tolerance = 1.5;
+  let node = walker.nextNode();
+  while (node) {
+    if (
+      node.textContent.trim() &&
+      !node.parentElement?.closest(INTENTIONAL_POLICY_TEXT_CLIPS)
+    ) {
+      const range = ownerDocument.createRange();
+      range.selectNodeContents(node);
+      const clips = Array.from(range.getClientRects()).some(
+        (rect) =>
+          rect.bottom > bounds.bottom + tolerance ||
+          rect.right > bounds.right + tolerance ||
+          rect.top < bounds.top - tolerance ||
+          rect.left < bounds.left - tolerance,
+      );
+      range.detach?.();
+      if (clips) return true;
+    }
+    node = walker.nextNode();
+  }
+  return false;
+}
+
+export function documentPageHasOverflow(root, templateId) {
+  if (!root) return false;
+  if (elementContentOverflows(root)) return true;
+  const selectors =
+    DOCUMENT_OVERFLOW_SELECTORS[templateId] || DOCUMENT_OVERFLOW_SELECTORS.default;
+  const containerOverflow = selectors.some((selector) =>
+    Array.from(root.querySelectorAll(selector)).some(elementContentOverflows),
+  );
+  if (containerOverflow) return true;
+  if (templateId !== "document-one-pager") return false;
+  return POLICY_TEXT_CLIP_SELECTORS.some((selector) =>
+    Array.from(root.querySelectorAll(selector)).some(
+      elementTextContentOverflows,
+    ),
+  );
+}
+
+function DocumentPagePreviewComponent({
   page,
   previewRef,
   pageNumber,
   pageCount,
   showPageNumbers = true,
+  onLayoutWarning,
 }) {
+  const rootRef = useRef(null);
+  const warningRef = useRef(onLayoutWarning);
+  const lastWarningRef = useRef(null);
+  warningRef.current = onLayoutWarning;
+  const combinedPreviewRef = useCallback(
+    (node) => {
+      rootRef.current = node;
+      if (typeof previewRef === "function") previewRef(node);
+      else if (previewRef) previewRef.current = node;
+    },
+    [previewRef],
+  );
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    if (!warningRef.current) lastWarningRef.current = null;
+    let frame = 0;
+    let disposed = false;
+    const measure = () => {
+      frame = 0;
+      if (disposed) return;
+      const overflow = documentPageHasOverflow(root, page.templateId);
+      const warning = overflow
+        ? "Page content exceeds the printable area. Shorten the content before exporting."
+        : "";
+      if (overflow) root.dataset.studioLayoutError = "true";
+      else delete root.dataset.studioLayoutError;
+      if (warningRef.current && lastWarningRef.current !== warning) {
+        lastWarningRef.current = warning;
+        warningRef.current(warning);
+      }
+    };
+    const schedule = () => {
+      if (disposed) return;
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+    observer?.observe(root);
+    const selectors =
+      DOCUMENT_OVERFLOW_SELECTORS[page.templateId] ||
+      DOCUMENT_OVERFLOW_SELECTORS.default;
+    selectors.forEach((selector) => {
+      root.querySelectorAll(selector).forEach((element) => observer?.observe(element));
+    });
+    schedule();
+    document.fonts?.ready?.then(schedule).catch(() => {});
+    return () => {
+      disposed = true;
+      if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      delete root.dataset.studioLayoutError;
+    };
+  }, [page.content, page.templateId, Boolean(onLayoutWarning)]);
+
   const props = {
     content: page.content || {},
-    previewRef,
+    previewRef: combinedPreviewRef,
     pageNumber,
     pageCount,
     showPageNumbers,
   };
-  if (page.templateId === "document-checklist") {
-    return <ChecklistPreview {...props} />;
-  }
-  if (page.templateId === "document-signup-sheet") {
-    return <SignupSheetPreview {...props} />;
-  }
-  if (page.templateId === "document-directory") {
-    return <DirectoryPreview {...props} />;
-  }
-  if (page.templateId === "document-content-page") {
-    return <ContentPagePreview {...props} />;
-  }
-  return <PolicyPreview {...props} />;
+  const PreviewComponent =
+    DOCUMENT_PREVIEW_RENDERERS[page.templateId] || PolicyPreview;
+  return <PreviewComponent {...props} />;
 }
+
+export const DocumentPagePreview = React.memo(DocumentPagePreviewComponent);
 
 function EventGraphicDecoration({composition}) {
   if (composition === "flat" || composition === "color-overlay") {
@@ -1213,27 +1378,6 @@ function usePointeGlassRefraction({
   return clipRects;
 }
 
-const EVENT_EDITABLE_FIELDS = {
-  eyebrow: {label: "Utility label", maximum: 30},
-  title: {label: "Event title", maximum: 52},
-  subtitle: {label: "Supporting line", maximum: 110, multiline: true},
-  date: {label: "Date", maximum: 28},
-  time: {label: "Time", maximum: 24},
-  location: {label: "Location", maximum: 34},
-  cta: {label: "Call to action", maximum: 44},
-};
-
-const SOCIAL_EDITABLE_FIELDS = {
-  eyebrow: {label: "Context label", maximum: 30},
-  title: {label: "Main text", maximum: 220, multiline: true},
-  subtitle: {
-    label: "Reference, attribution, or supporting text",
-    maximum: 110,
-    multiline: true,
-  },
-  cta: {label: "Footer text", maximum: 44},
-};
-
 function VisibilityEyeIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1308,16 +1452,38 @@ function EditableEventText({
   onSelectField,
   selectedField,
   className = "",
-  fieldOptions = EVENT_EDITABLE_FIELDS,
+  fieldOptions = EVENT_TEXT_FIELDS,
   visible = true,
   autoFitLines = 0,
   autoFitMinScale = 0.56,
   autoFitKey = "",
 }) {
   const textRef = React.useRef(null);
+  const acceptedValueRef = React.useRef(String(children || ""));
+  const latestValueRef = React.useRef(String(children || ""));
+  const [limitMessage, setLimitMessage] = React.useState("");
+  const errorId = `${React.useId()}-limit`;
   const isOptional = ["eyebrow", "subtitle"].includes(field);
   const isOptionalEmpty = isOptional && !hasText(children);
   const isOptionalHidden = isOptional && visible === false;
+
+  latestValueRef.current = String(children || "");
+
+  const setTextRef = React.useCallback((element) => {
+    textRef.current = element;
+    if (element && document.activeElement !== element) {
+      element.textContent = latestValueRef.current;
+      acceptedValueRef.current = latestValueRef.current;
+    }
+  }, []);
+
+  React.useLayoutEffect(() => {
+    const element = textRef.current;
+    if (!element || document.activeElement === element) return;
+    const nextValue = String(children || "");
+    if (element.textContent !== nextValue) element.textContent = nextValue;
+    acceptedValueRef.current = nextValue;
+  }, [children, editorMode]);
 
   React.useLayoutEffect(() => {
     const element = textRef.current;
@@ -1383,16 +1549,93 @@ function EditableEventText({
   }
 
   const config = fieldOptions[field];
-  const commitValue = (event) => {
-    const rawValue = config.multiline
-      ? event.currentTarget.innerText
-      : event.currentTarget.textContent;
-    const value = String(rawValue || "")
-      .replace(/\u00a0/g, " ")
-      .replace(config.multiline ? /\r/g : /[\r\n]+/g, config.multiline ? "" : " ")
-      .slice(0, config.maximum);
-    if (value !== children) onEditField(field, value);
+  const restoreAcceptedValue = (element) => {
+    element.textContent = acceptedValueRef.current;
+    const selection = window.getSelection?.();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
   };
+  const acceptInput = (element) => {
+    const rawValue = config.multiline ? element.innerText : element.textContent;
+    const result = validateGraphicTextEdit(rawValue, config);
+    if (!result.accepted) {
+      restoreAcceptedValue(element);
+      setLimitMessage(`${config.label} is limited to ${result.maximum} characters.`);
+      return false;
+    }
+    acceptedValueRef.current = result.value;
+    setLimitMessage("");
+    if (result.value !== latestValueRef.current) {
+      latestValueRef.current = result.value;
+      onEditField(field, result.value);
+    }
+    return true;
+  };
+  const handlePaste = (event) => {
+    event.preventDefault();
+    const text = normalizeGraphicText(
+      event.clipboardData.getData("text/plain"),
+      config.multiline,
+    );
+    const selection = window.getSelection?.();
+    if (!selection?.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const fragment = document.createDocumentFragment();
+    text.split("\n").forEach((line, index) => {
+      if (index) fragment.append(document.createElement("br"));
+      fragment.append(document.createTextNode(line));
+    });
+    range.insertNode(fragment);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    acceptInput(event.currentTarget);
+  };
+
+  const editableProps = {
+    ref: setTextRef,
+    contentEditable: true,
+    suppressContentEditableWarning: true,
+    spellCheck: true,
+    role: "textbox",
+    "aria-label": `Edit ${config.label}`,
+    "aria-multiline": config.multiline ? true : undefined,
+    "aria-invalid": limitMessage ? true : undefined,
+    "aria-errormessage": limitMessage ? errorId : undefined,
+    "data-event-field": field,
+    "data-placeholder": config.label,
+    onClick: (event) => {
+      event.stopPropagation();
+      onSelectField(field);
+    },
+    onFocus: () => onSelectField(field),
+    onInput: (event) => acceptInput(event.currentTarget),
+    onPaste: handlePaste,
+    onBlur: (event) => acceptInput(event.currentTarget),
+    onKeyDown: (event) => {
+      if (event.key === "Escape") event.currentTarget.blur();
+      if (event.key === "Enter" && !config.multiline) {
+        event.preventDefault();
+        event.currentTarget.blur();
+      }
+    },
+  };
+
+  const serverText = typeof document === "undefined" ? children : null;
+  const errorMessage =
+    limitMessage && typeof document !== "undefined"
+      ? createPortal(
+          <span className="event-edit-limit-message" id={errorId} role="alert">
+            {limitMessage}
+          </span>,
+          document.body,
+        )
+      : null;
 
   const editableText = (
     <span
@@ -1402,33 +1645,9 @@ function EditableEventText({
       ]
         .filter(Boolean)
         .join(" ")}
-      contentEditable
-      suppressContentEditableWarning
-      spellCheck
-      role="textbox"
-      aria-label={`Edit ${config.label}`}
-      aria-multiline={config.multiline ? true : undefined}
-      data-event-field={field}
-      data-placeholder={config.label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelectField(field);
-      }}
-      onFocus={() => {
-        onSelectField(field);
-      }}
-      onBlur={commitValue}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.currentTarget.blur();
-        }
-        if (event.key === "Enter" && !config.multiline) {
-          event.preventDefault();
-          event.currentTarget.blur();
-        }
-      }}
+      {...editableProps}
     >
-      {children}
+      {serverText}
     </span>
   );
 
@@ -1446,6 +1665,7 @@ function EditableEventText({
         data-field-visible="true"
       >
         {editableText}
+        {errorMessage}
         <button
           className="event-field-visibility-toggle"
           type="button"
@@ -1464,42 +1684,22 @@ function EditableEventText({
   }
 
   return (
-    <Tag
-      ref={textRef}
-      className={[
-        className,
-        "event-editable-field",
-        selectedField === field ? "is-selected" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      contentEditable
-      suppressContentEditableWarning
-      spellCheck
-      role="textbox"
-      aria-label={`Edit ${config.label}`}
-      aria-multiline={config.multiline || undefined}
-      data-event-field={field}
-      data-placeholder={config.label}
-      data-auto-fit-lines={autoFitLines || undefined}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelectField(field);
-      }}
-      onFocus={() => onSelectField(field)}
-      onBlur={commitValue}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.currentTarget.blur();
-        }
-        if (event.key === "Enter" && !config.multiline) {
-          event.preventDefault();
-          event.currentTarget.blur();
-        }
-      }}
-    >
-      {children}
-    </Tag>
+    <>
+      <Tag
+        {...editableProps}
+        className={[
+          className,
+          "event-editable-field",
+          selectedField === field ? "is-selected" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-auto-fit-lines={autoFitLines || undefined}
+      >
+        {serverText}
+      </Tag>
+      {errorMessage}
+    </>
   );
 }
 
@@ -1593,7 +1793,7 @@ function SocialPostContent({
   }, [simpleStatement, content, editorMode]);
   const editableProps = {
     editorMode,
-    fieldOptions: SOCIAL_EDITABLE_FIELDS,
+    fieldOptions: SOCIAL_TEXT_FIELDS,
     onEditField,
     onSelectField,
     selectedField,
@@ -1693,16 +1893,6 @@ function SocialPostContent({
   );
 }
 
-const SMALL_GROUP_EDITABLE_FIELDS = {
-  eyebrow: {label: "Ministry label", maximum: 30},
-  title: {label: "Group name", maximum: 52},
-  subtitle: {label: "Leader names", maximum: 110},
-  date: {label: "Meeting day", maximum: 28},
-  time: {label: "Meeting time", maximum: 48},
-  location: {label: "Meeting location", maximum: 34},
-  cta: {label: "Directory prompt", maximum: 44},
-};
-
 function PointeGroupsMark() {
   return (
     <div className="pointe-groups-default-mark" aria-label="Pointe Groups">
@@ -1732,7 +1922,7 @@ function SmallGroupLeaderContent({
     onEditField,
     onSelectField,
     selectedField,
-    fieldOptions: SMALL_GROUP_EDITABLE_FIELDS,
+    fieldOptions: SMALL_GROUP_TEXT_FIELDS,
   };
   return (
     <div className="small-group-leader-layout">

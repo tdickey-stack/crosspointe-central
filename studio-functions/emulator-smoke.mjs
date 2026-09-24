@@ -2,11 +2,17 @@ import assert from "node:assert/strict";
 
 import {getApps, initializeApp} from "firebase-admin/app";
 import {getFirestore, Timestamp} from "firebase-admin/firestore";
+import {getStorage} from "firebase-admin/storage";
 
 process.env.FIRESTORE_EMULATOR_HOST ||= "127.0.0.1:8080";
 process.env.FIREBASE_AUTH_EMULATOR_HOST ||= "127.0.0.1:9099";
 
-if (!getApps().length) initializeApp({projectId: "crosspointe-central"});
+if (!getApps().length) {
+  initializeApp({
+    projectId: "crosspointe-central",
+    storageBucket: "crosspointe-central.firebasestorage.app",
+  });
+}
 const db = getFirestore();
 const authBase = "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1";
 const hostingBase = "http://127.0.0.1:5005";
@@ -47,6 +53,7 @@ async function api(path, token, body) {
 const owner = await signUp("owner");
 const member = await signUp("member");
 const projectId = `smoke-${suffix}`;
+const projectAssetPath = `studio-projects/${projectId}/example.png`;
 await db.doc(`centralStudioProjects/${projectId}`).set({
   schemaVersion: 1,
   ownerUid: owner.uid,
@@ -60,11 +67,25 @@ await db.doc(`centralStudioProjects/${projectId}`).set({
 });
 await db.doc(`centralStudioProjects/${projectId}/pages/example-page`).set({
   schemaVersion: 1,
-  templateId: "document-content-page",
-  content: {},
+  templateId: "document-directory",
+  content: {cardOrder: ["example-card"]},
   createdAt: Timestamp.now(),
   updatedAt: Timestamp.now(),
 });
+await db
+  .doc(
+    `centralStudioProjects/${projectId}/pages/example-page/cards/example-card`,
+  )
+  .set({
+    schemaVersion: 1,
+    name: "Example card",
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  });
+await getStorage()
+  .bucket()
+  .file(projectAssetPath)
+  .save(Buffer.from("emulator image"), {contentType: "image/png"});
 
 const share = await api("/api/studio/projects/share", owner.token, {projectId});
 assert.equal(share.response.status, 200, share.data.error);
@@ -102,6 +123,20 @@ assert.equal((await db.doc(`centralStudioProjects/${projectId}`).get()).exists, 
 assert.equal(
   (
     await db.doc(`centralStudioProjects/${projectId}/pages/example-page`).get()
+  ).exists,
+  false,
+);
+assert.deepEqual(
+  (await getStorage().bucket().getFiles({prefix: `studio-projects/${projectId}/`}))[0],
+  [],
+);
+assert.equal(
+  (
+    await db
+      .doc(
+        `centralStudioProjects/${projectId}/pages/example-page/cards/example-card`,
+      )
+      .get()
   ).exists,
   false,
 );

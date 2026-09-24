@@ -1,15 +1,32 @@
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 
-import {
-  exportCarouselZip,
-  exportDocumentPdf,
-  exportEventPng,
-  openDocumentSystemPrint,
-} from "./export.js";
+import {flushSync} from "react-dom";
+import {getGraphicTextFields} from "./text-fields.js";
+import {createLatestRequest, readStudioImage} from "./uploads.js";
+import {DOCUMENT_FIELD_LIMITS} from "./document-fields.js";
+import {markStudioProjectPending, applyStudioSaveSuccess, applyStudioSaveFailure, reconcileStudioProjects, createStudioSaveCoordinator} from "./save-coordinator.js";
+const loadStudioExports = () => import("./export.js");
+const waitForPreviewMount = (timeoutMs = 8000) => new Promise((resolve, reject) => {
+  let settled = false;
+  const timeout = window.setTimeout(() => {
+    settled = true;
+    reject(new Error(
+      "Studio timed out while preparing the export preview. Please try again.",
+    ));
+  }, timeoutMs);
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    resolve();
+  };
+  window.requestAnimationFrame(() => window.requestAnimationFrame(finish));
+});
 import {
   CREATIVE_FILENAME_PREFERENCE_KEY,
   buildCreativeFilename,
+  validateCreativeFilenameForExport,
 } from "./creative-filename.js";
 import {
   normalizeFocalValue,
@@ -292,9 +309,15 @@ function useStudioAuth() {
   return authState;
 }
 
-function loadProjects() {
+const STUDIO_RECOVERY_STORAGE_KEY = `${STUDIO_STORAGE_KEY}:recovery`;
+
+function studioAccountStorageKey(actorUid) {
+  return `${STUDIO_STORAGE_KEY}:account:${encodeURIComponent(String(actorUid || ""))}`;
+}
+
+function loadProjects(storageKey = STUDIO_STORAGE_KEY) {
   try {
-    const stored = JSON.parse(localStorage.getItem(STUDIO_STORAGE_KEY) || "[]");
+    const stored = JSON.parse(localStorage.getItem(storageKey) || "[]");
     return Array.isArray(stored)
       ? stored.map(migrateLegacyStudioProject)
       : [];
@@ -342,9 +365,118 @@ function prepareProjectForStorage(project) {
   return stored;
 }
 
-function persistProjects(projects) {
+function persistProjects(projects, storageKey = STUDIO_STORAGE_KEY) {
   const safeProjects = projects.map(prepareProjectForStorage);
-  localStorage.setItem(STUDIO_STORAGE_KEY, JSON.stringify(safeProjects));
+  localStorage.setItem(storageKey, JSON.stringify(safeProjects));
+}
+
+function browserProjectIdentity(project) {
+  return String(
+    project?._studioSync?.actorUid || project?.ownerUid || "unattributed",
+  );
+}
+
+function isRecoverableBrowserProject(project, actorUid) {
+  const identity = browserProjectIdentity(project);
+  return identity === "unattributed" || identity === actorUid;
+}
+
+function newerProject(left, right) {
+  const leftTime = new Date(left?.updatedAt || "").getTime() || 0;
+  const rightTime = new Date(right?.updatedAt || "").getTime() || 0;
+  return rightTime > leftTime ? right : left;
+}
+
+function dedupeBrowserProjects(projects, {includeIdentity = true} = {}) {
+  const byKey = new Map();
+  for (const project of projects) {
+    if (!project?.id) continue;
+    const key = includeIdentity
+      ? `${browserProjectIdentity(project)}:${project.id}`
+      : project.id;
+    byKey.set(key, byKey.has(key) ? newerProject(byKey.get(key), project) : project);
+  }
+  return [...byKey.values()];
+}
+
+function partitionBrowserProjects(projects, actorUid) {
+  const current = [];
+  const unattributed = [];
+  const foreign = [];
+  for (const project of dedupeBrowserProjects(projects)) {
+    const marker = String(project?._studioSync?.actorUid || "");
+    const owner = String(project?.ownerUid || "");
+    if (marker === actorUid || (!marker && owner === actorUid)) {
+      current.push(project);
+    } else if (!marker && !owner) {
+      unattributed.push(project);
+    } else {
+      foreign.push(project);
+    }
+  }
+  return {current, unattributed, foreign};
+}
+
+function recoveredProjectCopy(project) {
+  const recovered = JSON.parse(JSON.stringify(project));
+  const previousId = recovered.id;
+  recovered.id = `studio-${
+    globalThis.crypto?.randomUUID?.() ||
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }`;
+  recovered.name = `${String(recovered.name || "Untitled project").slice(0, 68)} (Recovered)`;
+  recovered.createdAt = new Date().toISOString();
+  recovered.updatedAt = recovered.createdAt;
+  recovered.cloudBacked = false;
+  recovered.shared = false;
+  delete recovered.ownerUid;
+  delete recovered._studioSync;
+
+  const clearProjectAssets = (content) => {
+    if (!content) return;
+    if (
+      content.backgroundImageSource === "upload" ||
+      String(content.backgroundImageStoragePath || "").startsWith(
+        `studio-projects/${previousId}/`,
+      )
+    ) {
+      content.backgroundImage = "";
+      content.backgroundImageSource = "";
+      content.backgroundImageUrl = "";
+      content.backgroundImageStoragePath = "";
+      content.unsplashPhotoId = "";
+      content.unsplashPhotographerName = "";
+      content.unsplashPhotographerUrl = "";
+      content.unsplashPhotoUrl = "";
+    }
+    if (
+      content.heroLogoSource === "upload" ||
+      String(content.heroLogoStoragePath || "").startsWith(
+        `studio-projects/${previousId}/`,
+      )
+    ) {
+      content.heroMode = "text";
+      content.heroLogo = "";
+      content.heroLogoSource = "";
+      content.heroLogoLibraryId = "";
+      content.heroLogoStoragePath = "";
+      content.heroLogoName = "";
+    }
+  };
+  clearProjectAssets(recovered.content);
+  (recovered.carouselSlides || []).forEach((slide) =>
+    clearProjectAssets(slide.content),
+  );
+  (recovered.pages || []).forEach((page) => {
+    if (page.templateId !== "document-directory") return;
+    (page.content?.cards || []).forEach((card) => {
+      if (card.imageStoragePath) {
+        card.imageUrl = "";
+        card.imageStoragePath = "";
+      }
+    });
+  });
+  return recovered;
 }
 
 function StudioLogo() {
@@ -894,29 +1026,13 @@ function TextareaField({
   );
 }
 
-function SelectField({label, value, onChange, options, hint}) {
-  return (
-    <Field label={label} hint={hint}>
-      <select
-        value={value || ""}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-}
-
 function LineListField({
   label,
   items,
   draftValue,
   onChange,
   maximum,
+  maxLength,
   rows,
   hint,
 }) {
@@ -934,6 +1050,7 @@ function LineListField({
         })
       }
       rows={rows}
+      maxLength={maxLength}
       hint={hint}
     />
   );
@@ -953,36 +1070,6 @@ function ToggleField({label, description, checked, onChange}) {
       />
       <i aria-hidden="true" />
     </label>
-  );
-}
-
-function BrandColorField({
-  value,
-  onChange,
-  label = "Flat background color",
-  hint = "Approved colors from the CrossPointe brand guidelines.",
-}) {
-  return (
-    <div className="studio-brand-color-field">
-      <span>{label}</span>
-      <div className="studio-brand-color-options">
-        {BRAND_COLOR_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            className={value === option.value ? "is-selected" : ""}
-            type="button"
-            onClick={() => onChange(option.value)}
-            title={`${option.label} ${option.hex}`}
-            aria-label={`${option.label} ${option.hex}`}
-            aria-pressed={value === option.value}
-          >
-            <i style={{background: option.hex}} />
-            <small>{option.label}</small>
-          </button>
-        ))}
-      </div>
-      <small>{hint}</small>
-    </div>
   );
 }
 
@@ -1193,37 +1280,6 @@ function ImageFocalPointEditor({content, updateContent}) {
   );
 }
 
-const EVENT_TEXT_FIELD_OPTIONS = {
-  eyebrow: {label: "Utility label", maximum: 30},
-  title: {label: "Event title", maximum: 52},
-  subtitle: {label: "Supporting line", maximum: 110, multiline: true},
-  date: {label: "Date", maximum: 28},
-  time: {label: "Time", maximum: 24},
-  location: {label: "Location", maximum: 34},
-  cta: {label: "Call to action", maximum: 44},
-};
-
-const SOCIAL_TEXT_FIELD_OPTIONS = {
-  eyebrow: {label: "Context label", maximum: 30},
-  title: {label: "Main text", maximum: 220, multiline: true},
-  subtitle: {
-    label: "Reference, attribution, or supporting text",
-    maximum: 110,
-    multiline: true,
-  },
-  cta: {label: "Footer text", maximum: 44},
-};
-
-const SMALL_GROUP_TEXT_FIELD_OPTIONS = {
-  eyebrow: {label: "Ministry label", maximum: 30},
-  title: {label: "Group name", maximum: 52},
-  subtitle: {label: "Leader names", maximum: 110, multiline: true},
-  date: {label: "Meeting day", maximum: 28},
-  time: {label: "Meeting time", maximum: 48},
-  location: {label: "Meeting location", maximum: 34},
-  cta: {label: "Directory prompt", maximum: 44},
-};
-
 function EventQuickToolbar({
   content,
   updateContent,
@@ -1244,11 +1300,7 @@ function EventQuickToolbar({
     templateId,
     content.composition,
   );
-  const textFieldOptions = isSmallGroupLeader
-    ? SMALL_GROUP_TEXT_FIELD_OPTIONS
-    : isSocial
-      ? SOCIAL_TEXT_FIELD_OPTIONS
-      : EVENT_TEXT_FIELD_OPTIONS;
+  const textFieldOptions = getGraphicTextFields(template);
   const selectedTextOption = textFieldOptions[selectedField];
   return (
     <div className="studio-event-toolbar-shell">
@@ -1589,6 +1641,13 @@ function EventQuickToolbar({
   );
 }
 
+function useUploadRequest() {
+  const requests = useRef(null);
+  if (!requests.current) requests.current = createLatestRequest();
+  useEffect(() => () => requests.current.cancel(), []);
+  return requests.current;
+}
+
 function EventHeroControls({
   content,
   updateContent,
@@ -1596,20 +1655,30 @@ function EventHeroControls({
   project,
   canManageLogoLibrary,
 }) {
+  const request = useUploadRequest();
+  const libraryRequest = useUploadRequest();
   const projectLogoInputRef = useRef(null);
   const libraryLogoInputRef = useRef(null);
   const [library, setLibrary] = useState([]);
   const [libraryName, setLibraryName] = useState("");
   const [state, setState] = useState({status: "", message: ""});
+  const projectIdRef = useRef(project?.id);
+  const chooseContent = (changes) => {
+    request.cancel();
+    setState({status: "", message: ""});
+    updateContent(changes);
+  };
 
   const refreshLibrary = async () => {
+    const isCurrent = libraryRequest.begin();
     if (!cloud?.loadLogoLibrary) {
-      setLibrary([]);
+      if (isCurrent()) setLibrary([]);
       return;
     }
     setState({status: "working", message: "Loading the Logo Library…"});
     try {
       const logos = await cloud.loadLogoLibrary();
+      if (!isCurrent()) return;
       setLibrary(logos);
       setState({
         status: "success",
@@ -1618,7 +1687,7 @@ function EventHeroControls({
           : "The Logo Library is ready for its first upload.",
       });
     } catch (error) {
-      setState({status: "error", message: error.message});
+      if (isCurrent()) setState({status: "error", message: error.message});
     }
   };
 
@@ -1626,13 +1695,12 @@ function EventHeroControls({
     refreshLibrary();
   }, [cloud]);
 
-  const previewFile = (file) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("Studio could not preview that logo."));
-      reader.readAsDataURL(file);
-    });
+  useEffect(() => {
+    if (projectIdRef.current === project?.id) return;
+    projectIdRef.current = project?.id;
+    request.cancel();
+    setState({status: "", message: ""});
+  }, [project?.id]);
 
   const validateLogoFile = (file) => {
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
@@ -1647,9 +1715,12 @@ function EventHeroControls({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    const isCurrent = request.begin();
+    setState({status: "working", message: "Loading project logo…"});
     try {
       validateLogoFile(file);
-      const preview = await previewFile(file);
+      const preview = await readStudioImage(file, 4);
+      if (!isCurrent()) return;
       updateContent({
         heroMode: "logo",
         heroLogo: preview,
@@ -1667,9 +1738,11 @@ function EventHeroControls({
       }
       setState({status: "working", message: "Uploading project logo…"});
       const changes = await cloud.uploadHeroLogo(project, file);
+      if (!isCurrent()) return;
       updateContent(changes);
       setState({status: "success", message: "Project logo saved to Studio."});
     } catch (error) {
+      if (!isCurrent()) return;
       setState({status: "error", message: error.message});
     }
   };
@@ -1678,6 +1751,8 @@ function EventHeroControls({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || !cloud?.uploadLogoToLibrary) return;
+    const isCurrent = request.begin();
+    const submittedLibraryName = libraryName;
     try {
       validateLogoFile(file);
       const inferredName = file.name
@@ -1687,12 +1762,15 @@ function EventHeroControls({
       const name = libraryName.trim() || inferredName;
       setState({status: "working", message: "Adding logo to the library…"});
       const logo = await cloud.uploadLogoToLibrary(name, file);
+      if (!isCurrent()) return;
       setLibrary((current) =>
         [...current, logo].sort((left, right) =>
           left.name.localeCompare(right.name),
         ),
       );
-      setLibraryName("");
+      setLibraryName((current) =>
+        current === submittedLibraryName ? "" : current,
+      );
       updateContent({
         heroMode: "logo",
         heroLogo: logo.imageUrl,
@@ -1706,11 +1784,13 @@ function EventHeroControls({
         message: `${logo.name} was added to the Logo Library and selected.`,
       });
     } catch (error) {
+      if (!isCurrent()) return;
       setState({status: "error", message: error.message});
     }
   };
 
   const selectLibraryLogo = (logoId) => {
+    request.cancel();
     const logo = library.find((item) => item.id === logoId);
     if (!logo) return;
     updateContent({
@@ -1743,7 +1823,7 @@ function EventHeroControls({
           className={content.heroMode !== "logo" ? "is-active" : ""}
           type="button"
           aria-pressed={content.heroMode !== "logo"}
-          onClick={() => updateContent({heroMode: "text"})}
+          onClick={() => chooseContent({heroMode: "text"})}
         >
           <strong>Text Hero</strong>
           <span>Use the template’s display typography.</span>
@@ -1752,7 +1832,7 @@ function EventHeroControls({
           className={content.heroMode === "logo" ? "is-active" : ""}
           type="button"
           aria-pressed={content.heroMode === "logo"}
-          onClick={() => updateContent({heroMode: "logo"})}
+          onClick={() => chooseContent({heroMode: "logo"})}
         >
           <strong>Logo Hero</strong>
           <span>Replace the main text with a prepared logo.</span>
@@ -1795,6 +1875,7 @@ function EventHeroControls({
               <button
                 className="studio-button is-secondary"
                 type="button"
+                disabled={state.status === "working"}
                 onClick={() => projectLogoInputRef.current?.click()}
               >
                 Upload for this project
@@ -1879,6 +1960,7 @@ function EventHeroControls({
                   maxLength="80"
                   value={libraryName}
                   placeholder="Bids for Kids"
+                  disabled={state.status === "working"}
                   onChange={(event) => setLibraryName(event.target.value)}
                 />
               </label>
@@ -1917,18 +1999,35 @@ function EventHeroControls({
 }
 
 function UnsplashSearch({
+  beginSourceRequest,
+  sourceRevision,
   unsplash,
   content,
   updateContent,
 }) {
+  const searchRequest = useUploadRequest();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [state, setState] = useState({status: "", message: ""});
 
+  useEffect(() => {
+    searchRequest.cancel();
+    setResults([]);
+    setPage(1);
+    setTotalPages(0);
+    setState({status: "", message: ""});
+  }, [unsplash, content.format]);
+
+  useEffect(() => {
+    setState({status: "", message: ""});
+  }, [sourceRevision]);
+
   const searchPage = async (nextPage) => {
     if (!unsplash || query.trim().length < 2) return;
+    const isCurrent = searchRequest.begin();
+    const submittedQuery = query.trim();
     setState({status: "working", message: "Searching Unsplash…"});
     try {
       const orientation =
@@ -1938,10 +2037,11 @@ function UnsplashSearch({
             ? "squarish"
             : "landscape";
       const data = await unsplash.searchUnsplash(
-        query.trim(),
+        submittedQuery,
         orientation,
         nextPage,
       );
+      if (!isCurrent()) return;
       setResults(data.results || []);
       setPage(nextPage);
       setTotalPages(Number(data.totalPages || 0));
@@ -1957,7 +2057,7 @@ function UnsplashSearch({
           : "No photos matched that search.",
       });
     } catch (error) {
-      setState({status: "error", message: error.message});
+      if (isCurrent()) setState({status: "error", message: error.message});
     }
   };
 
@@ -1967,9 +2067,11 @@ function UnsplashSearch({
   };
 
   const selectPhoto = async (photo) => {
+    const isCurrent = beginSourceRequest();
     setState({status: "working", message: "Adding the selected photo…"});
     try {
       const changes = await unsplash.selectUnsplash(photo);
+      if (!isCurrent()) return;
       updateContent({
         ...changes,
         focalX: 50,
@@ -1977,7 +2079,9 @@ function UnsplashSearch({
         imageZoom: 1,
         backgroundImageRotation: 0,
       });
+      setState({status: "success", message: "Photo added from Unsplash."});
     } catch (error) {
+      if (!isCurrent()) return;
       setState({status: "error", message: error.message});
     }
   };
@@ -1997,7 +2101,14 @@ function UnsplashSearch({
           type="search"
           value={query}
           placeholder="People connecting, worship, community…"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            searchRequest.cancel();
+            setQuery(event.target.value);
+            setResults([]);
+            setPage(1);
+            setTotalPages(0);
+            setState({status: "", message: ""});
+          }}
           disabled={!unsplash}
         />
         <button
@@ -2092,48 +2203,46 @@ function EventBackgroundControls({
   unsplash,
   project,
 }) {
+  const request = useUploadRequest();
   const fileInputRef = useRef(null);
   const [uploadState, setUploadState] = useState({status: "", message: ""});
+  const [sourceRevision, setSourceRevision] = useState(0);
+  const chooseContent = (changes) => {
+    request.cancel();
+    setSourceRevision((current) => current + 1);
+    setUploadState({status: "", message: ""});
+    updateContent(changes);
+  };
+  const beginSourceRequest = () => {
+    setUploadState({status: "", message: ""});
+    return request.begin();
+  };
+
+  useEffect(() => {
+    request.cancel();
+    setSourceRevision((current) => current + 1);
+    setUploadState({status: "", message: ""});
+  }, [project?.id]);
 
   const handleFile = async (event) => {
-    const file = event.target.files && event.target.files[0];
+    const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setUploadState({status: "error", message: "Use a JPG, PNG, or WebP image."});
-      return;
-    }
-    if (file.size >= 8 * 1024 * 1024) {
-      setUploadState({status: "error", message: "Use an image smaller than 8 MB."});
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateContent({
-        backgroundImage: String(reader.result || ""),
-        backgroundImageSource: "",
-        backgroundImageUrl: "",
-        backgroundImageStoragePath: "",
-        focalX: 50,
-        focalY: 50,
-        imageZoom: 1,
-        backgroundImageRotation: 0,
-      });
-    };
-    reader.readAsDataURL(file);
-    if (!cloud) {
-      setUploadState({
-        status: "success",
-        message: "Preview loaded in this browser. Cloud upload is unavailable.",
-      });
-      return;
-    }
-    setUploadState({status: "working", message: "Uploading image to Studio…"});
+    const isCurrent = request.begin();
+    setSourceRevision((current) => current + 1);
+    setUploadState({status: "working", message: "Loading image…"});
     try {
-      const changes = await cloud.uploadBackground(project, file);
-      updateContent(changes);
-      setUploadState({status: "success", message: "Image saved to Studio."});
+      const preview = await readStudioImage(file);
+      if (!isCurrent()) return;
+      updateContent({backgroundImage: preview, backgroundImageSource: "", backgroundImageUrl: "", backgroundImageStoragePath: "", focalX: 50, focalY: 50, imageZoom: 1, backgroundImageRotation: 0});
+      if (cloud) {
+        const changes = await cloud.uploadBackground(project, file);
+        if (!isCurrent()) return;
+        updateContent(changes);
+      }
+      setUploadState({status: "success", message: cloud ? "Image saved to Studio." : "Preview loaded in this browser."});
     } catch (error) {
-      setUploadState({status: "error", message: error.message});
+      if (isCurrent()) setUploadState({status: "error", message: error.message});
     }
   };
 
@@ -2178,7 +2287,7 @@ function EventBackgroundControls({
             className="studio-button is-secondary"
             type="button"
             onClick={() =>
-              updateContent({
+              chooseContent({
                 backgroundImage: "",
                 backgroundImageSource: "",
                 backgroundImageUrl: "",
@@ -2225,725 +2334,13 @@ function EventBackgroundControls({
         </p>
       ) : null}
       <UnsplashSearch
+        beginSourceRequest={beginSourceRequest}
+        sourceRevision={sourceRevision}
         unsplash={unsplash}
         content={content}
         updateContent={updateContent}
       />
     </div>
-  );
-}
-
-function SourceStep({project, updateProject, cloud, unsplash}) {
-  const isPolicy = project.templateId === "policy-document";
-  const updateContent = (changes) =>
-    updateProject({content: {...project.content, ...changes}});
-  return (
-    <div className="studio-step-card">
-      <div className="studio-step-card-heading">
-        <span className="studio-kicker">PROJECT FOUNDATION</span>
-        <h2>{isPolicy ? "Start with a governed document" : "Choose the event source"}</h2>
-        <p>
-          {isPolicy
-            ? "This first version starts from approved manual content. Policy libraries and source-document linking will follow."
-            : "Manual event details are enabled for the frontend foundation. Central and Planning Center source selection comes in the next data milestone."}
-        </p>
-      </div>
-
-      <div className="studio-source-options">
-        <button className="studio-source-option is-selected">
-          <span className="studio-source-radio" aria-hidden="true" />
-          <span>
-            <strong>{isPolicy ? "New SOP / Policy" : "Manual event details"}</strong>
-            <small>
-              {isPolicy
-                ? "Build a single-page operating document from controlled sections."
-                : "Enter event facts directly while the authoritative source connector is prepared."}
-            </small>
-          </span>
-          <StatusPill tone="ready">AVAILABLE</StatusPill>
-        </button>
-        <button className="studio-source-option" disabled>
-          <span className="studio-source-radio" aria-hidden="true" />
-          <span>
-            <strong>
-              {isPolicy ? "Existing Studio policy" : "Central / Planning Center event"}
-            </strong>
-            <small>
-              {isPolicy
-                ? "Duplicate and update a previously approved document."
-                : "Re-read authoritative event facts and preserve the source identity."}
-            </small>
-          </span>
-          <StatusPill>NEXT MILESTONE</StatusPill>
-        </button>
-      </div>
-
-      <div className="studio-field-grid">
-        <InputField
-          label="Project name"
-          value={project.name}
-          maxLength={80}
-          wide
-          onChange={(name) => updateProject({name})}
-          hint="This identifies the project in Studio; it does not appear on the graphic."
-        />
-      </div>
-      {!isPolicy ? (
-        <EventBackgroundControls
-          content={project.content}
-          updateContent={updateContent}
-          cloud={cloud}
-          unsplash={unsplash}
-          project={project}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function PolicyContentStep({content, updateContent}) {
-  return (
-    <div className="studio-step-card">
-      <div className="studio-step-card-heading">
-        <span className="studio-kicker">DOCUMENT CONTENT</span>
-        <h2>Build the information hierarchy</h2>
-        <p>
-          Every field maps to a controlled location in the one-page document.
-        </p>
-      </div>
-      <div className="studio-field-grid">
-        <InputField
-          label="Document number"
-          value={content.documentNumber}
-          onChange={(value) => updateContent({documentNumber: value})}
-          maxLength={18}
-        />
-        <InputField
-          label="Audience label"
-          value={content.audience}
-          onChange={(value) => updateContent({audience: value})}
-          maxLength={28}
-        />
-        <InputField
-          label="Document title"
-          value={content.title}
-          onChange={(value) => updateContent({title: value})}
-          maxLength={72}
-          wide
-        />
-        <TextareaField
-          label="Purpose statement"
-          value={content.subtitle}
-          onChange={(value) => updateContent({subtitle: value})}
-          maxLength={150}
-          rows={2}
-        />
-        <InputField
-          label="Operating rule heading"
-          value={content.operatingRuleLabel}
-          onChange={(value) => updateContent({operatingRuleLabel: value})}
-          maxLength={32}
-          wide
-        />
-        <TextareaField
-          label="Operating rule"
-          value={content.operatingRule}
-          onChange={(value) => updateContent({operatingRule: value})}
-          maxLength={320}
-          rows={4}
-          hint={`${String(content.operatingRule || "").length}/320 characters`}
-        />
-      </div>
-    </div>
-  );
-}
-
-function EventContentStep({content, updateContent, templateId}) {
-  const isSmallGroupLeader =
-    getTemplateById(templateId).variant === "small-group-leader";
-  return (
-    <div className="studio-step-card">
-      <div className="studio-step-card-heading">
-        <span className="studio-kicker">EVENT CONTENT</span>
-        <h2>Keep the message short and useful</h2>
-        <p>
-          The template protects hierarchy while the copy adapts across each
-          format.
-        </p>
-      </div>
-      <div className="studio-field-grid">
-        <InputField
-          label="Utility label"
-          value={content.eyebrow}
-          onChange={(value) => updateContent({eyebrow: value})}
-          maxLength={30}
-        />
-        <InputField
-          label="Event title"
-          value={content.title}
-          onChange={(value) => updateContent({title: value})}
-          maxLength={52}
-        />
-        <TextareaField
-          label="Supporting line"
-          value={content.subtitle}
-          onChange={(value) => updateContent({subtitle: value})}
-          maxLength={110}
-          rows={3}
-        />
-        <InputField
-          label="Date"
-          value={content.date}
-          onChange={(value) => updateContent({date: value})}
-          maxLength={28}
-        />
-        <InputField
-          label={isSmallGroupLeader ? "Meeting time" : "Time"}
-          value={content.time}
-          onChange={(value) => updateContent({time: value})}
-          maxLength={isSmallGroupLeader ? 48 : 24}
-        />
-        <InputField
-          label="Location"
-          value={content.location}
-          onChange={(value) => updateContent({location: value})}
-          maxLength={34}
-        />
-        <InputField
-          label="Call to action"
-          value={content.cta}
-          onChange={(value) => updateContent({cta: value})}
-          maxLength={44}
-          wide
-        />
-      </div>
-    </div>
-  );
-}
-
-function PolicyLayoutStep({content, updateContent}) {
-  return (
-    <div className="studio-step-card">
-      <div className="studio-step-card-heading">
-        <span className="studio-kicker">CONTROLLED SECTIONS</span>
-        <h2>Shape the repeatable guidance</h2>
-        <p>
-          Use one line per item. Studio keeps the two support columns and owner
-          responsibilities aligned.
-        </p>
-      </div>
-      <div className="studio-field-grid">
-        <InputField
-          label="Primary section label"
-          value={content.primarySectionLabel}
-          onChange={(value) => updateContent({primarySectionLabel: value})}
-          maxLength={32}
-        />
-        <InputField
-          label="Primary section heading"
-          value={content.primarySectionTitle}
-          onChange={(value) => updateContent({primarySectionTitle: value})}
-          maxLength={38}
-        />
-        <InputField
-          label="Secondary section label"
-          value={content.secondarySectionLabel}
-          onChange={(value) => updateContent({secondarySectionLabel: value})}
-          maxLength={32}
-        />
-        <InputField
-          label="Secondary section heading"
-          value={content.secondarySectionTitle}
-          onChange={(value) => updateContent({secondarySectionTitle: value})}
-          maxLength={38}
-        />
-        <InputField
-          label="Owner section label"
-          value={content.ownerLabel}
-          onChange={(value) => updateContent({ownerLabel: value})}
-          maxLength={32}
-        />
-        <InputField
-          label="Owner section heading"
-          value={content.ownerTitle}
-          onChange={(value) => updateContent({ownerTitle: value})}
-          maxLength={38}
-        />
-        <LineListField
-          label="Standard workflow items"
-          items={content.primaryItems}
-          draftValue={content.primaryItemsText}
-          onChange={({draftValue, items}) =>
-            updateContent({primaryItemsText: draftValue, primaryItems: items})
-          }
-          maximum={7}
-          rows={7}
-          hint="One item per line; up to 7 items."
-        />
-        <LineListField
-          label="Strategic option items"
-          items={content.secondaryItems}
-          draftValue={content.secondaryItemsText}
-          onChange={({draftValue, items}) =>
-            updateContent({
-              secondaryItemsText: draftValue,
-              secondaryItems: items,
-            })
-          }
-          maximum={7}
-          rows={7}
-          hint="One item per line; up to 7 items."
-        />
-        <LineListField
-          label="Owner responsibilities"
-          items={content.ownerItems}
-          draftValue={content.ownerItemsText}
-          onChange={({draftValue, items}) =>
-            updateContent({ownerItemsText: draftValue, ownerItems: items})
-          }
-          maximum={3}
-          rows={5}
-          hint="Exactly three concise responsibilities work best."
-        />
-      </div>
-    </div>
-  );
-}
-
-function EventLayoutStep({content, updateContent, templateId}) {
-  const compositionOptions = getEventCompositionOptions(templateId);
-  const selectedComposition = normalizeEventComposition(
-    templateId,
-    content.composition,
-  );
-  return (
-    <div className="studio-step-card">
-      <div className="studio-step-card-heading">
-        <span className="studio-kicker">FORMAT + COMPOSITION</span>
-        <h2>Reflow the idea, not just the canvas</h2>
-        <p>
-          Each format uses the same approved content with responsive placement
-          rules.
-        </p>
-      </div>
-      <div className="studio-field-grid">
-        <SelectField
-          label="Output format"
-          value={content.format}
-          onChange={(value) => updateContent({format: value})}
-          options={EVENT_FORMAT_OPTIONS.map((option) => ({
-            ...option,
-            label:
-              option.value === "square"
-                ? "1:1 Social Post"
-                : option.value === "portrait"
-                  ? "4:5 Social Post"
-                  : "16:9 Screen Graphic",
-          }))}
-        />
-        <SelectField
-          label="Composition"
-          value={selectedComposition}
-          onChange={(value) => updateContent({composition: value})}
-          options={compositionOptions}
-        />
-        {!["flat", "color-overlay"].includes(selectedComposition) ? (
-          <SelectField
-            label="Palette"
-            value={content.palette}
-            onChange={(value) => updateContent({palette: value})}
-            options={EVENT_PALETTE_OPTIONS}
-          />
-        ) : null}
-        {selectedComposition === "flat" && !content.backgroundImage ? (
-          <BrandColorField
-            value={content.flatColor || "charcoal"}
-            onChange={(flatColor) => updateContent({flatColor})}
-          />
-        ) : null}
-        {selectedComposition === "color-overlay" ? (
-          <>
-            <BrandColorField
-              value={content.overlayColor || "red"}
-              onChange={(overlayColor) => updateContent({overlayColor})}
-              label="Overlay color"
-              hint="The selected CrossPointe color is blended over the background image."
-            />
-            <SelectField
-              label="Blend mode"
-              value={content.overlayBlendMode || "multiply"}
-              onChange={(overlayBlendMode) =>
-                updateContent({overlayBlendMode})
-              }
-              options={EVENT_BLEND_OPTIONS}
-              hint="Multiply darkens, Screen lightens, Overlay adds contrast, and Soft Light is more subtle."
-            />
-            {!content.backgroundImage ? (
-              <p className="studio-field-note">
-                Add a background image in Source to preview the color blend.
-              </p>
-            ) : null}
-          </>
-        ) : null}
-      </div>
-      <div className="studio-layout-guidance">
-        <span>Template behavior</span>
-        <ul>
-          <li>Logo and CTA anchors cannot be freely moved.</li>
-          <li>Type roles and contrast remain deterministic.</li>
-          <li>Long titles trigger a review warning instead of shrinking forever.</li>
-          <li>Flat mode removes decorative overlays and gradients.</li>
-          <li>Color Overlay uses approved brand colors and Photoshop-style blending.</li>
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function PolicyBrandStep({content, updateContent}) {
-  return (
-    <div className="studio-step-card">
-      <div className="studio-step-card-heading">
-        <span className="studio-kicker">DOCUMENT IDENTITY</span>
-        <h2>Finish the governed details</h2>
-        <p>
-          The visual system remains fixed while labels and references describe
-          this specific document.
-        </p>
-      </div>
-      <div className="studio-field-grid">
-        <InputField
-          label="Header label"
-          value={content.eyebrow}
-          onChange={(value) => updateContent({eyebrow: value})}
-          maxLength={52}
-          wide
-        />
-        <InputField
-          label="Process label"
-          value={content.processLabel}
-          onChange={(value) => updateContent({processLabel: value})}
-          maxLength={30}
-        />
-        <InputField
-          label="Footer reference"
-          value={content.footerReference}
-          onChange={(value) => updateContent({footerReference: value})}
-          maxLength={34}
-        />
-        <TextareaField
-          label="Footer note"
-          value={content.footerNote}
-          onChange={(value) => updateContent({footerNote: value})}
-          maxLength={500}
-          rows={5}
-        />
-      </div>
-      <div className="studio-locked-style">
-        <div className="studio-locked-swatch">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div>
-          <strong>CrossPointe Policy System</strong>
-          <p>
-            Montserrat hierarchy, red-to-charcoal hero, white card grid, red
-            operating accents, and branded process footer.
-          </p>
-        </div>
-        <StatusPill tone="ready">LOCKED</StatusPill>
-      </div>
-    </div>
-  );
-}
-
-function EventBrandStep({content, updateContent, templateId}) {
-  const fontOptions = getEventFontOptions(templateId);
-  const selectedFontKey = content.fontKey || fontOptions[0]?.value;
-  return (
-    <div className="studio-step-card">
-      <div className="studio-step-card-heading">
-        <span className="studio-kicker">TYPE TREATMENT</span>
-        <h2>Place the message around the visual</h2>
-        <p>
-          Control alignment and legibility while Studio preserves the approved
-          hierarchy and safe margins.
-        </p>
-      </div>
-      <div className="studio-field-grid">
-        <div className="studio-font-choice-field">
-          <span>Display font</span>
-          <div className="studio-font-choice-grid">
-            {fontOptions.map((font) => (
-              <button
-                className={font.value === selectedFontKey ? "is-selected" : ""}
-                key={font.value}
-                onClick={() => updateContent({fontKey: font.value})}
-                style={{fontFamily: `"${font.family}", sans-serif`}}
-                type="button"
-              >
-                <i>Aa</i>
-                <strong>{font.label}</strong>
-              </button>
-            ))}
-          </div>
-          <small>
-            Applied to the event title; supporting information remains
-            Montserrat for clarity.
-          </small>
-        </div>
-        <SelectField
-          label="Global font weight"
-          value={content.fontWeight || "template"}
-          onChange={(fontWeight) => updateContent({fontWeight})}
-          options={GRAPHIC_FONT_WEIGHT_OPTIONS}
-          hint="Applies one weight to every text element in the graphic."
-        />
-        <SelectField
-          label="Brand mark"
-          value={content.brandMark || "central"}
-          onChange={(brandMark) => updateContent({brandMark})}
-          options={GRAPHIC_BRAND_MARK_OPTIONS}
-          hint="Choose Central, the CrossPointe heart, or the full church logo."
-        />
-        <SelectField
-          label="Brand color"
-          value={content.brandColor || "auto"}
-          onChange={(brandColor) => updateContent({brandColor})}
-          options={GRAPHIC_BRAND_COLOR_OPTIONS}
-          hint="Auto Contrast switches between white and dark grey for legibility."
-        />
-        <SelectField
-          label="Text alignment"
-          value={content.textAlignment || "left"}
-          onChange={(textAlignment) => updateContent({textAlignment})}
-          options={[
-            {value: "left", label: "Left"},
-            {value: "center", label: "Center"},
-            {value: "right", label: "Right"},
-          ]}
-          hint="Moves and aligns the primary copy and event details."
-        />
-      </div>
-      <ToggleField
-        label="Text drop shadow"
-        description="Adds separation when type sits over a busy or similarly colored background."
-        checked={content.textShadow}
-        onChange={(textShadow) => updateContent({textShadow})}
-      />
-      <div className="studio-locked-style">
-        <div
-          className="studio-type-sample"
-          style={{
-            fontFamily: `${
-              fontOptions.find(
-                (option) => option.value === selectedFontKey,
-              )?.family || fontOptions[0]?.family || "Montserrat"
-            }, sans-serif`,
-          }}
-        >
-          Aa
-        </div>
-        <div>
-          <strong>Curated template typography</strong>
-          <p>
-            Each event template offers three display families selected for its
-            proportions and layout. Policy documents remain Montserrat-only.
-          </p>
-        </div>
-        <StatusPill tone="ready">3 FONTS</StatusPill>
-      </div>
-      <div className="studio-ai-boundary-note">
-        <span>AI image generation</span>
-        <p>
-          The prototype is intentionally disconnected here. The secured,
-          quota-controlled generation workflow will be added after projects,
-          templates, and authoritative event data are stable.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function ReviewStep({
-  project,
-  warnings,
-  onPrint,
-  onExportPng,
-  onExportPdf,
-  exportState,
-}) {
-  const isPolicy = project.templateId === "policy-document";
-  const isExporting = exportState.status === "working";
-  return (
-    <div className="studio-step-card">
-      <div className="studio-step-card-heading">
-        <span className="studio-kicker">FINAL CHECK</span>
-        <h2>{warnings.length ? "A few details need attention" : "Ready for a closer review"}</h2>
-        <p>
-          Studio checks the deterministic content rules before an approval or
-          export can happen.
-        </p>
-      </div>
-
-      <div className="studio-review-summary">
-        <div>
-          <span>Template</span>
-          <strong>{getTemplateById(project.templateId).name}</strong>
-        </div>
-        <div>
-          <span>Status</span>
-          <strong>{project.status || "draft"}</strong>
-        </div>
-        <div>
-          <span>Source</span>
-          <strong>Manual foundation</strong>
-        </div>
-      </div>
-
-      <div className={`studio-review-checks${warnings.length ? " has-warnings" : ""}`}>
-        {warnings.length ? (
-          warnings.map((warning) => (
-            <div key={warning}>
-              <span aria-hidden="true">!</span>
-              <p>{warning}</p>
-            </div>
-          ))
-        ) : (
-          <>
-            <div>
-              <span aria-hidden="true">✓</span>
-              <p>Required content is present.</p>
-            </div>
-            <div>
-              <span aria-hidden="true">✓</span>
-              <p>The selected format is using a deterministic composition.</p>
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="studio-review-actions">
-        {isPolicy ? (
-          <>
-            <button
-              className="studio-button is-primary"
-              onClick={onExportPdf}
-              disabled={warnings.length > 0 || isExporting}
-            >
-              {isExporting ? "Preparing PDF…" : "Export PDF"}
-            </button>
-            <button
-              className="studio-button is-secondary"
-              onClick={onPrint}
-              disabled={isExporting}
-            >
-              System Print
-            </button>
-          </>
-        ) : (
-          <button
-            className="studio-button is-primary"
-            onClick={onExportPng}
-            disabled={warnings.length > 0 || isExporting}
-          >
-            {isExporting ? "Preparing High-Res PNG…" : "Export High-Res PNG"}
-          </button>
-        )}
-        <button className="studio-button is-secondary" disabled>
-          Submit for Approval
-        </button>
-      </div>
-      {exportState.message ? (
-        <p
-          className={`studio-export-status is-${exportState.status}`}
-          role={exportState.status === "error" ? "alert" : "status"}
-        >
-          {exportState.message}
-        </p>
-      ) : null}
-      <p className="studio-review-footnote">
-        Exports are generated from the exact live preview. Approval history
-        remains disabled until its review workflow is defined.
-      </p>
-    </div>
-  );
-}
-
-function StepContent({
-  step,
-  project,
-  updateProject,
-  updateContent,
-  warnings,
-  onExportPng,
-  onExportPdf,
-  exportState,
-  cloud,
-  unsplash,
-}) {
-  if (step === 0) {
-    return (
-      <SourceStep
-        project={project}
-        updateProject={updateProject}
-        cloud={cloud}
-        unsplash={unsplash}
-      />
-    );
-  }
-  if (step === 1) {
-    return project.templateId === "policy-document" ? (
-      <PolicyContentStep
-        content={project.content}
-        updateContent={updateContent}
-      />
-    ) : (
-      <EventContentStep
-        content={project.content}
-        updateContent={updateContent}
-        templateId={project.templateId}
-      />
-    );
-  }
-  if (step === 2) {
-    return project.templateId === "policy-document" ? (
-      <PolicyLayoutStep
-        content={project.content}
-        updateContent={updateContent}
-      />
-    ) : (
-      <EventLayoutStep
-        content={project.content}
-        updateContent={updateContent}
-        templateId={project.templateId}
-      />
-    );
-  }
-  if (step === 3) {
-    return project.templateId === "policy-document" ? (
-      <PolicyBrandStep
-        content={project.content}
-        updateContent={updateContent}
-      />
-    ) : (
-      <EventBrandStep
-        content={project.content}
-        updateContent={updateContent}
-        templateId={project.templateId}
-      />
-    );
-  }
-  return (
-    <ReviewStep
-      project={project}
-      warnings={warnings}
-      onPrint={() => window.print()}
-      onExportPng={onExportPng}
-      onExportPdf={onExportPdf}
-      exportState={exportState}
-    />
   );
 }
 
@@ -2957,7 +2354,7 @@ function DocumentSectionHeading({eyebrow, title, description}) {
   );
 }
 
-function DocumentFooterFields({content, updateContent}) {
+function DocumentFooterFields({content, updateContent, referenceMaximum = 40}) {
   return (
     <>
       <DocumentSectionHeading
@@ -2977,7 +2374,7 @@ function DocumentFooterFields({content, updateContent}) {
           label="Footer reference"
           value={content.footerReference}
           onChange={(value) => updateContent({footerReference: value})}
-          maxLength={40}
+          maxLength={referenceMaximum}
           wide
         />
       </div>
@@ -3072,6 +2469,7 @@ function OnePagerInspector({content, updateContent}) {
           label="Primary items"
           items={content.primaryItems}
           draftValue={content.primaryItemsText}
+          maxLength={DOCUMENT_FIELD_LIMITS["document-one-pager"].primaryItemsText}
           onChange={({draftValue, items}) =>
             updateContent({primaryItemsText: draftValue, primaryItems: items})
           }
@@ -3095,6 +2493,7 @@ function OnePagerInspector({content, updateContent}) {
           label="Secondary items"
           items={content.secondaryItems}
           draftValue={content.secondaryItemsText}
+          maxLength={DOCUMENT_FIELD_LIMITS["document-one-pager"].secondaryItemsText}
           onChange={({draftValue, items}) =>
             updateContent({
               secondaryItemsText: draftValue,
@@ -3121,6 +2520,7 @@ function OnePagerInspector({content, updateContent}) {
           label="Owner responsibilities"
           items={content.ownerItems}
           draftValue={content.ownerItemsText}
+          maxLength={DOCUMENT_FIELD_LIMITS["document-one-pager"].ownerItemsText}
           onChange={({draftValue, items}) =>
             updateContent({ownerItemsText: draftValue, ownerItems: items})
           }
@@ -3147,6 +2547,7 @@ function OnePagerInspector({content, updateContent}) {
           label="Process steps"
           items={content.processSteps}
           draftValue={content.processStepsText}
+          maxLength={DOCUMENT_FIELD_LIMITS["document-one-pager"].processStepsText}
           onChange={({draftValue, items}) =>
             updateContent({processStepsText: draftValue, processSteps: items})
           }
@@ -3156,6 +2557,7 @@ function OnePagerInspector({content, updateContent}) {
         />
       </div>
       <DocumentFooterFields
+        referenceMaximum={DOCUMENT_FIELD_LIMITS["document-one-pager"].footerReference}
         content={content}
         updateContent={updateContent}
       />
@@ -3258,6 +2660,7 @@ function ChecklistInspector({content, updateContent}) {
               wide
             />
             <LineListField
+              maxLength={1400}
               label="Checklist items"
               items={section.items}
               draftValue={section.draft}
@@ -3464,46 +2867,32 @@ function DirectoryCardEditor({
   moveCard,
   deleteCard,
 }) {
+  const request = useUploadRequest();
   const fileInputRef = useRef(null);
   const [uploadState, setUploadState] = useState({status: "", message: ""});
+  useEffect(() => {
+    request.cancel();
+    setUploadState({status: "", message: ""});
+    return () => request.cancel();
+  }, [project?.id, page?.id, card.id]);
   const handleImage = async (event) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setUploadState({status: "error", message: "Use a JPG, PNG, or WebP image."});
-      return;
-    }
-    if (file.size >= 8 * 1024 * 1024) {
-      setUploadState({status: "error", message: "Use an image smaller than 8 MB."});
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () =>
-      updateCard({
-        imageUrl: String(reader.result || ""),
-        imageStoragePath: "",
-        sourceType: "manual",
-      });
-    reader.readAsDataURL(file);
-    if (!cloud) {
-      setUploadState({
-        status: "success",
-        message: "Preview loaded for this browser session.",
-      });
-      return;
-    }
-    setUploadState({status: "working", message: "Saving directory image…"});
+    const isCurrent = request.begin();
+    setUploadState({status: "working", message: "Loading directory image…"});
     try {
-      const image = await cloud.uploadDirectoryImage(
-        project,
-        page.id,
-        card.id,
-        file,
-      );
-      updateCard({...image, sourceType: card.sourceType || "manual"});
-      setUploadState({status: "success", message: "Directory image saved."});
+      const preview = await readStudioImage(file);
+      if (!isCurrent()) return;
+      updateCard({imageUrl: preview, imageStoragePath: ""});
+      if (cloud) {
+        const image = await cloud.uploadDirectoryImage(project, page.id, card.id, file);
+        if (!isCurrent()) return;
+        updateCard(image);
+      }
+      setUploadState({status: "success", message: cloud ? "Directory image saved." : "Preview loaded in this browser."});
     } catch (error) {
-      setUploadState({status: "error", message: error.message});
+      if (isCurrent()) setUploadState({status: "error", message: error.message});
     }
   };
   return (
@@ -3529,7 +2918,7 @@ function DirectoryCardEditor({
           </button>
           <button
             type="button"
-            onClick={deleteCard}
+            onClick={() => {request.cancel(); deleteCard();}}
             aria-label={`Delete directory card ${index + 1}`}
           >
             ×
@@ -3566,9 +2955,11 @@ function DirectoryCardEditor({
             <button
               className="studio-button is-secondary"
               type="button"
-              onClick={() =>
-                updateCard({imageUrl: "", imageStoragePath: ""})
-              }
+              onClick={() => {
+                request.cancel();
+                setUploadState({status: "", message: ""});
+                updateCard({imageUrl: "", imageStoragePath: ""});
+              }}
             >
               Remove
             </button>
@@ -3765,7 +3156,7 @@ function DirectoryInspector({
   services,
 }) {
   const cards = Array.isArray(content.cards) ? content.cards : [];
-  const updateCards = (nextCards) => updateContent({cards: nextCards});
+  const updateCards = (nextCards) => updateContent((latest) => ({cards: typeof nextCards === "function" ? nextCards(latest.cards || []) : nextCards}));
   return (
     <div className="studio-document-inspector-content">
       <DocumentSectionHeading
@@ -3817,7 +3208,7 @@ function DirectoryInspector({
       <PlanningCenterGroupPicker
         service={services}
         cards={cards}
-        onImport={(groups) => updateCards([...cards, ...groups].slice(0, 8))}
+        onImport={(groups) => updateCards((latestCards) => [...latestCards, ...groups.filter((group) => !latestCards.some((card) => card.sourceId && card.sourceId === group.sourceId))].slice(0, 8))}
       />
 
       <DocumentSectionHeading
@@ -3836,24 +3227,37 @@ function DirectoryInspector({
             page={page}
             cloud={cloud}
             updateCard={(changes) =>
-              updateCards(
-                cards.map((item) =>
+              updateCards((latestCards) =>
+                latestCards.map((item) =>
                   item.id === card.id ? {...item, ...changes} : item,
                 ),
               )
             }
             moveCard={(direction) => {
-              const targetIndex = index + direction;
-              if (targetIndex < 0 || targetIndex >= cards.length) return;
-              const nextCards = [...cards];
-              [nextCards[index], nextCards[targetIndex]] = [
-                nextCards[targetIndex],
-                nextCards[index],
-              ];
-              updateCards(nextCards);
+              updateCards((latestCards) => {
+                const currentIndex = latestCards.findIndex(
+                  (item) => item.id === card.id,
+                );
+                const targetIndex = currentIndex + direction;
+                if (
+                  currentIndex < 0 ||
+                  targetIndex < 0 ||
+                  targetIndex >= latestCards.length
+                ) {
+                  return latestCards;
+                }
+                const nextCards = [...latestCards];
+                [nextCards[currentIndex], nextCards[targetIndex]] = [
+                  nextCards[targetIndex],
+                  nextCards[currentIndex],
+                ];
+                return nextCards;
+              });
             }}
             deleteCard={() =>
-              updateCards(cards.filter((item) => item.id !== card.id))
+              updateCards((latestCards) =>
+                latestCards.filter((item) => item.id !== card.id),
+              )
             }
           />
         ))}
@@ -3862,7 +3266,13 @@ function DirectoryInspector({
         className="studio-button is-secondary studio-add-directory-card"
         type="button"
         disabled={cards.length >= 8}
-        onClick={() => updateCards([...cards, createDirectoryCard()])}
+        onClick={() =>
+          updateCards((latestCards) =>
+            latestCards.length >= 8
+              ? latestCards
+              : [...latestCards, createDirectoryCard()],
+          )
+        }
       >
         + Add Blank Card
       </button>
@@ -4125,6 +3535,13 @@ function ContentPageInspector({content, updateContent}) {
   );
 }
 
+const DOCUMENT_PAGE_INSPECTORS = Object.freeze({
+  "document-checklist": ChecklistInspector,
+  "document-signup-sheet": SignupSheetInspector,
+  "document-directory": DirectoryInspector,
+  "document-content-page": ContentPageInspector,
+});
+
 function DocumentPageInspector({
   page,
   updatePage,
@@ -4133,47 +3550,17 @@ function DocumentPageInspector({
   services,
 }) {
   const updateContent = (changes) =>
-    updatePage({content: {...page.content, ...changes}});
-  if (page.templateId === "document-checklist") {
-    return (
-      <ChecklistInspector
-        content={page.content}
-        updateContent={updateContent}
-      />
-    );
-  }
-  if (page.templateId === "document-signup-sheet") {
-    return (
-      <SignupSheetInspector
-        content={page.content}
-        updateContent={updateContent}
-      />
-    );
-  }
-  if (page.templateId === "document-directory") {
-    return (
-      <DirectoryInspector
-        content={page.content}
-        updateContent={updateContent}
-        project={project}
-        page={page}
-        cloud={cloud}
-        services={services}
-      />
-    );
-  }
-  if (page.templateId === "document-content-page") {
-    return (
-      <ContentPageInspector
-        content={page.content}
-        updateContent={updateContent}
-      />
-    );
-  }
+    updatePage((latest) => ({content: {...latest.content, ...(typeof changes === "function" ? changes(latest.content) : changes)}}));
+  const InspectorComponent =
+    DOCUMENT_PAGE_INSPECTORS[page.templateId] || OnePagerInspector;
   return (
-    <OnePagerInspector
+    <InspectorComponent
       content={page.content}
       updateContent={updateContent}
+      project={project}
+      page={page}
+      cloud={cloud}
+      services={services}
     />
   );
 }
@@ -4321,6 +3708,7 @@ function CreativeFilenameDialog({
         version,
         date: exportDate,
       });
+      validateCreativeFilenameForExport(filename, {extension, carousel: carouselSlideCount > 0, formatLabel: carouselRatio});
       setError("");
       onConfirm(filename);
     } catch (nextError) {
@@ -4437,6 +3825,7 @@ function DocumentEditor({
   onShare,
   cloud,
   unsplash,
+  onBusyChange,
 }) {
   const [activePageId, setActivePageId] = useState(project.pages?.[0]?.id || "");
   const [showPagePicker, setShowPagePicker] = useState(false);
@@ -4444,6 +3833,10 @@ function DocumentEditor({
   const [creativeFilenameEnabled, setCreativeFilenameEnabled] =
     useCreativeFilenamePreference();
   const [exportState, setExportState] = useState({status: "", message: ""});
+  const [exportProject, setExportProject] = useState(null);
+  const [layoutWarning, setLayoutWarning] = useState("");
+  const latestProjectRef = useRef(project);
+  latestProjectRef.current = project;
   const exportPageRefs = useRef(new Map());
   const printPagesRef = useRef(null);
   const pages = project.pages || [];
@@ -4452,7 +3845,7 @@ function DocumentEditor({
   const activeIndex = activePage
     ? pages.findIndex((page) => page.id === activePage.id)
     : -1;
-  const warnings = getProjectWarnings(project);
+  const warnings = [...getProjectWarnings(project), ...(layoutWarning ? [layoutWarning] : [])];
 
   useEffect(() => {
     if (!pages.length) return;
@@ -4461,15 +3854,16 @@ function DocumentEditor({
     }
   }, [activePageId, pages]);
 
-  const updateProject = (changes) =>
-    onChange({...project, ...changes, updatedAt: new Date().toISOString()});
-  const updatePage = (pageId, changes) => {
-    updateProject({
-      pages: pages.map((page) =>
-        page.id === pageId ? {...page, ...changes} : page,
-      ),
-    });
+  const updateProject = (changes) => {
+    const latest = latestProjectRef.current;
+    const next = {...latest, ...(typeof changes === "function" ? changes(latest) : changes), updatedAt: new Date().toISOString()};
+    latestProjectRef.current = next;
+    onChange(next);
   };
+  const updatePage = (pageId, changes) => updateProject((latest) => ({
+    pages: latest.pages.map((page) => page.id === pageId
+      ? {...page, ...(typeof changes === "function" ? changes(page) : changes)} : page),
+  }));
   const addPage = (templateId) => {
     if (pages.length >= 20) return;
     const page = createDocumentPage(templateId);
@@ -4514,9 +3908,19 @@ function DocumentEditor({
   const exportPdf = async (filenameBase = "") => {
     setShowFilenameDialog(false);
     setExportState({status: "working", message: "Preparing every page…"});
+    let exportMounted = false;
     try {
-      const elements = pages.map((page) => exportPageRefs.current.get(page.id));
-      const result = await exportDocumentPdf(project, elements, {
+      const snapshot = structuredClone(latestProjectRef.current);
+      exportPageRefs.current.clear();
+      flushSync(() => {
+        setExportProject(snapshot);
+        onBusyChange(true);
+      });
+      exportMounted = true;
+      const {exportDocumentPdf} = await loadStudioExports();
+      await waitForPreviewMount();
+      const elements = snapshot.pages.map((page) => exportPageRefs.current.get(page.id));
+      const result = await exportDocumentPdf(snapshot, elements, {
         resolvePlanningCenterImage: (cloud || unsplash)
           ?.resolvePlanningCenterImage,
         filenameBase,
@@ -4532,6 +3936,13 @@ function DocumentEditor({
         status: "error",
         message: error.message || "Studio could not export this document.",
       });
+    } finally {
+      if (exportMounted) {
+        flushSync(() => {
+          setExportProject(null);
+          onBusyChange(false);
+        });
+      }
     }
   };
   const requestPdfExport = () => {
@@ -4542,9 +3953,28 @@ function DocumentEditor({
     exportPdf();
   };
   const systemPrint = async () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setExportState({
+        status: "error",
+        message: "Allow pop-ups for Central Studio to use System Print.",
+      });
+      return;
+    }
     setExportState({status: "working", message: "Preparing System Print…"});
+    let exportMounted = false;
     try {
-      await openDocumentSystemPrint(project, printPagesRef.current, {
+      const snapshot = structuredClone(latestProjectRef.current);
+      exportPageRefs.current.clear();
+      flushSync(() => {
+        setExportProject(snapshot);
+        onBusyChange(true);
+      });
+      exportMounted = true;
+      const {openDocumentSystemPrint} = await loadStudioExports();
+      await waitForPreviewMount();
+      await openDocumentSystemPrint(snapshot, printPagesRef.current, {
+        printWindow,
         resolvePlanningCenterImage: (cloud || unsplash)
           ?.resolvePlanningCenterImage,
       });
@@ -4557,6 +3987,14 @@ function DocumentEditor({
         status: "error",
         message: error.message || "Studio could not open System Print.",
       });
+      printWindow?.close();
+    } finally {
+      if (exportMounted) {
+        flushSync(() => {
+          setExportProject(null);
+          onBusyChange(false);
+        });
+      }
     }
   };
 
@@ -4617,6 +4055,10 @@ function DocumentEditor({
           {exportState.message}
         </p>
       ) : null}
+
+      {warnings.length ? <div className="studio-document-warnings" role="alert">
+        {warnings.map((warning) => <p key={warning}>{warning}</p>)}
+      </div> : null}
 
       <div className="studio-document-workspace">
         <nav className="studio-page-rail" aria-label="Document pages">
@@ -4713,6 +4155,8 @@ function DocumentEditor({
           >
             {activePage ? (
               <DocumentPagePreview
+                key={activePage.id}
+                onLayoutWarning={setLayoutWarning}
                 page={activePage}
                 pageNumber={activeIndex + 1}
                 pageCount={pages.length}
@@ -4740,7 +4184,7 @@ function DocumentEditor({
               className="studio-button is-secondary"
               type="button"
               onClick={systemPrint}
-              disabled={exportState.status === "working"}
+              disabled={warnings.length > 0 || exportState.status === "working"}
             >
               System Print
             </button>
@@ -4766,6 +4210,7 @@ function DocumentEditor({
           </div>
           {activePage ? (
             <DocumentPageInspector
+              key={activePage.id}
               page={activePage}
               updatePage={(changes) => updatePage(activePage.id, changes)}
               project={project}
@@ -4776,26 +4221,26 @@ function DocumentEditor({
         </aside>
       </div>
 
-      <div
+      {exportProject ? <div
         ref={printPagesRef}
         className="studio-document-export-pages"
         data-studio-document-print
         aria-hidden="true"
       >
-        {pages.map((page, index) => (
+        {exportProject.pages.map((page, index) => (
           <DocumentPagePreview
             key={page.id}
             page={page}
             pageNumber={index + 1}
-            pageCount={pages.length}
-            showPageNumbers={project.documentSettings?.showPageNumbers !== false}
+            pageCount={exportProject.pages.length}
+            showPageNumbers={exportProject.documentSettings?.showPageNumbers !== false}
             previewRef={(element) => {
               if (element) exportPageRefs.current.set(page.id, element);
               else exportPageRefs.current.delete(page.id);
             }}
           />
         ))}
-      </div>
+      </div> : null}
 
       {showPagePicker ? (
         <AddPageDialog
@@ -5433,6 +4878,7 @@ function EventStudioEditor({
   unsplash,
   saveState,
   canManageLogoLibrary,
+  onBusyChange,
 }) {
   const [selectedField, setSelectedField] = useState("");
   const [activePanel, setActivePanel] = useState("");
@@ -5451,6 +4897,13 @@ function EventStudioEditor({
   const [exportState, setExportState] = useState({status: "", message: ""});
   const [activeSlideId, setActiveSlideId] = useState("primary");
   const [layoutWarnings, setLayoutWarnings] = useState({});
+  const [exportProject, setExportProject] = useState(null);
+  const snapshotSlides = exportProject
+    ? isSocialTemplateId(exportProject.templateId) &&
+      exportProject.postMode === "carousel"
+      ? getSocialProjectSlides(exportProject)
+      : [{id: "primary", content: exportProject.content}]
+    : [];
   const eventExportRefs = useRef(new Map());
   const latestProjectRef = useRef(project);
   latestProjectRef.current = project;
@@ -5467,7 +4920,8 @@ function EventStudioEditor({
     ...getProjectWarnings(project),
     ...(template.variant === "simple-statement"
       ? exportSlides.flatMap((slide, index) => {
-          const warning = layoutWarnings[`${project.id}:${slide.id}`];
+          const measured = layoutWarnings[`${project.id}:${slide.id}`];
+          const warning = measured?.content === slide.content ? measured.message : "";
           return warning ? [`${isCarousel ? `Slide ${index + 1}: ` : ""}${warning}`] : [];
         })
       : []),
@@ -5476,11 +4930,7 @@ function EventStudioEditor({
     ? slides.find((slide) => slide.id === activeSlideId) || slides[0]
     : slides[0];
   const activeContent = activeSlide?.content || project.content;
-  const textFieldOptions = template.variant === "small-group-leader"
-    ? SMALL_GROUP_TEXT_FIELD_OPTIONS
-    : isSocial
-      ? SOCIAL_TEXT_FIELD_OPTIONS
-      : EVENT_TEXT_FIELD_OPTIONS;
+  const textFieldOptions = getGraphicTextFields(template);
   const hiddenTextFields = ["eyebrow", "subtitle"].filter(
     (field) => activeContent[`${field}Visible`] === false,
   );
@@ -5676,30 +5126,38 @@ function EventStudioEditor({
     setActivePanel("");
     setMenuOpen(false);
     setSideSheet("");
-    setExportState({
-      status: "working",
-      message: isCarousel
-        ? "Preparing the carousel ZIP…"
-        : "Preparing the high-resolution PNG…",
-    });
+    let exportMounted = false;
     try {
-      await new Promise((resolve) =>
-        window.requestAnimationFrame(() =>
-          window.requestAnimationFrame(resolve),
-        ),
-      );
-      const result = isCarousel
+      const snapshot = structuredClone(latestProjectRef.current);
+      const snapshotIsCarousel =
+        isSocialTemplateId(snapshot.templateId) &&
+        snapshot.postMode === "carousel";
+      setExportState({
+        status: "working",
+        message: snapshotIsCarousel
+          ? "Preparing the carousel ZIP…"
+          : "Preparing the high-resolution PNG…",
+      });
+      eventExportRefs.current.clear();
+      flushSync(() => {
+        setExportProject(snapshot);
+        onBusyChange(true);
+      });
+      exportMounted = true;
+      const {exportCarouselZip, exportEventPng} = await loadStudioExports();
+      await waitForPreviewMount();
+      const result = snapshotIsCarousel
         ? await exportCarouselZip(
-            project,
-            slides.map((slide) => eventExportRefs.current.get(slide.id)),
+            snapshot,
+            getSocialProjectSlides(snapshot).map((slide) => eventExportRefs.current.get(slide.id)),
             {filenameBase},
           )
-        : await exportEventPng(project, eventExportRefs.current.get("primary"), {
+        : await exportEventPng(snapshot, eventExportRefs.current.get("primary"), {
             filenameBase,
           });
       setExportState({
         status: "success",
-        message: isCarousel
+        message: snapshotIsCarousel
           ? `Studio downloaded ${result.filename} with ${result.slides} slide PNGs.`
           : `${result.filename} was downloaded at ${result.width} × ${result.height}px.`,
       });
@@ -5710,6 +5168,13 @@ function EventStudioEditor({
           error.message ||
           "Studio could not export this project. Try removing the background image and exporting again.",
       });
+    } finally {
+      if (exportMounted) {
+        flushSync(() => {
+          setExportProject(null);
+          onBusyChange(false);
+        });
+      }
     }
   };
   const requestExport = () => {
@@ -5902,6 +5367,7 @@ function EventStudioEditor({
               onClose={() => setActivePanel("")}
             >
               <EventHeroControls
+                key={`${project.id}:${activeSlide?.id}`}
                 content={activeContent}
                 updateContent={(changes) =>
                   updateContentForSlide(activeSlide?.id || "primary", changes)
@@ -5920,6 +5386,7 @@ function EventStudioEditor({
               onClose={() => setActivePanel("")}
             >
               <EventBackgroundControls
+                key={`${project.id}:${activeSlide?.id}`}
                 content={activeContent}
                 updateContent={updateContent}
                 cloud={cloud}
@@ -6013,6 +5480,10 @@ function EventStudioEditor({
             data-studio-print-preview
           >
             <EventPreview
+              onLayoutWarning={(warning) => {
+                const key = `${project.id}:${activeSlide?.id || "primary"}`;
+                setLayoutWarnings((current) => current[key]?.message === warning && current[key]?.content === activeContent ? current : {...current, [key]: {message: warning, content: activeContent}});
+              }}
               content={activeContent}
               templateId={project.templateId}
               editorMode={exportState.status !== "working"}
@@ -6054,8 +5525,11 @@ function EventStudioEditor({
           }
         }}
       />
-      <div className="studio-event-export-previews" aria-hidden="true">
-        {exportSlides.map((slide) => (
+      {exportProject ? <div
+        className="studio-event-export-previews"
+        aria-hidden="true"
+      >
+        {snapshotSlides.map((slide) => (
           <EventPreview
             key={slide.id}
             content={slide.content}
@@ -6063,18 +5537,10 @@ function EventStudioEditor({
               if (element) eventExportRefs.current.set(slide.id, element);
               else eventExportRefs.current.delete(slide.id);
             }}
-            templateId={project.templateId}
-            onLayoutWarning={(warning) => {
-              const key = `${project.id}:${slide.id}`;
-              setLayoutWarnings((current) =>
-                (current[key] || "") === warning
-                  ? current
-                  : {...current, [key]: warning},
-              );
-            }}
+            templateId={exportProject.templateId}
           />
         ))}
-      </div>
+      </div> : null}
       {showFilenameDialog ? (
         <CreativeFilenameDialog
           project={project}
@@ -6097,11 +5563,32 @@ function StudioEditor(props) {
 
 function StudioApp() {
   const authState = useStudioAuth();
-  const [projects, setProjects] = useState(loadProjects);
+  const [projects, setProjects] = useState([]);
   const [currentProjectId, setCurrentProjectId] = useState("");
   const [saveState, setSaveState] = useState("");
   const [cloudMessage, setCloudMessage] = useState("");
-  const saveTimer = useRef(null);
+  const [projectSessionUid, setProjectSessionUid] = useState("");
+  const coordinatorRef = useRef(null);
+  const storageKeyRef = useRef("");
+  const recoveryProjectsRef = useRef([]);
+  const projectsRef = useRef(projects);
+  const [recoverableCount, setRecoverableCount] = useState(0);
+  const [saveStatuses, setSaveStatuses] = useState({});
+  const [exportBusy, setExportBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const replaceProjects = (next) => {
+    projectsRef.current = next;
+    setProjects(next);
+    if (!storageKeyRef.current) return true;
+    try {
+      persistProjects(next, storageKeyRef.current);
+      return true;
+    } catch (error) {
+      setCloudMessage("Browser storage is full or unavailable. Keep Studio open until Central finishes syncing.");
+      return false;
+    }
+  };
   const cloud = useMemo(
     () =>
       createStudioCloud({
@@ -6127,7 +5614,12 @@ function StudioApp() {
     [cloud],
   );
 
-  const currentProject = projects.find(
+  const visibleProjects =
+    authState.status === "ready" &&
+    projectSessionUid === authState.user.uid
+      ? projects
+      : [];
+  const currentProject = visibleProjects.find(
     (project) => project.id === currentProjectId,
   );
 
@@ -6135,23 +5627,89 @@ function StudioApp() {
     window.scrollTo({top: 0, behavior: "auto"});
   }, [currentProjectId]);
 
-  useEffect(
-    () => () => {
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    },
-    [],
-  );
+  useEffect(() => {
+    if (authState.status !== "ready" || cloud) return undefined;
+    const actorUid = authState.user.uid;
+    storageKeyRef.current = STUDIO_STORAGE_KEY;
+    const browserProjects = loadProjects(STUDIO_STORAGE_KEY);
+    projectsRef.current = browserProjects;
+    setProjects(browserProjects);
+    setProjectSessionUid(actorUid);
+    setCurrentProjectId("");
+    return () => {
+      if (storageKeyRef.current === STUDIO_STORAGE_KEY) {
+        storageKeyRef.current = "";
+      }
+    };
+  }, [authState.status, authState.user, cloud]);
 
   useEffect(() => {
     if (authState.status !== "ready" || !cloud) return undefined;
     let active = true;
-
+    const actorUid = authState.user.uid;
+    setProjectSessionUid(actorUid);
+    setCurrentProjectId("");
+    const accountStorageKey = studioAccountStorageKey(actorUid);
+    storageKeyRef.current = accountStorageKey;
+    const partitionedCache = partitionBrowserProjects(
+      [
+        ...loadProjects(accountStorageKey),
+        ...loadProjects(),
+        ...loadProjects(STUDIO_RECOVERY_STORAGE_KEY),
+      ],
+      actorUid,
+    );
+    const currentCache = dedupeBrowserProjects(partitionedCache.current, {
+      includeIdentity: false,
+    });
+    const legacyCandidates = partitionedCache.unattributed.filter(
+      (project) => !currentCache.some((current) => current.id === project.id),
+    );
+    const initialRecovery = dedupeBrowserProjects([
+      ...partitionedCache.foreign,
+      ...legacyCandidates,
+    ]);
+    recoveryProjectsRef.current = initialRecovery;
+    setRecoverableCount(legacyCandidates.length);
+    replaceProjects(currentCache);
+    setSaveStatuses({});
+    const coordinator = createStudioSaveCoordinator({
+      actorUid,
+      saveProject: (project) => cloud.saveProject(project),
+      deleteProject: (projectId, project) =>
+        project.shared
+          ? cloud.leaveProject(projectId)
+          : cloud.deleteProject(projectId, {ignoreMissing: true}),
+      onSaveSuccess: (result) => {
+        replaceProjects(projectsRef.current.map((item) => applyStudioSaveSuccess(item, result.savedProject, result)));
+      },
+      onSaveError: (result) => {
+        replaceProjects(projectsRef.current.map((item) => item.id === result.projectId ? applyStudioSaveFailure(item, result) : item));
+        setCloudMessage(result.error.message);
+      },
+      onStateChange: (state) => {
+        setSaveState("");
+        setSaveStatuses((current) => ({
+          ...current,
+          [state.projectId]: state.status,
+        }));
+      },
+    });
+    coordinatorRef.current = coordinator;
+    const retryPending = () => projectsRef.current.forEach((project) => {
+      if (
+        project._studioSync?.pending &&
+        !coordinator.retry(project.id)
+      ) {
+        coordinator.schedule(project);
+      }
+    });
+    window.addEventListener("online", retryPending);
     async function loadCloudProjects() {
+      setCloudLoading(true);
       setCloudMessage("Loading your Central Studio projects…");
       try {
-        const shareToken = new URLSearchParams(window.location.search).get(
-          "share",
-        );
+        const shareToken = new URLSearchParams(window.location.search).get("share");
         let acceptedProjectId = "";
         if (shareToken) {
           const accepted = await cloud.acceptShare(shareToken);
@@ -6160,84 +5718,65 @@ function StudioApp() {
           cleanUrl.searchParams.delete("share");
           window.history.replaceState({}, "", cleanUrl);
         }
-
-        let cloudProjects = await cloud.loadProjects();
-        const cloudIds = new Set(cloudProjects.map((project) => project.id));
-        const browserProjects = loadProjects();
-        const projectsToMigrate = browserProjects.filter(
-          (project) =>
-            !cloudIds.has(project.id) || project.cloudBacked === false,
-        );
-        const failedMigrationIds = new Set();
-        if (projectsToMigrate.length) {
-          setCloudMessage(
-            `Moving ${projectsToMigrate.length} browser project${
-              projectsToMigrate.length === 1 ? "" : "s"
-            } into your account…`,
-          );
-          const migrationResults = await Promise.allSettled(
-            projectsToMigrate.map((project) =>
-              cloud.saveProject(project, {
-                knownExisting: cloudIds.has(project.id),
-              }),
-            ),
-          );
-          migrationResults.forEach((result, index) => {
-            if (result.status === "rejected") {
-              failedMigrationIds.add(projectsToMigrate[index].id);
-            }
-          });
-          cloudProjects = await cloud.loadProjects();
-        }
+        const cloudProjects = await cloud.loadProjects();
         if (!active) return;
-        const refreshedCloudIds = new Set(
-          cloudProjects.map((project) => project.id),
+        const result = reconcileStudioProjects({
+          cloudProjects,
+          browserProjects: [...currentCache, ...legacyCandidates],
+          actorUid,
+        });
+        const recoveryProjects = dedupeBrowserProjects([
+          ...partitionedCache.foreign,
+          ...result.preservedBrowserProjects,
+        ]);
+        recoveryProjectsRef.current = recoveryProjects;
+        setRecoverableCount(
+          recoveryProjects.filter(
+            (project) => isRecoverableBrowserProject(project, actorUid),
+          ).length,
         );
-        const browserOnlyProjects = projectsToMigrate
-          .filter(
-            (project) =>
-              failedMigrationIds.has(project.id) ||
-              !refreshedCloudIds.has(project.id),
-          )
-          .map((project) => ({...project, cloudBacked: false}));
-        const browserOnlyIds = new Set(
-          browserOnlyProjects.map((project) => project.id),
-        );
-        const availableProjects = [
-          ...cloudProjects.filter(
-            (project) => !browserOnlyIds.has(project.id),
-          ),
-          ...browserOnlyProjects,
-        ];
-        const migrationFailureCount = browserOnlyProjects.length;
-        setProjects(availableProjects);
-        persistProjects(availableProjects);
+        let recoveryStored = true;
+        try {
+          persistProjects(recoveryProjects, STUDIO_RECOVERY_STORAGE_KEY);
+        } catch (error) {
+          recoveryStored = false;
+          setCloudMessage("Browser storage is full or unavailable. Keep Studio open until Central finishes syncing.");
+        }
+        const projectsStored = replaceProjects(result.projects);
+        let legacyRemoved = true;
+        if (recoveryStored && projectsStored) {
+          try {
+            localStorage.removeItem(STUDIO_STORAGE_KEY);
+          } catch (error) {
+            legacyRemoved = false;
+            setCloudMessage("Studio synced, but the older browser cache could not be cleared.");
+          }
+        }
+        result.pendingProjects.forEach((project) => coordinator.schedule(project));
         if (acceptedProjectId) setCurrentProjectId(acceptedProjectId);
-        if (migrationFailureCount) {
+        if (recoveryStored && projectsStored && legacyRemoved) {
           setCloudMessage(
-            `${migrationFailureCount} older browser project${
-              migrationFailureCount === 1 ? "" : "s"
-            } could not be moved into Central yet. ${
-              migrationFailureCount === 1 ? "It is" : "They are"
-            } still saved in this browser.`,
+            result.attentionProjects.length
+              ? "Some older browser projects are stored as recovery copies on this device."
+              : "",
           );
-          setSaveState("Browser project needs attention");
-        } else {
-          setCloudMessage("");
-          setSaveState("Saved to Central");
         }
       } catch (error) {
         if (!active) return;
-        setCloudMessage(
-          "Studio could not load cloud projects right now. " +
-            "Your browser projects are still available on this device.",
-        );
-      }
+        replaceProjects(currentCache);
+        currentCache.forEach((project) => {
+          if (project._studioSync?.pending) coordinator.schedule(project);
+        });
+        setCloudMessage("Studio could not load cloud projects. Your account's browser copies are available; reconnect to sync changes. " + error.message);
+      } finally {if (active) setCloudLoading(false);}
     }
-
     loadCloudProjects();
     return () => {
       active = false;
+      coordinator.dispose();
+      if (coordinatorRef.current === coordinator) coordinatorRef.current = null;
+      if (storageKeyRef.current === accountStorageKey) storageKeyRef.current = "";
+      window.removeEventListener("online", retryPending);
     };
   }, [authState.status, cloud]);
 
@@ -6245,62 +5784,98 @@ function StudioApp() {
     return <AccessScreen authState={authState} />;
   }
 
-  const canCreate = EDIT_PERMISSIONS.has(authState.permission);
-
-  const scheduleSave = (project) => {
-    setSaveState(cloud ? "Saving to Central…" : "Saving in this browser…");
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(async () => {
-      if (!cloud) {
-        setSaveState("Saved in this browser");
-        return;
-      }
-      try {
-        const savedProject = await cloud.saveProject(project);
-        setProjects((current) => {
-          const next = current.map((item) =>
-            item.id === savedProject.id
-              ? {
-                  ...item,
-                  schemaVersion: savedProject.schemaVersion,
-                  ownerUid: savedProject.ownerUid,
-                  cloudBacked: savedProject.cloudBacked,
-                }
-              : item,
-          );
-          persistProjects(next);
-          return next;
-        });
-        setSaveState("Saved to Central");
-      } catch (error) {
-        setSaveState("Browser saved · Central sync needs attention");
-        setCloudMessage(error.message);
-      }
-    }, 500);
-  };
+  const canCreate =
+    projectSessionUid === authState.user.uid &&
+    EDIT_PERMISSIONS.has(authState.permission);
 
   const saveProjects = (nextProjects, changedProject = null) => {
-    setProjects(nextProjects);
-    persistProjects(nextProjects);
-    if (changedProject) scheduleSave(changedProject);
+    setSaveState("");
+    const marked = changedProject && cloud
+      ? markStudioProjectPending({...changedProject, _studioSync: projectsRef.current.find((item) => item.id === changedProject.id)?._studioSync || changedProject._studioSync}, authState.user.uid)
+      : changedProject;
+    const next = marked ? nextProjects.map((item) => item.id === marked.id ? marked : item) : nextProjects;
+    const browserStored = replaceProjects(next);
+    if (marked && cloud) {
+      coordinatorRef.current?.schedule(marked);
+      if (!browserStored) void coordinatorRef.current?.flush(marked.id);
+    }
+    else setSaveState("Saved in this browser");
   };
+  const recoverLegacyProjects = () => {
+    if (!cloud || !canCreate) return;
+    const recoverable = recoveryProjectsRef.current.filter(
+      (project) =>
+        isRecoverableBrowserProject(project, authState.user.uid),
+    );
+    if (!recoverable.length) return;
+    const recovered = recoverable.map((project) =>
+      markStudioProjectPending(
+        recoveredProjectCopy(project),
+        authState.user.uid,
+      ),
+    );
+    const recoveredKeys = new Set(
+      recoverable.map(
+        (project) => `${browserProjectIdentity(project)}:${project.id}`,
+      ),
+    );
+    const remainingRecovery = recoveryProjectsRef.current.filter(
+      (project) =>
+        !recoveredKeys.has(
+          `${browserProjectIdentity(project)}:${project.id}`,
+        ),
+    );
+    const browserStored = replaceProjects([
+      ...recovered,
+      ...projectsRef.current,
+    ]);
+    let recoveryStored = false;
+    if (browserStored) {
+      recoveryProjectsRef.current = remainingRecovery;
+      try {
+        persistProjects(remainingRecovery, STUDIO_RECOVERY_STORAGE_KEY);
+        recoveryStored = true;
+      } catch (error) {
+        setCloudMessage("The recovered projects are syncing, but Studio could not update the browser recovery list.");
+      }
+    }
+    // Hide the action for this session even when browser storage is full. In
+    // that case the original recovery records stay intact for the next load.
+    setRecoverableCount(0);
+    recovered.forEach((project) => {
+      coordinatorRef.current?.schedule(project);
+      if (!browserStored) void coordinatorRef.current?.flush(project.id);
+    });
+    setCurrentProjectId(recovered[0]?.id || "");
+    if (browserStored && recoveryStored) {
+      setCloudMessage(
+        `${recovered.length} browser project${recovered.length === 1 ? "" : "s"} recovered and queued for Central sync. Uploaded project images must be added again.`,
+      );
+    }
+  };
+  const statuses = Object.values(saveStatuses);
+  const activeStatus = saveStatuses[currentProjectId];
+  const effectiveSaveState = cloud
+    ? (activeStatus === "error" || statuses.includes("error") ? "Browser saved · Central sync needs attention"
+      : statuses.some((status) => ["pending", "saving", "retrying"].includes(status)) ? "Saving to Central…" : saveState || "Saved to Central")
+    : saveState;
 
   const createProject = (templateId) => {
     if (!canCreate) return;
     const project = createStudioProject(templateId);
-    saveProjects([project, ...projects], project);
+    saveProjects([project, ...projectsRef.current], project);
     setCurrentProjectId(project.id);
   };
 
   const updateProject = (nextProject) => {
-    const nextProjects = projects.map((project) =>
+    const nextProjects = projectsRef.current.map((project) =>
       project.id === nextProject.id ? nextProject : project,
     );
     saveProjects(nextProjects, nextProject);
   };
 
   const deleteProject = async (projectId) => {
-    const project = projects.find((item) => item.id === projectId);
+    const project = visibleProjects.find((item) => item.id === projectId);
     if (!project) return;
     const confirmed = window.confirm(
       project.shared
@@ -6308,30 +5883,26 @@ function StudioApp() {
         : `Delete "${project.name}"? This removes the project and its uploaded images for everyone and cannot be undone.`,
     );
     if (!confirmed) return;
+    setDeleteBusy(true);
     try {
-      if (cloud && project.cloudBacked) {
-        if (project.shared) {
-          await cloud.leaveProject(projectId);
-        } else {
-          await cloud.deleteProject(projectId);
-        }
-      }
-      const nextProjects = projects.filter((item) => item.id !== projectId);
-      setProjects(nextProjects);
-      persistProjects(nextProjects);
+      if (cloud) await coordinatorRef.current.delete(project);
+      const nextProjects = projectsRef.current.filter((item) => item.id !== projectId);
+      replaceProjects(nextProjects);
       setSaveState(cloud ? "Saved to Central" : "Saved in this browser");
       if (currentProjectId === projectId) {
         setCurrentProjectId("");
       }
     } catch (error) {
       setCloudMessage(error.message);
-    }
+    } finally {setDeleteBusy(false);}
   };
 
   const shareProject = async (projectId) => {
     if (!cloud) return;
     setSaveState("Creating share link…");
     try {
+      await coordinatorRef.current?.flush(projectId);
+      if (projectsRef.current.find((item) => item.id === projectId)?._studioSync?.pending) throw new Error("Wait for this project to finish syncing before sharing.");
       const result = await cloud.createShare(projectId);
       try {
         await navigator.clipboard.writeText(result.shareUrl);
@@ -6347,18 +5918,30 @@ function StudioApp() {
   };
 
   return (
-    <div className="studio-app">
+    <>
+    <div className="studio-app" inert={exportBusy || deleteBusy || cloudLoading ? true : undefined}>
       {!currentProject || isDocumentProject(currentProject) ? (
         <StudioHeader
           authState={authState}
           view={currentProject ? "editor" : "home"}
           onHome={() => setCurrentProjectId("")}
-          saveState={saveState}
+          saveState={effectiveSaveState}
         />
       ) : null}
-      {cloudMessage ? (
+      {cloudMessage || recoverableCount ? (
         <div className="studio-cloud-message" role="status">
-          <span>{cloudMessage}</span>
+          <span>
+            {cloudMessage ||
+              `${recoverableCount} older browser project${recoverableCount === 1 ? " is" : "s are"} available to recover.`}
+          </span>
+          {recoverableCount && canCreate ? (
+            <button
+              className="studio-button is-secondary"
+              onClick={recoverLegacyProjects}
+            >
+              Recover {recoverableCount}
+            </button>
+          ) : null}
           <button onClick={() => setCloudMessage("")} aria-label="Dismiss">
             ×
           </button>
@@ -6366,6 +5949,8 @@ function StudioApp() {
       ) : null}
       {currentProject ? (
         <StudioEditor
+          key={currentProject.id}
+          onBusyChange={setExportBusy}
           project={currentProject}
           onChange={updateProject}
           onBack={() => setCurrentProjectId("")}
@@ -6373,7 +5958,7 @@ function StudioApp() {
           onShare={shareProject}
           cloud={cloud}
           unsplash={unsplash}
-          saveState={saveState}
+          saveState={effectiveSaveState}
           canManageLogoLibrary={
             String(authState.userData?.pageAccess?.studio || "")
               .trim()
@@ -6382,7 +5967,7 @@ function StudioApp() {
         />
       ) : (
         <StudioHome
-          projects={projects}
+          projects={visibleProjects}
           canCreate={canCreate}
           onCreate={createProject}
           onOpen={setCurrentProjectId}
@@ -6391,6 +5976,8 @@ function StudioApp() {
         />
       )}
     </div>
+    {exportBusy || deleteBusy || cloudLoading ? <div className="studio-busy-overlay" role="status">{exportBusy ? "Preparing your export…" : deleteBusy ? "Deleting your project…" : "Loading your projects…"}</div> : null}
+    </>
   );
 }
 

@@ -2,6 +2,11 @@ import {toCanvas} from "html-to-image";
 import {jsPDF} from "jspdf";
 
 import {buildCarouselZip} from "./carousel-archive.js";
+import {validateCreativeFilenameForExport} from "./creative-filename.js";
+
+const RESOURCE_TIMEOUT_MS = 8000;
+const IMAGE_TIMEOUT_MS = 5000;
+const RENDER_TIMEOUT_MS = 20000;
 
 const EVENT_EXPORT_SIZES = {
   square: {width: 1080, height: 1080, label: "1x1"},
@@ -19,9 +24,33 @@ function safeFilename(value, fallback) {
   return normalized || fallback;
 }
 
-async function waitForFonts() {
+export function waitForPromiseWithTimeout(
+  promise,
+  timeoutMs = RESOURCE_TIMEOUT_MS,
+  message = "Studio timed out while preparing an export resource.",
+) {
+  let timeout;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((resolve, reject) => {
+      timeout = globalThis.setTimeout(
+        () => reject(new Error(message)),
+        timeoutMs,
+      );
+    }),
+  ]).finally(() => globalThis.clearTimeout(timeout));
+}
+
+export async function waitForFonts() {
+  if (window.CENTRAL_STUDIO_FONT_CSS_ERROR && window.CENTRAL_STUDIO_RELOAD_FONT_CSS) {
+    window.CENTRAL_STUDIO_RELOAD_FONT_CSS();
+  }
   if (window.CENTRAL_STUDIO_FONT_CSS_READY) {
-    await window.CENTRAL_STUDIO_FONT_CSS_READY;
+    await waitForPromiseWithTimeout(
+      window.CENTRAL_STUDIO_FONT_CSS_READY,
+      RESOURCE_TIMEOUT_MS,
+      "Studio timed out while loading the approved fonts. Check your connection and try again.",
+    );
     if (window.CENTRAL_STUDIO_FONT_CSS_ERROR) {
       throw new Error(
         "Studio could not load the approved fonts. Check your connection and try again.",
@@ -29,7 +58,11 @@ async function waitForFonts() {
     }
   }
   if (document.fonts && document.fonts.ready) {
-    await document.fonts.ready;
+    await waitForPromiseWithTimeout(
+      document.fonts.ready,
+      RESOURCE_TIMEOUT_MS,
+      "Studio timed out while preparing the approved fonts. Check your connection and try again.",
+    );
   }
 }
 
@@ -91,6 +124,9 @@ async function waitForStableLayout(elements, maxFrames = 8) {
       stableFrames = 0;
     }
   }
+  throw new Error(
+    "Studio layout is still changing. Wait a moment and try the export again.",
+  );
 }
 
 async function waitForPreparedBrandMarks(element, maxFrames = 120) {
@@ -107,46 +143,64 @@ async function waitForPreparedBrandMarks(element, maxFrames = 120) {
   );
 }
 
-async function waitForRenderedImages(element, timeoutMs = 5000) {
+export function waitForImageElement(
+  image,
+  {
+    timeoutMs = IMAGE_TIMEOUT_MS,
+    failureMessage = "A Studio image could not be prepared for export.",
+    timeoutMessage = "A Studio image is still loading. Please try the export again.",
+  } = {},
+) {
+  if (image.complete) {
+    return image.naturalWidth
+      ? Promise.resolve(image)
+      : Promise.reject(new Error(failureMessage));
+  }
+  return new Promise((resolve, reject) => {
+    const timeout = globalThis.setTimeout(() => {
+      cleanup();
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+    const cleanup = () => {
+      globalThis.clearTimeout(timeout);
+      image.removeEventListener("load", handleLoad);
+      image.removeEventListener("error", handleError);
+    };
+    const handleLoad = () => {
+      cleanup();
+      if (!image.naturalWidth) {
+        reject(new Error(failureMessage));
+        return;
+      }
+      resolve(image);
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error(failureMessage));
+    };
+    image.addEventListener("load", handleLoad, {once: true});
+    image.addEventListener("error", handleError, {once: true});
+    if (image.complete) {
+      if (image.naturalWidth) handleLoad();
+      else handleError();
+    }
+  });
+}
+
+async function waitForRenderedImages(element, timeoutMs = IMAGE_TIMEOUT_MS) {
   const images = [...element.querySelectorAll("img")];
   await Promise.all(
-    images.map((image) => {
-      if (image.complete) {
-        return image.naturalWidth
-          ? Promise.resolve()
-          : Promise.reject(new Error("A Studio image could not be prepared for export."));
-      }
-      return new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(() => {
-          cleanup();
-          reject(new Error("A Studio image is still loading. Please try the export again."));
-        }, timeoutMs);
-        const cleanup = () => {
-          window.clearTimeout(timeout);
-          image.removeEventListener("load", handleLoad);
-          image.removeEventListener("error", handleError);
-        };
-        const handleLoad = () => {
-          cleanup();
-          resolve();
-        };
-        const handleError = () => {
-          cleanup();
-          reject(new Error("A Studio image could not be prepared for export."));
-        };
-        image.addEventListener("load", handleLoad, {once: true});
-        image.addEventListener("error", handleError, {once: true});
-      });
-    }),
+    images.map((image) => waitForImageElement(image, {timeoutMs})),
   );
 }
 
-function loadImage(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("The rendered preview could not be loaded."));
-    image.src = dataUrl;
+function loadImage(dataUrl, timeoutMs = IMAGE_TIMEOUT_MS) {
+  const image = new Image();
+  image.src = dataUrl;
+  return waitForImageElement(image, {
+    timeoutMs,
+    failureMessage: "The rendered preview could not be loaded.",
+    timeoutMessage: "The rendered preview took too long to load.",
   });
 }
 
@@ -210,22 +264,58 @@ async function useHighResolutionBackground(element, content, width) {
   };
 }
 
-async function renderExactPng(
+function studioLayoutError(element) {
+  if (!element) return "";
+  const marker = element.dataset?.studioLayoutError ||
+    element.querySelector?.("[data-studio-layout-error]")?.dataset
+      ?.studioLayoutError || "";
+  return marker === "true"
+    ? "Page content exceeds the printable area. Shorten the content before exporting."
+    : marker;
+}
+
+export function assertStudioLayoutReady(elements) {
+  const list = Array.isArray(elements) ? elements : [elements];
+  for (const element of list) {
+    const layoutError = studioLayoutError(element);
+    if (layoutError) throw new Error(layoutError);
+  }
+}
+
+async function prepareElementForExport(
+  element,
+  {waitForFontResources = true} = {},
+) {
+  if (!element) {
+    throw new Error("The Studio preview is not available for export.");
+  }
+  if (waitForFontResources) await waitForFonts();
+  await waitForPromiseWithTimeout(
+    waitForPreparedBrandMarks(element),
+    RESOURCE_TIMEOUT_MS,
+    "The selected CrossPointe logo took too long to prepare. Please try the export again.",
+  );
+  await waitForRenderedImages(element);
+  await waitForPromiseWithTimeout(
+    waitForStableLayout([element]),
+    RESOURCE_TIMEOUT_MS,
+    "Studio timed out while preparing the export layout. Please try again.",
+  );
+  assertStudioLayoutReady(element);
+}
+
+async function renderExactCanvas(
   element,
   width,
   height,
-  {requireNativeSize = false} = {},
+  {requireNativeSize = false, prepared = false} = {},
 ) {
   if (!element) {
     throw new Error("The Studio preview is not available for export.");
   }
 
-  await waitForFonts();
-  await waitForPreparedBrandMarks(element);
-  await waitForRenderedImages(element);
-  await waitForStableLayout([element]);
-  const layoutError = element.querySelector("[data-studio-layout-error]")?.dataset.studioLayoutError;
-  if (layoutError) throw new Error(layoutError);
+  if (!prepared) await prepareElementForExport(element);
+  else assertStudioLayoutReady(element);
   const bounds = element.getBoundingClientRect();
   if (!bounds.width || !bounds.height) {
     throw new Error("The Studio preview has no measurable export size.");
@@ -241,14 +331,18 @@ async function renderExactPng(
     );
   }
 
-  const renderedCanvas = await toCanvas(element, {
-    cacheBust: true,
-    includeQueryParams: true,
-    pixelRatio: requireNativeSize
-      ? 1
-      : Math.max(width / bounds.width, height / bounds.height),
-    skipAutoScale: true,
-  });
+  const renderedCanvas = await waitForPromiseWithTimeout(
+    toCanvas(element, {
+      cacheBust: true,
+      includeQueryParams: true,
+      pixelRatio: requireNativeSize
+        ? 1
+        : Math.max(width / bounds.width, height / bounds.height),
+      skipAutoScale: true,
+    }),
+    RENDER_TIMEOUT_MS,
+    "Studio timed out while rendering the export. Check the images and try again.",
+  );
 
   if (
     requireNativeSize &&
@@ -264,7 +358,7 @@ async function renderExactPng(
     renderedCanvas.width === width &&
     renderedCanvas.height === height
   ) {
-    return renderedCanvas.toDataURL("image/png");
+    return renderedCanvas;
   }
 
   const canvas = document.createElement("canvas");
@@ -277,16 +371,16 @@ async function renderExactPng(
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(renderedCanvas, 0, 0, width, height);
-  return canvas.toDataURL("image/png");
+  return canvas;
 }
 
-function downloadDataUrl(dataUrl, filename) {
-  const link = document.createElement("a");
-  link.download = filename;
-  link.href = dataUrl;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Studio could not create the exported PNG."));
+    }, "image/png");
+  });
 }
 
 function downloadBlob(blob, filename) {
@@ -297,7 +391,7 @@ function downloadBlob(blob, filename) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function prepareDirectoryImages(element, resolvePlanningCenterImage) {
@@ -305,28 +399,40 @@ async function prepareDirectoryImages(element, resolvePlanningCenterImage) {
     element?.querySelectorAll("img[data-studio-directory-image]") || [],
   );
   const restorers = [];
-  for (const image of images) {
-    const originalSource = image.getAttribute("src") || "";
-    if (
-      !originalSource ||
-      originalSource.startsWith("data:") ||
-      !originalSource.includes("groups-production.s3.amazonaws.com")
-    ) {
-      continue;
-    }
-    if (typeof resolvePlanningCenterImage !== "function") {
-      throw new Error(
-        "Studio could not securely prepare a Planning Center image for export.",
+  try {
+    for (const image of images) {
+      const originalSource = image.getAttribute("src") || "";
+      if (
+        !originalSource ||
+        originalSource.startsWith("data:") ||
+        !originalSource.includes("groups-production.s3.amazonaws.com")
+      ) {
+        continue;
+      }
+      if (typeof resolvePlanningCenterImage !== "function") {
+        throw new Error(
+          "Studio could not securely prepare a Planning Center image for export.",
+        );
+      }
+      const resolvedSource = await waitForPromiseWithTimeout(
+        resolvePlanningCenterImage(originalSource),
+        RESOURCE_TIMEOUT_MS,
+        "Studio timed out while securely preparing a Planning Center image.",
       );
+      await loadImage(resolvedSource);
+      image.setAttribute("src", resolvedSource);
+      restorers.push(() => image.setAttribute("src", originalSource));
+      await waitForImageElement(image, {
+        failureMessage:
+          "The Planning Center image could not be prepared for export.",
+        timeoutMessage:
+          "The Planning Center image is still loading. Please try the export again.",
+      });
+      await nextLayoutFrame();
     }
-    const resolvedSource = await resolvePlanningCenterImage(originalSource);
-    await loadImage(resolvedSource);
-    image.setAttribute("src", resolvedSource);
-    restorers.push(() => image.setAttribute("src", originalSource));
-    await nextLayoutFrame();
-    if (!image.complete || !image.naturalWidth) {
-      throw new Error("The Planning Center image could not be prepared for export.");
-    }
+  } catch (error) {
+    restorers.reverse().forEach((restore) => restore());
+    throw error;
   }
   return () => restorers.reverse().forEach((restore) => restore());
 }
@@ -338,19 +444,24 @@ export async function exportEventPng(
 ) {
   const format = project?.content?.format || "square";
   const size = EVENT_EXPORT_SIZES[format] || EVENT_EXPORT_SIZES.square;
+  const validatedFilenameBase = filenameBase
+    ? validateCreativeFilenameForExport(filenameBase, {extension: "png"})
+    : "";
+  assertStudioLayoutReady(element);
   const restoreBackground = await useHighResolutionBackground(
     element,
     project?.content,
     size.width,
   );
   try {
-    const png = await renderExactPng(element, size.width, size.height, {
+    const canvas = await renderExactCanvas(element, size.width, size.height, {
       requireNativeSize: true,
     });
-    const filename = filenameBase
-      ? `${filenameBase}.png`
+    const png = await canvasToPngBlob(canvas);
+    const filename = validatedFilenameBase
+      ? `${validatedFilenameBase}.png`
       : `${safeFilename(project?.name, "event-promotion")}-${size.label}.png`;
-    downloadDataUrl(png, filename);
+    downloadBlob(png, filename);
     return {filename, width: size.width, height: size.height};
   } finally {
     restoreBackground();
@@ -379,11 +490,32 @@ export async function exportCarouselZip(
     );
   }
 
-  await waitForFonts();
-  await waitForStableLayout(slideElements);
   const results = [];
   const archiveFiles = [];
-  const base = filenameBase || safeFilename(project?.name, "social-carousel");
+  const validatedFilenameBase = filenameBase
+    ? validateCreativeFilenameForExport(filenameBase, {
+        extension: "png",
+        carousel: true,
+        formatLabel:
+          (EVENT_EXPORT_SIZES[slides[0]?.format] || EVENT_EXPORT_SIZES.square)
+            .label,
+      })
+    : "";
+  if (validatedFilenameBase) {
+    slides.forEach((content) => {
+      const size =
+        EVENT_EXPORT_SIZES[content.format] || EVENT_EXPORT_SIZES.square;
+      validateCreativeFilenameForExport(validatedFilenameBase, {
+        extension: "png",
+        carousel: true,
+        formatLabel: size.label,
+      });
+    });
+  }
+  const base =
+    validatedFilenameBase || safeFilename(project?.name, "social-carousel");
+  assertStudioLayoutReady(slideElements);
+  await waitForFonts();
   for (let index = 0; index < slides.length; index += 1) {
     const content = slides[index];
     const format = content.format || "square";
@@ -394,49 +526,33 @@ export async function exportCarouselZip(
       size.width,
     );
     try {
-      const png = await renderExactPng(
+      await prepareElementForExport(slideElements[index], {
+        waitForFontResources: false,
+      });
+      const canvas = await renderExactCanvas(
         slideElements[index],
         size.width,
         size.height,
-        {requireNativeSize: true},
+        {requireNativeSize: true, prepared: true},
       );
+      const png = await canvasToPngBlob(canvas);
       const slideNumber = String(index + 1).padStart(2, "0");
       const filename = `${base}-s${slideNumber}-${size.label}.png`;
-      archiveFiles.push({filename, dataUrl: png});
+      archiveFiles.push({
+        filename,
+        bytes: new Uint8Array(await png.arrayBuffer()),
+      });
       results.push({filename, width: size.width, height: size.height});
     } finally {
       restoreBackground();
     }
   }
-  const filename = filenameBase ? `${base}.zip` : `${base}-carousel.zip`;
+  const filename = validatedFilenameBase
+    ? `${base}.zip`
+    : `${base}-carousel.zip`;
   const archive = buildCarouselZip(archiveFiles);
   downloadBlob(new Blob([archive], {type: "application/zip"}), filename);
   return {filename, files: results, slides: results.length};
-}
-
-export async function exportPolicyPdf(
-  project,
-  element,
-  {filenameBase = ""} = {},
-) {
-  const png = await renderExactPng(element, 2040, 2640);
-  const filename = filenameBase
-    ? `${filenameBase}.pdf`
-    : `${safeFilename(project?.name, "policy-document")}.pdf`;
-  const pdf = new jsPDF({
-    orientation: "portrait",
-    unit: "in",
-    format: "letter",
-    compress: true,
-  });
-  pdf.addImage(png, "PNG", 0, 0, 8.5, 11, undefined, "FAST");
-  pdf.setProperties({
-    title: project?.content?.title || project?.name || "Central Studio Policy",
-    subject: "Exported from Central Studio",
-    creator: "CrossPointe Central Studio",
-  });
-  pdf.save(filename);
-  return {filename, width: 8.5, height: 11};
 }
 
 export async function exportDocumentPdf(
@@ -454,10 +570,13 @@ export async function exportDocumentPdf(
     );
   }
 
+  const validatedFilenameBase = filenameBase
+    ? validateCreativeFilenameForExport(filenameBase, {extension: "pdf"})
+    : "";
+  assertStudioLayoutReady(pageElements);
   await waitForFonts();
-  await waitForStableLayout(pageElements);
-  const filename = filenameBase
-    ? `${filenameBase}.pdf`
+  const filename = validatedFilenameBase
+    ? `${validatedFilenameBase}.pdf`
     : `${safeFilename(project?.name, "studio-document")}.pdf`;
   const pdf = new jsPDF({
     orientation: "portrait",
@@ -473,8 +592,13 @@ export async function exportDocumentPdf(
       resolvePlanningCenterImage,
     );
     try {
-      const png = await renderExactPng(pageElements[index], 2040, 2640);
-      pdf.addImage(png, "PNG", 0, 0, 8.5, 11, undefined, "FAST");
+      await prepareElementForExport(pageElements[index], {
+        waitForFontResources: false,
+      });
+      const canvas = await renderExactCanvas(pageElements[index], 2040, 2640, {
+        prepared: true,
+      });
+      pdf.addImage(canvas, "PNG", 0, 0, 8.5, 11, undefined, "FAST");
     } finally {
       restoreImages();
     }
@@ -494,41 +618,72 @@ export async function exportDocumentPdf(
   };
 }
 
-function stylesheetLoad(documentTarget, href) {
-  return new Promise((resolve) => {
+function stylesheetLoad(documentTarget, href, timeoutMs = RESOURCE_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
     const link = documentTarget.createElement("link");
+    const timeout = globalThis.setTimeout(() => {
+      cleanup();
+      link.remove();
+      reject(new Error("Studio timed out while preparing the print styles."));
+    }, timeoutMs);
+    const cleanup = () => {
+      globalThis.clearTimeout(timeout);
+      link.onload = null;
+      link.onerror = null;
+    };
     link.rel = "stylesheet";
     link.href = href;
-    link.onload = resolve;
-    link.onerror = resolve;
+    link.onload = () => {
+      cleanup();
+      resolve();
+    };
+    link.onerror = () => {
+      cleanup();
+      reject(new Error("Studio could not load the print styles."));
+    };
     documentTarget.head.appendChild(link);
   });
 }
 
-function waitForDocumentImages(documentTarget) {
+export function waitForDocumentImages(
+  documentTarget,
+  timeoutMs = IMAGE_TIMEOUT_MS,
+) {
   return Promise.all(
-    Array.from(documentTarget.images).map((image) => {
-      if (image.complete && image.naturalWidth) return Promise.resolve();
-      return new Promise((resolve, reject) => {
-        image.onload = resolve;
-        image.onerror = () =>
-          reject(new Error("A directory image could not be prepared for printing."));
-      });
-    }),
+    Array.from(documentTarget.images).map((image) =>
+      waitForImageElement(image, {
+        timeoutMs,
+        failureMessage: "A directory image could not be prepared for printing.",
+        timeoutMessage:
+          "A directory image is still loading. Please try System Print again.",
+      }),
+    ),
   );
 }
 
 export async function openDocumentSystemPrint(
   project,
   container,
-  {resolvePlanningCenterImage} = {},
+  {resolvePlanningCenterImage, printWindow: providedPrintWindow} = {},
 ) {
   if (!container) {
+    providedPrintWindow?.close();
     throw new Error("The printable document pages are not available yet.");
   }
-  const printWindow = window.open("", "_blank");
+  const printWindow = providedPrintWindow || window.open("", "_blank");
   if (!printWindow) {
     throw new Error("Allow pop-ups for Central Studio to use System Print.");
+  }
+  const sourcePages = Array.from(container.children);
+  if (!sourcePages.length) {
+    printWindow.close();
+    throw new Error("Every document page must finish rendering before Studio can print it.");
+  }
+  try {
+    assertStudioLayoutReady(sourcePages);
+  } catch (error) {
+    printWindow.close();
+    throw error;
   }
   const restoreImages = await prepareDirectoryImages(
     container,
@@ -539,6 +694,12 @@ export async function openDocumentSystemPrint(
   });
   try {
     await waitForFonts();
+    await waitForPromiseWithTimeout(
+      waitForStableLayout(sourcePages),
+      RESOURCE_TIMEOUT_MS,
+      "Studio timed out while preparing the print layout. Please try again.",
+    );
+    assertStudioLayoutReady(sourcePages);
     const printDocument = printWindow.document;
     printDocument.open();
     printDocument.write(
@@ -604,12 +765,22 @@ export async function openDocumentSystemPrint(
     printDocument.body.appendChild(printablePages);
 
     await stylesheetReady;
-    if (printDocument.fonts?.ready) await printDocument.fonts.ready;
+    if (printDocument.fonts?.ready) {
+      await waitForPromiseWithTimeout(
+        printDocument.fonts.ready,
+        RESOURCE_TIMEOUT_MS,
+        "Studio timed out while preparing the approved fonts for printing.",
+      );
+    }
     await waitForDocumentImages(printDocument);
-    await new Promise((resolve) =>
-      printWindow.requestAnimationFrame(() =>
-        printWindow.requestAnimationFrame(resolve),
+    await waitForPromiseWithTimeout(
+      new Promise((resolve) =>
+        printWindow.requestAnimationFrame(() =>
+          printWindow.requestAnimationFrame(resolve),
+        ),
       ),
+      RESOURCE_TIMEOUT_MS,
+      "Studio timed out while preparing the print layout. Please try again.",
     );
     printWindow.addEventListener("afterprint", () => printWindow.close(), {
       once: true,

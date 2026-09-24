@@ -36,6 +36,39 @@ import {
   migrateLegacyStudioProject,
   supportsHeroLogoTemplate,
 } from "../src/studio/templates.js";
+import {
+  EVENT_TEXT_FIELDS,
+  SOCIAL_TEXT_FIELDS,
+  SMALL_GROUP_TEXT_FIELDS,
+  getGraphicTextFields,
+  normalizeGraphicText,
+  validateGraphicTextEdit,
+} from "../src/studio/text-fields.js";
+
+test("graphic text fields share limits and reject rather than truncate long edits", () => {
+  assert.equal(
+    getGraphicTextFields(getTemplateById("event-signal-stack")),
+    EVENT_TEXT_FIELDS,
+  );
+  assert.equal(
+    getGraphicTextFields(getTemplateById("social-statement")),
+    SOCIAL_TEXT_FIELDS,
+  );
+  assert.equal(
+    getGraphicTextFields(getTemplateById("document-small-group-leader")),
+    SMALL_GROUP_TEXT_FIELDS,
+  );
+  assert.equal(
+    normalizeGraphicText("First\r\nSecond\u00a0line", true),
+    "First\nSecond line",
+  );
+  assert.equal(normalizeGraphicText("First\r\nSecond", false), "First Second");
+  assert.deepEqual(validateGraphicTextEdit("12345", {maximum: 4}), {
+    accepted: false,
+    value: "12345",
+    maximum: 4,
+  });
+});
 
 test("Small Group Leader is a 16:9 document graphic with background support", () => {
   const template = TEMPLATE_CATALOG.find(

@@ -6,6 +6,7 @@ import {
   formatCreativeVersion,
   getCreativeDateStamp,
   normalizeCreativeFilenameToken,
+  validateCreativeFilenameForExport,
 } from "../src/studio/creative-filename.js";
 
 test("Creative Team filenames follow the documented segment order", () => {
@@ -55,4 +56,53 @@ test("Creative Team filenames reject missing required fields and bad versions", 
   );
   assert.throws(() => formatCreativeVersion(0), /1 to 999/);
   assert.throws(() => formatCreativeVersion(1.5), /whole number/);
+});
+
+test("Creative Team filenames are bounded before carousel rendering starts", () => {
+  assert.equal(
+    validateCreativeFilenameForExport("A".repeat(188), {
+      extension: "png",
+      carousel: true,
+      formatLabel: "1x1",
+    }),
+    "A".repeat(188),
+  );
+  assert.throws(
+    () =>
+      validateCreativeFilenameForExport("A".repeat(189), {
+        extension: "png",
+        carousel: true,
+        formatLabel: "1x1",
+      }),
+    /too long.*1 character/u,
+  );
+
+  const maximumDialogFilename = buildCreativeFilename({
+    contentId: "A".repeat(48),
+    workType: "B".repeat(48),
+    description: "C".repeat(100),
+    version: 999,
+    date: new Date(2026, 8, 23),
+  });
+  assert.throws(
+    () =>
+      validateCreativeFilenameForExport(maximumDialogFilename, {
+        extension: "png",
+        carousel: true,
+        formatLabel: "1x1",
+      }),
+    /too long.*24 characters/u,
+  );
+});
+
+test("Creative Team filename validation accounts for each output extension", () => {
+  assert.equal(
+    validateCreativeFilenameForExport("A".repeat(196), {extension: "pdf"}),
+    "A".repeat(196),
+  );
+  assert.throws(
+    () =>
+      validateCreativeFilenameForExport("A".repeat(197), {extension: "pdf"}),
+    /too long/u,
+  );
 });

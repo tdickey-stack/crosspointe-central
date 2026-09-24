@@ -254,30 +254,25 @@ function directoryContentForCloud(content) {
   };
 }
 
+const DOCUMENT_PAGE_SERIALIZERS = Object.freeze({
+  "document-one-pager": onePagerContentForCloud,
+  "document-checklist": checklistContentForCloud,
+  "document-signup-sheet": signupSheetContentForCloud,
+  "document-directory": directoryContentForCloud,
+  "document-content-page": contentPageContentForCloud,
+});
+
 function documentPageForCloud(page) {
-  const templateId = [
-    "document-one-pager",
-    "document-checklist",
-    "document-signup-sheet",
-    "document-directory",
-    "document-content-page",
-  ].includes(page?.templateId)
+  const templateId = Object.hasOwn(
+    DOCUMENT_PAGE_SERIALIZERS,
+    page?.templateId,
+  )
     ? page.templateId
     : "document-one-pager";
-  const content =
-    templateId === "document-checklist"
-      ? checklistContentForCloud(page.content || {})
-      : templateId === "document-signup-sheet"
-        ? signupSheetContentForCloud(page.content || {})
-        : templateId === "document-directory"
-          ? directoryContentForCloud(page.content || {})
-      : templateId === "document-content-page"
-        ? contentPageContentForCloud(page.content || {})
-        : onePagerContentForCloud(page.content || {});
   return {
     schemaVersion: 1,
     templateId,
-    content,
+    content: DOCUMENT_PAGE_SERIALIZERS[templateId](page?.content || {}),
   };
 }
 
@@ -698,7 +693,11 @@ async function authorizedJson(auth, url, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || "Central Studio could not complete that request.");
+    const error = new Error(
+      data.error || "Central Studio could not complete that request.",
+    );
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
@@ -813,6 +812,9 @@ export function createStudioCloud({
   user,
 }) {
   if (!auth || !firestore || !storage || !user) return null;
+  const projectSaveChains = new Map();
+  const knownProjectMetadata = new Map();
+  const deletedProjectIds = new Set();
 
   async function loadProjects() {
     const ownedSnapshot = await firestore
@@ -842,7 +844,7 @@ export function createStudioCloud({
     ]);
   }
 
-  async function saveProject(project, {knownExisting = false} = {}) {
+  async function saveProjectNow(project, {knownExisting = false} = {}) {
     const reference = firestore.doc(`${PROJECT_COLLECTION}/${project.id}`);
     // A get for a missing project is intentionally denied by the ownership
     // rules because there is no resource owner to authorize yet. New browser
@@ -865,16 +867,49 @@ export function createStudioCloud({
         Array.isArray(previousData.pageOrder)
           ? previousData.pageOrder
           : [];
+      const nextPages = (project.pages || []).slice(0, 20);
       const nextPageIds = new Set(payload.pageOrder);
+      const pageIdsToRead = projectExists
+        ? [...new Set([...previousPageIds, ...payload.pageOrder])]
+        : [];
+      const previousPageSnapshots = new Map(
+        await Promise.all(
+          pageIdsToRead.map(async (pageId) => {
+            const pageReference = reference.collection("pages").doc(pageId);
+            return [pageId, await pageReference.get()];
+          }),
+        ),
+      );
+      const previousCardSnapshots = new Map(
+        await Promise.all(
+          [...previousPageSnapshots.entries()]
+            .filter(([, pageSnapshot]) =>
+              pageSnapshot.exists &&
+              pageSnapshot.data().templateId === "document-directory",
+            )
+            .map(async ([pageId]) => {
+              const cards = await reference
+                .collection("pages")
+                .doc(pageId)
+                .collection("cards")
+                .get();
+              return [pageId, cards];
+            }),
+        ),
+      );
 
+      // The project root and every page are one atomic snapshot. Directory
+      // cards follow in per-page batches because their existing rules validate
+      // membership against the already-committed parent page.
+      const documentBatch = firestore.batch();
       if (!projectExists) {
-        await reference.set({
+        documentBatch.set(reference, {
           ...payload,
           createdAt: serverTimestamp,
           updatedAt: serverTimestamp,
         });
       } else if (previousData.schemaVersion === 2) {
-        await reference.update({
+        documentBatch.update(reference, {
           name: payload.name,
           status: payload.status,
           sourceType: payload.sourceType,
@@ -883,83 +918,90 @@ export function createStudioCloud({
           updatedAt: serverTimestamp,
         });
       } else {
-        await reference.set({
+        documentBatch.set(reference, {
           ...payload,
           createdAt: previousData.createdAt,
           updatedAt: serverTimestamp,
         });
       }
 
-      for (const page of project.pages || []) {
+      for (const page of nextPages) {
         const pageReference = reference.collection("pages").doc(page.id);
-        const pageSnapshot = await pageReference.get();
-        const previousPageData = pageSnapshot.exists
-          ? pageSnapshot.data()
-          : null;
-        const previousCardSnapshot =
-          previousPageData?.templateId === "document-directory"
-            ? await pageReference.collection("cards").get()
-            : null;
+        const pageSnapshot = previousPageSnapshots.get(page.id);
         const pagePayload = documentPageForCloud(page);
-        if (pageSnapshot.exists) {
-          await pageReference.update({
+        if (pageSnapshot?.exists) {
+          documentBatch.update(pageReference, {
             templateId: pagePayload.templateId,
             content: pagePayload.content,
             updatedAt: serverTimestamp,
           });
         } else {
-          await pageReference.set({
+          documentBatch.set(pageReference, {
             ...pagePayload,
             createdAt: serverTimestamp,
             updatedAt: serverTimestamp,
           });
-        }
-
-        const previousCardIds = new Set(
-          previousCardSnapshot?.docs.map((card) => card.id) || [],
-        );
-        if (page.templateId === "document-directory") {
-          const cards = (Array.isArray(page.content?.cards)
-            ? page.content.cards
-            : []
-          ).slice(0, 8);
-          const nextCardIds = new Set(cards.map((card) => card.id));
-          for (const card of cards) {
-            const cardReference = pageReference.collection("cards").doc(card.id);
-            const cardPayload = directoryCardForCloud(card);
-            if (previousCardIds.has(card.id)) {
-              await cardReference.update({
-                ...cardPayload,
-                updatedAt: serverTimestamp,
-              });
-            } else {
-              await cardReference.set({
-                ...cardPayload,
-                createdAt: serverTimestamp,
-                updatedAt: serverTimestamp,
-              });
-            }
-          }
-          for (const cardId of previousCardIds) {
-            if (!nextCardIds.has(cardId)) {
-              await pageReference.collection("cards").doc(cardId).delete();
-            }
-          }
-        } else {
-          for (const cardId of previousCardIds) {
-            await pageReference.collection("cards").doc(cardId).delete();
-          }
         }
       }
 
       for (const pageId of previousPageIds) {
         if (nextPageIds.has(pageId)) continue;
         const pageReference = reference.collection("pages").doc(pageId);
-        const cardSnapshot = await pageReference.collection("cards").get();
-        for (const cardDocument of cardSnapshot.docs) {
-          await cardDocument.ref.delete();
+        documentBatch.delete(pageReference);
+      }
+      await documentBatch.commit();
+      // The root now exists even if a later directory-card batch fails.
+      rememberSavedProject({
+        ...project,
+        schemaVersion: 2,
+        ownerUid: payload.ownerUid,
+        cloudBacked: true,
+      });
+
+      const nextPagesById = new Map(nextPages.map((page) => [page.id, page]));
+      const cardPageIds = new Set([
+        ...previousCardSnapshots.keys(),
+        ...nextPages
+          .filter((page) => page.templateId === "document-directory")
+          .map((page) => page.id),
+      ]);
+      for (const pageId of cardPageIds) {
+        const page = nextPagesById.get(pageId);
+        const cards =
+          page?.templateId === "document-directory" &&
+          Array.isArray(page.content?.cards)
+            ? page.content.cards.slice(0, 8)
+            : [];
+        const previousCardIds = new Set(
+          previousCardSnapshots.get(pageId)?.docs.map((card) => card.id) || [],
+        );
+        const nextCardIds = new Set(cards.map((card) => card.id));
+        const cardBatch = firestore.batch();
+        let cardWriteCount = 0;
+        const pageReference = reference.collection("pages").doc(pageId);
+        for (const card of cards) {
+          const cardReference = pageReference.collection("cards").doc(card.id);
+          const cardPayload = directoryCardForCloud(card);
+          if (previousCardIds.has(card.id)) {
+            cardBatch.update(cardReference, {
+              ...cardPayload,
+              updatedAt: serverTimestamp,
+            });
+          } else {
+            cardBatch.set(cardReference, {
+              ...cardPayload,
+              createdAt: serverTimestamp,
+              updatedAt: serverTimestamp,
+            });
+          }
+          cardWriteCount += 1;
         }
-        await pageReference.delete();
+        for (const cardId of previousCardIds) {
+          if (nextCardIds.has(cardId)) continue;
+          cardBatch.delete(pageReference.collection("cards").doc(cardId));
+          cardWriteCount += 1;
+        }
+        if (cardWriteCount) await cardBatch.commit();
       }
       return {
         ...project,
@@ -1071,6 +1113,113 @@ export function createStudioCloud({
     return {...project, ownerUid: payload.ownerUid, cloudBacked: true};
   }
 
+  function rememberSavedProject(project) {
+    knownProjectMetadata.set(project.id, {
+      schemaVersion: project.schemaVersion,
+      ownerUid: project.ownerUid,
+      cloudBacked: true,
+      shared: project.shared === true,
+    });
+  }
+
+  async function runProjectSave(project, options) {
+    const known = knownProjectMetadata.get(project.id);
+    const candidate = known
+      ? {...project, ...known, cloudBacked: true}
+      : project;
+    const knownExisting = options.knownExisting === true || Boolean(known);
+    try {
+      const saved = await saveProjectNow(candidate, {knownExisting});
+      rememberSavedProject(saved);
+      return saved;
+    } catch (error) {
+      // A document root/pages batch may have committed before a directory-card
+      // batch failed. It can also complete after another caller captured the
+      // project as browser-only. Re-read only after a failed create attempt:
+      // an existing owned project is readable, while a missing project is
+      // intentionally denied by the rules.
+      if (knownExisting || candidate.cloudBacked === true) throw error;
+      const committed = knownProjectMetadata.get(project.id);
+      if (committed) {
+        const recovered = await saveProjectNow(
+          {...project, ...committed, cloudBacked: true},
+          {knownExisting: true},
+        );
+        rememberSavedProject(recovered);
+        return recovered;
+      }
+      let snapshot;
+      try {
+        snapshot = await firestore
+          .doc(`${PROJECT_COLLECTION}/${project.id}`)
+          .get();
+      } catch (readError) {
+        throw error;
+      }
+      if (!snapshot.exists) throw error;
+      const recovered = await saveProjectNow(
+        {
+          ...project,
+          ownerUid: snapshot.data().ownerUid,
+          cloudBacked: true,
+        },
+        {knownExisting: true},
+      );
+      rememberSavedProject(recovered);
+      return recovered;
+    }
+  }
+
+  function enqueueProjectOperation(projectId, run) {
+    if (deletedProjectIds.has(projectId)) {
+      return Promise.reject(new Error("This Studio project is being deleted."));
+    }
+    const previous = projectSaveChains.get(projectId) || Promise.resolve();
+    const operation = previous
+      .catch(() => undefined)
+      .then(run);
+    projectSaveChains.set(projectId, operation);
+    const clear = () => {
+      if (projectSaveChains.get(projectId) === operation) {
+        projectSaveChains.delete(projectId);
+      }
+    };
+    operation.then(clear, clear);
+    return operation;
+  }
+
+  function saveProject(project, options = {}) {
+    const projectId = stringValue(project?.id);
+    if (!projectId) {
+      return Promise.reject(new Error("Studio projects require an ID before saving."));
+    }
+    if (deletedProjectIds.has(projectId)) {
+      return Promise.reject(new Error("This Studio project is being deleted."));
+    }
+    return enqueueProjectOperation(projectId, () =>
+      runProjectSave(project, options),
+    );
+  }
+
+  async function ensureProjectExistsNow(project) {
+    const known = knownProjectMetadata.get(project.id);
+    if (known) return {...project, ...known, cloudBacked: true};
+    if (project.cloudBacked === true) {
+      const snapshot = await firestore
+        .doc(`${PROJECT_COLLECTION}/${project.id}`)
+        .get();
+      if (!snapshot.exists) throw new Error("This Studio project no longer exists.");
+      const existing = {
+        ...project,
+        ownerUid: snapshot.data().ownerUid,
+        cloudBacked: true,
+      };
+      rememberSavedProject(existing);
+      return existing;
+    }
+    return runProjectSave(project, {});
+  }
+
   async function uploadBackground(project, file) {
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       throw new Error("Use a JPG, PNG, or WebP image.");
@@ -1087,23 +1236,25 @@ export function createStudioCloud({
     const assetId =
       globalThis.crypto?.randomUUID?.() ||
       `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    await saveProject(project);
-    const path = `studio-projects/${project.id}/${assetId}.${extension}`;
-    const reference = storage.ref(path);
-    await reference.put(file, {
-      contentType: file.type,
-      cacheControl: "private,max-age=3600",
+    return enqueueProjectOperation(project.id, async () => {
+      await ensureProjectExistsNow(project);
+      const path = `studio-projects/${project.id}/${assetId}.${extension}`;
+      const reference = storage.ref(path);
+      await reference.put(file, {
+        contentType: file.type,
+        cacheControl: "private,max-age=3600",
+      });
+      return {
+        backgroundImage: await reference.getDownloadURL(),
+        backgroundImageSource: "upload",
+        backgroundImageStoragePath: path,
+        backgroundImageUrl: "",
+        unsplashPhotoId: "",
+        unsplashPhotographerName: "",
+        unsplashPhotographerUrl: "",
+        unsplashPhotoUrl: "",
+      };
     });
-    return {
-      backgroundImage: await reference.getDownloadURL(),
-      backgroundImageSource: "upload",
-      backgroundImageStoragePath: path,
-      backgroundImageUrl: "",
-      unsplashPhotoId: "",
-      unsplashPhotographerName: "",
-      unsplashPhotographerUrl: "",
-      unsplashPhotoUrl: "",
-    };
   }
 
   async function uploadHeroLogo(project, file) {
@@ -1122,21 +1273,23 @@ export function createStudioCloud({
     const assetId =
       globalThis.crypto?.randomUUID?.() ||
       `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    await saveProject(project);
-    const path = `studio-projects/${project.id}/logo-${assetId}.${extension}`;
-    const reference = storage.ref(path);
-    await reference.put(file, {
-      contentType: file.type,
-      cacheControl: "private,max-age=3600",
+    return enqueueProjectOperation(project.id, async () => {
+      await ensureProjectExistsNow(project);
+      const path = `studio-projects/${project.id}/logo-${assetId}.${extension}`;
+      const reference = storage.ref(path);
+      await reference.put(file, {
+        contentType: file.type,
+        cacheControl: "private,max-age=3600",
+      });
+      return {
+        heroMode: "logo",
+        heroLogo: await reference.getDownloadURL(),
+        heroLogoSource: "upload",
+        heroLogoLibraryId: "",
+        heroLogoStoragePath: path,
+        heroLogoName: stringValue(file.name).slice(0, 80) || "Uploaded logo",
+      };
     });
-    return {
-      heroMode: "logo",
-      heroLogo: await reference.getDownloadURL(),
-      heroLogoSource: "upload",
-      heroLogoLibraryId: "",
-      heroLogoStoragePath: path,
-      heroLogoName: stringValue(file.name).slice(0, 80) || "Uploaded logo",
-    };
   }
 
   async function loadLogoLibrary() {
@@ -1230,19 +1383,48 @@ export function createStudioCloud({
     const assetId =
       globalThis.crypto?.randomUUID?.() ||
       `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    await saveProject(project);
-    const path =
-      `studio-projects/${project.id}/directory-${String(pageId).slice(0, 36)}-` +
-      `${String(cardId).slice(0, 36)}-${assetId}.${extension}`;
-    const reference = storage.ref(path);
-    await reference.put(file, {
-      contentType: file.type,
-      cacheControl: "private,max-age=3600",
+    return enqueueProjectOperation(project.id, async () => {
+      await ensureProjectExistsNow(project);
+      const path =
+        `studio-projects/${project.id}/directory-${String(pageId).slice(0, 36)}-` +
+        `${String(cardId).slice(0, 36)}-${assetId}.${extension}`;
+      const reference = storage.ref(path);
+      await reference.put(file, {
+        contentType: file.type,
+        cacheControl: "private,max-age=3600",
+      });
+      return {
+        imageUrl: await reference.getDownloadURL(),
+        imageStoragePath: path,
+      };
     });
-    return {
-      imageUrl: await reference.getDownloadURL(),
-      imageStoragePath: path,
-    };
+  }
+
+  async function removeProjectAfterPendingOperations(
+    projectId,
+    endpoint,
+    {ignoreMissing = false} = {},
+  ) {
+    const cleanProjectId = stringValue(projectId);
+    if (!cleanProjectId) throw new Error("Studio projects require an ID.");
+    deletedProjectIds.add(cleanProjectId);
+    const pending = projectSaveChains.get(cleanProjectId);
+    if (pending) await pending.catch(() => undefined);
+    try {
+      const result = await authorizedJson(auth, endpoint, {
+        method: "POST",
+        body: JSON.stringify({projectId: cleanProjectId}),
+      });
+      knownProjectMetadata.delete(cleanProjectId);
+      return result;
+    } catch (error) {
+      if (ignoreMissing && error.status === 404) {
+        knownProjectMetadata.delete(cleanProjectId);
+        return {projectId: cleanProjectId, missing: true};
+      }
+      deletedProjectIds.delete(cleanProjectId);
+      throw error;
+    }
   }
 
   return {
@@ -1313,16 +1495,17 @@ export function createStudioCloud({
       });
     },
     leaveProject(projectId) {
-      return authorizedJson(auth, "/api/studio/projects/leave", {
-        method: "POST",
-        body: JSON.stringify({projectId}),
-      });
+      return removeProjectAfterPendingOperations(
+        projectId,
+        "/api/studio/projects/leave",
+      );
     },
-    deleteProject(projectId) {
-      return authorizedJson(auth, "/api/studio/projects/delete", {
-        method: "POST",
-        body: JSON.stringify({projectId}),
-      });
+    deleteProject(projectId, options = {}) {
+      return removeProjectAfterPendingOperations(
+        projectId,
+        "/api/studio/projects/delete",
+        options,
+      );
     },
   };
 }

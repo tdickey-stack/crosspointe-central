@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import assert from "node:assert/strict";
 import {fileURLToPath} from "node:url";
 
 import {
@@ -12,8 +13,11 @@ import "firebase/compat/firestore";
 import "firebase/compat/storage";
 import test from "node:test";
 
-import {projectForCloud} from "../src/studio/persistence.js";
-import {createStudioProject} from "../src/studio/templates.js";
+import {createStudioCloud, projectForCloud} from "../src/studio/persistence.js";
+import {
+  createDocumentPage,
+  createStudioProject,
+} from "../src/studio/templates.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..");
@@ -547,6 +551,50 @@ test("owner can create and edit a multi-page document atomically", async () => {
     db.doc("centralStudioProjects/document-a/pages/checklist-one"),
   );
   await assertSucceeds(removePageBatch.commit());
+});
+
+test("the Studio client can atomically save a document at the 20-page limit", async () => {
+  const context = environment.authenticatedContext("owner");
+  const project = createStudioProject("document-one-pager");
+  project.id = "twenty-page-document";
+  project.pages = Array.from({length: 20}, (_, index) =>
+    createDocumentPage(
+      "document-one-pager",
+      {...policyContent(), title: `Page ${index + 1}`},
+      `page-${index + 1}`,
+    ),
+  );
+  const cloud = createStudioCloud({
+    auth: {},
+    firestore: context.firestore(),
+    storage: context.storage(),
+    user: {uid: "owner"},
+  });
+  const previousWindow = globalThis.window;
+  globalThis.window = {firebase};
+  try {
+    await assertSucceeds(cloud.saveProject(project));
+    const root = await context
+      .firestore()
+      .doc("centralStudioProjects/twenty-page-document")
+      .get();
+    assert.equal(root.data().pageOrder.length, 20);
+    await Promise.all(
+      project.pages.map((page) =>
+        assertSucceeds(
+          context
+            .firestore()
+            .doc(
+              `centralStudioProjects/twenty-page-document/pages/${page.id}`,
+            )
+            .get(),
+        ),
+      ),
+    );
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });
 
 test("document pages reject orphan writes and malformed content", async () => {

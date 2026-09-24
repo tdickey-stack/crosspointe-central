@@ -1,3 +1,4 @@
+import {documentFieldWarnings} from "./document-fields.js";
 export const STUDIO_STORAGE_KEY = "crosspointeStudioProjectsV1";
 export const DOCUMENT_PROJECT_TEMPLATE_ID = "document-project";
 export const LEGACY_POLICY_TEMPLATE_ID = "policy-document";
@@ -1050,20 +1051,19 @@ function createId(prefix = "studio") {
     : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+const DOCUMENT_DEFAULTS = {
+  "document-one-pager": onePagerContent,
+  "document-checklist": checklistContent,
+  "document-signup-sheet": signupSheetContent,
+  "document-directory": directoryContent,
+  "document-content-page": contentPageContent,
+};
+
 export function createDocumentPage(templateId, content = null, pageId = "") {
   const template = DOCUMENT_PAGE_TEMPLATES.find(
     (item) => item.id === templateId,
   ) || DOCUMENT_PAGE_TEMPLATES[0];
-  const defaults =
-    template.id === "document-checklist"
-      ? checklistContent
-      : template.id === "document-signup-sheet"
-        ? signupSheetContent
-        : template.id === "document-directory"
-          ? directoryContent
-      : template.id === "document-content-page"
-        ? contentPageContent
-        : onePagerContent;
+  const defaults = DOCUMENT_DEFAULTS[template.id];
   return {
     id: pageId || createId("studio-page"),
     templateId: template.id,
@@ -1414,6 +1414,7 @@ export function getProjectWarnings(project) {
     project.pages.forEach((page, index) => {
       const content = page.content || {};
       const pageLabel = `Page ${index + 1}`;
+      warnings.push(...documentFieldWarnings(page).map((warning) => `${pageLabel}: ${warning}`));
       if (!String(content.title || "").trim()) {
         warnings.push(`${pageLabel} needs a title.`);
       }

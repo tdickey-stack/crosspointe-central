@@ -1,6 +1,8 @@
 export const CREATIVE_FILENAME_PREFERENCE_KEY =
   "crosspointe-central-studio-creative-filename-v1";
 
+export const MAX_STUDIO_EXPORT_FILENAME_LENGTH = 200;
+
 export function getCreativeDateStamp(date = new Date()) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     throw new Error("Choose a valid export date.");
@@ -57,4 +59,46 @@ export function buildCreativeFilename({
   ]
     .filter(Boolean)
     .join("_");
+}
+
+export function validateCreativeFilenameForExport(
+  filenameBase,
+  {
+    extension = "png",
+    carousel = false,
+    formatLabel = "1x1",
+  } = {},
+) {
+  const base = String(filenameBase || "").trim();
+  if (!base) {
+    throw new Error("Complete the required filename details.");
+  }
+  if (!/^[A-Z0-9][A-Z0-9_-]*$/u.test(base)) {
+    throw new Error("The Creative Team filename contains unsupported characters.");
+  }
+
+  const normalizedExtension = String(extension || "png")
+    .trim()
+    .toLowerCase()
+    .replace(/^\.+/u, "");
+  if (!/^[a-z0-9]+$/u.test(normalizedExtension)) {
+    throw new Error("Choose a valid export file type.");
+  }
+
+  const normalizedFormatLabel = String(formatLabel || "1x1").trim();
+  if (carousel && !/^[0-9]+x[0-9]+$/u.test(normalizedFormatLabel)) {
+    throw new Error("Choose a valid carousel output ratio.");
+  }
+  const suffix = carousel
+    ? `-s01-${normalizedFormatLabel}.${normalizedExtension}`
+    : `.${normalizedExtension}`;
+  const maximumBaseLength = MAX_STUDIO_EXPORT_FILENAME_LENGTH - suffix.length;
+  if (base.length > maximumBaseLength) {
+    throw new Error(
+      `Creative Team filename is too long. Shorten Content ID, Work Type, or Description by ${
+        base.length - maximumBaseLength
+      } character${base.length - maximumBaseLength === 1 ? "" : "s"}.`,
+    );
+  }
+  return base;
 }

@@ -8977,3 +8977,37 @@ a {
     page-break-after: auto;
   }
 }
+
+/* Editing feedback stays legible at every canvas zoom level. */
+.event-edit-limit-message {
+  position: fixed;
+  bottom: max(200px, calc(env(safe-area-inset-bottom) + 1rem));
+  left: 50%;
+  z-index: 10020;
+  width: max-content;
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: .65rem .9rem;
+  border: 1px solid #f3bd65;
+  border-radius: .5rem;
+  background: #fff5dc;
+  color: #482b06;
+  font: 600 14px/1.4 system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: 0 .6rem 1.8rem rgb(24 24 27 / 28%);
+  transform: translateX(-50%);
+}
+.studio-busy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-content: center;
+  background: rgb(255 255 255 / 70%);
+  color: #172033;
+  font: 600 1rem/1.5 system-ui, sans-serif;
+  cursor: progress;
+}
+
+.studio-document-warnings { margin: 0 1.5rem 1rem; padding: .6rem 1rem; border-radius: .6rem; background: #fff5dc; color: #482b06; font-size: .875rem; }
+.studio-document-warnings p { margin: .35rem 0; }

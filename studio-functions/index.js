@@ -20,6 +20,7 @@ import {
   planningCenterGroupResult,
   unsplashPhotoResult,
 } from "./studio-core.js";
+import {deleteStudioProjectRecords} from "./project-deletion.js";
 
 if (!getApps().length) initializeApp();
 
@@ -469,16 +470,20 @@ export const studioDeleteProject = onRequest(
         projectRef.collection("pages").get(),
         projectRef.collection("slides").get(),
       ]);
-      const batch = db.batch();
-      memberships.docs.forEach((document) => batch.delete(document.ref));
-      shares.docs.forEach((document) => batch.delete(document.ref));
-      pages.docs.forEach((document) => batch.delete(document.ref));
-      slides.docs.forEach((document) => batch.delete(document.ref));
-      batch.delete(projectRef);
-      await batch.commit();
+      // Remove Storage assets while the owned root still exists. If this
+      // fails, the request can be retried without leaving an unreachable
+      // project prefix behind.
       await getStorage()
         .bucket()
         .deleteFiles({prefix: `studio-projects/${projectId}/`});
+      await deleteStudioProjectRecords({
+        firestore: db,
+        projectReference: projectRef,
+        memberships,
+        shares,
+        pages,
+        slides,
+      });
       sendJson(response, 200, {projectId});
     } catch (error) {
       handleError(response, error, "Studio project deletion failed");

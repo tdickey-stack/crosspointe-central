@@ -5,6 +5,7 @@ import {createRequire} from "node:module";
 import {buildSync} from "esbuild";
 import React from "react";
 import {renderToStaticMarkup} from "react-dom/server";
+import {createDocumentPage} from "../src/studio/templates.js";
 
 const require = createRequire(import.meta.url);
 
@@ -24,7 +25,8 @@ new Function("require", "module", "exports", previewBundle.outputFiles[0].text)(
   previewModule,
   previewModule.exports,
 );
-const {EventPreview} = previewModule.exports;
+const {DocumentPagePreview, EventPreview, documentPageHasOverflow} =
+  previewModule.exports;
 
 const visibleContent = {
   eyebrow: "A PLACE TO CONNECT",
@@ -107,4 +109,78 @@ test("export previews contain visible optional copy but never editor controls", 
   assert.match(exportMarkup, /Come as you are\. Leave knowing someone new\./u);
   assert.doesNotMatch(exportMarkup, /event-field-visibility-toggle/u);
   assert.doesNotMatch(exportMarkup, /aria-label="(?:Hide|Show) (?:Utility label|Supporting line)"/u);
+});
+
+test("document overflow checks meaningful content regions without treating directory card clamps as errors", () => {
+  const overflowingBlocks = {
+    clientHeight: 100,
+    scrollHeight: 130,
+    clientWidth: 100,
+    scrollWidth: 100,
+  };
+  const root = {
+    clientHeight: 200,
+    scrollHeight: 200,
+    clientWidth: 150,
+    scrollWidth: 150,
+    querySelectorAll(selector) {
+      return selector === ".content-page-blocks" ? [overflowingBlocks] : [];
+    },
+  };
+  assert.equal(documentPageHasOverflow(root, "document-content-page"), true);
+
+  const intentionallyClampedCard = {
+    clientHeight: 50,
+    scrollHeight: 90,
+    clientWidth: 50,
+    scrollWidth: 50,
+  };
+  root.querySelectorAll = (selector) =>
+    selector === ".directory-card-copy" ? [intentionallyClampedCard] : [];
+  assert.equal(documentPageHasOverflow(root, "document-directory"), false);
+});
+
+test("one-pager cards ignore padding-only scroll metrics", () => {
+  const paddedCard = {
+    clientHeight: 108,
+    scrollHeight: 125,
+    clientWidth: 200,
+    scrollWidth: 200,
+  };
+  const root = {
+    clientHeight: 660,
+    scrollHeight: 660,
+    clientWidth: 510,
+    scrollWidth: 510,
+    querySelectorAll(selector) {
+      if ([".policy-list-card", ".policy-owner-card"].includes(selector)) {
+        return [paddedCard];
+      }
+      return [];
+    },
+  };
+
+  assert.equal(documentPageHasOverflow(root, "document-one-pager"), false);
+});
+
+test("every default document page reaches its distinct SSR renderer", () => {
+  const expectedClasses = {
+    "document-one-pager": "studio-policy-document",
+    "document-checklist": "studio-checklist-document",
+    "document-signup-sheet": "studio-signup-document",
+    "document-directory": "studio-directory-document",
+    "document-content-page": "studio-content-document",
+  };
+
+  Object.entries(expectedClasses).forEach(([templateId, className]) => {
+    const markup = renderToStaticMarkup(
+      React.createElement(DocumentPagePreview, {
+        page: createDocumentPage(templateId),
+        pageNumber: 1,
+        pageCount: 1,
+      }),
+    );
+    assert.match(markup, new RegExp(`class="${className}"`, "u"), templateId);
+    assert.doesNotMatch(markup, /data-studio-layout-error/u, templateId);
+  });
 });

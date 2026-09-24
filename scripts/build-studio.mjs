@@ -12,8 +12,10 @@ const outputFile = path.join(projectRoot, "public", "studio.js");
 const outputCssFile = path.join(projectRoot, "public", "studio.css");
 
 await build({
-  entryPoints: [entryFile],
-  outfile: outputFile,
+  entryPoints: {studio: entryFile},
+  outdir: path.dirname(outputFile),
+  splitting: true,
+  chunkNames: "studio-chunks/[name]-[hash]",
   bundle: true,
   format: "esm",
   jsx: "automatic",
@@ -30,16 +32,19 @@ await build({
   },
 });
 
-const legalFile = `${outputFile}.LEGAL.txt`;
-try {
-  const legalText = await fs.readFile(legalFile, "utf8");
-  const normalizedLegalText = legalText
-    .split(/\r?\n/u)
-    .map((line) => line.trimEnd())
-    .join("\n");
-  await fs.writeFile(legalFile, normalizedLegalText, "utf8");
-} catch (error) {
-  if (error.code !== "ENOENT") throw error;
+const chunkDirectory = path.join(projectRoot, "public", "studio-chunks");
+const legalFiles = [
+  `${outputFile}.LEGAL.txt`,
+  ...(await fs.readdir(chunkDirectory)).filter((name) => name.endsWith(".LEGAL.txt"))
+    .map((name) => path.join(chunkDirectory, name)),
+];
+for (const legalFile of legalFiles) {
+  try {
+    const legalText = await fs.readFile(legalFile, "utf8");
+    await fs.writeFile(legalFile, legalText.split(/\r?\n/u).map((line) => line.trimEnd()).join("\n"), "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
 }
 
 try {

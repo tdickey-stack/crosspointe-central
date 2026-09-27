@@ -41,6 +41,10 @@
     ],
     "headers": [
       {
+        "source": "/navlab{,/**,.html,.css,.js,-*.js,-*.css}",
+        "headers": [{"key": "Cache-Control", "value": "no-store"}]
+      },
+      {
         "source": "/group-@(directory|embed).js",
         "headers": [
           {
@@ -381,6 +385,10 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/navlab{,/**}",
+        "destination": "/navlab.html"
+      },
       {
         "source": "/group-lab",
         "destination": "/group-lab.html"

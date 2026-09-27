@@ -52,6 +52,83 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
   let lastPagerWidth = 0;
   let pendingNavigation = null;
   let highlightedView = "";
+  // Match Central's --cp-ease (also shared by Studio and Planner).
+  const pageMotion = {duration: 420, curve: [0.16, 1, 0.3, 1]};
+  let stopPageMotion = null;
+
+  function cancelPageMotion() {
+    stopPageMotion?.();
+    stopPageMotion = null;
+  }
+
+  function slideDesktop(previous, next, previousScroll) {
+    const outgoing = byId(previous);
+    const incoming = byId(next);
+    const distance = (destinations.indexOf(next) > destinations.indexOf(previous) ? 1 : -1) * pager.clientWidth;
+    outgoing.hidden = false;
+    outgoing.inert = true;
+    outgoing.style.position = "absolute";
+    outgoing.style.width = "100%";
+    outgoing.style.top = `${window.scrollY - previousScroll}px`;
+    pager.dataset.sliding = "true";
+    const timing = {duration: pageMotion.duration, easing: `cubic-bezier(${pageMotion.curve.join(",")})`, fill: "both"};
+    const exit = outgoing.animate([{transform: "translateX(0)"}, {transform: `translateX(${-distance}px)`}], timing);
+    const enter = incoming.animate([{transform: `translateX(${distance}px)`}, {transform: "translateX(0)"}], timing);
+    const cleanup = () => {
+      enter.onfinish = null;
+      outgoing.hidden = true;
+      outgoing.style.position = outgoing.style.width = outgoing.style.top = "";
+      delete pager.dataset.sliding;
+      exit.cancel();
+      enter.cancel();
+    };
+    stopPageMotion = cleanup;
+    enter.onfinish = () => {
+      cleanup();
+      stopPageMotion = null;
+      focusHeading(next);
+    };
+  }
+
+  // ScrollTo's browser-defined smooth easing cannot use --cp-ease. Animate
+  // button requests only; native touch scrolling and snapping still own swipes.
+  function slideMobile(left) {
+    const start = pager.scrollLeft;
+    if (Math.abs(left - start) < 1) {
+      pager.scrollTo({left, behavior: "instant"});
+      settlePage();
+      return;
+    }
+    const [x1, y1, x2, y2] = pageMotion.curve;
+    const bezier = (t, a, b) => 3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t ** 2 * b + t ** 3;
+    const ease = (progress) => {
+      let low = 0, high = 1;
+      for (let i = 0; i < 16; i++) {
+        const t = (low + high) / 2;
+        if (bezier(t, x1, x2) < progress) low = t;
+        else high = t;
+      }
+      return bezier((low + high) / 2, y1, y2);
+    };
+    let started;
+    let frame;
+    pager.dataset.sliding = "true";
+    stopPageMotion = () => {
+      window.cancelAnimationFrame(frame);
+      delete pager.dataset.sliding;
+    };
+    const step = (time) => {
+      started ??= time;
+      const progress = Math.min(1, (time - started) / pageMotion.duration);
+      pager.scrollTo({left: progress === 1 ? left : start + (left - start) * ease(progress), behavior: "instant"});
+      if (progress < 1) frame = window.requestAnimationFrame(step);
+      else {
+        cancelPageMotion();
+        settlePage();
+      }
+    };
+    frame = window.requestAnimationFrame(step);
+  }
 
   function highlightView(next) {
     if (!next || next === highlightedView) return;
@@ -71,7 +148,7 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
       const available = destinations.includes(view.id);
       view.hidden = !available || (!mobile.matches && view.id !== next);
       // Keep offscreen controls out of the keyboard and screen-reader order.
-      view.inert = !available || (mobile.matches && view.id !== next);
+      view.inert = !available || view.id !== next;
     });
     highlightView(next);
     const title = next === "next-steps" ? "Next Steps" : next[0].toUpperCase() + next.slice(1);
@@ -84,6 +161,7 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
   }
 
   function setSundayMode(enabled, showHome = true) {
+    cancelPageMotion();
     sundayMode = enabled;
     destinations = enabled ? ["home", "notes", "next-steps", "groups", "events"] : ["home", "next-steps", "groups", "events"];
     document.documentElement.dataset.sundayPreview = String(enabled);
@@ -117,24 +195,31 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
     if (next === currentView && !mobile.matches) return;
     if (dialog.open) dialog.close();
     const initial = !currentView;
+    const previous = currentView;
+    const previousScroll = window.scrollY;
+    cancelPageMotion();
     if (currentView && !mobile.matches) scrollPositions[currentView] = window.scrollY;
     clearTimeout(scrollTimer);
     pendingNavigation = mobile.matches ? {destination: next, focus: !initial} : null;
-    selectView(next, !initial && !mobile.matches);
+    const animate = !initial && !reduceMotion.matches;
+    selectView(next, !initial && !mobile.matches && !animate);
     if (mobile.matches) {
-      pager.scrollTo({
-        left: destinations.indexOf(next) * pager.clientWidth,
-        behavior: initial || reduceMotion.matches ? "instant" : "smooth",
-      });
-      settlePage();
+      const left = destinations.indexOf(next) * pager.clientWidth;
+      if (animate) slideMobile(left);
+      else {
+        pager.scrollTo({left, behavior: "instant"});
+        settlePage();
+      }
     } else {
       window.scrollTo({top: scrollPositions[next] || 0, behavior: "instant"});
+      if (animate) slideDesktop(previous, next, previousScroll);
     }
   }
 
   // The browser owns dragging, momentum, cancellation, and snap animations.
   // Highlight the mostly visible page during a swipe; commit URL/focus afterward.
   function settlePage() {
+    if (stopPageMotion) return;
     if (!mobile.matches || !pager.clientWidth || document.querySelector("dialog[open]")) return;
     const index = Math.round(pager.scrollLeft / pager.clientWidth);
     if (Math.abs(pager.scrollLeft - index * pager.clientWidth) > 2) return;
@@ -165,6 +250,7 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
   // A new gesture takes ownership immediately; native swiping is never locked.
   for (const eventName of ["pointerdown", "touchstart", "wheel"]) {
     pager.addEventListener(eventName, () => {
+      if (mobile.matches) cancelPageMotion();
       pendingNavigation = null;
       clearTimeout(scrollTimer);
     }, {passive: true});
@@ -178,18 +264,32 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
     } else if (!mobile.matches && navigation.parentElement !== headerInner) {
       headerInner.insertBefore(navigation, byId("theme-toggle"));
     }
-    if (mobile.matches && pager.clientWidth !== lastPagerWidth) {
-      pager.scrollTo({left: destinations.indexOf(currentView) * pager.clientWidth, behavior: "instant"});
+    if (pager.clientWidth !== lastPagerWidth) {
+      const wasSliding = Boolean(stopPageMotion);
+      cancelPageMotion();
+      if (mobile.matches) {
+        pager.scrollTo({left: destinations.indexOf(currentView) * pager.clientWidth, behavior: "instant"});
+        if (wasSliding) settlePage();
+      } else if (wasSliding) focusHeading(currentView);
     }
     lastPagerWidth = pager.clientWidth;
   }
   mobile.addEventListener("change", () => {
+    cancelPageMotion();
     pendingNavigation = null;
     selectView(currentView);
     lastPagerWidth = 0;
     sizePager();
   });
   window.addEventListener("resize", sizePager);
+  reduceMotion.addEventListener("change", () => {
+    if (!reduceMotion.matches || !stopPageMotion) return;
+    cancelPageMotion();
+    if (mobile.matches) {
+      pager.scrollTo({left: destinations.indexOf(currentView) * pager.clientWidth, behavior: "instant"});
+      settlePage();
+    } else focusHeading(currentView);
+  });
   dialog.addEventListener("close", () => {
     document.body.style.overflow = "";
     previousFocus?.focus({preventScroll: true});

@@ -1064,3 +1064,145 @@ textarea:focus-visible {
     flex-direction: column;
   }
 }
+
+/* Event selection workspace. Groups retain their directory-focused editor. */
+.embeds-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+body.is-events-workspace { height: 100dvh; overflow: hidden; }
+.is-events-workspace #central-embeds-root { height: 100%; display: flex; flex-direction: column; }
+.is-events-workspace .embeds-header { flex: 0 0 auto; }
+.is-events-workspace .embeds-main { width: 100%; flex: 1; min-height: 0; padding: 18px 28px 0; display: flex; flex-direction: column; }
+.is-events-workspace .embeds-alert { flex-shrink: 0; margin: 0 0 10px; padding: 9px 14px; }
+.embeds-workspace-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 18px; flex-shrink: 0; }
+.embeds-workspace-title { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.embeds-workspace-title .embeds-back { justify-self: start; padding: 0; font-size: .76rem; }
+.embeds-workspace-title input { width: 100%; min-width: 160px; color: var(--embeds-ink); font: 700 1.65rem/1.1 "League Spartan", sans-serif; background: none; border: 0; padding: 3px 0; }
+.embeds-draft-status { color: var(--embeds-muted); font-size: .73rem; }
+.embeds-toolbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.embeds-layout-switch, .embeds-filter-chips, .embeds-preview-widths, .embeds-mobile-tabs { display: flex; gap: 4px; }
+.embeds-layout-switch { border: 1px solid var(--embeds-line); background: #fff; border-radius: 12px; padding: 3px; }
+.embeds-layout-switch button, .embeds-filter-chips button, .embeds-preview-widths button, .embeds-mobile-tabs button { border: 0; border-radius: 8px; padding: 9px 12px; background: transparent; font-size: .78rem; color: var(--embeds-muted); cursor: pointer; font-weight: 700; white-space: nowrap; }
+.embeds-layout-switch button[aria-pressed="true"], .embeds-preview-widths button[aria-pressed="true"], .embeds-mobile-tabs button[aria-pressed="true"] { background: #efe6ed; color: var(--embeds-plum-dark); }
+.embeds-mobile-tabs { display: none; }
+.embeds-workbench { display: grid; grid-template-columns: 290px minmax(0,1fr); gap: 20px; flex: 1; min-height: 0; }
+.embeds-selection-rail, .embeds-event-library { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--embeds-panel); border: 1px solid var(--embeds-line); border-radius: 18px; overflow: hidden; }
+.embeds-rail-heading { padding: 20px 18px 16px; border-bottom: 1px solid var(--embeds-line); }
+.embeds-rail-heading h2, .embeds-library-toolbar h2 { margin: 0; font: 700 1.35rem/1.15 "League Spartan",sans-serif; }
+.embeds-rail-heading h2 span { margin-left: 7px; background: #efe6ed; color: var(--embeds-plum-dark); padding: 3px 8px; border-radius: 7px; font: 700 .8rem/1.2 "Google Sans Flex",sans-serif; }
+.embeds-rail-heading p, .embeds-library-toolbar p { margin: 6px 0 0; font-size: .8rem; color: var(--embeds-muted); line-height: 1.4; }
+.embeds-rail-heading small { display: block; color: var(--embeds-muted); font-size: .7rem; margin-top: 7px; }
+.embeds-selection-list { overflow: auto; overscroll-behavior: contain; flex: 1; padding: 8px; }
+.embeds-selection-row { display: grid; grid-template-columns: 21px minmax(0,1fr); gap: 8px; padding: 12px 9px; border: 1px solid transparent; border-bottom-color: var(--embeds-line); border-radius: 9px; }
+.embeds-selection-row.is-featured { background: #f6eef4; border-color: #ddc8d8; margin-bottom: 5px; }
+.embeds-selection-row.is-missing { background: #faf8f6; }
+.embeds-selection-number { color: #8a808a; font-size: .75rem; padding-top: 1px; }
+.embeds-selection-row strong { font-size: .85rem; line-height: 1.3; display: block; overflow-wrap: anywhere; }
+.embeds-selection-row small { display: block; color: var(--embeds-muted); font-size: .7rem; margin-top: 5px; line-height: 1.4; }
+.embeds-small-featured { color: var(--embeds-plum-dark); font-size: .65rem; font-weight: 800; display: block; margin-top: 4px; }
+.embeds-selection-actions { display: flex; gap: 13px; margin-top: 5px; }
+.embeds-selection-actions button { padding: 6px 0; border: 0; background: none; color: var(--embeds-plum-dark); font-size: .7rem; font-weight: 700; cursor: pointer; }
+.embeds-selection-actions button:last-child { color: var(--embeds-muted); }
+.embeds-event-library { background: rgba(255,255,255,.55); }
+.embeds-library-toolbar { padding: 20px 20px 14px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.embeds-library-filters { padding: 0 20px; display: flex; gap: 14px; align-items: center; }
+.embeds-library-filters .embeds-search { margin: 0; flex: 1; min-width: 150px; }
+.embeds-library-filters input { background: #fff; padding: 10px 12px; font-size: .82rem; }
+.embeds-filter-chips button { border-radius: 999px; padding: 9px 10px; }
+.embeds-filter-chips button[aria-pressed="true"] { background: var(--embeds-ink); color: #fff; }
+.embeds-filter-chips span { font-size: .7rem; opacity: .75; margin-left: 3px; }
+.embeds-library-summary { color: var(--embeds-muted); font-size: .7rem; padding: 12px 20px 8px; }
+.embeds-card-scroll { overflow: auto; overscroll-behavior: contain; padding: 0 20px 20px; flex: 1; }
+.embeds-event-cards { display: grid; gap: 13px; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); align-items: start; }
+.embeds-event-card { background: #fff; border: 1px solid #ded9df; border-radius: 14px; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+.embeds-event-card:hover { border-color: #9f8b9b; }
+.embeds-event-card.is-selected { border-color: var(--embeds-plum); box-shadow: inset 0 0 0 1px var(--embeds-plum); background: #fbf7fa; }
+.embeds-event-card.is-featured { border-top: 4px solid var(--embeds-plum); }
+.embeds-card-choice { cursor: pointer; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-height: 175px; }
+.embeds-card-image { width: calc(100% + 28px); height: 92px; object-fit: cover; margin: -14px -14px 4px; }
+.embeds-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.embeds-card-badge { color: var(--embeds-muted); font-size: .65rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.is-featured .embeds-card-badge { color: var(--embeds-plum-dark); background: #f0e2ec; padding: 4px 7px; border-radius: 5px; }
+.embeds-card-choice input { width: 20px; height: 20px; accent-color: var(--embeds-plum); margin: 0; cursor: pointer; flex-shrink: 0; }
+.embeds-card-choice strong { font: 700 1.12rem/1.13 "League Spartan",sans-serif; margin: 5px 0; }
+.embeds-card-choice > span:not(.embeds-card-heading) { font-size: .75rem; }
+.embeds-card-date { font-weight: 700; color: var(--embeds-plum-dark); }
+.embeds-card-choice small { color: var(--embeds-muted); font-size: .7rem; line-height: 1.3; }
+.embeds-series-dates, .embeds-card-footer { border-top: 1px solid var(--embeds-line); font-size: .7rem; color: var(--embeds-muted); padding: 11px 14px; }
+.embeds-series-dates summary { cursor: pointer; }
+.embeds-series-dates ul { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; line-height: 1.4; }
+.embeds-preview-dock { flex-shrink: 0; margin-top: 12px; border: 1px solid var(--embeds-line); border-bottom: 0; border-radius: 16px 16px 0 0; background: #fff; overflow: hidden; }
+.embeds-preview-heading { display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 0 16px; gap: 14px; }
+.embeds-preview-heading > button { flex: 1; display: flex; gap: 16px; text-align: left; align-items: center; border: 0; background: none; padding: 12px 0; cursor: pointer; color: var(--embeds-ink); }
+.embeds-preview-heading strong { font-size: .85rem; }
+.embeds-preview-heading span { font-size: .72rem; color: var(--embeds-muted); }
+.embeds-preview-stage { height: clamp(190px, 31vh, 310px); background: #eeebef; overflow: auto; padding: 12px; border-top: 1px solid var(--embeds-line); }
+.embeds-preview-stage iframe { display: block; background: #fff; border: 0; width: 100%; height: 100%; min-height: 210px; margin: auto; }
+.embeds-preview-stage.is-mobile iframe { width: min(390px,100%); }
+.embeds-modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(32,26,33,.35); backdrop-filter: blur(5px); display: flex; align-items: stretch; justify-content: flex-end; }
+.embeds-details-drawer { width: min(610px,100%); padding: 26px; background: #faf8fb; overflow: auto; box-shadow: -15px 0 60px #21152325; }
+.embeds-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.embeds-dialog-heading h2 { font: 700 1.6rem/1.1 "League Spartan",sans-serif; margin: 3px 0; }
+.embeds-detail-help { color: var(--embeds-muted); font-size: .83rem; line-height: 1.5; }
+.embeds-details-drawer .embeds-selected-event { padding: 20px; margin-bottom: 20px; border-radius: 16px; box-shadow: none; }
+.embeds-details-drawer .embeds-selected-top { margin-bottom: 18px; }
+.embeds-details-drawer .embeds-image-editor { grid-template-columns: 120px minmax(0,1fr); }
+.embeds-code-dialog { width: min(900px,calc(100% - 32px)); max-height: calc(100dvh - 60px); overflow: auto; margin: auto; padding: 26px; background: #faf8fb; border-radius: 22px; }
+.embeds-code-dialog > p { color: var(--embeds-muted); font-size: .85rem; }
+.embeds-code-dialog .embeds-publish-tools { display: block; box-shadow: none; padding: 20px; }
+.embeds-code-dialog .embeds-publish-actions { margin: 20px 0; }
+.embeds-code-dialog .embeds-publish-tools p { font-size: .85rem; }
+@media (max-width: 1150px) {
+  .embeds-workbench { grid-template-columns: 260px minmax(0,1fr); gap: 14px; }
+  .embeds-library-filters { flex-wrap: wrap; gap: 8px; }
+  .embeds-library-filters .embeds-search { flex-basis: 100%; }
+  .embeds-toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .embeds-workspace-title { flex: 1; }
+  .embeds-workspace-toolbar { gap: 14px; }
+}
+@media (max-width: 760px) {
+  .is-events-workspace .embeds-main { padding: 12px 12px 0; }
+  .is-events-workspace .embeds-header-inner { min-height: 58px; }
+  .is-events-workspace .embeds-header-current, .is-events-workspace .embeds-account span { display: none; }
+  .embeds-workspace-toolbar { display: block; padding-bottom: 10px; }
+  .embeds-workspace-title input { font-size: 1.35rem; }
+  .embeds-toolbar-actions { justify-content: flex-start; margin-top: 10px; gap: 6px; }
+  .embeds-toolbar-actions .embeds-button { padding: 0 10px; font-size: .72rem; min-height: 36px; }
+  .embeds-layout-switch button { font-size: .7rem; padding: 7px; }
+  .embeds-mobile-tabs { display: flex; margin-bottom: 10px; }
+  .embeds-workbench { display: flex; }
+  .embeds-selection-rail, .embeds-event-library { flex: 1; }
+  .embeds-workbench[data-mobile-panel="events"] .embeds-selection-rail, .embeds-workbench[data-mobile-panel="selected"] .embeds-event-library { display: none; }
+  .embeds-library-toolbar { padding: 14px 14px 10px; }
+  .embeds-library-toolbar h2 { font-size: 1.15rem; }
+  .embeds-library-toolbar p { font-size: .72rem; }
+  .embeds-library-filters { padding: 0 14px; }
+  .embeds-library-summary { padding-left: 14px; }
+  .embeds-card-scroll { padding: 0 14px 14px; }
+  .embeds-event-cards { grid-template-columns: repeat(auto-fill,minmax(190px,1fr)); }
+  .embeds-preview-heading { padding: 0 12px; gap: 6px; }
+  .embeds-preview-heading > button { display: grid; gap: 4px; }
+  .embeds-preview-widths button { padding: 7px; font-size: .7rem; }
+  .embeds-preview-stage { height: 32dvh; }
+  .embeds-details-drawer { padding: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .embeds-event-card { transition: none; }
+}
+
+.embeds-preview-heading > .embeds-preview-expand { flex: none; font-size: .75rem; font-weight: 700; padding: 9px 12px; border: 1px solid var(--embeds-line); border-radius: 8px; }
+.embeds-preview-dock.is-expanded { position: fixed; inset: 84px 24px 24px; z-index: 40; display: flex; flex-direction: column; margin: 0; border-radius: 16px; box-shadow: 0 0 0 100vmax #22192480; }
+.embeds-preview-dock.is-expanded .embeds-preview-stage { height: auto; flex: 1; min-height: 0; }
+@media (max-width: 760px) {
+  .embeds-preview-dock.is-expanded { inset: 10px; }
+  .embeds-preview-dock.is-expanded .embeds-preview-heading { flex-wrap: wrap; padding: 8px 12px; }
+  .embeds-preview-dock.is-expanded .embeds-preview-heading > button:first-child { flex-basis: 100%; }
+}
+
+.embeds-upload-button { position: relative; overflow: hidden; }
+.embeds-image-actions .embeds-upload-button input { display: block; position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.embeds-upload-button:focus-within { outline: 3px solid #76516f70; outline-offset: 2px; }
+@media (max-width: 760px) {
+  .is-events-workspace .embeds-main:has(.embeds-preview-dock.is-open) .embeds-workbench { display: none; }
+  .embeds-preview-dock.is-open { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+  .embeds-preview-dock.is-open .embeds-preview-stage { height: auto; flex: 1; min-height: 0; }
+  .embeds-mobile-tabs button { padding-left: 10px; padding-right: 10px; }
+}

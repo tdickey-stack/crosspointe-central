@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "scripts": {
+    "build:embed-preview": "node scripts/build-embed-preview.mjs",
     "build:planner": "node scripts/build-planner.mjs",
     "build:studio": "node scripts/build-studio.mjs",
     "build:youversion": "node scripts/build-youversion-reader.mjs",
@@ -31,7 +32,7 @@
     "emulators:lan": "node scripts/start-lan-emulators.mjs",
     "gmail:token": "node scripts/get-gmail-refresh-token.mjs",
     "test:groups": "node --test functions/groups/*.test.js test/group-directory.test.mjs test/group-embed.test.mjs",
-    "test:embeds": "node --test functions/embeds/*.test.js test/embed-groups-editor.test.mjs test/embed-loader.test.mjs"
+    "test:embeds": "node --test functions/embeds/*.test.js test/embed-groups-editor.test.mjs test/embed-loader.test.mjs test/embed-preview.test.mjs test/embeds-workspace.test.mjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",

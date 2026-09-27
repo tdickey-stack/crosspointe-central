@@ -226,6 +226,14 @@
     if (!host || host.getAttribute("data-central-embed-loading") === "true") {
       return;
     }
+    // The Admin preview supplies a fully rendered, unsaved draft in a sandboxed
+    // srcdoc. Enhance its controls, but never replace it with published data.
+    if (host.getAttribute("data-central-embed-static-preview") === "true") {
+      enhanceEmbed_(host);
+      host.setAttribute("data-central-embed-static", "true");
+      host.setAttribute("data-central-embed-loaded", "true");
+      return;
+    }
     var embedId = validEmbedId_(host.getAttribute("data-central-embed"));
     if (!embedId) {
       renderError_(host, "");

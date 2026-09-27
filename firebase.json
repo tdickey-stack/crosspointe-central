@@ -192,6 +192,10 @@
         ]
       },
       {
+        "source": "/embed-preview.js",
+        "headers": [{"key": "Cache-Control", "value": "no-store"}]
+      },
+      {
         "source": "/embed.js",
         "headers": [
           {

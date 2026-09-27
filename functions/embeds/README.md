@@ -78,3 +78,24 @@ copied shell provides a link to the public Church Center groups directory.
 `npm run seed:embed-lab` seeds local-emulator-only Event and Groups configs,
 including `embed_labgroupslight`, `embed_labgroupsdark`, and
 `embed_labgroupsresponsive`. Groups still use current public PCO records.
+
+
+## Event selection workspace and draft preview
+
+The Event editor groups upcoming occurrences by Planning Center series and shows
+one selectable card for each series. The selected rail follows the public
+resolver: Featured first, then source date. Missing selections stay saved and
+are listed as awaiting a date. Manual ordering is intentionally unavailable.
+Field and image overrides live in an optional details drawer. Refresh preserves
+unsaved edits; Save Draft and Publish remain separate operations.
+
+`src/embed-preview.js` imports the production resolver and HTML renderer. Build
+its checked-in browser bundle with `npm run build:embed-preview` after changing
+the source, payload normalizer, or renderer. The deployment workflows rebuild it.
+The sandboxed iframe loads the same public CSS and interaction loader with
+`data-central-embed-static-preview="true"`; the loader enhances this supplied
+HTML without requesting or replacing it with published data. Draft preview is
+available before first publication, with mobile width and expanded views.
+
+Run `npm run test:embeds` for source resolution, public rendering, draft preview,
+workspace state, and the existing Groups regression checks.

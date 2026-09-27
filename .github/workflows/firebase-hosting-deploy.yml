@@ -49,6 +49,9 @@ jobs:
       - name: Restore generated YouVersion bundle
         run: pnpm run build:youversion
 
+      - name: Build Central Embed preview
+        run: pnpm run build:embed-preview
+
       - name: Build Central Studio
         run: pnpm run build:studio
 

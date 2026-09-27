@@ -117,9 +117,16 @@
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.1fr);
+  border-color: rgba(118, 81, 111, 0.5);
+  box-shadow: 0 16px 38px rgba(71, 43, 64, 0.16), inset 4px 0 0 #76516f;
   justify-self: center;
   max-width: 780px;
   width: 100%;
+}
+
+/* A Featured event without a graphic should remain a single generous card. */
+.central-embed-root.central-embed-layout-standard .central-embed-event.is-featured-without-image {
+  display: flex;
 }
 
 .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured .central-embed-media {
@@ -255,8 +262,13 @@
 }
 
 .central-embed-root.central-embed-layout-compact .central-embed-event.is-featured {
-  border-color: rgba(118, 81, 111, 0.38);
-  box-shadow: 0 8px 24px rgba(71, 43, 64, 0.13);
+  border: 2px solid rgba(118, 81, 111, 0.68);
+  box-shadow: 0 10px 28px rgba(71, 43, 64, 0.2), inset 0 0 0 3px rgba(240, 231, 237, 0.74);
+}
+
+.central-embed-root.central-embed-layout-compact .central-embed-event.is-featured .central-embed-featured-label {
+  background: #76516f;
+  color: #fff;
 }
 
 .central-embed-root.central-embed-layout-compact .central-embed-grid::-webkit-scrollbar {
@@ -371,4 +383,9 @@
   .central-embed-root.central-embed-layout-compact .central-embed-grid {
     scroll-behavior: auto;
   }
+}
+
+/* Featured artwork often contains type; keep the entire graphic readable. */
+.central-embed-root.central-embed-layout-standard .central-embed-event.is-featured .central-embed-media img {
+  object-fit: contain;
 }

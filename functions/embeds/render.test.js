@@ -221,6 +221,7 @@ test("HTML renderer emits semantic markup and escapes content", () => {
   assert.match(html, /Kids &lt; Night/);
   assert.match(html, /data-central-embed-event-kind="featured"/);
   assert.match(html, /central-embed-featured-label">Featured/);
+  assert.match(html, /central-embed-event is-featured is-featured-without-image/);
   assert.match(html, /itemtype="https:\/\/schema.org\/Event"/);
   assert.match(html, /itemprop="startDate"/);
   assert.match(html, /itemprop="name"/);
@@ -264,7 +265,7 @@ test(
       }], {includeStyles: false, layout: "standard"});
 
       assert.match(html, /data-central-embed-event-kind="normal"/);
-      assert.match(html, /class="central-embed-event is-featured"/);
+      assert.match(html, /class="central-embed-event is-featured(?: |\")/);
     },
 );
 

@@ -233,6 +233,7 @@ function renderCentralEmbedEventHtml_(event, layout) {
   return [
     "<article itemscope itemtype=\"https://schema.org/Event\" class=\"central-embed-event",
     event.featured ? " is-featured" : "",
+    event.featured && !event.imageUrl ? " is-featured-without-image" : "",
     "\" data-central-embed-event-kind=\"",
     event.featured ? "featured" : "normal",
     "\">",

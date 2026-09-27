@@ -5,7 +5,7 @@ import test from "node:test";
 
 const source = await readFile(new URL("../public/embed.js", import.meta.url), "utf8");
 
-function hostFixture(type) {
+function hostFixture(type, staticPreview = false) {
   const rootAttrs = new Map(type === "groups" ? [["data-central-embed-type", "groups"]] : []);
   const root = {
     getAttribute: (name) => rootAttrs.get(name),
@@ -13,6 +13,7 @@ function hostFixture(type) {
     querySelector: () => null,
   };
   const attrs = new Map([["data-central-embed", "embed_labgroupslight"]]);
+  if (staticPreview) attrs.set("data-central-embed-static-preview", "true");
   return {
     innerHTML: type === "groups" ? "Groups shell" : "Readable Event snapshot",
     getAttribute: (name) => attrs.get(name),
@@ -60,4 +61,16 @@ test("Event refresh failure preserves the readable copied snapshot", async () =>
   await runLoader(host, async () => ({ok: false}));
   assert.equal(host.innerHTML, "Readable Event snapshot");
   assert.equal(host.getAttribute("aria-busy"), undefined);
+});
+
+test("static draft previews enhance their snapshot without fetching published data", async () => {
+  const host = hostFixture("events", true);
+  let fetchCalls = 0;
+  await runLoader(host, async () => {
+    fetchCalls += 1;
+    throw new Error("A draft preview must not fetch.");
+  });
+  assert.equal(fetchCalls, 0);
+  assert.equal(host.getAttribute("data-central-embed-static"), "true");
+  assert.equal(host.getAttribute("data-central-embed-loaded"), "true");
 });

@@ -6513,7 +6513,7 @@ button:disabled {
   place-items: center;
   overflow: hidden;
   border-radius: 0.11in;
-  background: #202124;
+  background: #fff;
 }
 
 .central-bulletin-featured-media img {
@@ -6632,7 +6632,7 @@ button:disabled {
   min-height: 0.62in;
   overflow: hidden;
   border-radius: 0.11in;
-  background: #e4e4e7;
+  background: #fff;
 }
 
 .central-bulletin-fallback-media img {
@@ -7059,7 +7059,7 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   border-style: dashed;
-  background: #fafafa;
+  background: #fff;
 }
 
 .central-bulletin-back-custom-block {
@@ -7257,7 +7257,7 @@ button:disabled {
   padding: 0.035in 0.02in;
   border: 1px solid var(--bulletin-line);
   border-radius: 0.075in;
-  background: #f7f7f8;
+  background: #fff;
   box-sizing: border-box;
 }
 
@@ -7464,7 +7464,7 @@ button:disabled {
 .central-bulletin-markdown code {
   padding: 0.005in 0.02in;
   border-radius: 0.025in;
-  background: #f0f0f1;
+  background: #fff;
   color: inherit;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
@@ -8015,7 +8015,7 @@ button:disabled {
   overflow: hidden;
   border: 0;
   border-radius: 0.11in;
-  background: #f4f4f5;
+  background: #fff;
 }
 
 .central-bulletin-panel-front.is-bulletin-layout-scannable
@@ -8112,7 +8112,7 @@ button:disabled {
   border-width: 0 0 0 0.045in;
   border-radius: 0.04in;
   border-left-color: var(--bulletin-red);
-  background: #fafafa;
+  background: #fff;
 }
 
 .central-bulletin-panel-front.is-bulletin-layout-scannable
@@ -8194,7 +8194,7 @@ button:disabled {
 .central-bulletin-scannable-featured,
 .central-bulletin-panel-front.is-bulletin-layout-scannable.is-black-and-white
 .central-bulletin-scannable-content .central-bulletin-card {
-  background: #f3f3f3;
+  background: #fff;
 }
 
 .central-bulletin-panel-front.is-bulletin-layout-scannable.is-front-density-3:not(.is-full-page)
@@ -9030,7 +9030,7 @@ button:disabled {
   align-items: stretch;
   border: 1px solid var(--bulletin-line);
   border-radius: 0.08in;
-  background: #f4f4f5;
+  background: #fff;
 }
 
 .central-bulletin-panel.is-bulletin-layout-readable
@@ -9361,7 +9361,7 @@ button:disabled {
 
 .central-bulletin-panel.is-bulletin-layout-readable.is-black-and-white
 :is(.b3-hero, .b3-card) {
-  background: #f3f3f3;
+  background: #fff;
 }
 
 .central-bulletin-panel.is-bulletin-layout-readable.is-black-and-white

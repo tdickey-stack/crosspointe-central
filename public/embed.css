@@ -19,6 +19,7 @@
   max-width: 100%;
   min-width: 0;
   width: 100%;
+  container-type: inline-size;
 }
 
 .central-embed-root .central-embed-grid {
@@ -34,6 +35,18 @@
   display: block;
   max-width: 100%;
   min-width: 0;
+  width: 100%;
+}
+
+.central-embed-root.central-embed-layout-standard .central-embed-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  max-width: 1060px;
+  margin-inline: auto;
+}
+
+.central-embed-root.central-embed-layout-standard .central-embed-event {
+  justify-self: center;
+  max-width: 340px;
   width: 100%;
 }
 
@@ -116,26 +129,60 @@
 .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   border-color: rgba(118, 81, 111, 0.5);
   box-shadow: 0 16px 38px rgba(71, 43, 64, 0.16), inset 4px 0 0 #76516f;
   justify-self: center;
-  max-width: 780px;
+  max-width: 660px;
   width: 100%;
 }
 
-/* A Featured event without a graphic should remain a single generous card. */
+/* Keep the same compact treatment when there is no graphic. */
 .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured-without-image {
   display: flex;
 }
 
 .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured .central-embed-media {
-  aspect-ratio: auto;
-  min-height: 100%;
+  align-self: start;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  margin: 18px 0 18px 18px;
+  width: calc(100% - 18px);
 }
 
 .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured .central-embed-title {
-  font-size: clamp(1.55rem, 2.6vw, 2rem);
+  font-size: clamp(1.4rem, 2.2vw, 1.65rem);
+}
+
+/* Clamp only after the loader has added an accessible disclosure control. */
+.central-embed-root .central-embed-description.is-collapsed {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
+.central-embed-root .central-embed-description-toggle {
+  align-self: flex-start;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: #6d4764;
+  cursor: pointer;
+  font: 700 0.86rem/1.4 "Google Sans Flex", "Helvetica Neue", Arial, sans-serif;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.central-embed-root .central-embed-description-toggle[hidden] {
+  display: none;
+}
+
+.central-embed-root .central-embed-description-toggle:focus-visible {
+  outline: 2px solid #76516f;
+  outline-offset: 3px;
 }
 
 .central-embed-root .central-embed-location,
@@ -357,12 +404,14 @@
 
   .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured {
     display: flex;
-    max-width: 400px;
+    max-width: 360px;
   }
 
   .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured .central-embed-media {
     aspect-ratio: 16 / 9;
     min-height: 0;
+    margin: 14px 14px 0;
+    width: calc(100% - 28px);
   }
 
   .central-embed-root.central-embed-layout-compact .central-embed-grid {
@@ -382,6 +431,19 @@
 
   .central-embed-root.central-embed-layout-compact .central-embed-grid {
     scroll-behavior: auto;
+  }
+}
+
+/* Site-builder columns can be narrow even on a wide browser window. */
+@container (max-width: 560px) {
+  .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured {
+    display: flex;
+    max-width: 360px;
+  }
+
+  .central-embed-root.central-embed-layout-standard .central-embed-event.is-featured .central-embed-media {
+    margin: 14px 14px 0;
+    width: calc(100% - 28px);
   }
 }
 

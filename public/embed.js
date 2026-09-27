@@ -6,6 +6,7 @@
   var centralOrigin = scriptUrl ? scriptUrl.origin :
     "https://central.crosspointe.tv";
   var expansionDurationMs = 1000;
+  var descriptionId = 0;
 
   function ensureStyles_() {
     if (document.querySelector("link[data-central-embed-styles]")) return;
@@ -121,14 +122,64 @@
     window.setTimeout(finish, expansionDurationMs + 90);
   }
 
+  function enhanceFeaturedDescriptions_(root, onChange) {
+    var disclosures = Array.from(root.querySelectorAll(
+        ".central-embed-event.is-featured .central-embed-description",
+    )).map(function(description) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "central-embed-description-toggle";
+      button.setAttribute("data-central-embed-description-toggle", "");
+      if (!description.id) {
+        var id;
+        do {
+          id = "central-embed-description-" + (++descriptionId);
+        } while (document.getElementById(id));
+        description.id = id;
+      }
+      button.setAttribute("aria-controls", description.id);
+      button.setAttribute("aria-expanded", "false");
+      button.textContent = "Read more";
+      description.after(button);
+      button.addEventListener("click", function() {
+        var expanded = button.getAttribute("aria-expanded") === "true";
+        button.setAttribute("aria-expanded", String(!expanded));
+        button.textContent = expanded ? "Read more" : "Read less";
+        description.classList.toggle("is-collapsed", expanded);
+        onChange();
+      });
+      return {description: description, button: button};
+    });
+
+    return function() {
+      disclosures.forEach(function(disclosure) {
+        var description = disclosure.description;
+        var button = disclosure.button;
+        var expanded = button.getAttribute("aria-expanded") === "true";
+        description.classList.add("is-collapsed");
+        var overflows = description.scrollHeight > description.clientHeight + 1;
+        button.hidden = !overflows && !expanded;
+        description.classList.toggle("is-collapsed", overflows && !expanded);
+      });
+    };
+  }
+
   function enhanceStandardEmbed_(root, viewport, grid) {
     var button = root.querySelector("[data-central-embed-toggle]");
-    if (!button) return;
     var collapsedHeight = 0;
+    var measureDescriptions = enhanceFeaturedDescriptions_(root, function() {
+      measure();
+    });
 
     var measure = function() {
-      if (button.disabled) return;
+      measureDescriptions();
+      if (!button) return;
       var expanded = button.getAttribute("aria-expanded") === "true";
+      if (button.disabled) {
+        collapsedHeight = getFirstRowHeight_(grid).height;
+        viewport.style.height = (expanded ? grid.scrollHeight : collapsedHeight) + "px";
+        return;
+      }
       viewport.style.transition = "none";
       viewport.style.height = "auto";
       root.classList.remove("central-embed-is-collapsed");
@@ -148,7 +199,7 @@
       viewport.style.transition = "";
     };
 
-    button.addEventListener("click", function() {
+    if (button) button.addEventListener("click", function() {
       if (button.disabled || !collapsedHeight) return;
       var expanded = button.getAttribute("aria-expanded") === "true";
       button.disabled = true;
@@ -176,6 +227,7 @@
         root.classList.remove("central-embed-is-collapsed");
         viewport.style.height = "auto";
         button.disabled = false;
+        measure();
       });
     });
 
@@ -187,6 +239,8 @@
     measure();
     window.requestAnimationFrame(measure);
     window.setTimeout(measure, 250);
+    var stylesheet = document.querySelector("link[data-central-embed-styles]");
+    if (stylesheet) stylesheet.addEventListener("load", measure, {once: true});
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(measure);
     }

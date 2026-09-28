@@ -513,7 +513,7 @@ function createPreviewWorkspace() {
     campaigns,
   });
   const lane = ensureLevel2StandingLane({
-    weekStart,
+    weekStart: today,
     plays: capacity.plays,
     ongoingPlaybook: starter.playbooks.find((item) => item.id === "level-2-ongoing-awareness"),
   });

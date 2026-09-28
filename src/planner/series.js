@@ -6,7 +6,7 @@ import {
   differenceInDays,
   generateCampaignSchedule,
   smuggledBeneficiaryPlayIds,
-  startOfSundayWeek,
+  startOfPlanningWeek,
   utcDateFromKey,
 } from "./domain.js";
 import {expandRecurrence, normalizeRecurrence} from "./recurrence.js";
@@ -180,7 +180,7 @@ function allocateLevel4WithProtected({plays, campaigns, protectedIds}) {
     const allocationAnchor = protectedIds.has(play.id)
       ? play.scheduledDate
       : (play.originalScheduledDate || play.scheduledDate);
-    const key = startOfSundayWeek(allocationAnchor);
+    const key = startOfPlanningWeek(allocationAnchor);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(play);
   });
@@ -188,7 +188,7 @@ function allocateLevel4WithProtected({plays, campaigns, protectedIds}) {
   groups.forEach((candidates, weekStart) => {
     const protectedCandidates = candidates.filter((play) => protectedIds.has(play.id));
     const mutable = candidates.filter((play) => !protectedIds.has(play.id));
-    const standardSlots = [addDays(weekStart, 1), addDays(weekStart, 5)];
+    const standardSlots = [weekStart, addDays(weekStart, 4)];
     const occupiedStandard = new Set(protectedCandidates.map((play) => play.scheduledDate).filter((date) => standardSlots.includes(date)));
     const capacityRemaining = Math.max(0, 2 - protectedCandidates.length);
     const available = standardSlots.filter((slot) => !occupiedStandard.has(slot)).slice(0, capacityRemaining);
@@ -243,7 +243,7 @@ function allocateLevel4WithProtected({plays, campaigns, protectedIds}) {
 
 function periodKey(play, rule) {
   return rule.capacityPeriod === "week" || rule.capacityPeriod === "sunday"
-    ? startOfSundayWeek(play.scheduledDate)
+    ? startOfPlanningWeek(play.scheduledDate)
     : play.scheduledDate;
 }
 

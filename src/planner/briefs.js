@@ -1,5 +1,5 @@
 import {jsPDF} from "jspdf";
-import {buildSmuggleRelationships, dateKey, nextPlanningWeekStart} from "./domain.js";
+import {buildSmuggleRelationships, dateKey, nextSunday} from "./domain.js";
 import {briefMarkdownToPlainText} from "./markdown.js";
 
 const HIDDEN_PROMOTION_STATUSES = new Set(["missed", "skipped"]);
@@ -19,7 +19,7 @@ function safeText(value, maximum = 2000) {
 export function promotionBriefFilename(brief = {}) {
   const generatedAt = brief.generatedAt || new Date();
   const creationDate = dateKey(generatedAt).replaceAll("-", "");
-  const upcomingSunday = nextPlanningWeekStart(generatedAt);
+  const upcomingSunday = nextSunday(generatedAt);
   const sundayMonthDay = upcomingSunday.slice(5).replace("-", "");
   return `SUN${sundayMonthDay}_ANN_${creationDate}.pdf`;
 }

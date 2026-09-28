@@ -15,12 +15,14 @@ import {
   groupCalendarCampaignDays,
   isCampaignExpired,
   nextPlanningWeekStart,
+  nextSunday,
+  planningWeekRange,
   recommendSmuggleOpportunities,
   recurringContentDates,
   reportPresetDateRange,
   scheduleSummary,
   skipPromotion,
-  startOfSundayWeek,
+  startOfPlanningWeek,
   utilizationForWeek,
   weeklyInventoryPlays,
 } from "../src/planner/domain.js";
@@ -111,19 +113,19 @@ test("campaign expiry follows a recurrence's moved actual end rather than its im
   assert.equal(isCampaignExpired(movedOccurrence, new Date("2026-11-15T12:00:00-06:00")), true);
 });
 
-test("report date presets follow the upcoming planning Sunday", () => {
-  const reference = new Date("2026-08-16T12:00:00-05:00");
+test("report date presets follow the current Monday through Sunday planning week", () => {
+  const reference = new Date("2026-09-30T12:00:00-05:00");
   assert.deepEqual(reportPresetDateRange("upcoming", reference), {
-    startDate: "2026-08-23",
-    endDate: "2026-08-29",
+    startDate: "2026-09-28",
+    endDate: "2026-10-04",
   });
   assert.deepEqual(reportPresetDateRange("next-two-weeks", reference), {
-    startDate: "2026-08-23",
-    endDate: "2026-09-05",
+    startDate: "2026-09-28",
+    endDate: "2026-10-11",
   });
   assert.deepEqual(reportPresetDateRange("month-at-a-glance", reference), {
-    startDate: "2026-08-01",
-    endDate: "2026-08-31",
+    startDate: "2026-09-01",
+    endDate: "2026-09-30",
   });
   assert.throws(() => reportPresetDateRange("custom", reference), /valid report date preset/);
 });
@@ -246,7 +248,7 @@ test("midweek late flexible play reschedules while passed Sunday play is missed"
 });
 
 function socialCandidate(id, eventDate, submittedAt = "2026-09-01T12:00:00.000Z") {
-  const weekStart = startOfSundayWeek(eventDate);
+  const weekStart = startOfPlanningWeek(eventDate);
   return {
     play: {
       id: `play-${id}`,
@@ -255,8 +257,8 @@ function socialCandidate(id, eventDate, submittedAt = "2026-09-01T12:00:00.000Z"
       campaignLevel: 4,
       campaignType: "standard",
       resourceId: "level-4-social",
-      originalScheduledDate: addDays(weekStart, 1),
-      scheduledDate: addDays(weekStart, 1),
+      originalScheduledDate: weekStart,
+      scheduledDate: weekStart,
       status: "scheduled",
       conflictState: "none",
     },
@@ -347,36 +349,37 @@ test("Newsletter Event Cards warn above four and conflict only above six", () =>
   assert.equal(overCapacity.conflicts[0].typicalCapacity, 4);
   assert.equal(overCapacity.plays.filter((play) => play.status === "conflict").length, 1);
   const utilization = utilizationForWeek({
-    weekStart: "2026-10-11",
+    weekStart: "2026-10-12",
     plays: cards.slice(0, 5),
     capacityRules: [rule],
   });
   assert.equal(utilization[0].capacityState, "above-typical");
 });
 
-test("weekly inventory includes every matching status and excludes other weeks and resources", () => {
+test("weekly inventory groups Monday through Sunday and excludes adjacent weeks and resources", () => {
   const plays = [
-    {id: "level-1", campaignName: "Priority", resourceId: "stage-announcement", campaignLevel: 1, scheduledDate: "2026-10-17", status: "scheduled"},
-    {id: "scheduled", campaignName: "A", resourceId: "stage-announcement", campaignLevel: 4, scheduledDate: "2026-10-11", status: "scheduled"},
-    {id: "conflict", campaignName: "B", resourceId: "stage-announcement", campaignLevel: 3, scheduledDate: "2026-10-14", status: "conflict"},
-    {id: "missed", campaignName: "C", resourceId: "stage-announcement", campaignLevel: 2, scheduledDate: "2026-10-17", status: "missed"},
-    {id: "level-5", campaignName: "Later", resourceId: "stage-announcement", campaignLevel: 5, scheduledDate: "2026-10-11", status: "scheduled"},
-    {id: "other-resource", campaignName: "D", resourceId: "newsletter-feature", campaignLevel: 2, scheduledDate: "2026-10-14", status: "scheduled"},
-    {id: "other-week", campaignName: "E", resourceId: "stage-announcement", campaignLevel: 2, scheduledDate: "2026-10-18", status: "scheduled"},
+    {id: "level-1", campaignName: "Priority", resourceId: "stage-announcement", campaignLevel: 1, scheduledDate: "2026-10-04", status: "scheduled"},
+    {id: "scheduled", campaignName: "A", resourceId: "stage-announcement", campaignLevel: 4, scheduledDate: "2026-09-28", status: "scheduled"},
+    {id: "conflict", campaignName: "B", resourceId: "stage-announcement", campaignLevel: 3, scheduledDate: "2026-09-30", status: "conflict"},
+    {id: "missed", campaignName: "C", resourceId: "stage-announcement", campaignLevel: 2, scheduledDate: "2026-10-04", status: "missed"},
+    {id: "level-5", campaignName: "Later", resourceId: "stage-announcement", campaignLevel: 5, scheduledDate: "2026-09-28", status: "scheduled"},
+    {id: "other-resource", campaignName: "D", resourceId: "newsletter-feature", campaignLevel: 2, scheduledDate: "2026-09-30", status: "scheduled"},
+    {id: "previous-sunday", campaignName: "Previous", resourceId: "stage-announcement", campaignLevel: 2, scheduledDate: "2026-09-27", status: "scheduled"},
+    {id: "next-monday", campaignName: "Next", resourceId: "stage-announcement", campaignLevel: 2, scheduledDate: "2026-10-05", status: "scheduled"},
   ];
   assert.deepEqual(
-    weeklyInventoryPlays({plays, weekStart: "2026-10-11", resourceId: "stage-announcement"}).map((play) => play.id),
+    weeklyInventoryPlays({plays, weekStart: "2026-09-30", resourceId: "stage-announcement"}).map((play) => play.id),
     ["level-1", "missed", "conflict", "scheduled", "level-5"],
   );
   assert.deepEqual(
-    weeklyInventoryPlays({plays, weekStart: "2026-10-11", campaignLevel: 2}).map((play) => play.id),
+    weeklyInventoryPlays({plays, weekStart: "2026-09-30", campaignLevel: 2}).map((play) => play.id),
     ["other-resource", "missed"],
   );
 });
 
 test("planning overview capacity cards use the intended dashboard order", () => {
   const utilization = utilizationForWeek({
-    weekStart: "2026-10-11",
+    weekStart: "2026-10-12",
     plays: [],
     capacityRules: [...STARTER_CAPACITY_RULES].reverse(),
   });
@@ -386,9 +389,56 @@ test("planning overview capacity cards use the intended dashboard order", () => 
   );
 });
 
-test("planning overview always starts on the next Sunday", () => {
-  assert.equal(nextPlanningWeekStart("2026-08-15"), "2026-08-16");
-  assert.equal(nextPlanningWeekStart("2026-08-16"), "2026-08-23");
+test("planning capacity groups Monday, Wednesday, and Sunday into one planning week", () => {
+  const weeklyRule = {
+    id: "weekly-resource",
+    name: "Weekly Resource",
+    capacity: 1,
+    capacityPeriod: "week",
+    active: true,
+  };
+  const result = evaluateCapacity({
+    plays: [
+      {id: "previous-sunday", campaignId: "previous", resourceId: weeklyRule.id, scheduledDate: "2026-09-27", eventDate: "2026-10-31", submittedAt: "2026-09-01T12:00:00.000Z", status: "scheduled"},
+      {id: "wednesday", campaignId: "wednesday", resourceId: weeklyRule.id, scheduledDate: "2026-09-30", eventDate: "2026-10-31", submittedAt: "2026-09-01T12:00:00.000Z", status: "scheduled"},
+      {id: "sunday", campaignId: "sunday", resourceId: weeklyRule.id, scheduledDate: "2026-10-04", eventDate: "2026-10-31", submittedAt: "2026-09-01T12:00:00.000Z", status: "scheduled"},
+    ],
+    capacityRules: [weeklyRule],
+  });
+  assert.equal(result.conflicts.length, 1);
+  assert.equal(result.conflicts[0].period, "2026-09-28");
+  assert.equal(result.conflicts[0].campaignCount, 2);
+
+  const utilization = utilizationForWeek({
+    weekStart: "2026-09-30",
+    plays: [
+      {id: "announcement", resourceId: "stage-announcement", scheduledDate: "2026-10-04", status: "scheduled"},
+      {id: "newsletter", resourceId: "newsletter-feature", scheduledDate: "2026-09-30", status: "scheduled"},
+      {id: "social", resourceId: "level-4-social", scheduledDate: "2026-09-28", status: "scheduled"},
+    ],
+    capacityRules: STARTER_CAPACITY_RULES,
+  });
+  const used = Object.fromEntries(utilization.map((item) => [item.id, item.used]));
+  assert.equal(used["stage-announcement"], 1);
+  assert.equal(used["newsletter-feature"], 1);
+  assert.equal(used["level-4-social"], 1);
+});
+
+test("planning week helpers use Central-time Monday through Sunday boundaries", () => {
+  assert.equal(startOfPlanningWeek("2026-09-27"), "2026-09-21");
+  assert.equal(startOfPlanningWeek("2026-09-28"), "2026-09-28");
+  assert.equal(nextPlanningWeekStart("2026-09-27"), "2026-09-28");
+  assert.equal(nextPlanningWeekStart("2026-09-28"), "2026-10-05");
+  assert.equal(nextSunday("2026-09-26"), "2026-09-27");
+  assert.equal(nextSunday("2026-09-27"), "2026-10-04");
+  assert.deepEqual(planningWeekRange("2026-09-30"), {startDate: "2026-09-28", endDate: "2026-10-04"});
+  assert.deepEqual(planningWeekRange("2026-09-30", 3), {startDate: "2026-10-19", endDate: "2026-10-25"});
+  assert.deepEqual(planningWeekRange("2027-01-03"), {startDate: "2026-12-28", endDate: "2027-01-03"});
+  assert.equal(startOfPlanningWeek(new Date("2026-09-28T04:59:00.000Z")), "2026-09-21");
+  assert.equal(startOfPlanningWeek(new Date("2026-09-28T05:00:00.000Z")), "2026-09-28");
+  assert.equal(startOfPlanningWeek(new Date("2026-11-02T05:59:00.000Z")), "2026-10-26");
+  assert.equal(startOfPlanningWeek(new Date("2026-11-02T06:00:00.000Z")), "2026-11-02");
+  assert.throws(() => planningWeekRange("2026-09-30", 0.5), /integer/);
 });
 
 test("recurring content supports bounded weekly and anchored monthly series", () => {
@@ -428,7 +478,7 @@ test("calendar groups only same-day plays for the same campaign", () => {
 test("Level 2 event campaign covers the lane before ongoing fallback", () => {
   const existing = [{id: "event-play", campaignLevel: 2, scheduledDate: "2026-10-13", status: "scheduled"}];
   const result = ensureLevel2StandingLane({
-    weekStart: "2026-10-11",
+    weekStart: "2026-10-12",
     plays: existing,
     ongoingPlaybook: playbook("level-2-ongoing-awareness"),
   });
@@ -438,13 +488,16 @@ test("Level 2 event campaign covers the lane before ongoing fallback", () => {
 
 test("week without Level 2 event receives ongoing standing lane plays", () => {
   const result = ensureLevel2StandingLane({
-    weekStart: "2026-10-11",
+    weekStart: "2026-09-30",
     plays: [],
     ongoingPlaybook: playbook("level-2-ongoing-awareness"),
   });
   assert.equal(result.source, "ongoing");
   assert.ok(result.plays.length > 0);
   assert.ok(result.plays.every((play) => play.source === "standing-lane"));
+  assert.ok(result.plays.every((play) => play.scheduledDate >= "2026-09-28" && play.scheduledDate <= "2026-10-04"));
+  assert.equal(result.plays.find((play) => play.templatePlayId === "awareness-slide").scheduledDate, "2026-10-04");
+  assert.equal(result.plays.find((play) => play.templatePlayId === "awareness-newsletter").scheduledDate, "2026-09-30");
 });
 
 test("Smuggle recommends Level 4 before Level 5 and never applies automatically", () => {

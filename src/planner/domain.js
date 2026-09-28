@@ -99,20 +99,37 @@ export function startOfSundayWeek(value) {
   return addDays(value, -date.getUTCDay());
 }
 
+export function startOfPlanningWeek(value = new Date()) {
+  const date = utcDateFromKey(value);
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+  return addDays(value, -daysSinceMonday);
+}
+
 export function nextPlanningWeekStart(value = new Date()) {
+  return addDays(startOfPlanningWeek(value), 7);
+}
+
+export function nextSunday(value = new Date()) {
   return addDays(startOfSundayWeek(value), 7);
 }
 
+export function planningWeekRange(value = new Date(), weekOffset = 0) {
+  const offset = Number(weekOffset);
+  if (!Number.isInteger(offset)) throw new Error("Planning week offset must be an integer.");
+  const startDate = addDays(startOfPlanningWeek(value), offset * 7);
+  return {startDate, endDate: addDays(startDate, 6)};
+}
+
 export function reportPresetDateRange(preset, value = new Date()) {
-  const upcomingStart = nextPlanningWeekStart(value);
+  const current = planningWeekRange(value);
   if (preset === "upcoming") {
-    return {startDate: upcomingStart, endDate: addDays(upcomingStart, 6)};
+    return current;
   }
   if (preset === "next-two-weeks") {
-    return {startDate: upcomingStart, endDate: addDays(upcomingStart, 13)};
+    return {startDate: current.startDate, endDate: addDays(current.startDate, 13)};
   }
   if (preset === "month-at-a-glance") {
-    const monthStart = Temporal.PlainDate.from(upcomingStart).with({day: 1});
+    const monthStart = Temporal.PlainDate.from(dateKey(value)).with({day: 1});
     return {
       startDate: monthStart.toString(),
       endDate: monthStart.add({months: 1}).subtract({days: 1}).toString(),
@@ -544,12 +561,14 @@ export function scheduleSummary(plays) {
 export function weeklyInventoryPlays({
   plays,
   weekStart,
-  weekEnd = addDays(weekStart, 6),
+  weekEnd,
   resourceId = "",
   campaignLevel = null,
 }) {
+  const start = startOfPlanningWeek(weekStart);
+  const end = weekEnd ? dateKey(weekEnd) : addDays(start, 6);
   return (Array.isArray(plays) ? plays : [])
-    .filter((play) => play.scheduledDate >= weekStart && play.scheduledDate <= weekEnd)
+    .filter((play) => play.scheduledDate >= start && play.scheduledDate <= end)
     .filter((play) => resourceId ? play.resourceId === resourceId : Number(play.campaignLevel) === Number(campaignLevel))
     .sort((left, right) =>
       Number(left.campaignLevel || 5) - Number(right.campaignLevel || 5) ||
@@ -596,7 +615,7 @@ export function groupCalendarCampaignDays(plays) {
 function resourcePeriodKey(play, rule) {
   const date = play.scheduledDate;
   if (rule.capacityPeriod === "week" || rule.capacityPeriod === "sunday") {
-    return startOfSundayWeek(date);
+    return startOfPlanningWeek(date);
   }
   return date;
 }
@@ -678,14 +697,14 @@ export function allocateLevel4SocialSlots({plays, campaigns = []}) {
       play.resourceId !== "level-4-social" ||
       !["scheduled", "rescheduled"].includes(play.status)
     ) return;
-    const key = startOfSundayWeek(play.originalScheduledDate || play.scheduledDate);
+    const key = startOfPlanningWeek(play.originalScheduledDate || play.scheduledDate);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(play);
   });
 
   const conflicts = [];
   groups.forEach((candidates, weekStart) => {
-    const slots = [addDays(weekStart, 1), addDays(weekStart, 5)];
+    const slots = [weekStart, addDays(weekStart, 4)];
     const ordered = [...candidates].sort((left, right) => {
       const leftCampaign = campaignMap.get(left.campaignId) || left;
       const rightCampaign = campaignMap.get(right.campaignId) || right;
@@ -732,7 +751,7 @@ export function allocateLevel4SocialSlots({plays, campaigns = []}) {
 }
 
 export function ensureLevel2StandingLane({weekStart, plays, ongoingPlaybook}) {
-  const start = startOfSundayWeek(weekStart);
+  const start = startOfPlanningWeek(weekStart);
   const end = addDays(start, 6);
   const existing = (plays || []).filter((play) =>
     Number(play.campaignLevel) === 2 &&
@@ -758,8 +777,8 @@ export function ensureLevel2StandingLane({weekStart, plays, ongoingPlaybook}) {
     playType: play.playType,
     channel: play.channel,
     resourceId: play.resourceId,
-    originalScheduledDate: addDays(start, normalizedEligibleDays(play)[0] || 0),
-    scheduledDate: addDays(start, normalizedEligibleDays(play)[0] || 0),
+    originalScheduledDate: addDays(start, ((normalizedEligibleDays(play)[0] || 0) + 6) % 7),
+    scheduledDate: addDays(start, ((normalizedEligibleDays(play)[0] || 0) + 6) % 7),
     eligibleWeekdays: normalizedEligibleDays(play),
     requirement: play.requirement || "required",
     lateBehavior: play.lateBehavior || "SKIP",
@@ -956,7 +975,7 @@ export function skipPromotion(play) {
 }
 
 export function utilizationForWeek({weekStart, plays, capacityRules}) {
-  const start = startOfSundayWeek(weekStart);
+  const start = startOfPlanningWeek(weekStart);
   const end = addDays(start, 6);
   const smuggledPlayIds = smuggledBeneficiaryPlayIds({plays});
   const active = (plays || []).filter((play) =>

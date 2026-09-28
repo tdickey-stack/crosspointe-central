@@ -43,7 +43,7 @@ FullCalendar is only the display and interaction layer. It does not calculate ca
 
 `src/planner/domain.js` contains pure, testable rules:
 
-- America/Chicago submission handling and Sunday-Saturday campaign weeks
+- America/Chicago submission handling and Monday–Sunday planning weeks
 - backward anchoring from the event week
 - recommended start, days/weeks late, and current campaign week
 - independent Scheduled Play generation
@@ -54,6 +54,8 @@ FullCalendar is only the display and interaction layer. It does not calculate ca
 - explainable Level 4-before-Level 5 Smuggle recommendations
 - explicit-only Smuggle application
 - weekly utilization summaries
+
+Overview opens on the current planning week (Week 1). Its Week 1–4 selector updates capacity cards, the agenda, decisions, and card-to-report date ranges. Calendar weeks and report presets use the same Monday–Sunday boundaries. Campaign schedules remain anchored to their event dates, and playbook/recurrence weekdays retain the Sunday=0 convention.
 
 No schedule is hardcoded into the engine. It consumes editable Playbook Definition records.
 

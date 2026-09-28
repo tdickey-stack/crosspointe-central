@@ -369,7 +369,7 @@ test("capacity allocation reserves protected records and writes affected unrelat
   assert.deepEqual(plan.conflicts[0].protectedPlayIds, [protectedPlay.id]);
 });
 
-test("a protected Level 4 move reserves its actual week and actual slot", () => {
+test("a protected Level 4 move reserves its actual Monday planning week and slot", () => {
   const protectedCampaign = {
     id: "moved-campaign",
     name: "Moved Campaign",
@@ -402,6 +402,57 @@ test("a protected Level 4 move reserves its actual week and actual slot", () => 
   assert.equal(generated.originalScheduledDate, "2026-10-19");
   assert.equal(generated.scheduledDate, "2026-10-23");
   assert.equal(plan.conflicts.length, 0);
+});
+
+test("a protected Sunday manual move consumes capacity in the Monday planning week that contains it", () => {
+  const protectedCampaign = {
+    id: "protected-sunday-campaign",
+    name: "Protected Sunday",
+    eventDate: "2026-10-20",
+    submittedAt: "2026-08-01T12:00:00.000Z",
+    level: 4,
+    campaignType: "standard",
+    status: "active",
+  };
+  const protectedPlay = {
+    id: "protected-sunday-social",
+    campaignId: protectedCampaign.id,
+    campaignName: protectedCampaign.name,
+    campaignLevel: 4,
+    resourceId: "level-4-social",
+    originalScheduledDate: "2026-09-28",
+    scheduledDate: "2026-10-04",
+    status: "rescheduled",
+    manuallyAdjusted: true,
+    locked: false,
+    conflictState: "none",
+    conflictReason: "",
+    smuggle: null,
+  };
+  const unrelatedCampaign = {...protectedCampaign, id: "unrelated-monday-campaign", name: "Unrelated Monday"};
+  const unrelatedPlay = {
+    ...protectedPlay,
+    id: "unrelated-monday-social",
+    campaignId: unrelatedCampaign.id,
+    campaignName: unrelatedCampaign.name,
+    scheduledDate: "2026-09-28",
+    manuallyAdjusted: false,
+  };
+  const nextSeries = series({
+    recurrence: {...series().recurrence, startDate: "2026-10-04", monthDay: 4, count: 1},
+  });
+  const plan = buildSeriesPlan({
+    series: nextSeries,
+    playbook: playbook(),
+    campaigns: [protectedCampaign, unrelatedCampaign],
+    plays: [protectedPlay, unrelatedPlay],
+    generatedAt,
+  });
+  assert.equal(plan.conflicts.length, 1);
+  assert.equal(plan.conflicts[0].period, "2026-09-28");
+  assert.equal(plan.conflicts[0].campaignCount, 3);
+  assert.equal(plan.conflicts[0].involvesProtected, true);
+  assert.deepEqual(plan.conflicts[0].protectedPlayIds, [protectedPlay.id]);
 });
 
 test("default future edits preserve past and completed campaign records and remain retry safe", () => {

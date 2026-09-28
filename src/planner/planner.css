@@ -151,6 +151,10 @@ a { text-decoration: none; }
 .planner-request-platforms > div { display: flex; flex-wrap: wrap; gap: 6px; }
 .planner-request-platforms span { padding: 6px 9px; border: 1px solid var(--planner-line); border-radius: 999px; background: rgba(255,255,255,.04); color: var(--planner-muted); font-size: .51rem; font-weight: 750; }
 
+.planner-week-controls { display: flex; max-width: 1500px; align-items: flex-end; gap: 16px; margin: 0 auto 18px; }
+.planner-week-controls .planner-field { width: min(100%, 340px); }
+.planner-week-controls p { margin: 0 0 12px; color: var(--planner-muted); font-size: .58rem; }
+
 .planner-metric-grid { display: grid; max-width: 1500px; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 auto 18px; }
 .planner-metric-card { width: 100%; min-width: 0; min-height: 132px; padding: 16px; border: 1px solid var(--planner-line); border-radius: 16px; outline: 0; background: linear-gradient(150deg, rgba(43,43,47,.96), rgba(30,30,33,.96)); color: inherit; cursor: pointer; text-align: left; transition: transform 180ms var(--planner-ease), border-color 180ms ease, background 180ms ease; }
 .planner-metric-card:hover { transform: translateY(-2px); border-color: var(--planner-line-strong); background: linear-gradient(150deg, rgba(50,50,55,.98), rgba(34,34,37,.98)); }
@@ -709,6 +713,9 @@ a { text-decoration: none; }
   .planner-page-heading { display: grid; gap: 17px; }
   .planner-heading-actions, .planner-heading-actions > .planner-button, .planner-heading-action-group { width: 100%; }
   .planner-heading-action-group { display: grid; grid-template-columns: 1fr; }
+  .planner-week-controls { display: grid; gap: 8px; }
+  .planner-week-controls .planner-field { width: 100%; }
+  .planner-week-controls p { margin: 0; }
   .planner-metric-grid { grid-template-columns: 1fr 1fr; gap: 9px; }
   .planner-metric-card { min-height: 140px; padding: 16px; }
   .planner-metric-card > strong { font-size: 2rem; }

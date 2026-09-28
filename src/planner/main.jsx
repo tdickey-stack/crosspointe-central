@@ -24,7 +24,8 @@ import {
   generateCampaignSchedule,
   groupCalendarCampaignDays,
   isCampaignExpired,
-  nextPlanningWeekStart,
+  planningWeekRange,
+  startOfPlanningWeek,
   recommendSmuggleOpportunities,
   recurringContentDates,
   reportPresetDateRange,
@@ -96,8 +97,8 @@ const CONTENT_RECURRENCE_OPTIONS = [
   {value: "monthly", label: "Monthly"},
 ];
 const REPORT_DATE_PRESETS = [
-  {value: "upcoming", label: "Upcoming"},
-  {value: "next-two-weeks", label: "Next 2 Weeks"},
+  {value: "upcoming", label: "Current Week"},
+  {value: "next-two-weeks", label: "Current + Next Week"},
   {value: "month-at-a-glance", label: "Month at a Glance"},
   {value: "custom", label: "Custom"},
 ];
@@ -526,12 +527,17 @@ function PageHeading({eyebrow, title, copy, actions}) {
   );
 }
 
-function Overview({workspace, onNewCampaign, onOpenCampaign, onOpenPlay, onSavePlay, onUseSmuggle, onSkipSmuggle, onBuildReport, canEdit}) {
+function Overview({workspace, weekOffset, onWeekChange, onNewCampaign, onOpenCampaign, onOpenPlay, onSavePlay, onUseSmuggle, onSkipSmuggle, onBuildReport, canEdit}) {
   const [selectedMetric, setSelectedMetric] = useState(null);
   const [selectedSmuggle, setSelectedSmuggle] = useState(null);
   const [selectedScheduleGroup, setSelectedScheduleGroup] = useState(null);
-  const weekStart = nextPlanningWeekStart(new Date());
-  const weekEnd = addDays(weekStart, 6);
+  const today = dateKey(new Date());
+  const {startDate: weekStart, endDate: weekEnd} = planningWeekRange(today, weekOffset);
+  const weekLabel = weekOffset === 0 ? "Current planning week" : `Planning week ${weekOffset + 1}`;
+  const weekOptions = Array.from({length: 4}, (_, offset) => ({
+    offset,
+    ...planningWeekRange(today, offset),
+  }));
   const smuggleRelationships = buildSmuggleRelationships({
     plays: workspace.scheduledPlays,
     campaigns: workspace.campaigns,
@@ -557,19 +563,31 @@ function Overview({workspace, onNewCampaign, onOpenCampaign, onOpenPlay, onSaveP
   return (
     <>
       <PageHeading
-        eyebrow={`Next planning week · ${formatDate(weekStart, {year: false})}–${formatDate(weekEnd)}`}
+        eyebrow={`${weekLabel} · ${formatDate(weekStart, {year: false})}–${formatDate(weekEnd)}`}
         title="Creative operations at a glance"
         copy="Capacity, coverage, and decisions across campaigns and standalone content."
         actions={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>＋ New campaign</button>}
       />
-      <section className="planner-metric-grid" aria-label="Next planning week capacity">
+      <div className="planner-week-controls">
+        <Field label="Planning week">
+          <select value={weekOffset} onChange={(event) => onWeekChange(Number(event.target.value))}>
+            {weekOptions.map(({offset, startDate, endDate}) => (
+              <option key={offset} value={offset}>
+                {`Week ${offset + 1}${offset === 0 ? " · Current" : ""} · ${formatDate(startDate, {year: false})}–${formatDate(endDate, {year: false})}`}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <p>Monday–Sunday · Central time</p>
+      </div>
+      <section className="planner-metric-grid" aria-label={`${weekLabel} capacity`}>
         {utilization.map((item) => (
           <button
             type="button"
             className={`planner-metric-card ${item.capacityState === "conflict" ? "has-alert" : ["above-typical", "full"].includes(item.capacityState) ? "has-caution" : ""}`}
             key={item.id}
             onClick={() => setSelectedMetric({...item, inventoryType: "resource", resourceId: item.id})}
-            aria-label={`Open ${item.name} promotions for next planning week`}
+            aria-label={`Open ${item.name} promotions for ${weekLabel.toLowerCase()}`}
           >
             <div><span>{item.name}</span><StatusBadge status={item.capacityState} /></div>
             <strong>{item.used}<i>/</i>{item.capacity}</strong>
@@ -581,7 +599,7 @@ function Overview({workspace, onNewCampaign, onOpenCampaign, onOpenPlay, onSaveP
       <section className="planner-dashboard-grid">
         <article className="planner-panel planner-week-agenda">
           <div className="planner-panel-heading">
-            <div><span className="planner-kicker">Schedule</span><h2>Next planning week</h2></div>
+            <div><span className="planner-kicker">Schedule</span><h2>{weekLabel}</h2></div>
             <StatusBadge>{weekPlays.length} promotions</StatusBadge>
           </div>
           {weekPlays.length ? (
@@ -938,7 +956,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     const logicalView = normalizeCalendarView(next);
     calendarRef.current?.getApi?.().changeView(
       renderedCalendarView(logicalView, useListWeek),
-      date || (logicalView === "dayGridWeek" ? nextPlanningWeekStart(new Date()) : undefined),
+      date || (logicalView === "dayGridWeek" ? startOfPlanningWeek(new Date()) : undefined),
     );
     setView(logicalView);
     localStorage.setItem(VIEW_STORAGE_KEY, logicalView);
@@ -1003,8 +1021,8 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
           ref={calendarRef}
           plugins={[dayGridPlugin, listPlugin, interactionPlugin, classicThemePlugin]}
           initialView={renderedCalendarView(view, useListWeek)}
-          initialDate={view === "dayGridWeek" ? nextPlanningWeekStart(new Date()) : new Date()}
-          firstDay={0}
+          initialDate={view === "dayGridWeek" ? startOfPlanningWeek(new Date()) : new Date()}
+          firstDay={1}
           headerToolbar={{left: "prev,next today", center: "title", right: ""}}
           height="auto"
           views={{
@@ -2560,6 +2578,7 @@ function LaneDialog({lane, playbooks, onClose, onSave}) {
 function PlannerApp({authState}) {
   const [workspace, setWorkspace] = useState(null);
   const [activeView, setActiveView] = useState("overview");
+  const [overviewWeekOffset, setOverviewWeekOffset] = useState(0);
   const [mobileNav, setMobileNav] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -2725,7 +2744,7 @@ function PlannerApp({authState}) {
     const saved = await perform(() => store.saveStandingLane(lane), `${lane.name} standing lane saved.`);
     setWorkspace((current) => ({...current, standingLanes: current.standingLanes.map((item) => item.id === saved.id ? saved : item)}));
   }} />;
-  else content = <Overview workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onSavePlay={updatePlay} onUseSmuggle={useSmuggle} onSkipSmuggle={skipSmuggle} onBuildReport={(setup) => { setReportSetup(setup); setActiveView("reports"); }} />;
+  else content = <Overview workspace={workspace} weekOffset={overviewWeekOffset} onWeekChange={setOverviewWeekOffset} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onSavePlay={updatePlay} onUseSmuggle={useSmuggle} onSkipSmuggle={skipSmuggle} onBuildReport={(setup) => { setReportSetup(setup); setActiveView("reports"); }} />;
 
   return (
     <div className="planner-app">

@@ -25,7 +25,6 @@ import {
   groupCalendarCampaignDays,
   isCampaignExpired,
   planningWeekRange,
-  startOfPlanningWeek,
   recommendSmuggleOpportunities,
   recurringContentDates,
   reportPresetDateRange,
@@ -956,7 +955,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
     const logicalView = normalizeCalendarView(next);
     calendarRef.current?.getApi?.().changeView(
       renderedCalendarView(logicalView, useListWeek),
-      date || (logicalView === "dayGridWeek" ? startOfPlanningWeek(new Date()) : undefined),
+      date || (logicalView === "dayGridWeek" ? dateKey(new Date()) : undefined),
     );
     setView(logicalView);
     localStorage.setItem(VIEW_STORAGE_KEY, logicalView);
@@ -1021,7 +1020,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
           ref={calendarRef}
           plugins={[dayGridPlugin, listPlugin, interactionPlugin, classicThemePlugin]}
           initialView={renderedCalendarView(view, useListWeek)}
-          initialDate={view === "dayGridWeek" ? startOfPlanningWeek(new Date()) : new Date()}
+          initialDate={dateKey(new Date())}
           firstDay={1}
           headerToolbar={{left: "prev,next today", center: "title", right: ""}}
           height="auto"

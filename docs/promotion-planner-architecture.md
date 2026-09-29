@@ -115,6 +115,21 @@ Scheduled Plays are loaded in `scheduledDate` order without the former -70/+400-
 - Newsletter Event Cards use a typical planning target of 4 and a hard weekly maximum of 6
 - Level 2 weekly standing lane
 
+The live workspace derives Level 2 ongoing promotions for each uncovered
+Monday–Sunday week in America/Chicago. Actual Level 2 campaign promotions take
+precedence in their scheduled week; missed/skipped promotions do not cover it.
+The active standing lane selects the current fallback playbook. Overview,
+calendar, capacity checks, and announcement briefs use the same effective
+inventory. Calendar and report ranges extend the default 400-day planning view.
+
+Fallback reads do not write to Firestore, so view-only users see the same plan.
+Editing a fallback promotion saves a normal scheduled-play record with a stable
+weekly identity; later reads overlay that decision without resetting its
+playbook version, original date, or creation metadata. Saved past/completed
+records remain history; unsaved past weeks are not fabricated from the current
+template. Recurrence concurrency checks and write sets use stored records only,
+while their capacity previews also account for the effective fallback.
+
 The PDFs remain reference material. The authenticated UI shows starter configuration without writing it. An editor must explicitly choose **Publish starter configuration**; after that, Firestore is the operational source of truth.
 
 ## Access and safety

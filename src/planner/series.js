@@ -8,6 +8,7 @@ import {
   smuggledBeneficiaryPlayIds,
   startOfPlanningWeek,
   utcDateFromKey,
+  withLevel2StandingLane,
 } from "./domain.js";
 import {expandRecurrence, normalizeRecurrence} from "./recurrence.js";
 import {Temporal} from "temporal-polyfill";
@@ -307,10 +308,16 @@ function evaluateCapacityWithProtected({plays, campaigns, capacityRules, protect
   return {plays: next, conflicts};
 }
 
-function applyWorkspaceCapacity({campaigns, plays, capacityRules, protectedIds}) {
-  const social = allocateLevel4WithProtected({campaigns, plays, protectedIds});
+function applyWorkspaceCapacity({campaigns, plays, capacityRules, protectedIds, standingLanes, playbooks, generatedAt}) {
+  const persistedIds = new Set(plays.map((play) => play.id));
+  const effective = withLevel2StandingLane({campaigns, scheduledPlays: plays, capacityRules, standingLanes, playbooks}, {
+    now: generatedAt, checkCapacity: false,
+    ranges: campaigns.map((campaign) => ({startDate: campaign.recommendedStartDate, endDate: campaign.eventDate})),
+  });
+  const social = allocateLevel4WithProtected({campaigns, plays: effective.scheduledPlays, protectedIds});
   const capacity = evaluateCapacityWithProtected({campaigns, plays: social.plays, capacityRules, protectedIds});
-  return {plays: capacity.plays, conflicts: [...social.conflicts, ...capacity.conflicts]};
+  // Derived fallback is inventory for capacity, never a write or optimistic-lock baseline.
+  return {plays: capacity.plays.filter((play) => persistedIds.has(play.id)), conflicts: [...social.conflicts, ...capacity.conflicts]};
 }
 
 function removedPlay(previous, reason) {
@@ -420,6 +427,8 @@ export function buildSeriesPlan({
   campaigns = [],
   plays = [],
   capacityRules = [],
+  standingLanes = [],
+  playbooks = [],
   generatedAt = new Date(),
   scope = "future",
   fromDate = "",
@@ -541,7 +550,7 @@ export function buildSeriesPlan({
   const fullCampaigns = [...desiredCampaignById.values()];
   const fullPlays = [...desiredPlayById.values()];
   fullPlays.filter((play) => protectedPlay(play, today)).forEach((play) => protectedIds.add(play.id));
-  const allocated = applyWorkspaceCapacity({campaigns: fullCampaigns, plays: fullPlays, capacityRules, protectedIds});
+  const allocated = applyWorkspaceCapacity({campaigns: fullCampaigns, plays: fullPlays, capacityRules, protectedIds, standingLanes, playbooks, generatedAt});
   const targetCampaigns = fullCampaigns.filter((campaign) => targetIds.has(campaign.id));
   return buildWrites({
     originalCampaigns: campaigns,
@@ -557,7 +566,7 @@ export function buildSeriesPlan({
   });
 }
 
-export function buildOccurrencePlan({campaign, updates = {}, playbook, campaigns = [], plays = [], capacityRules = [], generatedAt = new Date()} = {}) {
+export function buildOccurrencePlan({campaign, updates = {}, playbook, campaigns = [], plays = [], capacityRules = [], standingLanes = [], playbooks = [], generatedAt = new Date()} = {}) {
   if (!campaign?.id || !campaign.seriesId || !campaign.occurrenceKey) throw new Error("A recurring occurrence campaign is required.");
   if (!playbook?.id || !Array.isArray(playbook.weeks)) throw new Error("A valid pinned playbook is required.");
   if (playbook.id !== campaign.playbookId || Number(playbook.version || 1) !== Number(campaign.playbookVersion || 1)) {
@@ -599,7 +608,7 @@ export function buildOccurrencePlan({campaign, updates = {}, playbook, campaigns
   const playById = new Map(plays.map((play) => [play.id, play]));
   generated.plays.forEach((play) => playById.set(play.id, play));
   [...playById.values()].filter((play) => protectedPlay(play, today)).forEach((play) => protectedIds.add(play.id));
-  const allocated = applyWorkspaceCapacity({campaigns: [...campaignById.values()], plays: [...playById.values()], capacityRules, protectedIds});
+  const allocated = applyWorkspaceCapacity({campaigns: [...campaignById.values()], plays: [...playById.values()], capacityRules, protectedIds, standingLanes, playbooks, generatedAt});
   return buildWrites({
     originalCampaigns: campaigns.some((item) => item.id === campaign.id) ? campaigns : [...campaigns, campaign],
     originalPlays: plays,

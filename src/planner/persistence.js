@@ -2,7 +2,6 @@ import {
   addDays,
   allocateLevel4SocialSlots,
   dateKey,
-  ensureLevel2StandingLane,
   evaluateCapacity,
   generateCampaignSchedule,
   startOfSundayWeek,
@@ -512,14 +511,7 @@ function createPreviewWorkspace() {
     capacityRules: starter.capacityRules.filter((rule) => rule.id !== "level-4-social"),
     campaigns,
   });
-  const lane = ensureLevel2StandingLane({
-    weekStart: today,
-    plays: capacity.plays,
-    ongoingPlaybook: starter.playbooks.find((item) => item.id === "level-2-ongoing-awareness"),
-  });
-  plays = lane.source === "ongoing"
-    ? [...capacity.plays, ...lane.plays]
-    : capacity.plays;
+  plays = capacity.plays;
   return {
     ...starter,
     campaignSeries: [],
@@ -904,20 +896,31 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
   async function saveScheduledPlay(play) {
     const next = {...deepClone(play), manuallyAdjusted: true};
     if (preview) {
-      previewWorkspace.scheduledPlays = previewWorkspace.scheduledPlays.map((item) =>
-        item.id === next.id ? next : item,
-      );
+      previewWorkspace.scheduledPlays = [
+        ...previewWorkspace.scheduledPlays.filter((item) => item.id !== next.id), next,
+      ];
       return deepClone(next);
     }
-    const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
-    const payload = playForCloud(next, user.uid, timestamp);
-    delete payload.createdAt;
-    delete payload.createdByUid;
-    await firestore.collection(PLANNER_COLLECTIONS.plays).doc(next.id).set(
-      payload,
-      {merge: true},
-    );
-    return next;
+    const reference = firestore.collection(PLANNER_COLLECTIONS.plays).doc(next.id);
+    // Virtual fallback promotions become saved records on their first edit.
+    // Read inside the transaction so concurrent edits cannot reset creation data.
+    await firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(reference);
+      if (!snapshot.exists && next.source !== "standing-lane") {
+        throw new Error("This promotion was removed. Reload Planner before saving.");
+      }
+      const existing = snapshot.exists ? normalizePlay(documentData(snapshot)) : null;
+      if (existing) {
+        for (const key of ["campaignId", "playbookId", "playbookVersion", "templatePlayId", "originalScheduledDate"]) {
+          if (existing[key] !== next[key]) throw new Error("This promotion changed. Reload Planner before saving.");
+        }
+      }
+      const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
+      transaction.set(reference, playForCloud({...next,
+        createdAt: existing?.createdAt, createdByUid: existing?.createdByUid,
+      }, user.uid, timestamp));
+    });
+    return normalizePlay(documentData(await reference.get()));
   }
 
   async function saveSeriesPlan(plan) {

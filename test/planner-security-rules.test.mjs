@@ -19,7 +19,7 @@ import {
 } from "../src/planner/persistence.js";
 import {cloneStarterData} from "../src/planner/seed-data.js";
 import {defaultRecurrence} from "../src/planner/recurrence.js";
-import {generateCampaignSchedule} from "../src/planner/domain.js";
+import {generateCampaignSchedule, withLevel2StandingLane} from "../src/planner/domain.js";
 import {buildSeriesPlan, buildOccurrencePlan, skipOccurrencePlan} from "../src/planner/series.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -875,4 +875,26 @@ test("converted series can resume an interrupted end after reloading its saved s
   assert.equal(workspace.campaignSeries[0].saveState, "ready");
   assert.equal(workspace.campaigns.find((item) => item.id === "campaign-a").status, "active");
   assert.ok(workspace.campaigns.filter((item) => item.eventDate >= cutoff).every((item) => item.status === "archived"));
+}));
+
+test("standing fallback edits create once, retain metadata, and survive reload without granting viewers writes", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const store = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  const raw = await store.loadWorkspace();
+  const projected = withLevel2StandingLane(raw, {now: "2026-09-29"});
+  const play = projected.scheduledPlays.find((item) => item.source === "standing-lane" && item.scheduledDate === "2026-09-30");
+  assert.ok(play);
+  const first = await assertSucceeds(store.saveScheduledPlay({...play, scheduledDate: "2026-10-01", status: "rescheduled"}));
+  assert.ok(first.createdAt);
+  assert.equal(first.createdByUid, "editor");
+  const second = await assertSucceeds(store.saveScheduledPlay({...first, scheduledDate: "2026-10-02"}));
+  assert.equal(second.createdAt, first.createdAt);
+  assert.equal(second.originalScheduledDate, "2026-09-30");
+  const loaded = withLevel2StandingLane(await store.loadWorkspace(), {now: "2026-09-29"});
+  assert.equal(loaded.scheduledPlays.filter((item) => item.id === play.id).length, 1);
+  assert.equal(loaded.scheduledPlays.find((item) => item.id === play.id).scheduledDate, "2026-10-02");
+  const viewer = createPlannerStore({firestore: environment.authenticatedContext("viewer").firestore(), user: {uid: "viewer"}});
+  const viewerWorkspace = withLevel2StandingLane(await viewer.loadWorkspace(), {now: "2026-09-29"});
+  assert.ok(viewerWorkspace.scheduledPlays.some((item) => item.source === "standing-lane"));
+  await assertFails(viewer.saveScheduledPlay(second));
 }));

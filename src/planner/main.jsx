@@ -33,6 +33,7 @@ import {
   utilizationForWeek,
   utcDateFromKey,
   weeklyInventoryPlays,
+  withLevel2StandingLane,
 } from "./domain.js";
 import {
   buildPromotionBrief,
@@ -613,7 +614,7 @@ function Overview({workspace, weekOffset, onWeekChange, onNewCampaign, onOpenCam
                     <div>{daily.map((group) => {
                       const campaign = workspace.campaigns.find((item) => item.id === group.campaignId);
                       return <OverviewCampaignDayCard key={group.id} group={group} smuggleByHostPlay={smuggleByHostPlay} onClick={() => {
-                        if (!campaign) return onOpenPlay(group.plays[0]);
+                        if (!campaign && group.plays[0]?.source !== "standing-lane") return onOpenPlay(group.plays[0]);
                         if (isStandaloneContent(group)) return onOpenCampaign(campaign);
                         setSelectedScheduleGroup(group);
                       }} />;
@@ -801,7 +802,9 @@ function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, can
 }
 
 function CalendarPromotionBriefDialog({group, workspace, onClose, onOpenPlay, onOpenCampaign}) {
-  const campaign = workspace.campaigns.find((item) => item.id === group.campaignId);
+  const savedCampaign = workspace.campaigns.find((item) => item.id === group.campaignId);
+  const ongoing = !savedCampaign && group.plays[0]?.source === "standing-lane";
+  const campaign = savedCampaign || (ongoing ? {name: group.campaignName, level: group.campaignLevel, playbookId: group.plays[0].playbookId} : null);
   const campaignPlays = workspace.scheduledPlays.filter((play) => play.campaignId === group.campaignId);
   const playbook = workspace.playbooks.find((item) => item.id === campaign?.playbookId);
   const smuggleRelationships = buildSmuggleRelationships({
@@ -842,13 +845,13 @@ function CalendarPromotionBriefDialog({group, workspace, onClose, onOpenPlay, on
           <p>{phaseBrief(phase)}</p>
         </div>
         <dl className="planner-calendar-brief-facts">
-          <div><dt>Campaign position</dt><dd>{weekNumbers.length > 1 ? `Weeks ${weekNumbers.join(" & ")}` : `Week ${primaryWeek}`} of {durationWeeks}</dd></div>
-          <div><dt>Promotion date</dt><dd>{campaignTimingLabel(group.scheduledDate, campaign.eventDate)}</dd></div>
-          <div><dt>Event</dt><dd>{formatDate(campaign.eventDate)}</dd></div>
+          <div><dt>{ongoing ? "Coverage" : "Campaign position"}</dt><dd>{ongoing ? "Weekly fallback" : <>{weekNumbers.length > 1 ? `Weeks ${weekNumbers.join(" & ")}` : `Week ${primaryWeek}`} of {durationWeeks}</>}</dd></div>
+          <div><dt>Promotion date</dt><dd>{ongoing ? formatDate(group.scheduledDate) : campaignTimingLabel(group.scheduledDate, campaign.eventDate)}</dd></div>
+          {!ongoing && <div><dt>Event</dt><dd>{formatDate(campaign.eventDate)}</dd></div>}
         </dl>
       </section>
 
-      {arc.length > 0 && (
+      {!ongoing && arc.length > 0 && (
         <section className="planner-campaign-arc" aria-label="Campaign progression">
           <div className="planner-section-heading"><div><span className="planner-kicker">Campaign arc</span><h3>Where this promotion sits</h3></div></div>
           <ol>
@@ -880,9 +883,9 @@ function CalendarPromotionBriefDialog({group, workspace, onClose, onOpenPlay, on
       {campaign.notes && <div className="planner-detail-note"><strong>Campaign notes</strong><p>{campaign.notes}</p></div>}
       <div className="planner-calendar-next-step">
         <span className="planner-kicker">Next in the plan</span>
-        {nextDate ? <><strong>{formatDate(nextDate)} · {nextPlays.map((play) => play.playType).join(", ")}</strong><p>The campaign continues with {nextPlays.length} planned promotion{nextPlays.length === 1 ? "" : "s"} on its next active date.</p></> : <><strong>{group.scheduledDate === campaign.eventDate ? "This is the event-day promotion" : "No later promotions are planned"}</strong><p>This is the final active promotion date currently on the campaign.</p></>}
+        {nextDate ? <><strong>{formatDate(nextDate)} · {nextPlays.map((play) => play.playType).join(", ")}</strong><p>{ongoing ? "This week continues" : "The campaign continues"} with {nextPlays.length} planned promotion{nextPlays.length === 1 ? "" : "s"} on its next active date.</p></> : <><strong>{group.scheduledDate === campaign.eventDate ? "This is the event-day promotion" : "No later promotions are planned"}</strong><p>{ongoing ? "The fallback repeats in future weeks without a Level 2 campaign." : "This is the final active promotion date currently on the campaign."}</p></>}
       </div>
-      <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button><button className="planner-button is-primary" onClick={() => onOpenCampaign(campaign)}>Open full campaign</button></div>
+      <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button>{!ongoing && <button className="planner-button is-primary" onClick={() => onOpenCampaign(campaign)}>Open full campaign</button>}</div>
     </Modal>
   );
 }
@@ -911,7 +914,7 @@ function useMediaQuery(query) {
   return matches;
 }
 
-function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePlay}) {
+function CalendarView({workspace, onRangeChange, canEdit, onOpenCampaign, onOpenPlay, onMovePlay}) {
   const calendarRef = useRef(null);
   const [view, setView] = useState(() => normalizeCalendarView(localStorage.getItem(VIEW_STORAGE_KEY)));
   const useListWeek = useMediaQuery(MOBILE_WEEK_CALENDAR_QUERY);
@@ -1021,6 +1024,10 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
           plugins={[dayGridPlugin, listPlugin, interactionPlugin, classicThemePlugin]}
           initialView={renderedCalendarView(view, useListWeek)}
           initialDate={dateKey(new Date())}
+          datesSet={(info) => {
+            const next = {startDate: info.startStr.slice(0, 10), endDate: addDays(info.endStr.slice(0, 10), -1)};
+            onRangeChange((current) => current?.startDate === next.startDate && current?.endDate === next.endDate ? current : next);
+          }}
           firstDay={1}
           headerToolbar={{left: "prev,next today", center: "title", right: ""}}
           height="auto"
@@ -1052,7 +1059,7 @@ function CalendarView({workspace, canEdit, onOpenCampaign, onOpenPlay, onMovePla
             const group = info.event.extendedProps.campaignDayGroup;
             if (!group) return onOpenPlay(info.event.extendedProps.play);
             const campaign = workspace.campaigns.find((item) => item.id === group.campaignId);
-            if (!campaign) return onOpenPlay(group.plays[0]);
+            if (!campaign && group.plays[0]?.source !== "standing-lane") return onOpenPlay(group.plays[0]);
             if (isStandaloneContent(group)) return onOpenCampaign(campaign);
             setSelectedGroup(group);
           }}
@@ -1458,10 +1465,14 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
       generatedAt: new Date(),
     });
     const combinedCampaigns = [...workspace.campaigns, generated.campaign];
-    const combinedPlays = [...workspace.scheduledPlays, ...generated.plays];
+    const combinedPlays = withLevel2StandingLane({...workspace,
+      campaigns: combinedCampaigns, storedScheduledPlays: undefined,
+      scheduledPlays: [...workspace.storedScheduledPlays, ...generated.plays],
+    }, {checkCapacity: false, ranges: [{startDate: generated.campaign.recommendedStartDate, endDate: generated.campaign.eventDate}]}).scheduledPlays;
     const level4 = allocateLevel4SocialSlots({plays: combinedPlays, campaigns: combinedCampaigns});
     const capacity = evaluateCapacity({
       plays: level4.plays,
+      protectedIds: new Set(workspace.storedScheduledPlays.filter((play) => play.manuallyAdjusted || play.locked || play.status === "completed" || play.scheduledDate < dateKey(new Date()) || play.smuggle).map((play) => play.id)),
       capacityRules: workspace.capacityRules.filter((rule) => rule.id !== "level-4-social"),
       campaigns: combinedCampaigns,
     });
@@ -1531,10 +1542,10 @@ function BriefEntryPreview({entry, canEdit = false, onEditBriefContent}) {
       <header>
         <div>
           <PromotionKindBadge item={entry.kind === "content" ? {campaignType: STANDALONE_CONTENT_TYPE} : {level: entry.level}} />
-          <span><strong>{entry.name}</strong><small>{entry.kind === "content" ? `${formatDate(entry.firstPromotionDate)}–${formatDate(entry.lastPromotionDate)}` : `Event ${formatDate(entry.eventDate)}`}</small></span>
+          <span><strong>{entry.name}</strong><small>{(entry.kind === "content" || !entry.eventDate) ? `${formatDate(entry.firstPromotionDate)}–${formatDate(entry.lastPromotionDate)}` : `Event ${formatDate(entry.eventDate)}`}</small></span>
         </div>
         <div className="planner-brief-entry-actions">
-          {canEdit && entry.kind === "campaign" && <button className="planner-text-button" onClick={() => onEditBriefContent(entry.id)}>Edit brief content</button>}
+          {canEdit && entry.kind === "campaign" && entry.eventDate && <button className="planner-text-button" onClick={() => onEditBriefContent(entry.id)}>Edit brief content</button>}
           <StatusBadge status={entry.smuggledInto.length && !entry.announcements.length ? "smuggle" : ""}>{entry.announcements.length ? `${entry.announcements.length} selected` : "Smuggle"}</StatusBadge>
         </div>
       </header>
@@ -1610,12 +1621,15 @@ function ReportEmailDialog({brief, authState, onClose, onSent}) {
   );
 }
 
-function ReportsView({workspace, authState, canEdit, canEmail, initialSetup, onEditBriefContent, onNotice, onError}) {
+function ReportsView({workspace, onRangeChange, authState, canEdit, canEmail, initialSetup, onEditBriefContent, onNotice, onError}) {
   const defaultRange = reportPresetDateRange("upcoming", new Date());
   const initialRange = initialSetup?.startDate && initialSetup?.endDate ? initialSetup : defaultRange;
   const [datePreset, setDatePreset] = useState(initialSetup?.datePreset || "upcoming");
   const [startDate, setStartDate] = useState(initialRange.startDate);
   const [endDate, setEndDate] = useState(initialRange.endDate);
+  useEffect(() => {
+    onRangeChange((current) => current?.startDate === startDate && current?.endDate === endDate ? current : {startDate, endDate});
+  }, [startDate, endDate, onRangeChange]);
   const [title, setTitle] = useState("Sunday Announcement Brief");
   const [includeEventDetails, setIncludeEventDetails] = useState(false);
   const [includeSampleAnnouncements, setIncludeSampleAnnouncements] = useState(false);
@@ -1829,7 +1843,8 @@ function PlaybooksView({workspace, canEdit, onSave, onDelete, onRegenerate}) {
   }, [selectedId, selected?.version]);
   const regeneration = useMemo(() => buildCampaignRegeneration({
     campaigns: workspace.campaigns,
-    plays: workspace.scheduledPlays,
+    plays: workspace.storedScheduledPlays,
+    standingLanes: workspace.standingLanes,
     playbooks: workspace.playbooks,
     capacityRules: workspace.capacityRules,
     generatedAt: new Date(),
@@ -2202,7 +2217,7 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
       if (form.repeat !== "none") {
         const series = seriesDefinition({id: seriesId, form, recurrence: {...recurrence, frequency: form.repeat}, playbook});
         expandRecurrence(series.recurrence);
-        return {plan: buildSeriesPlan({series, playbook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date()}), error: ""};
+        return {plan: buildSeriesPlan({series, playbook, campaigns: workspace.campaigns, plays: workspace.storedScheduledPlays, capacityRules: workspace.capacityRules, standingLanes: workspace.standingLanes, playbooks: workspace.playbooks, generatedAt: new Date()}), error: ""};
       }
       const generated = generateCampaignSchedule({
       campaign: {
@@ -2217,10 +2232,14 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
       generatedAt: new Date(),
     });
     const combinedCampaigns = [...workspace.campaigns, generated.campaign];
-    const combinedPlays = [...workspace.scheduledPlays, ...generated.plays];
+    const combinedPlays = withLevel2StandingLane({...workspace,
+      campaigns: combinedCampaigns, storedScheduledPlays: undefined,
+      scheduledPlays: [...workspace.storedScheduledPlays, ...generated.plays],
+    }, {checkCapacity: false, ranges: [{startDate: generated.campaign.recommendedStartDate, endDate: generated.campaign.eventDate}]}).scheduledPlays;
     const level4 = allocateLevel4SocialSlots({plays: combinedPlays, campaigns: combinedCampaigns});
     const capacity = evaluateCapacity({
       plays: level4.plays,
+      protectedIds: new Set(workspace.storedScheduledPlays.filter((play) => play.manuallyAdjusted || play.locked || play.status === "completed" || play.scheduledDate < dateKey(new Date()) || play.smuggle).map((play) => play.id)),
       capacityRules: workspace.capacityRules.filter((rule) => rule.id !== "level-4-social"),
       campaigns: combinedCampaigns,
     });
@@ -2373,10 +2392,10 @@ function SeriesEditorDialog({mode, campaign, series = null, workspace, onClose, 
   const previewState = useMemo(() => {
     if (!form.name.trim() || !pinnedPlaybook) return {plan: null, error: pinnedPlaybook ? "" : "The pinned playbook version is unavailable."};
     try {
-      if (retrying) return {plan: buildSeriesPlan({series, playbook: pinnedPlaybook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date(), scope: "future", fromDate: series.saveFromDate || series.recurrence.startDate, seedCampaignId: series.seedCampaignId || ""}), error: ""};
+      if (retrying) return {plan: buildSeriesPlan({series, playbook: pinnedPlaybook, campaigns: workspace.campaigns, plays: workspace.storedScheduledPlays, capacityRules: workspace.capacityRules, standingLanes: workspace.standingLanes, playbooks: workspace.playbooks, generatedAt: new Date(), scope: "future", fromDate: series.saveFromDate || series.recurrence.startDate, seedCampaignId: series.seedCampaignId || ""}), error: ""};
       const revision = converting ? 1 : nextSeriesRevision(series);
       const draftSeries = {...(series || {}), ...seriesDefinition({id: seriesId, form, recurrence: {...recurrence, startDate}, playbook: pinnedPlaybook, revision})};
-      const options = {series: draftSeries, playbook: pinnedPlaybook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date()};
+      const options = {series: draftSeries, playbook: pinnedPlaybook, campaigns: workspace.campaigns, plays: workspace.storedScheduledPlays, capacityRules: workspace.capacityRules, standingLanes: workspace.standingLanes, playbooks: workspace.playbooks, generatedAt: new Date()};
       if (converting) options.seedCampaignId = campaign.id;
       if (!converting && !retrying) { options.scope = "future"; options.fromDate = startDate; }
       expandRecurrence(draftSeries.recurrence);
@@ -2424,7 +2443,7 @@ function OccurrenceEditorDialog({campaign, series, workspace, onClose, onSave}) 
     if (!playbook || !form.name.trim() || !form.eventDate) return {plan: null, error: playbook ? "" : "The pinned playbook version is unavailable."};
     try {
       const {sourceEventId: _sourceEventId, ...editable} = form;
-      return {plan: buildOccurrencePlan({campaign, updates: {...editable, deadlineOffsetDays: form.deadlineOffsetDays === "" ? null : Number(form.deadlineOffsetDays)}, playbook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date()}), error: ""};
+      return {plan: buildOccurrencePlan({campaign, updates: {...editable, deadlineOffsetDays: form.deadlineOffsetDays === "" ? null : Number(form.deadlineOffsetDays)}, playbook, campaigns: workspace.campaigns, plays: workspace.storedScheduledPlays, capacityRules: workspace.capacityRules, standingLanes: workspace.standingLanes, playbooks: workspace.playbooks, generatedAt: new Date()}), error: ""};
     } catch (previewError) { return {plan: null, error: previewError.message || "This occurrence could not be previewed."}; }
   }, [campaign, form, playbook, workspace]);
   return <Modal title="Edit this occurrence" eyebrow={`${series.name} · ${formatDate(occurrenceDate(campaign))}`} onClose={onClose} size="wide">
@@ -2450,7 +2469,7 @@ function EndSeriesDialog({campaign, series, workspace, onClose, onSave}) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const previewState = useMemo(() => {
-    try { return {plan: buildSeriesPlan({series: {...series, status: "ended", revision: nextSeriesRevision(series)}, playbook, campaigns: workspace.campaigns, plays: workspace.scheduledPlays, capacityRules: workspace.capacityRules, generatedAt: new Date(), scope: "future", fromDate: occurrenceDate(campaign)}), error: ""}; }
+    try { return {plan: buildSeriesPlan({series: {...series, status: "ended", revision: nextSeriesRevision(series)}, playbook, campaigns: workspace.campaigns, plays: workspace.storedScheduledPlays, capacityRules: workspace.capacityRules, standingLanes: workspace.standingLanes, playbooks: workspace.playbooks, generatedAt: new Date(), scope: "future", fromDate: occurrenceDate(campaign)}), error: ""}; }
     catch (previewError) { return {plan: null, error: previewError.message || "This series end could not be previewed."}; }
   }, [campaign, playbook, series, workspace]);
   const affected = previewState.plan?.campaigns?.filter((item) => item.status === "archived").length || 0;
@@ -2575,7 +2594,13 @@ function LaneDialog({lane, playbooks, onClose, onSave}) {
 }
 
 function PlannerApp({authState}) {
-  const [workspace, setWorkspace] = useState(null);
+  const [storedWorkspace, setWorkspace] = useState(null);
+  const today = useBusinessDate();
+  const [calendarRange, setCalendarRange] = useState(null);
+  const [reportRange, setReportRange] = useState(null);
+  const workspace = useMemo(() => withLevel2StandingLane(storedWorkspace, {
+    now: today, ranges: [calendarRange, reportRange].filter(Boolean),
+  }), [storedWorkspace, today, calendarRange, reportRange]);
   const [activeView, setActiveView] = useState("overview");
   const [overviewWeekOffset, setOverviewWeekOffset] = useState(0);
   const [mobileNav, setMobileNav] = useState(false);
@@ -2639,7 +2664,7 @@ function PlannerApp({authState}) {
       throw new Error("A promotion cannot be planned after its campaign deadline.");
     }
     const saved = await perform(() => store.saveScheduledPlay(play), success);
-    setWorkspace((current) => ({...current, scheduledPlays: current.scheduledPlays.map((item) => item.id === saved.id ? saved : item)}));
+    setWorkspace((current) => ({...current, scheduledPlays: mergeById(current.scheduledPlays, [saved])}));
     setSelectedPlay(null);
     return saved;
   };
@@ -2701,11 +2726,11 @@ function PlannerApp({authState}) {
   };
 
   let content = null;
-  if (activeView === "calendar") content = <CalendarView workspace={workspace} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
+  if (activeView === "calendar") content = <CalendarView workspace={workspace} onRangeChange={setCalendarRange} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
   else if (activeView === "requests") content = <RequestsView workspace={workspace} canEdit={canEdit} onOpenRequest={setSelectedRequest} />;
   else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} onEditSeries={(series, campaign) => setSeriesEditor({mode: "retry", series, campaign})} />;
   else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
-  else if (activeView === "reports") content = <ReportsView workspace={workspace} authState={authState} canEdit={canEdit} canEmail={canEmail} initialSetup={reportSetup} onEditBriefContent={setEditingBriefContent} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
+  else if (activeView === "reports") content = <ReportsView workspace={workspace} onRangeChange={setReportRange} authState={authState} canEdit={canEdit} canEmail={canEmail} initialSetup={reportSetup} onEditBriefContent={setEditingBriefContent} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
   else if (activeView === "playbooks") content = <PlaybooksView workspace={workspace} canEdit={canEdit} onSave={async (playbook) => {
     const isNew = !workspace.playbooks.some((item) => item.id === playbook.id);
     const saved = await perform(() => store.savePlaybook(playbook), isNew ? `Added ${playbook.name}.` : `Saved ${playbook.name} as a new version.`);
@@ -2788,7 +2813,7 @@ function PlannerApp({authState}) {
         setEditingContent(null); setActiveView("content");
       }} />}
       {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} smuggleRelationship={smuggleByHostPlay.get(selectedPlay.id)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} onCancelSmuggle={removeSmuggle} />}
-      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onEditBriefContent={(campaign) => { setSelectedCampaign(null); setEditingBriefContent(campaign); }} onDelete={deleteCampaign} onCancelSmuggle={removeSmuggle} onRepeat={(campaign) => { setSelectedCampaign(null); setSeriesEditor({mode: "convert", campaign, series: null}); }} onEditOccurrence={(campaign, series) => { setSelectedCampaign(null); setOccurrenceEditor({campaign, series}); }} onEditFuture={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "future", campaign, series}); }} onRetrySeries={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "retry", campaign, series}); }} onEndSeries={(campaign, series) => { setSelectedCampaign(null); setEndingSeries({campaign, series}); }} onSkipOccurrence={async (campaign) => { const plan = skipOccurrencePlan({campaign, plays: workspace.scheduledPlays, generatedAt: new Date()}); await saveSeriesPlan(plan, `${campaign.name} on ${formatDate(occurrenceDate(campaign))} was skipped.`); setSelectedCampaign(null); }} onNavigateOccurrence={setSelectedCampaign} />}
+      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onEditBriefContent={(campaign) => { setSelectedCampaign(null); setEditingBriefContent(campaign); }} onDelete={deleteCampaign} onCancelSmuggle={removeSmuggle} onRepeat={(campaign) => { setSelectedCampaign(null); setSeriesEditor({mode: "convert", campaign, series: null}); }} onEditOccurrence={(campaign, series) => { setSelectedCampaign(null); setOccurrenceEditor({campaign, series}); }} onEditFuture={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "future", campaign, series}); }} onRetrySeries={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "retry", campaign, series}); }} onEndSeries={(campaign, series) => { setSelectedCampaign(null); setEndingSeries({campaign, series}); }} onSkipOccurrence={async (campaign) => { const plan = skipOccurrencePlan({campaign, plays: workspace.storedScheduledPlays, generatedAt: new Date()}); await saveSeriesPlan(plan, `${campaign.name} on ${formatDate(occurrenceDate(campaign))} was skipped.`); setSelectedCampaign(null); }} onNavigateOccurrence={setSelectedCampaign} />}
       {seriesEditor && <SeriesEditorDialog {...seriesEditor} workspace={workspace} onClose={() => setSeriesEditor(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${plan.series.name} recurring schedule was saved.`); setSeriesEditor(null); setActiveView("campaigns"); }} />}
       {occurrenceEditor && <OccurrenceEditorDialog {...occurrenceEditor} workspace={workspace} onClose={() => setOccurrenceEditor(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${occurrenceEditor.campaign.name} occurrence was updated.`); setOccurrenceEditor(null); }} />}
       {endingSeries && <EndSeriesDialog {...endingSeries} workspace={workspace} onClose={() => setEndingSeries(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${endingSeries.series.name} was ended from ${formatDate(occurrenceDate(endingSeries.campaign))}.`); setEndingSeries(null); setActiveView("campaigns"); }} />}

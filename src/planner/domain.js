@@ -191,7 +191,7 @@ export function campaignWeekForDate({eventDate, durationWeeks, value}) {
 }
 
 function deadlineForCampaign(campaign) {
-  const event = dateKey(campaign.eventDate);
+  const event = dateKey(campaign.eventDate || campaign.scheduledDate);
   if (!campaign.registrationDeadline) return event;
   const registration = dateKey(campaign.registrationDeadline);
   return registration < event ? registration : event;
@@ -223,7 +223,7 @@ export function priorityTuple(campaign) {
   const timeliness = campaign.isOnTime === false ? 0 : 1;
   const deadline = deadlineForCampaign(campaign);
   return [
-    6 - Math.min(5, Math.max(1, Number(campaign.level) || 5)),
+    6 - Math.min(5, Math.max(1, Number(campaign.level || campaign.campaignLevel) || 5)),
     typeWeight,
     timeliness,
     -differenceInDays(deadline, dateKey(campaign.submittedAt || deadline)),
@@ -395,6 +395,7 @@ export function buildCampaignRegeneration({
   plays = [],
   playbooks = [],
   capacityRules = [],
+  standingLanes = [],
   generatedAt = new Date(),
 } = {}) {
   const today = dateKey(generatedAt);
@@ -501,8 +502,14 @@ export function buildCampaignRegeneration({
     plays: [...untouchedPlays, ...candidatePlays],
     campaigns: combinedCampaigns,
   });
+  const effective = withLevel2StandingLane({campaigns: combinedCampaigns,
+    scheduledPlays: allocated.plays, playbooks, standingLanes, capacityRules},
+  {now: generatedAt, checkCapacity: false, ranges: regeneratedCampaigns.map((campaign) =>
+    ({startDate: campaign.recommendedStartDate, endDate: campaign.eventDate}))});
   const capacity = evaluateCapacity({
-    plays: allocated.plays,
+    plays: effective.scheduledPlays,
+    now: generatedAt,
+    protectedIds: new Set(plays.filter((play) => regenerationProtected(play, today)).map((play) => play.id)),
     capacityRules: capacityRules.filter((rule) => rule.id !== "level-4-social"),
     campaigns: combinedCampaigns,
   });
@@ -629,9 +636,9 @@ function capacityThresholds(rule) {
   return {capacity, typicalCapacity};
 }
 
-export function evaluateCapacity({plays, capacityRules, campaigns = []}) {
+export function evaluateCapacity({plays, capacityRules, campaigns = [], now = new Date(), protectedIds = new Set()}) {
   const campaignMap = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
-  const next = plays.map((play) => ({...play}));
+  const next = suppressCoveredLevel2Fallback(plays, now).map((play) => ({...play}));
   const rules = new Map((capacityRules || []).map((rule) => [rule.id, rule]));
   const groups = new Map();
 
@@ -641,7 +648,7 @@ export function evaluateCapacity({plays, capacityRules, campaigns = []}) {
     if (!rule || rule.active === false) return;
     if (Array.isArray(rule.allowedWeekdays) && rule.allowedWeekdays.length) {
       const weekday = utcDateFromKey(play.scheduledDate).getUTCDay();
-      if (!rule.allowedWeekdays.includes(weekday)) {
+      if (!rule.allowedWeekdays.includes(weekday) && !protectedIds.has(play.id)) {
         play.status = "conflict";
         play.conflictState = "invalid-weekday";
         play.conflictReason = `${rule.name} is not available on this weekday.`;
@@ -657,14 +664,16 @@ export function evaluateCapacity({plays, capacityRules, campaigns = []}) {
   groups.forEach(({rule, plays: candidates}, key) => {
     const {capacity, typicalCapacity} = capacityThresholds(rule);
     if (candidates.length <= capacity) return;
-    const ordered = [...candidates].sort((left, right) =>
+    const protectedCandidates = candidates.filter((play) => protectedIds.has(play.id));
+    const ordered = candidates.filter((play) => !protectedIds.has(play.id)).sort((left, right) =>
       compareCampaignPriority(
-        campaignMap.get(left.campaignId) || left,
-        campaignMap.get(right.campaignId) || right,
+        campaignMap.get(left.campaignId) || {...left, level: left.campaignLevel},
+        campaignMap.get(right.campaignId) || {...right, level: right.campaignLevel},
       ),
     );
-    const winners = ordered.slice(0, capacity);
-    const overflow = ordered.slice(capacity);
+    const available = Math.max(0, capacity - protectedCandidates.length);
+    const winners = [...protectedCandidates.slice(0, capacity), ...ordered.slice(0, available)];
+    const overflow = ordered.slice(available);
     overflow.forEach((play) => {
       play.status = "conflict";
       play.conflictState = "capacity-overflow";
@@ -679,7 +688,7 @@ export function evaluateCapacity({plays, capacityRules, campaigns = []}) {
       typicalCapacity,
       campaignCount: candidates.length,
       recommendedPlayIds: winners.map((play) => play.id),
-      overflowPlayIds: overflow.map((play) => play.id),
+      overflowPlayIds: [...protectedCandidates.slice(capacity), ...overflow].map((play) => play.id),
       reason: "Recommended by promotion level, campaign type, timeliness, deadline proximity, then submission time.",
       requiresDecision: rule.autoResolve !== true,
     });
@@ -755,6 +764,7 @@ export function ensureLevel2StandingLane({weekStart, plays, ongoingPlaybook}) {
   const end = addDays(start, 6);
   const existing = (plays || []).filter((play) =>
     Number(play.campaignLevel) === 2 &&
+    play.source !== "standing-lane" &&
     play.scheduledDate >= start &&
     play.scheduledDate <= end &&
     !["missed", "skipped"].includes(play.status),
@@ -793,6 +803,84 @@ export function ensureLevel2StandingLane({weekStart, plays, ongoingPlaybook}) {
     smuggle: null,
   }));
   return {covered: generated.length > 0, source: "ongoing", plays: generated};
+}
+
+// Completed work and saved history remain visible. Future fallback yields to
+// event coverage; its saved overrides stay in storage and return if coverage ends.
+export function suppressCoveredLevel2Fallback(plays, now = new Date()) {
+  const today = dateKey(now);
+  const coveredWeeks = new Set(plays.filter((play) =>
+    Number(play.campaignLevel) === 2 && play.source !== "standing-lane" &&
+    !["missed", "skipped"].includes(play.status),
+  ).map((play) => startOfPlanningWeek(play.scheduledDate)));
+  return plays.filter((play) => play.source !== "standing-lane" ||
+    play.status === "completed" || play.scheduledDate < today ||
+    !coveredWeeks.has(startOfPlanningWeek(play.scheduledDate)));
+}
+
+/** Derive the live fallback without writes on read (including view-only users).
+ * Saved standing-lane records are explicit decisions and always win over the
+ * template. Unsaved past weeks are never backfilled with today's playbook.
+ */
+export function withLevel2StandingLane(workspace, {
+  now = new Date(), ranges = [], checkCapacity = true,
+} = {}) {
+  if (!workspace) return workspace;
+  const today = dateKey(now);
+  const currentWeek = startOfPlanningWeek(today);
+  const saved = workspace.storedScheduledPlays || workspace.scheduledPlays || [];
+  const byId = new Map(saved.filter((play) => play.source !== "standing-lane" ||
+    play.scheduledDate < today || play.status === "completed").map((play) => [play.id, play]));
+  const savedById = new Map(saved.map((play) => [play.id, play]));
+  const lane = (workspace.standingLanes || []).find((item) =>
+    Number(item.level) === 2 && item.active !== false && item.cadence === "weekly");
+  const playbook = (workspace.playbooks || []).find((item) =>
+    item.id === lane?.fallbackPlaybookId && Number(item.level) === 2 && item.active !== false);
+  if (playbook) {
+    const templateIds = new Set((playbook.weeks?.[0]?.plays || []).map((play) => play.id));
+    saved.filter((play) => play.source === "standing-lane" && play.playbookId === playbook.id &&
+      templateIds.has(play.templatePlayId)).forEach((play) => byId.set(play.id, play));
+    const weeks = new Set();
+    for (const range of [{startDate: today, endDate: addDays(today, 400)}, ...ranges]) {
+      if (!range?.startDate || !range?.endDate) continue;
+      let start, end;
+      try {
+        start = startOfPlanningWeek(Temporal.PlainDate.from(range.startDate).toString());
+        end = Temporal.PlainDate.from(range.endDate).toString();
+      } catch { continue; }
+      if (start < currentWeek) start = currentWeek;
+      for (let week = start; week <= end; week = addDays(week, 7)) weeks.add(week);
+    }
+    for (const weekStart of weeks) {
+      const result = ensureLevel2StandingLane({weekStart, plays: saved, ongoingPlaybook: playbook});
+      if (result.source !== "ongoing") continue;
+      for (const play of result.plays) {
+        // Include lane and playbook identity, but not version: operator edits
+        // survive template revisions without colliding with another fallback.
+        let hash = 14695981039346656037n;
+        for (const character of JSON.stringify([lane.id, playbook.id, play.templatePlayId])) {
+          hash = BigInt.asUintN(64, (hash ^ BigInt(character.codePointAt(0))) * 1099511628211n);
+        }
+        const id = `standing_${weekStart}_${hash.toString(16)}`;
+        const legacy = savedById.get(play.id);
+        const previous = savedById.get(id) || (legacy?.playbookId === playbook.id ? legacy : null);
+        const next = previous || {...play, id};
+        byId.set(next.id, next);
+      }
+    }
+  }
+  const plays = suppressCoveredLevel2Fallback([...byId.values()], today);
+  // Re-evaluate automatic capacity conflicts against the effective inventory.
+  // A replaced fallback must not leave stale conflicts on an event campaign.
+  const candidates = plays.map((play) =>
+    play.scheduledDate >= today && !play.locked && !play.manuallyAdjusted && play.status === "conflict" && ["capacity-overflow", "invalid-weekday"].includes(play.conflictState)
+      ? {...play, status: play.scheduledDate === play.originalScheduledDate ? "scheduled" : "rescheduled", conflictState: "none", conflictReason: ""}
+      : play);
+  const capacity = checkCapacity ? evaluateCapacity({plays: candidates, campaigns: workspace.campaigns, now,
+    protectedIds: new Set(saved.filter((play) => play.manuallyAdjusted || play.locked ||
+      play.status === "completed" || play.scheduledDate < today || play.smuggle).map((play) => play.id)),
+    capacityRules: (workspace.capacityRules || []).filter((rule) => rule.id !== "level-4-social")}) : {plays};
+  return {...workspace, storedScheduledPlays: saved, scheduledPlays: capacity.plays};
 }
 
 export function recommendSmuggleOpportunities({

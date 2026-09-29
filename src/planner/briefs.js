@@ -224,7 +224,7 @@ function entryHeaderLayout(pdf, entry, continued = false) {
   const nameLines = wrap(pdf, `${entry.name}${suffix}`, 5.35).slice(0, 2);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7.5);
-  const scheduleLabel = entry.kind === "content"
+  const scheduleLabel = entry.kind === "content" || !entry.eventDate
     ? `${formatBriefDate(entry.firstPromotionDate)} - ${formatBriefDate(entry.lastPromotionDate)}`
     : `Event ${formatBriefDate(entry.eventDate)}${entry.registrationDeadline ? `  |  Registration ${formatBriefDate(entry.registrationDeadline)}` : ""}`;
   const scheduleLines = wrap(pdf, scheduleLabel, 6.45).slice(0, 2);

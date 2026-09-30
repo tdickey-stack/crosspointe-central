@@ -1,0 +1,33 @@
+{
+  "score": 4,
+  "summary": "Prototype Annual Planner rules reuse the existing active staff Planner ACL, with exact create/update metadata invariants, fully inspected bounded wire values, atomic event-adjustment pairs, and optimistic revisions. Local Firestore emulator tests pass including maximal create/update payloads. No production rules were deployed.",
+  "findings": [
+    {
+      "check": "Business Logic vs. Rules",
+      "severity": "minor",
+      "issue": "Rules validate stored types, bounded ranges, and real calendar values, while compound schedule feasibility near the domain's 1900/2200 boundaries remains a domain validation responsibility. A custom authorized client can store a bounded definition whose generated schedule crosses that supported range.",
+      "recommendation": "The normal save path rejects these schedules. Live subscriptions validate complete joined records and report the affected record rather than sending it to rendering. Review a server-authoritative schedule validator if untrusted editors or wider distribution are introduced."
+    }
+  ],
+  "instance": {"project": "crosspointe-central", "database": "(default)", "edition": "STANDARD", "location": "us-central1", "verification": "Parent verified with Firebase CLI during this task."},
+  "scope": ["centralAnnualEvents", "centralAnnualAdjustments", "centralAnnualTemplates", "centralAnnualSettings/workspace"],
+  "access": {
+    "read": "Existing active Central user; planner permission view/propose/edit/approve/admin. Absent planner key falls back to studio then settings. Explicit planner none wins.",
+    "write": "Same ACL excluding view. Creator metadata is provenance, not ownership: authorized staff collaborate on shared plans.",
+    "identity": "Creator UID and createdAt equal authenticated UID/request.time at create and remain immutable. updatedByUid/request.time are checked every save. No new roles or permission fields."
+  },
+  "wireFormat": {
+    "reason": "Firestore's 1000-expression evaluation ceiling requires compact nested values and an atomic companion adjustment document; domain and UI retain named objects and YYYY-MM-DD strings.",
+    "event": "Header contains anchorDate as UTC-midnight Timestamp and a pinned templateSnapshot. Manual overrides and excludedMeetingDates live in centralAnnualAdjustments with the same document ID and revision. Both write and delete atomically; getAfter checks enforce pairing.",
+    "templatePhases": "Map keyed by unique phase ID. Value [name, kind, packedRange]. packedRange = ((offsetDays + 730) * 366 + durationDays - 1) * 6 + originalOrder. Rules require integer 0..3208355; decode offset=floor(packed/2196)-730, duration=floor(packed/6)%366+1, order=packed%6. This represents offsets -730..730, durations 1..366, order 0..5 with no invalid combinations.",
+    "overrides": "Map keyed by stable schedule item ID. Integer value = (startEpochDay + 25567) * 366 + endEpochDay - startEpochDay. Rules require integer >=0 and floor(value/366)+value%366 <=109937. Decode start=floor(value/366)-25567; end=start+value%366. All decoded ranges are real dates within 1900-01-01..2200-12-31 and 1..366 inclusive days.",
+    "exclusions": "List of integer UTC days since 1970-01-01, inclusive range -25567..84370. Every possible value represents a real calendar date.",
+    "limits": {"phases": 6, "overrides": 8, "excludedMeetingDates": 12, "meetings": 8, "recoveryDays": 56, "nameCharacters": 140, "notesCharacters": 3000},
+    "metadata": "Server timestamps come from the page's actual Firebase compat instance; never a separately bundled SDK. Template library version increments; event snapshots remain pinned until explicitly replaced."
+  },
+  "checks": {
+    "unit": "17 domain/persistence tests passed, including all starter templates, leap day and DST roundtrips, supported calendar boundary encodings, preview isolation, stale updates/deletes, and v1 bounds.",
+    "emulator": "11 tests passed: maximum header/adjustments/template create+update, stale concurrent transactions, viewer/inactive/anonymous/missing/revoked ACLs, legacy fallback and explicit denial, malformed nested updates, UID/time invariants, singleton settings, bad cloud-record error handling, atomic paired saves/deletes, and boundary validation after joining manual dates.",
+    "remaining": "Live production collaboration and deployed-rule behavior remain unverified until an intentional deployment. Rules apply to the new Annual Planner collections only; broader existing rules were not re-audited."
+  }
+}

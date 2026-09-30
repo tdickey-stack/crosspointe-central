@@ -503,6 +503,9 @@ function Sidebar({activeView, setActiveView, open, close}) {
             <a href="/admin" className="planner-tool-link">
               <span aria-hidden="true"><PlannerGearIcon /></span>Admin
             </a>
+            <a href="/annual-planner" className="planner-tool-link">
+              <span aria-hidden="true">▦</span>Annual Planner
+            </a>
             <a href="/studio" className="planner-tool-link">
               <span aria-hidden="true">✦</span>Studio
             </a>

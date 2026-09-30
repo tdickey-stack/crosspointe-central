@@ -32,7 +32,10 @@
     "emulators:lan": "node scripts/start-lan-emulators.mjs",
     "gmail:token": "node scripts/get-gmail-refresh-token.mjs",
     "test:groups": "node --test functions/groups/*.test.js test/group-directory.test.mjs test/group-embed.test.mjs",
-    "test:embeds": "node --test functions/embeds/*.test.js test/embed-groups-editor.test.mjs test/embed-loader.test.mjs test/embed-preview.test.mjs test/embeds-workspace.test.mjs"
+    "test:embeds": "node --test functions/embeds/*.test.js test/embed-groups-editor.test.mjs test/embed-loader.test.mjs test/embed-preview.test.mjs test/embeds-workspace.test.mjs",
+    "build:annual-planner": "node scripts/build-annual-planner.mjs",
+    "test:annual-planner": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/annual-planner-domain.test.mjs test/annual-planner-persistence.test.mjs test/annual-planner-timeline.test.mjs",
+    "test:annual-planner-rules": "firebase emulators:exec --project crosspointe-central-annual-rules --only firestore \"node --test test/annual-planner-security-rules.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",

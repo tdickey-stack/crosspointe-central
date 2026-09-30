@@ -221,6 +221,7 @@ function renderCentralAppNavigation_(user, userRecord) {
   }
   if (getCentralNavigationPermission_(pageAccess, "planner") !== "none") {
     destinations.push({href: "/planner", label: "Planner"});
+    destinations.push({href: "/annual-planner", label: "Annual Planner"});
   }
 
   if (!destinations.length) {

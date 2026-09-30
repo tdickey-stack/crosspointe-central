@@ -2,6 +2,13 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Annual Planner model: centralAnnualEvents stores staff-shared headers and
+    // pinned template snapshots; centralAnnualAdjustments stores the same-revision
+    // date overrides/exclusions, atomically saved/deleted with its event.
+    // centralAnnualTemplates holds editable definitions; centralAnnualSettings/
+    // workspace holds ordered thresholds. All have immutable creator/time metadata,
+    // authenticated updater/server time, and optimistic revisions. Compact nested
+    // wire encodings and v1 bounds are documented in annual-planner-security-audit.json.
     // ===============================================================
     // Assumed Promotion Planner Data Model
     // ===============================================================
@@ -1902,6 +1909,126 @@ service cloud.firestore {
 
     match /centralStudioShares/{shareId} {
       allow read, write: if false;
+    }
+
+    // Annual Planner: separate staff-shared events, mutable templates, and singleton
+    // thresholds. Dates are UTC-midnight timestamps; event snapshots pin template
+    // definitions. Revision/creator/time metadata is mandatory and creation is immutable.
+    // Equivalent Planner ACL, cached once to leave evaluation budget for bounded data.
+    function annualAccess(editing) {
+      let user = get(userDocPath()).data;
+      let access = user.pageAccess;
+      let permission = access.get('planner', access.get('studio', access.get('settings', 'none')));
+      return request.auth != null && user.active == true &&
+        (editing ? permission in ['propose', 'edit', 'approve', 'admin'] : permission in ['view', 'propose', 'edit', 'approve', 'admin']);
+    }
+    function annualId(value) {
+      return value is string && value.matches("^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$");
+    }
+    function annualInt(value, low, high) { return value is int && value >= low && value <= high; }
+    function annualName(value) { return value is string && value.matches('(?s)^.{1,140}$'); }
+    function annualDate(value) {
+      return value is timestamp && value.date() == value && value.year() >= 1900 && value.year() <= 2200;
+    }
+    // Phase map key is unique ID. Tuple = [name, kind, packedRange].
+    // packedRange = ((offset + 730) * 366 + duration - 1) * 6 + order.
+    // Every integer in this range decodes to offset -730..730, duration 1..366,
+    // and order 0..5. This keeps complete validation below 1000 expressions.
+    function annualPhase(value, id) {
+      return value is list && value.size() == 3 && annualId(id) &&
+        id != 'recovery' && !id.matches('^meeting-.*') && annualName(value[0]) &&
+        value[1] in ['preparation', 'active', 'milestone', 'rest'] && annualInt(value[2], 0, 3208355);
+    }
+    function annualPhases(values) {
+      let keys = values.keys();
+      let count = keys.size();
+      return values is map && count >= 1 && count <= 6 && (count <= 0 || (annualPhase(values[keys[0]], keys[0]) && (count <= 1 || (annualPhase(values[keys[1]], keys[1]) && (count <= 2 || (annualPhase(values[keys[2]], keys[2]) && (count <= 3 || (annualPhase(values[keys[3]], keys[3]) && (count <= 4 || (annualPhase(values[keys[4]], keys[4]) && (count <= 5 || (annualPhase(values[keys[5]], keys[5]) && true))))))))))));
+    }
+    function annualTemplateDefinition(value) {
+      return value is map && annualId(value.id) && annualName(value.name) && validPlannerString(value.description, 3000) &&
+        annualInt(value.level, 1, 5) && annualInt(value.version, 1, 1000000) &&
+        annualInt(value.meetingCount, 0, 8) && annualInt(value.recoveryDays, 0, 56) && annualPhases(value.phases);
+    }
+    function annualSnapshot(value) {
+      return annualTemplateDefinition(value) && value.keys().hasOnly(['id', 'name', 'description', 'level', 'version', 'meetingCount', 'phases', 'recoveryDays']);
+    }
+    function annualMetadata(value) {
+      // Creator/time types come from exact request.auth/request.time equality at creation,
+      // and are immutable on updates. Revision begins at 1 and advances exactly once.
+      return value.revision <= 1000000 && value.updatedByUid == request.auth.uid && value.updatedAt == request.time;
+    }
+    function annualCreation(value) {
+      return value.revision == 1 && value.createdByUid == request.auth.uid && value.createdAt == request.time;
+    }
+    function annualUpdate(value) {
+      return value.revision == resource.data.revision + 1 && value.createdByUid == resource.data.createdByUid && value.createdAt == resource.data.createdAt;
+    }
+    function validAnnualTemplate(value, id) {
+      return annualTemplateDefinition(value) && value.id == id && annualMetadata(value) &&
+        value.keys().hasOnly(['id', 'name', 'description', 'level', 'version', 'meetingCount', 'phases', 'recoveryDays', 'revision', 'createdByUid', 'updatedByUid', 'createdAt', 'updatedAt']);
+    }
+    // Whole UTC days since 1970-01-01; bounded 1900..2200.
+    function annualDay(value) { return value is int && value >= -25567 && value <= 84370; }
+    // packed = (startDay + 25567) * 366 + (endDay - startDay).
+    function annualOverride(value, id) {
+      return annualId(id) && value is int && value >= 0 &&
+        math.floor(value / 366) + value % 366 <= 109937;
+    }
+    function annualOverrides(values) {
+      let keys = values.keys();
+      let count = keys.size();
+      return values is map && count <= 8 && (count <= 0 || (annualOverride(values[keys[0]], keys[0]) && (count <= 1 || (annualOverride(values[keys[1]], keys[1]) && (count <= 2 || (annualOverride(values[keys[2]], keys[2]) && (count <= 3 || (annualOverride(values[keys[3]], keys[3]) && (count <= 4 || (annualOverride(values[keys[4]], keys[4]) && (count <= 5 || (annualOverride(values[keys[5]], keys[5]) && (count <= 6 || (annualOverride(values[keys[6]], keys[6]) && (count <= 7 || (annualOverride(values[keys[7]], keys[7]) && true))))))))))))))));
+    }
+    function annualExclusions(values) {
+      let count = values.size();
+      return values is list && count <= 12 && (count <= 0 || (annualDay(values[0]) && (count <= 1 || (annualDay(values[1]) && (count <= 2 || (annualDay(values[2]) && (count <= 3 || (annualDay(values[3]) && (count <= 4 || (annualDay(values[4]) && (count <= 5 || (annualDay(values[5]) && (count <= 6 || (annualDay(values[6]) && (count <= 7 || (annualDay(values[7]) && (count <= 8 || (annualDay(values[8]) && (count <= 9 || (annualDay(values[9]) && (count <= 10 || (annualDay(values[10]) && (count <= 11 || (annualDay(values[11]) && true))))))))))))))))))))))));
+    }
+    function validAnnualEvent(value, id) {
+      return value is map && value.keys().hasOnly(['id', 'name', 'level', 'anchorDate', 'templateId', 'templateSnapshot', 'notes', 'status', 'revision', 'createdByUid', 'updatedByUid', 'createdAt', 'updatedAt']) &&
+        value.id == id && annualId(id) && annualName(value.name) && annualInt(value.level, 1, 5) &&
+        annualDate(value.anchorDate) && annualSnapshot(value.templateSnapshot) && value.templateId == value.templateSnapshot.id &&
+        validPlannerString(value.notes, 3000) && value.status in ['tentative', 'confirmed'] && annualMetadata(value);
+    }
+    function validAnnualAdjustments(value, id) {
+      return value.keys().hasOnly(['eventId', 'overrides', 'excludedMeetingDates', 'revision', 'createdByUid', 'updatedByUid', 'createdAt', 'updatedAt']) &&
+        value.eventId == id && annualId(id) && annualOverrides(value.overrides) && annualExclusions(value.excludedMeetingDates) && annualMetadata(value);
+    }
+    function annualEventPath(id) { return /databases/$(database)/documents/centralAnnualEvents/$(id); }
+    function annualAdjustmentPath(id) { return /databases/$(database)/documents/centralAnnualAdjustments/$(id); }
+    function annualPair(value, id) {
+      return getAfter(annualAdjustmentPath(id)).data.revision == value.revision;
+    }
+    function annualAdjustmentPair(value, id) {
+      let event = getAfter(annualEventPath(id)).data;
+      return event.revision == value.revision && event.createdByUid == value.createdByUid && event.createdAt == value.createdAt;
+    }
+    function validAnnualSettings(value) {
+      return value is map && value.keys().hasOnly(['lightThreshold', 'strongThreshold', 'revision', 'createdByUid', 'updatedByUid', 'createdAt', 'updatedAt']) &&
+        annualInt(value.lightThreshold, 1, 10) && annualInt(value.strongThreshold, value.lightThreshold + 1, 20) && annualMetadata(value);
+    }
+    match /centralAnnualEvents/{id} {
+      allow read: if annualAccess(false);
+      allow create: if annualAccess(true) && annualCreation(request.resource.data) && validAnnualEvent(request.resource.data, id) && annualPair(request.resource.data, id);
+      allow update: if annualAccess(true) && annualUpdate(request.resource.data) && validAnnualEvent(request.resource.data, id) && annualPair(request.resource.data, id);
+      allow delete: if annualAccess(true) && !existsAfter(annualAdjustmentPath(id));
+    }
+    match /centralAnnualAdjustments/{id} {
+      allow read: if annualAccess(false);
+      allow create: if annualAccess(true) && annualCreation(request.resource.data) && validAnnualAdjustments(request.resource.data, id) && annualAdjustmentPair(request.resource.data, id);
+      allow update: if annualAccess(true) && annualUpdate(request.resource.data) && validAnnualAdjustments(request.resource.data, id) && annualAdjustmentPair(request.resource.data, id);
+      allow delete: if annualAccess(true) && !existsAfter(annualEventPath(id));
+    }
+    match /centralAnnualTemplates/{id} {
+      allow read: if annualAccess(false);
+      allow create: if annualAccess(true) && annualCreation(request.resource.data) && validAnnualTemplate(request.resource.data, id);
+      allow update: if annualAccess(true) && annualUpdate(request.resource.data) && validAnnualTemplate(request.resource.data, id) && request.resource.data.version == resource.data.version + 1;
+      allow delete: if false;
+    }
+    match /centralAnnualSettings/{id} {
+      allow read: if annualAccess(false) && id == 'workspace';
+      allow create: if annualAccess(true) && id == 'workspace' && annualCreation(request.resource.data) && validAnnualSettings(request.resource.data);
+      allow update: if annualAccess(true) && id == 'workspace' && annualUpdate(request.resource.data) && validAnnualSettings(request.resource.data);
+      allow delete: if false;
     }
 
     match /centralPromotionPlaybooks/{playbookId} {

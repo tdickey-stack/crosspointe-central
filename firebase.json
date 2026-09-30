@@ -326,6 +326,13 @@
         ]
       },
       {
+        "source": "/annual-planner{,/**,.html,.css,.js}",
+        "headers": [
+          {"key": "Cache-Control", "value": "no-store"},
+          {"key": "X-Robots-Tag", "value": "noindex, nofollow"}
+        ]
+      },
+      {
         "source": "/planner.@(html|js|css)",
         "headers": [
           {
@@ -436,6 +443,14 @@
       {
         "source": "/studio/**",
         "destination": "/studio.html"
+      },
+      {
+        "source": "/annual-planner",
+        "destination": "/annual-planner.html"
+      },
+      {
+        "source": "/annual-planner/**",
+        "destination": "/annual-planner.html"
       },
       {
         "source": "/planner",

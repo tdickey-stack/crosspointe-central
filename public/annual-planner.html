@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#18181b">
+<title>Annual Planner · CrossPointe Central</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/annual-planner.css">
+<script>
+(function(){
+var local=['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname);
+function load(src){return new Promise(function(resolve,reject){var s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=function(){reject(new Error('Unable to connect to Central. Reload to retry.'));};document.head.appendChild(s);});}
+window.CENTRAL_ANNUAL_FIREBASE_READY=local&&new URLSearchParams(location.search).get('preview')==='1'?Promise.resolve():load('/__/firebase/11.10.0/firebase-app-compat.js').then(function(){return load('/__/firebase/11.10.0/firebase-auth-compat.js');}).then(function(){return load('/__/firebase/11.10.0/firebase-firestore-compat.js');}).then(function(){return load('/__/firebase/init.js');});
+window.CENTRAL_ANNUAL_FIREBASE_READY.catch(function(){});
+})();
+</script><script type="module" src="/annual-planner.js"></script>
+</head><body><div id="annual-root"><noscript>Annual Planner requires JavaScript.</noscript></div></body>
+</html>

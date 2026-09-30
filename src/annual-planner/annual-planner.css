@@ -209,23 +209,11 @@ b {
   margin-top: 5px;
 }
 .ap-mark {
-  font-size: 27px;
-  font-weight: 800;
-  letter-spacing: -4px;
-  line-height: 1;
-  background: var(--annual-text);
-  color: #111113;
+  display: block;
   width: 42px;
   height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 11px;
-  padding-right: 4px;
+  object-fit: contain;
   flex-shrink: 0;
-}
-.ap-mark span {
-  font-size: 20px;
 }
 .ap-nav-label {
   color: var(--annual-muted);

@@ -978,6 +978,7 @@ b {
   width: 980px;
 }
 .ap-modal > header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -998,6 +999,8 @@ b {
   flex-shrink: 0;
 }
 .ap-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 24px 27px;
   overscroll-behavior: contain;
@@ -1005,10 +1008,12 @@ b {
 .ap-modal-body h3 {
   margin-top: 25px;
 }
-.ap-modal-body > p {
+.ap-modal-body > p,
+.ap-modal-fields > p {
   font-size: 12px;
 }
 .ap-modal > footer {
+  flex: 0 0 auto;
   padding: 18px 27px;
   border-top: 1px solid var(--annual-line-strong);
   display: flex;
@@ -1596,11 +1601,11 @@ b {
 .ap-presenter .ap-phase.meeting {
   font-size: 16px;
 }
-fieldset.ap-modal-body {
+.ap-modal-fields {
   border: 0;
   margin: 0;
+  padding: 0;
   min-inline-size: 0;
-  flex: 1 1 auto;
 }
 .ap-presenter.compact {
   padding: 22px 28px;

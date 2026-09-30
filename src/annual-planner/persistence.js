@@ -1,4 +1,4 @@
-import {validateEvent, validateTemplate} from './domain.js';
+import {DEMAND_LEVELS, WORK_STAGES, validateEvent, validateTemplate} from './domain.js';
 import {STARTER_TEMPLATES} from './seed-data.js';
 
 export const ANNUAL_COLLECTIONS = {events: 'centralAnnualEvents', templates: 'centralAnnualTemplates', settings: 'centralAnnualSettings', adjustments: 'centralAnnualAdjustments'};
@@ -11,11 +11,31 @@ const asDate = value => new Date(`${value}T00:00:00.000Z`);
 const dayIndex = value => asDate(value).getTime() / 86400000;
 const fromDay = value => new Date(value * 86400000).toISOString().slice(0, 10);
 // Bounded wire ranges: 366 duration choices x 6 ordering slots per offset.
-const encodeTemplate = value => ({...value, phases: Object.fromEntries(value.phases.map((p, index) => [p.id, [p.name, p.kind, ((p.offsetDays + 730) * 366 + p.durationDays - 1) * 6 + index]]))});
-const decodeTemplate = value => ({...value, phases: Object.entries(value.phases).sort((a, b) => a[1][2] % 6 - b[1][2] % 6).map(([id, [name, kind, range]]) => ({id, name, kind, offsetDays: Math.floor(range / 2196) - 730, durationDays: Math.floor(range / 6) % 366 + 1}))});
+// Legacy tuples keep three slots. Optional profiles append stage/demand, with
+// empty strings representing absence; no stage or demand is inferred on load.
+const optionalProfile = phase => Object.fromEntries(['workStage', 'demand'].filter(key => phase[key] !== undefined).map(key => [key, phase[key]]));
+const encodeTemplate = value => ({...value, phases: Object.fromEntries(value.phases.map((phase, index) => {
+  const tuple = [phase.name, phase.kind, ((phase.offsetDays + 730) * 366 + phase.durationDays - 1) * 6 + index];
+  if (phase.workStage !== undefined || phase.demand !== undefined) tuple.push(phase.workStage ?? '', phase.demand ?? '');
+  return [phase.id, tuple];
+}))});
+function decodeTemplate(value) {
+  const phases = Object.entries(value.phases).map(([id, tuple]) => {
+    assertValid(Array.isArray(tuple) && (tuple.length === 3 || tuple.length === 5) ? [] : [`Phase ${id} has an invalid stored tuple.`]);
+    const [name, kind, range, workStage, demand] = tuple;
+    if (tuple.length === 5) {
+      assertValid(['preparation', 'active'].includes(kind) && (workStage === '' || WORK_STAGES.includes(workStage)) && (demand === '' || DEMAND_LEVELS.includes(demand)) ? [] : [`Phase ${id} has an invalid stored work profile.`]);
+    }
+    const phase = {id, name, kind, offsetDays: Math.floor(range / 2196) - 730, durationDays: Math.floor(range / 6) % 366 + 1};
+    if (workStage) phase.workStage = workStage;
+    if (demand) phase.demand = demand;
+    return {phase, order: range % 6};
+  });
+  return {...value, phases: phases.sort((a, b) => a.order - b.order).map(item => item.phase)};
+}
 const pick = (value, fields) => Object.fromEntries(fields.map(key => [key, value[key]]));
 const templateFields = ['id', 'name', 'description', 'level', 'version', 'meetingCount', 'phases', 'recoveryDays'];
-const templateDefinition = value => ({...pick(value, templateFields), phases: value.phases.map(phase => pick(phase, ['id', 'name', 'kind', 'offsetDays', 'durationDays']))});
+const templateDefinition = value => ({...pick(value, templateFields), phases: value.phases.map(phase => ({...pick(phase, ['id', 'name', 'kind', 'offsetDays', 'durationDays']), ...optionalProfile(phase)}))});
 function assertValid(errors) {
   if (errors.length) throw Object.assign(new Error(errors.join(' ')), {code: 'annual/invalid-data'});
 }

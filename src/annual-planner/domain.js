@@ -3,6 +3,10 @@ const DAY = 86400000;
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
 const KINDS = new Set(['preparation', 'active', 'milestone', 'rest']);
 const WORK = new Set(['preparation', 'active']);
+export const WORK_STAGES = Object.freeze(['ideation', 'activation', 'implementation']);
+export const DEMAND_LEVELS = Object.freeze(['light', 'moderate', 'high']);
+const DEMAND_RANK = { light: 1, moderate: 2, high: 3 };
+const SEVERITY_RANK = { clear: 0, light: 1, strong: 2 };
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const integer = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
 const validText = (value, max, required = false) => typeof value === 'string' && value.length <= max && (!required || value.trim().length > 0);
@@ -77,6 +81,8 @@ export function validateTemplate(template) {
       ids.add(phase.id);
       if (!validText(phase.name, 140, true)) errors.push('Each phase needs a name of at most 140 characters.');
       if (!KINDS.has(phase.kind)) errors.push('Phase kind is invalid.');
+      if (phase.workStage !== undefined && (!WORK.has(phase.kind) || !WORK_STAGES.includes(phase.workStage))) errors.push('Work stage must be ideation, activation, or implementation on a preparation or active phase.');
+      if (phase.demand !== undefined && (!WORK.has(phase.kind) || !DEMAND_LEVELS.includes(phase.demand))) errors.push('Demand must be light, moderate, or high on a preparation or active phase.');
       if (!integer(phase.offsetDays, -730, 730)) errors.push('Phase offsets must be whole days between -730 and 730.');
       if (!integer(phase.durationDays, 1, 366)) errors.push('Phase duration must be 1–366 days.');
     }
@@ -119,9 +125,9 @@ function buildSchedule(event) {
   const template = event.templateSnapshot;
   const decorate = item => {
     const override = event.overrides && Object.hasOwn(event.overrides, item.id) ? event.overrides[item.id] : undefined;
-    return { ...item, ...(override ? { startDate: override.startDate, endDate: override.endDate } : {}), eventId: event.id, eventName: event.name, level: event.level, manuallyAdjusted: Boolean(override) };
+    return { workStage: null, demand: null, ...item, ...(override ? { startDate: override.startDate, endDate: override.endDate } : {}), eventId: event.id, eventName: event.name, level: event.level, manuallyAdjusted: Boolean(override) };
   };
-  const schedule = template.phases.map(phase => decorate({ id: phase.id, name: phase.name, kind: phase.kind, startDate: addDays(event.anchorDate, phase.offsetDays), endDate: addDays(event.anchorDate, phase.offsetDays + phase.durationDays - 1) }));
+  const schedule = template.phases.map(phase => decorate({ id: phase.id, name: phase.name, kind: phase.kind, workStage: phase.workStage ?? null, demand: phase.demand ?? null, startDate: addDays(event.anchorDate, phase.offsetDays), endDate: addDays(event.anchorDate, phase.offsetDays + phase.durationDays - 1) }));
   const work = schedule.filter(item => WORK.has(item.kind));
   const meetingTargets = work.length ? work : schedule.filter(item => item.kind === 'milestone');
   if (template.meetingCount && meetingTargets.length) {
@@ -156,8 +162,49 @@ export function summarizeEvent(event) {
   return { startDate: schedule[0].startDate, endDate: schedule.map(item => item.endDate).sort().at(-1), planningStartDate: planning.length ? planning[0].startDate : schedule[0].startDate };
 }
 
-/** Congestion is the daily peak of distinct Level 1–2 events doing prep/activity.
- * eventIds/names identify the first peak day; rest conflicts cover all levels.
+function dailyPressure(items, date, lightThreshold, strongThreshold) {
+  const byEvent = new Map();
+  let unclassified = false;
+  for (const item of items) {
+    const rank = DEMAND_RANK[item.demand] || 0;
+    if (!rank) unclassified = true;
+    byEvent.set(item.eventId, Math.max(byEvent.get(item.eventId) || 0, rank));
+  }
+  const ranks = [...byEvent.values()];
+  const high = ranks.filter(rank => rank === DEMAND_RANK.high).length;
+  const moderate = ranks.filter(rank => rank === DEMAND_RANK.moderate).length;
+  const light = ranks.filter(rank => rank === DEMAND_RANK.light).length;
+  let severity = 'clear';
+  let reason = byEvent.size ? 'No pressure combination flagged' : 'No Level 1–2 work scheduled';
+  if (high >= 2) { severity = 'strong'; reason = 'High-demand work overlaps across events'; }
+  else if (high && moderate) { severity = 'strong'; reason = 'High and moderate demand overlap'; }
+  else if (moderate >= 3) { severity = 'strong'; reason = 'Three or more moderate-demand events overlap'; }
+  else if (moderate >= 2) { severity = 'light'; reason = 'Two moderate-demand events overlap'; }
+  else if (high && light) { severity = 'light'; reason = 'High and light demand overlap'; }
+  else if (light > 1 && !moderate && !high) reason = 'Only light-demand work overlaps';
+
+  if (unclassified) {
+    const legacy = byEvent.size >= strongThreshold ? 'strong' : byEvent.size >= lightThreshold ? 'light' : 'clear';
+    if (SEVERITY_RANK[legacy] > SEVERITY_RANK[severity] || severity === 'clear') {
+      severity = legacy;
+      reason = legacy === 'clear' ? 'Unclassified phases are below the event-count signal thresholds' : 'Unclassified phases use event-count signals';
+    } else reason += '; unclassified phases also use event-count signals';
+  }
+  const eventIds = [...byEvent.keys()].sort();
+  const phases = items.map(({ eventId, eventName, id, name, workStage, demand, startDate, endDate }) => ({ eventId, eventName, id, name, workStage, demand, startDate, endDate }))
+    .sort((a, b) => a.eventId.localeCompare(b.eventId) || a.id.localeCompare(b.id));
+  return { date: eventIds.length ? date : null, severity, reason, eventIds, phases, unclassified };
+}
+
+function preferPressure(candidate, current) {
+  return !current || SEVERITY_RANK[candidate.severity] > SEVERITY_RANK[current.severity]
+    || (candidate.severity === 'clear' && current.severity === 'clear' && candidate.eventIds.length > current.eventIds.length);
+}
+
+/** Raw count/eventIds/names describe the first daily event-count peak. Pressure
+ * has its own strongest-day evidence; an event contributes only its highest
+ * classified demand that day, with legacy count signals for unclassified work.
+ * Rest conflicts continue to cover work across all priority and demand levels.
  */
 export function weeklyCongestion(events, year, { lightThreshold = 2, strongThreshold = 3 } = {}) {
   if (!integer(year, 1900, 2200)) throw new RangeError('Year must be between 1900 and 2200.');
@@ -177,13 +224,20 @@ export function weeklyCongestion(events, year, { lightThreshold = 2, strongThres
     let count = 0;
     let peakIds = new Set();
     let peakDate = null;
+    let pressure = dailyPressure([], null, lightThreshold, strongThreshold);
+    const pressureByEvent = Object.create(null);
     const conflicts = new Map();
     for (let time = requireDate(startDate); time <= requireDate(endDate); time += DAY) {
       const date = new Date(time).toISOString().slice(0, 10);
       const overlapping = work.filter(item => item.startDate <= date && item.endDate >= date);
-      const ids = new Set(overlapping.filter(item => item.level <= 2).map(item => item.eventId));
+      const sharedWork = overlapping.filter(item => item.level <= 2);
+      const ids = new Set(sharedWork.map(item => item.eventId));
       const allLevelIds = new Set(overlapping.map(item => item.eventId));
       if (ids.size > count) { count = ids.size; peakIds = new Set(ids); peakDate = date; }
+      const daily = dailyPressure(sharedWork, date, lightThreshold, strongThreshold);
+      // First strongest day wins. For a clear week, retain its busiest clear day.
+      if (preferPressure(daily, pressure)) pressure = daily;
+      for (const eventId of daily.eventIds) if (preferPressure(daily, pressureByEvent[eventId])) pressureByEvent[eventId] = daily;
       for (const item of rest.filter(item => item.startDate <= date && item.endDate >= date)) {
         const others = [...allLevelIds].filter(id => id !== item.eventId);
         if (!others.length) continue;
@@ -192,7 +246,7 @@ export function weeklyCongestion(events, year, { lightThreshold = 2, strongThres
       }
     }
     const eventIds = [...peakIds].sort();
-    weeks.push({ startDate, endDate, count, peakDate, eventIds, names: eventIds.map(id => nameById.get(id)), severity: count >= strongThreshold ? 'strong' : count >= lightThreshold ? 'light' : 'clear', restConflicts: [...conflicts].map(([restEventId, ids]) => { const eventIds = [...ids].sort(); return { restEventId, restName: nameById.get(restEventId), eventIds, names: eventIds.map(id => nameById.get(id)) }; }) });
+    weeks.push({ startDate, endDate, count, peakDate, eventIds, names: eventIds.map(id => nameById.get(id)), severity: pressure.severity, pressure, pressureByEvent, restConflicts: [...conflicts].map(([restEventId, ids]) => { const eventIds = [...ids].sort(); return { restEventId, restName: nameById.get(restEventId), eventIds, names: eventIds.map(id => nameById.get(id)) }; }) });
     if (endDate === yearEnd) break;
     startDate = addDays(endDate, 1);
   }

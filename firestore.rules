@@ -1930,14 +1930,21 @@ service cloud.firestore {
     function annualDate(value) {
       return value is timestamp && value.date() == value && value.year() >= 1900 && value.year() <= 2200;
     }
-    // Phase map key is unique ID. Tuple = [name, kind, packedRange].
+    // Phase map key is unique ID. Legacy tuple = [name, kind, packedRange].
+    // Optional work-only profile appends [stageOrEmpty, demandOrEmpty].
     // packedRange = ((offset + 730) * 366 + duration - 1) * 6 + order.
     // Every integer in this range decodes to offset -730..730, duration 1..366,
     // and order 0..5. This keeps complete validation below 1000 expressions.
     function annualPhase(value, id) {
-      return value is list && value.size() == 3 && annualId(id) &&
-        id != 'recovery' && !id.matches('^meeting-.*') && annualName(value[0]) &&
-        value[1] in ['preparation', 'active', 'milestone', 'rest'] && annualInt(value[2], 0, 3208355);
+      let range = value[2];
+      let count = value.size();
+      // Map keys are strings; matches rejects non-string names/profile fields.
+      return value is list && id.matches('^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$') &&
+        !id.matches('^(recovery|meeting-.*)$') && value[0].matches('(?s)^.{1,140}$') &&
+        range is int && range >= 0 && range <= 3208355 &&
+        ((count == 3 && value[1] in ['preparation', 'active', 'milestone', 'rest']) ||
+          (count == 5 && value[1] in ['preparation', 'active'] &&
+            value[3].matches('^(ideation|activation|implementation)?$') && value[4].matches('^(light|moderate|high)?$')));
     }
     function annualPhases(values) {
       let keys = values.keys();

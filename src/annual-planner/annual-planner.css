@@ -2123,3 +2123,59 @@ button.ap-canvas-rest-range {
   top: 23px;
   height: 5px;
 }
+/* Work stage and demand describe phases independently of the event's priority hue. */
+.ap-profile-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; grid-column: 1 / -1; width: 100%; }
+.ap-profile-fields .ap-field { margin-bottom: 0; }
+.ap-profile-fields select { font-size: 11px; padding: 8px 10px; }
+.ap-schedule-item > .ap-profile-fields { border-top: 1px solid var(--annual-line); padding-top: 11px; }
+.ap-demand-guide { padding: 0 20px 16px; color: var(--annual-muted); font-size: 10px; }
+.ap-demand-key { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ap-demand-key > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ap-demand-key > span:first-child { color: #d4d4d8; font-weight: 700; }
+.ap-demand-key b { color: #fafafa; font-size: 9px; letter-spacing: 1px; }
+.ap-demand-guide details { margin-top: 10px; }
+.ap-demand-guide summary, .ap-raw-capacity summary { cursor: pointer; color: #d4d4d8; padding: 4px 0; }
+.ap-demand-guide p { max-width: 850px; margin: 10px 0 0; font-size: 11px; line-height: 1.65; }
+.ap-modal-body .ap-demand-guide { padding: 0; margin: 14px 0 22px; }
+.ap-presenter .ap-demand-guide { padding-left: 0; padding-right: 0; font-size: 11px; }
+.ap-demand-mark { display: inline-block; margin-right: 5px; font-size: 8px; line-height: 1; font-weight: 800; letter-spacing: 1px; vertical-align: baseline; }
+.ap-demand-mark.demand-unclassified { color: #e4e4e7; font-size: 10px; }
+button.ap-canvas-phase.demand-light, button.ap-month-segment.demand-light { background: color-mix(in srgb,var(--level) 10%,var(--annual-shell)); color: #fafafa; }
+button.ap-canvas-phase.demand-moderate, button.ap-month-segment.demand-moderate { background: color-mix(in srgb,var(--level) 27%,var(--annual-shell)); color: #fafafa; }
+button.ap-canvas-phase.demand-high, button.ap-month-segment.demand-high { background: color-mix(in srgb,var(--level) 45%,var(--annual-shell)); color: #fafafa; box-shadow: inset 0 -2px var(--level); }
+button.ap-canvas-phase.demand-unclassified, button.ap-month-segment.demand-unclassified { background: repeating-linear-gradient(135deg,color-mix(in srgb,var(--level) 16%,var(--annual-shell)),color-mix(in srgb,var(--level) 16%,var(--annual-shell)) 4px,var(--annual-shell) 4px,var(--annual-shell) 7px); color: #fafafa; border-style: dashed; }
+button.ap-canvas-phase.active[class*="demand-"], button.ap-month-segment.active[class*="demand-"] { border-top: 2px solid var(--level); }
+button.ap-canvas-phase.manual { box-shadow: inset 0 -2px #fff; }
+.ap-upgrade-block > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid rgba(239,62,45,.22); }
+.ap-upgrade-block button { margin-left: 0; }
+.ap-upgrade-block p { font-size: 11px; margin: 10px 0; }
+.ap-profile-change-list { margin: 14px 0; padding: 12px; border: 1px solid rgba(75,195,167,.2); border-radius: 6px; }
+.ap-profile-change-list > div { margin-top: 8px; font-size: 10px; }
+.ap-pressure-phases { display: grid; gap: 10px; margin: 18px 0; }
+.ap-pressure-phase { display: grid; gap: 6px; border: 1px solid var(--annual-line-strong); border-left: 3px solid #71717a; border-radius: 6px; padding: 12px; background: var(--annual-shell); font-size: 11px; }
+.ap-pressure-phase > span { color: #d4d4d8; }
+.ap-pressure-phase > small { color: var(--annual-muted); }
+.ap-pressure-phase.demand-high { border-left-width: 6px; }
+.ap-pressure-phase.demand-moderate { border-left-width: 4px; }
+.ap-pressure-phase.demand-unclassified { border-left-style: dashed; }
+.ap-raw-capacity { border-top: 1px solid var(--annual-line); padding-top: 12px; color: var(--annual-muted); font-size: 11px; margin: 22px 0; }
+.ap-raw-capacity p { margin-top: 10px; }
+.ap-warning-list small { overflow-wrap: anywhere; }
+.ap-warning-list small.ap-raw-count { font-size: 9px; color: var(--annual-muted); }
+.ap-playbook-profile { display: block; margin-top: 4px; font-size: 8px; color: var(--annual-muted); line-height: 1.5; }
+@media(max-width:800px) { .ap-demand-guide { padding-left: 13px; padding-right: 13px; } .ap-demand-key { gap: 10px; font-size: 9px; } .ap-profile-fields { gap: 10px; } }
+.ap-stage-key { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 9px; }
+.ap-stage-key > span { display: inline-flex; align-items: center; gap: 5px; }
+.ap-stage-key > span:first-child { color: #d4d4d8; font-weight: 700; }
+.ap-stage-key b, .ap-stage-mark { display: inline-block; border: 1px solid rgba(255,255,255,.35); border-radius: 2px; padding: 1px 3px; color: #fafafa; font-size: 8px; font-weight: 700; line-height: 1.1; }
+.ap-stage-mark { margin-right: 4px; vertical-align: baseline; }
+.ap-stage-mark.unclassified { border-style: dashed; }
+.ap-presenter .ap-stage-mark { font-size: 9px; }
+@media(max-width:800px) { .ap-stage-key { gap: 10px; font-size: 9px; } }
+/* Phase identity stays on one readable line at every timeline scale. */
+button.ap-canvas-phase, button.ap-month-segment { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+button.ap-canvas-phase > .ap-stage-mark, button.ap-canvas-phase > .ap-demand-mark,
+button.ap-month-segment > .ap-stage-mark, button.ap-month-segment > .ap-demand-mark { flex: 0 0 auto; margin-right: 0; }
+button.ap-canvas-phase > .ap-phase-name, button.ap-month-segment > .ap-phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.ap-canvas-phase.meeting, button.ap-canvas-phase.milestone { justify-content: center; gap: 0; }
+button.ap-canvas-phase.meeting > .ap-phase-name, button.ap-canvas-phase.milestone > .ap-phase-name { flex: 0 0 auto; overflow: visible; }

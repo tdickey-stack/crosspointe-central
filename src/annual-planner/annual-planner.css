@@ -2167,3 +2167,32 @@ button.ap-month-segment > .ap-stage-mark, button.ap-month-segment > .ap-demand-m
 button.ap-canvas-phase > .ap-phase-name, button.ap-month-segment > .ap-phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.ap-canvas-phase.meeting, button.ap-canvas-phase.milestone { justify-content: center; gap: 0; }
 button.ap-canvas-phase.meeting > .ap-phase-name, button.ap-canvas-phase.milestone > .ap-phase-name { flex: 0 0 auto; overflow: visible; }
+.ap-heading-actions { flex-wrap: wrap; max-width: 100%; }
+.ap-report-intro { margin-bottom: 20px; }
+.ap-report-format { display: inline-block; padding: 5px 8px; margin-bottom: 12px; border: 1px solid var(--annual-line-strong); border-radius: 4px; color: #d4d4d8; background: var(--annual-shell); font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+.ap-report-intro h3 { margin: 0 0 10px; font-size: 19px; }
+.ap-report-intro p { font-size: 12px; color: #d4d4d8; margin-bottom: 12px; }
+.ap-report-intro .ap-report-scope { color: var(--annual-muted); font-size: 11px; margin-bottom: 0; }
+.ap-report-source { margin: 16px 0; border-radius: 6px; line-height: 1.6; }
+.ap-report-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 22px 0; }
+.ap-report-stats > div { display: flex; flex-direction: column; gap: 7px; padding: 16px; background: var(--annual-shell); border: 1px solid var(--annual-line-strong); border-radius: 8px; }
+.ap-report-stats strong { font-size: 24px; font-weight: 600; color: #fafafa; }
+.ap-report-stats span { color: var(--annual-muted); font-size: 10px; line-height: 1.5; }
+.ap-report-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 24px 0 12px; }
+.ap-report-list-heading h3 { margin: 0; }
+.ap-report-list-heading > span { font-size: 10px; color: var(--annual-muted); }
+.ap-report-event-list { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.ap-report-event-list > li { padding: 14px 16px; border: 1px solid var(--annual-line); border-left: 3px solid var(--level); border-radius: 7px; background: var(--annual-shell); }
+.ap-report-event-name { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.ap-report-event-name strong { font-size: 12px; overflow-wrap: anywhere; }
+.ap-report-status { margin-left: auto; padding: 3px 6px; border-radius: 4px; font-size: 9px; text-transform: capitalize; color: var(--annual-muted); background: var(--annual-raised); }
+.ap-report-status.confirmed { color: #7ce0c8; background: rgba(75,195,167,.1); }
+.ap-report-dates { display: flex; gap: 10px 18px; flex-wrap: wrap; margin-top: 10px; color: var(--annual-muted); font-size: 10px; line-height: 1.6; }
+.ap-report-dates b { color: #d4d4d8; font-weight: 600; margin-right: 4px; }
+.ap-report-empty { padding: 22px 18px; border: 1px dashed var(--annual-line-strong); border-radius: 8px; color: var(--annual-muted); }
+.ap-report-empty h3 { margin: 0 0 8px; color: #d4d4d8; }
+.ap-report-empty p { margin: 0; font-size: 11px; }
+.ap-modal-body .ap-report-timestamp { font-size: 10px; color: var(--annual-muted); margin: 18px 0 0; }
+.ap-report-success { margin-top: 18px; padding: 13px 15px; border: 1px solid rgba(75,195,167,.3); border-radius: 8px; color: #7ce0c8; background: rgba(75,195,167,.1); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+@media(max-width:800px) { .ap-report-stats { gap: 7px; } .ap-report-stats > div { padding: 12px 10px; } .ap-report-stats strong { font-size: 21px; } .ap-report-stats span { font-size: 9px; } .ap-report-list-heading { align-items: flex-start; flex-direction: column; gap: 6px; } .ap-report-dates { flex-direction: column; gap: 4px; } .ap-report-event-name { gap: 7px; } .ap-report-status { margin-left: 0; } }
+.ap-modal > footer .ap-report-success, .ap-modal > footer .ap-report-download-error { flex: 0 0 100%; margin: 0; }

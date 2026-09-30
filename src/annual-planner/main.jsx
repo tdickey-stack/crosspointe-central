@@ -4,6 +4,7 @@ import { addDays, daysBetween, generateSchedule, summarizeEvent, weeklyCongestio
 import { STARTER_TEMPLATES, createDemoEvents } from "./seed-data.js";
 import { createAnnualStore } from "./persistence.js";
 import { buildTimelineLayout } from "./timeline-layout.js";
+import { buildAnnualReport, downloadAnnualReportPdf } from "./report.js";
 import "./annual-planner.css";
 const params = new URLSearchParams(location.search);
 const PRESENTER = params.get("presenter") === "1";
@@ -451,6 +452,50 @@ function WeekDetails({week,events,onClose,onEvent}) {
     </div><footer><button onClick={onClose}>Close</button></footer>
   </Modal>;
 }
+function ReportPreview({snapshot, connectionInterrupted, onClose}) {
+  const [state] = useState(()=>{
+    try {
+      return {report:buildAnnualReport(snapshot.events,snapshot.year,snapshot.settings,snapshot.generatedAt),error:''};
+    } catch(error) {
+      return {report:null,error:error.message||'The report could not be prepared.'};
+    }
+  });
+  const [busy,setBusy] = useState(false);
+  const [downloadError,setDownloadError] = useState('');
+  const [notice,setNotice] = useState('');
+  const report = state.report;
+  const stale = snapshot.connectionInterrupted || connectionInterrupted;
+  const sourceNotice = [snapshot.preview?'LOCAL PREVIEW — demonstration data only':'',stale?'CONNECTION INTERRUPTED — saved snapshot may be out of date':''].filter(Boolean).join(' · ');
+  const close = ()=>{if(!busy)onClose();};
+  const download = async()=>{
+    if(!report)return;
+    setBusy(true);setDownloadError('');setNotice('');
+    try {
+      const result = await downloadAnnualReportPdf({...report,sourceNotice});
+      setNotice(`PDF download started: ${result.filename} · ${result.pageCount} ${result.pageCount===1?'page':'pages'}.`);
+    } catch(error) {
+      setDownloadError(error.message||'The PDF download could not be started. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <Modal title={`${snapshot.year} annual planning report`} onClose={close} wide>
+    <div className="ap-modal-body" tabIndex={0} role="region" aria-label="Annual planning report preview">
+      <div className="ap-report-intro"><span className="ap-report-format">PRINTABLE PDF</span><h3>A saved snapshot of the whole year</h3><p>All priority levels for {snapshot.year}, including events whose preparation or recovery reaches into the year. The report includes event dates, preparation phases, work stages and demand, individual staff meetings, protected rest and recovery, and overlap explanations.</p><p className="ap-report-scope">Current calendar filters and unsaved proposals are excluded. This preview keeps the saved snapshot from when you opened it.</p></div>
+      {snapshot.preview&&<div className="ap-preview-banner ap-report-source">LOCAL PREVIEW · This report contains demonstration data. Every PDF page will be labeled.</div>}
+      {stale&&<div className="ap-alert" role="alert">Connection interrupted. This report uses the last loaded saved calendar and may be out of date. The PDF will carry this notice. Reconnect and reopen the report for a refreshed snapshot.</div>}
+      {state.error&&<div className="ap-alert" role="alert">{state.error} Close this preview and try again after the calendar has loaded.</div>}
+      {report&&<>
+        <div className="ap-report-stats"><div><strong>{report.summaries.eventCount}</strong><span>Calendar items</span></div><div><strong>{report.summaries.capacityWeeks.length}</strong><span>Weeks with overlap signals</span></div><div><strong>{report.summaries.restPeriodCount}</strong><span>Protected rest periods</span></div></div>
+        {report.summaries.unsupportedCharacters?.length>0&&<div className="ap-alert" role="alert">Some characters in this report are unsupported by the PDF font and will appear as character codes. <span>Characters: {report.summaries.unsupportedCharacters.join(' ')}</span></div>}
+        <div className="ap-report-list-heading"><h3>Included in the PDF</h3><span>{report.summaries.confirmedCount} confirmed · {report.summaries.tentativeCount} tentative</span></div>
+        {report.events.length?<ol className="ap-report-event-list">{report.events.map(event=><li key={event.id} style={{'--level':COLORS[event.level]}}><div className="ap-report-event-name"><span className="ap-level">L{event.level}</span><strong>{event.name}</strong><span className={`ap-report-status ${event.status}`}>{event.status}</span></div><div className="ap-report-dates"><span><b>Anchor</b> {fullDate(event.anchorDate)}</span><span><b>Plan</b> {fullDate(event.startDate)}–{fullDate(event.endDate)}</span><span>{event.schedule.length} schedule items{event.crossYear?' · Cross-year plan':''}</span></div></li>)}</ol>:<div className="ap-report-empty"><h3>No saved items for {snapshot.year}.</h3><p>You can still download an empty report with the selected year and its planning summary.</p></div>}
+        <p className="ap-report-timestamp">Snapshot prepared {new Date(report.generatedAt).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short',timeZone:'America/Chicago'})} Central. Full schedules remain in the PDF when they extend beyond {snapshot.year}.</p>
+      </>}
+    </div>
+    <footer>{downloadError&&<div className="ap-alert ap-report-download-error" role="alert">{downloadError} Your calendar has not changed.</div>}{notice&&<div className="ap-report-success" role="status">{notice}</div>}<button disabled={busy} onClick={close}>Close</button><button className="primary" disabled={busy||!report} onClick={download}>{busy?'Preparing PDF…':'Download PDF'}</button></footer>
+  </Modal>;
+}
 function makeEvent(template, year, isRest = false) {
   const snapshot = isRest ? { id: "protected-rest", name: "Protected rest", description: "Protected shared Sabbath or recovery.", level: 1, version: 1, meetingCount: 0, recoveryDays: 0, phases: [{ id: "protected-rest", name: "Protected rest", kind: "rest", offsetDays: 0, durationDays: 7 }] } : clone(template);
   return { id: createId("event"), name: isRest ? "Protected rest" : "", level: snapshot.level, anchorDate: `${year}-01-01`, templateId: snapshot.id, templateSnapshot: snapshot, overrides: {}, notes: "", status: "tentative", excludedMeetingDates: [], revision: 0 };
@@ -469,6 +514,7 @@ function Planner({ auth }) {
   const [event, setEvent] = useState(null);
   const [playbook, setPlaybook] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reportSnapshot,setReportSnapshot] = useState(null);
   const [draftDisplay, setDraftDisplay] = useState(null);
   const [displayOpen, setDisplayOpen] = useState(false);
   const [presenterConnected, setPresenterConnected] = useState(false);
@@ -616,7 +662,7 @@ function Planner({ auth }) {
     } catch {
     }
   }}>{committed.length ? "Preview calendar has events" : "Load sample year"}</button></div>}{loadError && <div className="ap-alert" role="alert">{loadError} Changes cannot be verified while disconnected. <button onClick={() => location.reload()}>Reconnect</button></div>}{actionError && <div className="ap-alert" role="alert">{actionError}<button onClick={() => setActionError("")} aria-label="Dismiss error">✕</button></div>}
- <section className="ap-page-heading"><div><p className="eyebrow">ONE YEAR. ONE SHARED PICTURE.</p><h1>{section === "calendar" ? "Plan the year together." : "Build a repeatable rhythm."}</h1><p>{section === "calendar" ? "See the big commitments, make room to prepare, and protect time to recover." : "Editable starting points for the work before, during, and after each event."}</p></div><div className="ap-heading-actions">{section === "calendar" ? <><button onClick={openDisplay}>{displayOpen ? "Open display \u2197" : "Present \u2197"}</button>{editable && <button className="primary" onClick={() => setEvent(makeEvent(templates[0], view.year))}>＋ Plan an event</button>}</> : editable && <button className="primary" onClick={() => setPlaybook({ ...clone(templates[0]), id: createId("playbook"), revision: 0, version: 1, name: "New playbook" })}>＋ New playbook</button>}</div></section>
+ <section className="ap-page-heading"><div><p className="eyebrow">ONE YEAR. ONE SHARED PICTURE.</p><h1>{section === "calendar" ? "Plan the year together." : "Build a repeatable rhythm."}</h1><p>{section === "calendar" ? "See the big commitments, make room to prepare, and protect time to recover." : "Editable starting points for the work before, during, and after each event."}</p></div><div className="ap-heading-actions">{section === "calendar" ? <><button onClick={()=>setReportSnapshot({events:clone(committed),year:view.year,settings:clone(settings),generatedAt:new Date(),preview:!!auth.preview,connectionInterrupted:!!loadError})}>Export report</button><button onClick={openDisplay}>{displayOpen ? "Open display \u2197" : "Present \u2197"}</button>{editable && <button className="primary" onClick={() => setEvent(makeEvent(templates[0], view.year))}>＋ Plan an event</button>}</> : editable && <button className="primary" onClick={() => setPlaybook({ ...clone(templates[0]), id: createId("playbook"), revision: 0, version: 1, name: "New playbook" })}>＋ New playbook</button>}</div></section>
  {section === "calendar" ? <><div className="ap-workflow"><button onClick={() => setView((v) => ({ ...v, level: "1" }))}><span>01</span><div><b>Place the anchors</b><small>Level 1 · Start here</small></div><em>{anchors}</em></button><button onClick={() => setView((v) => ({ ...v, level: "2" }))}><span>02</span><div><b>Add shared seasons</b><small>Level 2 · Plan the preparation</small></div><em>{visibleYearEvents.filter((e) => e.level === 2 && !restEvent(e)).length}</em></button><button onClick={() => setView((v) => ({ ...v, level: "small" }))}><span>03</span><div><b>Make room for the rest</b><small>Levels 3–5 · Review the fit</small></div><em>{visibleYearEvents.filter((e) => e.level >= 3 && !restEvent(e)).length}</em></button></div><section className="ap-calendar-card"><div className="ap-calendar-toolbar">{controls}<div className="ap-calendar-actions">{editable && <><button onClick={() => setEvent(makeEvent(templates[0], view.year, true))}>＋ Protect rest</button><button aria-label="Capacity signal settings" onClick={() => setSettingsOpen(true)}>Signals ⚙</button></>}</div></div>{draftDisplay && <div className="ap-draft-banner"><span>PROPOSED DISPLAY · {draftDisplay.name} · Not saved</span><button onClick={() => setDraftDisplay(null)}>End preview</button></div>}{timeline}</section><section className="ap-review-panels"><div><div className="ap-panel-heading"><h3>Shared capacity</h3><span>{congestion.length} weeks</span></div><p>Signals follow the demand of overlapping Level 1–2 phases. Each explanation names the work and its actual pressure date.</p>{congestion.length ? <div className="ap-warning-list">{(showAllCapacity ? congestion : congestion.slice(0, 6)).map((w) => <div key={w.startDate}><span className={`ap-warning-dot ${w.severity}`} /><button className="ap-week-detail-link" onClick={() => setInspectedWeek(w)}>{fmt(w.startDate)} ↗</button><span>{w.pressure?.reason}</span><small>{pressureDescription(w)}</small><small className="ap-raw-count">Weekly event-count peak: {w.count} events · {fullDate(w.peakDate || w.startDate)}</small></div>)}{congestion.length > 6 && <button className="text-button ap-show-all" onClick={() => setShowAllCapacity((value) => !value)}>{showAllCapacity ? "Show fewer weeks" : `Show all ${congestion.length} weeks`}</button>}</div> : <p className="ap-quiet">No shared-capacity signals for this year.</p>}</div><div><div className="ap-panel-heading"><h3>Protect the breathing room</h3><span>{restWarnings.length} weeks</span></div><p>Sabbath and recovery remain visible, with their own conflict signals.</p>{restWarnings.length ? <div className="ap-warning-list">{(showAllRest ? restWarnings : restWarnings.slice(0, 5)).map((w) => <div key={w.startDate}><span className="ap-warning-dot rest" /><button className="ap-week-detail-link" onClick={() => setInspectedWeek(w)}>{fmt(w.startDate)} ↗</button><small>{w.restConflicts.map((c) => `${c.restName}: ${c.names.join(", ")}`).join(" \xB7 ")}</small></div>)}{restWarnings.length > 5 && <button className="text-button ap-show-all" onClick={() => setShowAllRest((value) => !value)}>{showAllRest ? "Show fewer weeks" : `Show all ${restWarnings.length} weeks`}</button>}</div> : <p className="ap-quiet">No protected-rest conflicts for this year.</p>}</div></section></> : <section className="ap-playbooks"><div className="ap-note">Proposed starting points, ready to adapt. Playbooks describe preparation and staff rhythm; they do not place events on the calendar until you choose an anchor date.</div><div className="ap-playbook-grid">{templates.map((t) => <article key={t.id} style={{ "--level": COLORS[t.level] }}><div className="ap-panel-heading"><span className="ap-level">LEVEL {t.level}</span><small>Version {t.version}</small></div><h2>{t.name}</h2><p>{t.description}</p><div className="ap-playbook-phases">{t.phases.map((p) => <div key={p.id}><i className={p.kind} /><span>{p.name}{isWorkPhase(p) && <span className="ap-playbook-profile">{phaseProfileText(p)}</span>}</span><small>{p.offsetDays > 0 ? "+" : ""}{timeUnits(p.offsetDays)} · {timeUnits(p.durationDays)}</small></div>)}</div><p className="ap-playbook-meta">{t.meetingCount} Tuesday meetings · {t.recoveryDays} recovery days</p>{editable && <footer><button onClick={() => setPlaybook(t)}>Edit playbook</button><button onClick={() => setEvent(makeEvent(t, view.year))}>Use playbook →</button></footer>}</article>)}</div></section>}
  <footer className="ap-page-footer"><span>CrossPointe Central · Annual Planner</span><span>Shared priorities. Thoughtful preparation. Protected rest.</span></footer></main>{inspectedWeek && <WeekDetails week={weeks.find((w) => w.startDate === inspectedWeek.startDate) || inspectedWeek} events={events} onClose={() => setInspectedWeek(null)} onEvent={(item) => {
     setInspectedWeek(null);
@@ -624,6 +670,6 @@ function Planner({ auth }) {
   }} />}{event && <EventEditor initial={event} templates={templates} events={committed} settings={settings} editable={editable && !loadError} year={view.year} onClose={() => {
     setEvent(null);
     setDraftDisplay(null);
-  }} onDisplay={displayDraft} onSave={(e) => save(() => store.saveEvent(e))} onDelete={(e) => save(() => store.deleteEvent(e))} />} {playbook && <PlaybookEditor initial={playbook} onSave={(t) => save(() => store.saveTemplate(t))} onClose={() => setPlaybook(null)} />} {settingsOpen && <SettingsEditor settings={settings} onSave={(s) => save(() => store.saveSettings(s))} onClose={() => setSettingsOpen(false)} />}</div>;
+  }} onDisplay={displayDraft} onSave={(e) => save(() => store.saveEvent(e))} onDelete={(e) => save(() => store.deleteEvent(e))} />} {playbook && <PlaybookEditor initial={playbook} onSave={(t) => save(() => store.saveTemplate(t))} onClose={() => setPlaybook(null)} />} {settingsOpen && <SettingsEditor settings={settings} onSave={(s) => save(() => store.saveSettings(s))} onClose={() => setSettingsOpen(false)} />}{reportSnapshot && <ReportPreview snapshot={reportSnapshot} connectionInterrupted={!!loadError} onClose={()=>setReportSnapshot(null)}/>}</div>;
 }
 createRoot(document.getElementById("annual-root")).render(<AuthGate />);

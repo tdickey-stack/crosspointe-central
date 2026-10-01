@@ -247,7 +247,7 @@ test("Layout 3 arrangement does not alter legacy layout fields", () => {
   assert.deepEqual(payload.layout3.items, [
     {key: "campaign:campaign-1", side: "back", size: 2},
     {key: "serve:serve-1", side: "off", size: 2},
-    {key: "event:event-1", side: "back", size: 1},
+    {key: "event:event-1", side: "back", size: 2},
     {key: "custom:custom-1", side: "back", size: 1},
   ]);
 });
@@ -277,8 +277,8 @@ test("Layout 3 safely normalizes invalid and duplicate items", () => {
     items: [
       {key: "campaign:first", side: "front", size: 2},
       {key: "serve:second", side: "off", size: 1},
-      {key: "event:event-1", side: "back", size: 1},
-      {key: "event:event-2", side: "off", size: 1},
+      {key: "event:event-1", side: "back", size: 2},
+      {key: "event:event-2", side: "off", size: 2},
     ],
   });
   assert.equal(normalizePrintModePayload({layout3: []}).layout3, null);

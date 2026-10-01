@@ -9249,6 +9249,91 @@ button:disabled {
   line-height: 1.08;
 }
 
+/* Event artwork and registration share the rail beside readable print copy. */
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-card {
+  display: flex;
+  gap: 0.08in;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-content {
+  display: grid;
+  grid-template-columns: 1.05in minmax(0, 1fr);
+  align-content: start;
+  column-gap: 0.12in;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-hero:has(> .b3-event-media) {
+  grid-template-columns: 1.7in minmax(0, 1fr);
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-media {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.07in;
+  min-width: 0;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-thumbnail {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 0.08in;
+  background: var(--b3-event-color);
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-thumbnail::before {
+  content: "";
+  position: absolute;
+  width: 85%;
+  aspect-ratio: 1;
+  top: -40%;
+  right: -25%;
+  border: 1px solid #ffffff80;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0.12in #ffffff20, 0 0 0 0.24in #ffffff20;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-thumbnail img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-thumbnail.is-loaded {
+  background: #fff;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-thumbnail.is-loaded::before {display:none}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-thumbnail.is-loaded img {opacity:1}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.035in;
+  width: 100%;
+  color: #000;
+  text-align: center;
+  text-decoration: none;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-qr svg {
+  display: block;
+  flex: 0 0 auto;
+  width: 1in;
+  height: 1in;
+  max-width: none;
+  background: #fff;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-qr span {
+  font-size: 12pt;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-copy {min-width:0}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-copy>.b3-copy {margin-top:0}
+.central-bulletin-panel.is-bulletin-layout-readable.is-black-and-white .b3-event-thumbnail {background:#fff; border:1px solid #d6d6d8}
+.central-bulletin-panel.is-bulletin-layout-readable.is-black-and-white .b3-event-thumbnail img {filter:grayscale(1)}
+.central-bulletin-panel.is-bulletin-layout-readable.is-black-and-white .b3-event-thumbnail::before {border-color:#777;box-shadow:0 0 0 0.12in #eee,0 0 0 0.24in #ddd}
+
 /* Preserve the original centered four-stat generosity card at readable type sizes. */
 .central-bulletin-panel.is-bulletin-layout-readable .b3-giving {
   display: flex;

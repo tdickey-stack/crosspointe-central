@@ -342,11 +342,10 @@ function normalizePrintModeLayout3Item_(source) {
 
   let side = ["front", "back", "off"].includes(source.side) ?
     source.side : "off";
-  let size = Number(source.size) === 2 ? 2 : 1;
+  const size = Number(source.size) === 2 ? 2 : 1;
 
   if (keyMatch[1] === "event") {
     side = side === "front" ? "back" : side;
-    size = 1;
   }
 
   return {

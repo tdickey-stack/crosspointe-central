@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {createPrintModePlanningCenterService} from "./planning-center.js";
+import {buildCalendarSourceCacheId} from "../calendar-source-cache.js";
+
+const calendarCachePath = "centralCache/planningCenter/calendar/" +
+  buildCalendarSourceCacheId(35);
 
 test("Print Mode reads its existing shared Planning Center cache", async () => {
   const paths = [];
@@ -36,7 +40,7 @@ test("Print Mode falls back to the shared calendar cache", async () => {
     upcoming: [],
   };
   const firestore = createFirestore_({
-    "centralCache/planningCenter/calendar/v3-35": {
+    [calendarCachePath]: {
       value: calendarValue,
       fetchedAtMs: 789,
     },
@@ -53,18 +57,18 @@ test("Print Mode falls back to the shared calendar cache", async () => {
   assert.deepEqual(result.data.featuredEvent, {id: "featured-1"});
   assert.deepEqual(paths, [
     "centralCache/planningCenter/bulletin/v1-room-hash",
-    "centralCache/planningCenter/calendar/v3-35",
+    calendarCachePath,
   ]);
 });
 
-test("Print Mode applies presentation after reading the source cache", async () => {
+test("Print Mode applies presentation to the source cache", async () => {
   const paths = [];
   const sourceValue = {
     today: [{id: "event-1", title: "Planning Center Title"}],
     upcoming: [],
   };
   const firestore = createFirestore_({
-    "centralCache/planningCenter/calendar/v3-35": {
+    [calendarCachePath]: {
       value: sourceValue,
       fetchedAtMs: 900,
     },
@@ -91,7 +95,7 @@ test("Print Mode applies presentation after reading the source cache", async () 
   }]);
   assert.deepEqual(paths, [
     "centralCache/planningCenter/bulletin/v1-room-hash",
-    "centralCache/planningCenter/calendar/v3-35",
+    calendarCachePath,
   ]);
 });
 

@@ -161,7 +161,11 @@
               initializeAnalytics_();
 
               if (isAdminRoute) {
-                return loadFirebaseScript_("/admin.js");
+                return loadFirebaseScript_("/print-mode-qr.js?v=1").catch(function() {
+                  console.warn("Print Mode QR generator could not load.");
+                }).then(function() {
+                  return loadFirebaseScript_("/admin.js");
+                });
               }
             })
             .catch(function(error) {

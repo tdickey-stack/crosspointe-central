@@ -137,6 +137,7 @@ function measureLayout3({
   regions = [],
   usage = {front: 0, back: 0},
   documentOverrides = {},
+  qrFailure = false,
 } = {}) {
   let removed = false;
   let appended = false;
@@ -144,6 +145,7 @@ function measureLayout3({
     style: {},
     innerHTML: "",
     setAttribute() {},
+    querySelector: () => qrFailure ? {} : null,
     querySelectorAll: () => regions,
     remove() {
       removed = true;
@@ -251,7 +253,7 @@ test("client and backend normalize Layout 3 keys and limits consistently", () =>
   assert.equal(client.items.length, 250);
   assert.deepEqual(client.items.slice(0, 3), [
     {key: "campaign:padded-id", side: "front", size: 2},
-    {key: "event:event-1", side: "back", size: 1},
+    {key: "event:event-1", side: "back", size: 2},
     {key: "serve:serve-1", side: "off", size: 1},
   ]);
   assert.equal(context.normalizeBulletinLayout3_([]), null);
@@ -506,7 +508,7 @@ test("front and back capacity failures roll placement moves back", () => {
   assert.match(context.adminState.bulletinError, /back is full/);
 });
 
-test("Large uses two slots, events use one, and back packing is exact", () => {
+test("Large events and custom blocks use two slots and back packing is exact", () => {
   const context = loadFunctions([
     "normalizeBulletinLayout3_",
     "packBulletinLayout3Back_",
@@ -518,7 +520,7 @@ test("Large uses two slots, events use one, and back packing is exact", () => {
 
   assert.deepEqual(normalized.items, [
     {key: "custom:large", side: "back", size: 2},
-    {key: "event:event-1", side: "back", size: 1},
+    {key: "event:event-1", side: "back", size: 2},
   ]);
   assert.equal(
       context.packBulletinLayout3Back_(
@@ -842,6 +844,12 @@ test("Layout 3 fit measurement catches back overflow without false positives", (
   assert.match(overflow.message, /Back: Event card/);
 });
 
+test("Layout 3 blocks printing when a registration QR cannot be generated", () => {
+  const failed = measureLayout3({qrFailure: true});
+  assert.equal(failed.fits, false);
+  assert.match(failed.message, /Registration QR code unavailable/);
+});
+
 test("Layout 3 ignores clipped trailing card and hero padding when content fits", () => {
   for (const [name, scrollHeight, clientHeight, contentBottom] of [
     ["hero", 245, 239, 333],
@@ -944,10 +952,11 @@ test("Readable events retain the familiar checked and disabled card UI", () => {
     "escapeAttr_",
     "renderBulletinChoice_",
     "renderBulletinEventEditor_",
+    "renderBulletinLayout3Segments_",
     "renderBulletinLayout3Events_",
   ], {
     adminState: {bulletinEventFilter: "all"},
-    getBulletinLayout3Entries_: () => [{key: "event:event-1"}],
+    getBulletinLayout3Entries_: () => [{key: "event:event-1", size: 2}],
     getBulletinEventDraftsInWindow_: () => [event],
     getFilteredBulletinEventDrafts_: (events) => events,
     getBulletinEventWeekCounts_: () => [0, 0, 0, 1],
@@ -962,7 +971,8 @@ test("Readable events retain the familiar checked and disabled card UI", () => {
   assert.match(html, /central-admin-bulletin-event-schedule/);
   assert.match(html, /central-admin-bulletin-event-copy/);
   assert.doesNotMatch(html, /<select/);
-  assert.doesNotMatch(html, /data-admin-action="set-bulletin-layout3"/);
+  assert.match(html, /data-admin-action="set-bulletin-layout3"[^>]*data-admin-layout3-value="2"[^>]*aria-pressed="true"[^>]*disabled/);
+  assert.doesNotMatch(html, /data-admin-layout3-field="side"/);
 });
 
 test("Layout 3 flexible rows use checkboxes and selected-only segments", () => {
@@ -1023,8 +1033,12 @@ test("Layout 3 cards render full escaped Markdown and event metadata", () => {
     "escapeHtml_",
     "escapeAttr_",
     "renderBulletinLayout3Meta_",
+    "getBulletinEventSourceUrl_",
+    "renderBulletinLayout3EventMedia_",
     "renderBulletinLayout3Card_",
   ], {
+    URL,
+    window: {},
     formatBulletinLongDate_: () => "Sunday <September 20>",
     getBulletinFallbackImageUrl_: () => "",
   });

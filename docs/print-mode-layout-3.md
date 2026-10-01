@@ -10,7 +10,7 @@ behavior.
 - Back: six slots in two columns of three. Events remain individual cards.
 - Campaigns, Serve Needs, and Custom Blocks can be placed on either side.
 - Standard uses one slot; Large uses two vertically stacked slots. Event cards
-  always use one back slot. At most two Large blocks fit on the back.
+  use one back slot by default; Large events use two. At most two Large cards fit on the back.
 - All generated print text is at least 12pt. Uploaded artwork retains its own
   embedded typography; inspect the actual-size paper proof.
 - Hero and custom-block graphics display in uncropped 16:9 frames.
@@ -26,11 +26,23 @@ behavior.
 Events use the existing tiled list, week filters, and one-click Include
 checkboxes. Campaigns, Serve Needs, and Custom Blocks use familiar checkbox
 lists. Selected flexible items reveal Front/Back and Standard/Large buttons;
-events always use one back slot. A rejected selection leaves the existing
+events can use Standard or Large on the back. A rejected selection leaves the existing
 arrangement intact and explains which side is full. Reordering is available
 under the collapsed Arrange front/back items section.
 Controls wrap below the item when the editor column is narrow, keeping image
 thumbnails and titles clear of the placement buttons.
+
+Planning Center events include their source thumbnail, with a stable brand-color
+fallback for missing or failed images. A parsed registration link produces an
+offline vector QR beneath the thumbnail, with its complete button caption below
+the code. This also applies to the front-page Featured Event. QR codes retain a
+four-module quiet zone and print at one inch square in color and black-and-white.
+Choose Large for a back-page registration card or longer copy that does not fit
+Standard; the preflight keeps printing blocked when any content is clipped.
+
+Image URLs and registration links refresh from Planning Center. They are not
+stored in the editorial draft; staff title, description, location, selections,
+and size choices remain saved independently.
 
 ## Compatibility and persistence
 

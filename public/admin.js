@@ -5983,6 +5983,7 @@
     syncAdminUserEditorModal_();
     maybeLoadCurrentPageData_();
     if (currentPage.id === "bulletin" && adminState.bulletinLoaded) {
+      syncBulletinEventImages_(appEl);
       syncBulletinFrontFit_();
       if (document.fonts) document.fonts.ready.then(syncBulletinFrontFit_);
       Array.prototype.forEach.call(
@@ -9629,6 +9630,8 @@
         "<p class=\"is-empty\">No description from Planning Center.</p>",
       readable ? "" : renderBulletinEventDescriptionGuidance_(item),
       "</div>",
+      readable && item.included ? renderBulletinLayout3Segments_("event:" + item.id, "size",
+          item.layout3Size || 1, [[1, "Standard"], [2, "Large · 2 slots"]], canSave) : "",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-event-edit\" data-admin-action=\"edit-bulletin-event\" data-admin-bulletin-event-id=\"",
       escapeAttr_(item.id), "\"", canSave ? "" : " disabled", ">Edit Print Copy</button>",
       "</article>",
@@ -9651,7 +9654,7 @@
       var side = ["front", "back"].indexOf(item.side) >= 0 ? item.side : "off";
       var isEvent = match[1] === "event";
       items.push({key: key, side: isEvent && side === "front" ? "back" : side,
-        size: !isEvent && Number(item.size) === 2 ? 2 : 1});
+        size: Number(item.size) === 2 ? 2 : 1});
     });
     return {items: items};
   }
@@ -9867,9 +9870,10 @@
   }
 
   function renderBulletinLayout3Events_(canSave) {
-    var selected = getBulletinLayout3Entries_("back").map(function(entry) { return entry.key; });
+    var selected = getBulletinLayout3Entries_("back");
     var events = getBulletinEventDraftsInWindow_().map(function(item) {
-      return Object.assign({}, item, {included: selected.indexOf("event:" + item.id) >= 0});
+      var placement = selected.find(function(entry) { return entry.key === "event:" + item.id; });
+      return Object.assign({}, item, {included: !!placement, layout3Size: placement ? placement.size : 1});
     });
     var visibleEvents = getFilteredBulletinEventDrafts_(events);
     var counts = getBulletinEventWeekCounts_(events);
@@ -9880,7 +9884,7 @@
         return '<button type="button" class="central-admin-bulletin-filter' + (adminState.bulletinEventFilter === filter ? ' is-active' : '') +
           '" data-admin-action="filter-bulletin-events" data-admin-bulletin-filter="' + filter + '" aria-pressed="' + (adminState.bulletinEventFilter === filter) + '">' +
           (index < 4 ? 'Week ' + (index + 1) : filter === "included" ? 'Included' : 'All 28 Days') + ' <span>' + count + '</span></button>';
-      }).join('') + '</div>' +
+      }).join('') + '</div><p>Standard uses 1 slot; Large uses 2. Choose Large when a thumbnail, registration QR, or longer print copy needs more room.</p>' +
       '<div class="central-admin-bulletin-events-grid">' + visibleEvents.map(function(item) {
         return renderBulletinEventEditor_(item, {readable: true, canSave: canSave});
       }).join('') + '</div>' + (!visibleEvents.length ? '<p>No events match this view.</p>' : '') + '</div>';
@@ -9924,11 +9928,66 @@
     return lines.length ? '<div class="b3-meta">' + lines.map(function(line) { return '<p>' + escapeHtml_(line) + '</p>'; }).join('') + '</div>' : '';
   }
 
+  function getBulletinEventSourceUrl_(value) {
+    try {
+      var url = new URL(String(value || "").trim());
+      return url.protocol === "https:" && !url.username && !url.password ? url.href : "";
+    } catch (error) { return ""; }
+  }
+
+  function getBulletinEventSourceMetadata_(item) {
+    var source = item || {};
+    return {
+      planning_center_event_id: String(source.planning_center_event_id || "").trim(),
+      image_url: getBulletinEventSourceUrl_(source.image_url),
+      registration_url: getBulletinEventSourceUrl_(source.registration_url),
+      registration_button_text: String(source.registration_button_text || "").trim(),
+    };
+  }
+
+  function renderBulletinLayout3EventMedia_(item, image) {
+    // Same stable CP-CM-1.3 palette used by Navlab; the QR always stays black/white.
+    var colors = ["#EF3E2D", "#33BECC", "#64242E", "#FAC8C3", "#4BC3A7", "#4BB8E9", "#5558A6"];
+    var key = String(item.planning_center_event_id || item.title || item.id || "CrossPointe");
+    var hash = 2166136261;
+    for (var character of key) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
+    var url = getBulletinEventSourceUrl_(item.registration_url);
+    var svg = url && window.PrintModeQr ? window.PrintModeQr.renderSvg(url) : "";
+    return '<div class="b3-event-media"><div class="b3-event-thumbnail" aria-hidden="true" style="--b3-event-color:' + colors[hash % colors.length] + '">' +
+      (image ? '<img src="' + escapeAttr_(image) + '" alt="" data-bulletin-event-image>' : '') + '</div>' +
+      (url ? svg ? '<a class="b3-event-qr" href="' + escapeAttr_(url) + '">' + svg +
+        '<span>' + escapeHtml_(item.registration_button_text || "Register") + '</span></a>' :
+        '<p class="b3-qr-error" data-b3-qr-error>Registration QR code could not be generated.</p>' : '') + '</div>';
+  }
+
+  function syncBulletinEventImages_(root) {
+    Array.prototype.forEach.call(root.querySelectorAll("[data-bulletin-event-image]"), function(image) {
+      function loaded() { image.parentElement.classList.add("is-loaded"); syncBulletinFrontFit_(); }
+      function failed() { image.remove(); syncBulletinFrontFit_(); }
+      if (image.complete) {
+        if (image.naturalWidth) image.parentElement.classList.add("is-loaded");
+        else image.remove();
+      } else {
+        image.addEventListener("load", loaded, {once: true});
+        image.addEventListener("error", failed, {once: true});
+      }
+    });
+  }
+
   function renderBulletinLayout3Card_(entry, position) {
     var item = entry.item;
     var image = entry.type === "custom" ? getBulletinFallbackImageUrl_(item.imageUrl) : "";
     var label = entry.type === "custom" ? item.eyebrow : entry.type === "campaign" ? "Campaign" : entry.type === "serve" ? "Serve" : "";
     var title = item.title || item.name || "Untitled";
+    if (entry.type === "event") {
+      return '<article class="b3-card b3-event-card' + (entry.size === 2 ? ' is-large' : '') +
+        '" data-b3-region="' + escapeAttr_(title) + '" data-bulletin-preview-key="' + escapeAttr_(entry.key) + '"' +
+        (position ? ' style="grid-column:' + position.column + ';grid-row:' + position.row + ' / span ' + entry.size + '"' : '') + '>' +
+        '<div class="b3-event-heading"><h2>' + escapeHtml_(title) + '</h2>' + renderBulletinLayout3Meta_(item) + '</div>' +
+        '<div class="b3-event-content">' + renderBulletinLayout3EventMedia_(item, getBulletinEventSourceUrl_(item.image_url)) +
+        '<div class="b3-event-copy">' +
+        (item.description && item.includeDescription !== false ? '<div class="b3-copy">' + renderAdminMarkdownLite_(item.description) + '</div>' : '') + '</div></div></article>';
+    }
     return '<article class="b3-card' + (entry.size === 2 ? ' is-large' : '') +
       (image ? ' is-image-' + (item.imageSide === "left" ? "left" : "right") : '') +
       '" data-b3-region="' + escapeAttr_(title) + '" data-bulletin-preview-key="' + escapeAttr_(entry.key) + '"' +
@@ -9956,9 +10015,11 @@
     }
     var hero = getBulletinFrontHero_();
     var heroImage = hero.source === "featured" ? getBulletinFeaturedPrintImageUrl_(hero) : getBulletinFallbackImageUrl_(hero.image_url);
+    var heroHasCta = hero.source === "featured" && !!getBulletinEventSourceUrl_(hero.registration_url);
     var giving = draft.giving || {};
     return header + '<section class="b3-hero" data-b3-region="Hero">' +
-      (heroImage ? '<img class="b3-hero-image" src="' + escapeAttr_(heroImage) + '" alt="">' : '') +
+      (heroHasCta ? renderBulletinLayout3EventMedia_(hero, getBulletinEventSourceUrl_(heroImage)) :
+        heroImage ? '<img class="b3-hero-image" src="' + escapeAttr_(heroImage) + '" alt="">' : '') +
       '<div class="b3-hero-copy"><p class="b3-eyebrow">' + escapeHtml_(hero.eyebrow) + '</p><h2>' + escapeHtml_(hero.title) + '</h2>' +
       (hero.source === "featured" ? renderBulletinLayout3Meta_(hero) : '') +
       (hero.includeDescription && hero.description ? '<div class="b3-copy">' + renderAdminMarkdownLite_(hero.description) + '</div>' : '') +
@@ -10007,6 +10068,7 @@
     if (usage.back > 6) problems.push("Back uses " + usage.back + "/6 slots");
     if (usage.back <= 6 && !packBulletinLayout3Back_(getBulletinLayout3Entries_("back"))) problems.push("Back allows at most two Large blocks");
     try {
+      if (holder.querySelector("[data-b3-qr-error]")) problems.push("Registration QR code unavailable; reload Print Mode before printing");
       Array.prototype.forEach.call(holder.querySelectorAll("[data-b3-region]"), function(region) {
         if (region.scrollWidth > region.clientWidth + 1 ||
           (region.scrollHeight > region.clientHeight + 1 && bulletinLayout3ContentOverflows_(region))) {
@@ -20071,6 +20133,7 @@
         doors_open_time: String(item.doors_open_time || ""),
         location: savedLocation || sourceLocation,
         sourceLocation: sourceLocation,
+        ...getBulletinEventSourceMetadata_(item),
       };
     });
 

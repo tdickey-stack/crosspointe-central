@@ -12,7 +12,31 @@ const LOCAL = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(location.hostn
 const LEVELS = [1, 2, 3, 4, 5];
 const EDIT = /* @__PURE__ */ new Set(["propose", "edit", "approve", "admin"]);
 const ALLOWED = /* @__PURE__ */ new Set(["view", ...EDIT]);
-const COLORS = { 1: "#ef3e2d", 2: "#f59e0b", 3: "#4bb8e9", 4: "#4bc3a7", 5: "#a78bfa" };
+const COLORS = { 1: "var(--annual-red)", 2: "var(--annual-amber)", 3: "var(--annual-blue)", 4: "var(--annual-mint)", 5: "var(--annual-purple)" };
+const THEME_KEY = "central-annual-theme";
+function useTheme() {
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.colorScheme === "light" ? "light" : "dark");
+  useEffect(() => {
+    document.documentElement.dataset.colorScheme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#ffffff" : "#18181b");
+  }, [theme]);
+  useEffect(() => {
+    const sync = (event) => {
+      if (event.key === THEME_KEY || event.key === null) setTheme(event.newValue === "light" ? "light" : "dark");
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem(THEME_KEY, next); } catch { /* Keep the control usable when storage is unavailable. */ }
+    setTheme(next);
+  };
+  return { theme, toggleTheme };
+}
+function ThemeToggle({ theme, toggleTheme }) {
+  return <button className="ap-theme-toggle" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={toggleTheme}><span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span><span>{theme === "dark" ? "Light mode" : "Dark mode"}</span></button>;
+}
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const timeUnits = (days) => days !== 0 && days % 7 === 0 ? `${days / 7}w` : `${days}d`;
 const fmt = (value) => (/* @__PURE__ */ new Date(`${value}T12:00:00Z`)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -139,15 +163,16 @@ function useAuth() {
 }
 function AuthGate() {
   const auth = useAuth();
+  const appearance = useTheme();
   const [error, setError] = useState("");
-  if (auth.status === "ready") return <Planner key={auth.user.uid} auth={auth} />;
+  if (auth.status === "ready") return <Planner key={auth.user.uid} auth={auth} appearance={appearance} />;
   return <main className="ap-gate"><img className="ap-mark" src="/favicon.svg" alt="" width="42" height="42" /><p className="eyebrow">CROSSPOINTE CENTRAL</p><h1>Annual Planner</h1><p>{auth.message}</p>{error && <p role="alert">{error}</p>}{auth.status === "signed-out" && <button className="primary" onClick={async () => {
     try {
       await auth.auth.signInWithPopup(new window.firebase.auth.GoogleAuthProvider());
     } catch (e) {
       setError(e.message);
     }
-  }}>Sign in with Google</button>}{auth.status === "error" && <button onClick={() => location.reload()}>Retry connection</button>}<a href="/">Back to Central</a></main>;
+  }}>Sign in with Google</button>}{auth.status === "error" && <button onClick={() => location.reload()}>Retry connection</button>}<ThemeToggle {...appearance} /><a href="/">Back to Central</a></main>;
 }
 function Modal({ title, children, onClose, wide = false }) {
   const ref = useRef();
@@ -500,7 +525,7 @@ function makeEvent(template, year, isRest = false) {
   const snapshot = isRest ? { id: "protected-rest", name: "Protected rest", description: "Protected shared Sabbath or recovery.", level: 1, version: 1, meetingCount: 0, recoveryDays: 0, phases: [{ id: "protected-rest", name: "Protected rest", kind: "rest", offsetDays: 0, durationDays: 7 }] } : clone(template);
   return { id: createId("event"), name: isRest ? "Protected rest" : "", level: snapshot.level, anchorDate: `${year}-01-01`, templateId: snapshot.id, templateSnapshot: snapshot, overrides: {}, notes: "", status: "tentative", excludedMeetingDates: [], revision: 0 };
 }
-function Planner({ auth }) {
+function Planner({ auth, appearance }) {
   const store = useMemo(() => createAnnualStore({ firestore: auth.firestore, user: auth.user, preview: !!auth.preview }), [auth.firestore, auth.user.uid, auth.preview]);
   const [workspace, setWorkspace] = useState(null);
   const [loadError, setLoadError] = useState("");
@@ -646,7 +671,7 @@ function Planner({ auth }) {
   const anchors = visibleYearEvents.filter((e) => e.level === 1 && !restEvent(e)).length;
   const timeline = <><div className="ap-legend"><span><i className="prep" />Preparation</span><span><i className="active" />Active event / season</span>{(view.mode === "month" || (view.showMeetings ?? view.zoom === "quarter")) && <span><i className="meeting" />Tuesday meeting</span>}<span><i className="rest" />Protected rest / recovery</span><span className="ap-legend-signal"><i className="light" />Review overlap <i className="strong" />Strong overlap</span></div><DemandGuide/>{view.mode === "month" ? <MonthGrid key={`${view.year}-${view.quarter}`} events={events} view={view} onView={setView} onEvent={setEvent} readOnly={PRESENTER} /> : <Timeline events={events} view={view} settings={settings} onEvent={setEvent} onWeek={setInspectedWeek} readOnly={PRESENTER} />}</>;
   const controls = <div className="ap-view-controls"><div className="ap-year"><button aria-label="Previous year" disabled={view.year <= 1901} onClick={() => setView((v) => ({ ...v, year: Math.max(1901, v.year - 1) }))}>←</button><strong>{view.year}</strong><button aria-label="Next year" disabled={view.year >= 2199} onClick={() => setView((v) => ({ ...v, year: Math.min(2199, v.year + 1) }))}>→</button></div><div className="ap-segmented" aria-label="Calendar layout"><button aria-pressed={view.mode === "timeline"} onClick={() => setView((v) => ({ ...v, mode: "timeline" }))}>Timeline</button><button aria-pressed={view.mode === "month"} onClick={() => setView((v) => ({ ...v, mode: "month" }))}>Month</button></div>{view.mode === "timeline" && <div className="ap-segmented" aria-label="Timeline zoom"><button aria-pressed={view.zoom === "year"} onClick={() => setView((v) => ({ ...v, zoom: "year" }))}>Year</button><button aria-pressed={view.zoom === "quarter"} onClick={() => setView((v) => ({ ...v, zoom: "quarter" }))}>Quarter</button></div>}{view.zoom === "quarter" && view.mode === "timeline" && <select aria-label="Quarter" value={view.quarter} onChange={(e) => setView((v) => ({ ...v, quarter: Number(e.target.value) }))}>{[1, 2, 3, 4].map((q) => <option value={q} key={q}>Q{q}</option>)}</select>}<select aria-label="Filter priority levels" value={view.level} onChange={(e) => setView((v) => ({ ...v, level: e.target.value }))}><option value="all">All priority levels</option><option value="1">Level 1 · Anchors</option><option value="2">Level 2 · Shared seasons</option><option value="small">Levels 3–5 · Smaller events</option></select>{view.mode === "timeline" && <button className="ap-meetings-toggle" aria-pressed={view.showMeetings ?? view.zoom === "quarter"} onClick={() => setView((v) => ({ ...v, showMeetings: !(v.showMeetings ?? v.zoom === "quarter") }))}>Show meetings</button>}<select aria-label="Presentation density" value={view.density} onChange={(e) => setView((v) => ({ ...v, density: e.target.value }))}><option value="compact">Display · Compact</option><option value="roomy">Display · Roomy</option></select></div>;
-  if (PRESENTER) return <main className={`ap-presenter ${view.density !== "roomy" ? "compact" : ""}`}><header><div><p className="eyebrow">CROSSPOINTE · SHARED STAFF CALENDAR</p><h1>{view.year} <span>Annual Plan</span></h1></div><div className="ap-presenter-state"><span className={draftDisplay ? "ap-proposed" : "ap-live"}>{draftDisplay ? "PROPOSED \xB7 NOT SAVED" : "COMMITTED CALENDAR"}</span><button onClick={async () => {
+  if (PRESENTER) return <main className={`ap-presenter ${view.density !== "roomy" ? "compact" : ""}`}><header><div><p className="eyebrow">CROSSPOINTE · SHARED STAFF CALENDAR</p><h1>{view.year} <span>Annual Plan</span></h1></div><div className="ap-presenter-state"><ThemeToggle {...appearance} /><span className={draftDisplay ? "ap-proposed" : "ap-live"}>{draftDisplay ? "PROPOSED \xB7 NOT SAVED" : "COMMITTED CALENDAR"}</span><button onClick={async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen();
@@ -654,7 +679,7 @@ function Planner({ auth }) {
       setActionError(e.message);
     }
   }}>Full screen</button></div></header>{loadError && <div className="ap-alert" role="alert">Connection interrupted: {loadError} The displayed calendar may be out of date.</div>}{actionError && <div className="ap-alert" role="alert">{actionError}</div>}{auth.preview && <div className="ap-preview-banner">LOCAL PREVIEW · Demonstration data only</div>}{draftDisplay && <div className="ap-draft-banner">PROPOSED CHANGE · {draftDisplay.name} · Discussion preview only</div>}{timeline}<footer><span>{anchors} Level 1 anchors · {congestion.length} weeks with shared-capacity signals · {restWarnings.length} protected-rest warnings</span><span>{presenterConnected ? "Connected to operator" : auth.preview ? "Open the operator window to sync this local preview" : "Live shared calendar"}</span></footer></main>;
-  return <div className="ap-shell"><aside className="ap-sidebar"><a href="/" className="ap-brand" aria-label="CrossPointe Central home"><img className="ap-mark" src="/favicon.svg" alt="" width="42" height="42" /><span>CROSSPOINTE<small>CENTRAL</small></span></a><p className="ap-nav-label">STAFF WORKSPACE</p><nav><button className={section === "calendar" ? "selected" : ""} onClick={() => setSection("calendar")}><span>▦</span> Annual calendar</button><button className={section === "playbooks" ? "selected" : ""} onClick={() => setSection("playbooks")}><span>▤</span> Phase playbooks</button><a href="/planner"><span>↗</span> Promotion Planner</a></nav><div className="ap-sidebar-bottom"><span className="ap-avatar">{auth.user.displayName?.slice(0, 1) || "C"}</span><div><strong>{auth.user.displayName || "Central staff"}</strong><small>{editable ? "Shared staff workspace" : "Read-only access"}</small></div></div></aside><main className="ap-main"><header className="ap-topbar"><span>Planning <span className="muted">/</span> Annual Planner</span><div className={`ap-save-status ${loadError ? "error" : ""}`} role="status"><i />{loadError ? "Connection needs attention" : saving ? "Saving\u2026" : auth.preview ? "Local preview \xB7 not cloud saved" : "Shared calendar \xB7 connected"}</div></header>{auth.preview && <div className="ap-preview-banner">LOCAL PREVIEW · Changes stay on this browser. <button disabled={saving || committed.length > 0} onClick={async () => {
+  return <div className="ap-shell"><aside className="ap-sidebar"><a href="/" className="ap-brand" aria-label="CrossPointe Central home"><img className="ap-mark" src="/favicon.svg" alt="" width="42" height="42" /><span>CROSSPOINTE<small>CENTRAL</small></span></a><p className="ap-nav-label">STAFF WORKSPACE</p><nav><button className={section === "calendar" ? "selected" : ""} onClick={() => setSection("calendar")}><span>▦</span> Annual calendar</button><button className={section === "playbooks" ? "selected" : ""} onClick={() => setSection("playbooks")}><span>▤</span> Phase playbooks</button><a href="/planner"><span>↗</span> Promotion Planner</a></nav><div className="ap-sidebar-bottom"><span className="ap-avatar">{auth.user.displayName?.slice(0, 1) || "C"}</span><div><strong>{auth.user.displayName || "Central staff"}</strong><small>{editable ? "Shared staff workspace" : "Read-only access"}</small></div></div></aside><main className="ap-main"><header className="ap-topbar"><span>Planning <span className="muted">/</span> Annual Planner</span><div className={`ap-save-status ${loadError ? "error" : ""}`} role="status"><i />{loadError ? "Connection needs attention" : saving ? "Saving\u2026" : auth.preview ? "Local preview \xB7 not cloud saved" : "Shared calendar \xB7 connected"}</div><ThemeToggle {...appearance} /></header>{auth.preview && <div className="ap-preview-banner">LOCAL PREVIEW · Changes stay on this browser. <button disabled={saving || committed.length > 0} onClick={async () => {
     try {
       await save(async () => {
         for (const e of createDemoEvents(view.year)) await store.saveEvent(e);

@@ -2,6 +2,14 @@
 <html lang="en" data-color-scheme="dark">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#18181b">
+<script>
+(function(){
+var theme='dark';
+try{if(localStorage.getItem('central-annual-theme')==='light')theme='light';}catch(e){}
+document.documentElement.dataset.colorScheme=theme;
+document.querySelector('meta[name="theme-color"]').setAttribute('content',theme==='light'?'#ffffff':'#18181b');
+})();
+</script>
 <title>Annual Planner · CrossPointe Central</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

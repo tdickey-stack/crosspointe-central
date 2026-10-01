@@ -4,8 +4,9 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#18181b">
 <script>
 (function(){
-var theme='dark';
-try{if(localStorage.getItem('central-annual-theme')==='light')theme='light';}catch(e){}
+var requestedTheme=new URLSearchParams(location.search).get('theme');
+var theme=requestedTheme==='light'?'light':'dark';
+try{var savedTheme=localStorage.getItem('central-annual-theme');if(savedTheme==='light'||savedTheme==='dark')theme=savedTheme;}catch(e){}
 document.documentElement.dataset.colorScheme=theme;
 document.querySelector('meta[name="theme-color"]').setAttribute('content',theme==='light'?'#ffffff':'#18181b');
 })();

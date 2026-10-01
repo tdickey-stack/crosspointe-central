@@ -19,6 +19,7 @@ function useTheme() {
   useEffect(() => {
     document.documentElement.dataset.colorScheme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#ffffff" : "#18181b");
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* Theme changes still sync through the presentation connection. */ }
   }, [theme]);
   useEffect(() => {
     const sync = (event) => {
@@ -29,10 +30,9 @@ function useTheme() {
   }, []);
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
-    try { localStorage.setItem(THEME_KEY, next); } catch { /* Keep the control usable when storage is unavailable. */ }
     setTheme(next);
   };
-  return { theme, toggleTheme };
+  return { theme, toggleTheme, setTheme };
 }
 function ThemeToggle({ theme, toggleTheme }) {
   return <button className="ap-theme-toggle" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={toggleTheme}><span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span><span>{theme === "dark" ? "Light mode" : "Dark mode"}</span></button>;
@@ -546,6 +546,9 @@ function Planner({ auth, appearance }) {
   const channel = useRef(null);
   const popup = useRef(null);
   const messageState = useRef(null);
+  const themeSetter = useRef(appearance.setTheme);
+  themeSetter.current = appearance.setTheme;
+  const lastBroadcastTheme = useRef(appearance.theme);
   const lastDisplayContact = useRef(0);
   const session = useRef(null);
   if (!session.current) {
@@ -568,7 +571,7 @@ function Planner({ auth, appearance }) {
   const broadcast = () => {
     if (!PRESENTER && channel.current) channel.current.postMessage({ type: "state", ...messageState.current });
   };
-  messageState.current = { view, draft: draftDisplay, previewWorkspace: auth.preview ? workspace : null };
+  messageState.current = { view, theme: appearance.theme, draft: draftDisplay, previewWorkspace: auth.preview ? workspace : null };
   useEffect(() => {
     if (!session.current || !window.BroadcastChannel) return;
     const bus = new BroadcastChannel(`central-annual:${auth.user.uid}:${session.current}`);
@@ -578,6 +581,10 @@ function Planner({ auth, appearance }) {
     };
     bus.onmessage = ({ data }) => {
       if (!data || typeof data !== "object") return;
+      if ((data.type === "theme" || (PRESENTER && data.type === "state")) && ["light", "dark"].includes(data.theme)) {
+        lastBroadcastTheme.current = data.theme;
+        themeSetter.current(data.theme);
+      }
       if (PRESENTER && data.type === "state") {
         lastDisplayContact.current = Date.now();
         setPresenterConnected(true);
@@ -616,7 +623,11 @@ function Planner({ auth, appearance }) {
       window.removeEventListener("beforeunload", leaving);
     };
   }, [auth.user.uid, auth.preview]);
-  useEffect(() => broadcast(), [view, draftDisplay, workspace]);
+  useEffect(() => broadcast(), [view, draftDisplay, workspace, appearance.theme]);
+  useEffect(() => {
+    if (lastBroadcastTheme.current !== appearance.theme) channel.current?.postMessage({ type: "theme", theme: appearance.theme });
+    lastBroadcastTheme.current = appearance.theme;
+  }, [appearance.theme]);
   const openDisplay = () => {
     setActionError("");
     if (!window.BroadcastChannel) {
@@ -627,6 +638,7 @@ function Planner({ auth, appearance }) {
     url.search = "";
     url.searchParams.set("presenter", "1");
     url.searchParams.set("displaySession", session.current);
+    url.searchParams.set("theme", appearance.theme);
     if (auth.preview && LOCAL) url.searchParams.set("preview", "1");
     popup.current = window.open(url.href, `central-annual-display-${auth.user.uid}`, "popup,width=1440,height=900");
     if (!popup.current) {

@@ -31,7 +31,7 @@ function envelope(items, range) {
   return { startDate: startDate < range.start ? range.start : startDate, endDate: endDate > range.end ? range.end : endDate };
 }
 
-/** Pack connected event envelopes into shared lanes, with rest in a separate strip.
+/** Pack connected event envelopes into lanes ordered by level, with rest in a separate strip.
  * Group envelopes are clipped to range. Items keep their actual schedule dates for
  * tooltips; only items intersecting the visible range are included.
  */
@@ -52,7 +52,17 @@ export function buildTimelineLayout(events, range, { level = 'all', showMeetings
     const items = schedule.filter(item => visible(item) && (MAIN_KINDS.has(item.kind) || (showMeetings && item.kind === 'meeting')));
     if (items.length) mainGroups.push({ event, items, ...envelope(items, range) });
   }
-  const lanes = pack(mainGroups);
+  mainGroups.sort((a, b) => a.event.level - b.event.level || compareGroups(a, b));
+  const lanes = [];
+  for (let priority = 1; priority <= 5; priority += 1) {
+    // Reuse rows within a level without placing lower-priority work above it.
+    const levelLanes = pack(mainGroups.filter(group => group.event.level === priority));
+    const offset = lanes.length;
+    for (const lane of levelLanes) {
+      for (const group of lane) group.lane += offset;
+    }
+    lanes.push(...levelLanes);
+  }
   const restLanes = pack(restGroups);
   return { lanes, restLanes, events: mainGroups };
 }

@@ -45,6 +45,59 @@ test('shuffled inputs produce identical deterministic ordering and lane assignme
   assert.deepEqual(laneIds(first), [['a', 'next'], ['z'], ['long']]);
 });
 
+test('priority levels form top-to-bottom bands before chronological order', () => {
+  const level1Late = event('level-1-late', '2027-11-01', undefined, { level: 1 });
+  const level2Later = event('level-2-later', '2027-09-01', undefined, { level: 2 });
+  const level3Early = event('level-3-early', '2027-03-01', undefined, { level: 3 });
+  const level5First = event('level-5-first', '2027-01-01', undefined, { level: 5 });
+  const layout = buildTimelineLayout([level5First, level3Early, level2Later, level1Late], YEAR);
+  assert.deepEqual(laneIds(layout), [['level-1-late'], ['level-2-later'], ['level-3-early'], ['level-5-first']]);
+  assert.deepEqual(layout.events.map(group => group.event.id), ['level-1-late', 'level-2-later', 'level-3-early', 'level-5-first']);
+  assert.deepEqual(layout.events.map(group => group.lane), [0, 1, 2, 3]);
+});
+
+test('disjoint events only reuse lanes within their own priority level', () => {
+  const level1Early = event('level-1-early', '2027-02-01', undefined, { level: 1 });
+  const level1Late = event('level-1-late', '2027-08-01', undefined, { level: 1 });
+  const level2Middle = event('level-2-middle', '2027-05-01', undefined, { level: 2 });
+  const layout = buildTimelineLayout([level2Middle, level1Late, level1Early], YEAR);
+  assert.deepEqual(laneIds(layout), [['level-1-early', 'level-1-late'], ['level-2-middle']]);
+  assert.equal(layout.events.find(group => group.event.id === 'level-2-middle').lane, 1);
+});
+
+test('every occupied Level 1 lane precedes Level 2 and uses its absolute group lane', () => {
+  const level1Long = event('level-1-long', '2027-04-01', [phase('active', 'active', 0, 5)], { level: 1 });
+  const level1Overlap = event('level-1-overlap', '2027-04-02', undefined, { level: 1 });
+  const level1After = event('level-1-after', '2027-04-06', undefined, { level: 1 });
+  const level2Earlier = event('level-2-earlier', '2027-01-01', undefined, { level: 2 });
+  const layout = buildTimelineLayout([level2Earlier, level1After, level1Overlap, level1Long], YEAR);
+  assert.deepEqual(laneIds(layout), [['level-1-long', 'level-1-after'], ['level-1-overlap'], ['level-2-earlier']]);
+  assert.deepEqual(layout.events.map(group => group.event.id), ['level-1-long', 'level-1-overlap', 'level-1-after', 'level-2-earlier']);
+  layout.lanes.forEach((lane, laneIndex) => lane.forEach(group => assert.equal(group.lane, laneIndex)));
+  assert.deepEqual(Object.fromEntries(layout.events.map(group => [group.event.id, group.lane])), {
+    'level-1-long': 0,
+    'level-1-overlap': 1,
+    'level-1-after': 0,
+    'level-2-earlier': 2,
+  });
+});
+
+test('mixed-level packing is deterministic when shuffled and preserves filtered level bands', () => {
+  const events = [
+    event('level-4', '2027-04-01', undefined, { level: 4 }),
+    event('level-3-b', '2027-03-01', undefined, { level: 3 }),
+    event('level-5', '2027-01-01', undefined, { level: 5 }),
+    event('level-3-a', '2027-03-01', undefined, { level: 3 }),
+    event('level-2', '2027-02-01', undefined, { level: 2 }),
+  ];
+  const ordered = buildTimelineLayout(events, YEAR);
+  const shuffled = buildTimelineLayout([events[3], events[1], events[4], events[0], events[2]], YEAR);
+  assert.deepEqual(ordered, shuffled);
+  assert.deepEqual(laneIds(ordered), [['level-2'], ['level-3-a'], ['level-3-b'], ['level-4'], ['level-5']]);
+  assert.deepEqual(laneIds(buildTimelineLayout(events, YEAR, { level: 'small' })), [['level-3-a'], ['level-3-b'], ['level-4'], ['level-5']]);
+  assert.deepEqual(laneIds(buildTimelineLayout(events, YEAR, { level: '3' })), [['level-3-a'], ['level-3-b']]);
+});
+
 test('cross-year and quarter envelopes clip to visible items while retaining actual item dates', () => {
   const acrossYear = event('year', '2027-01-05', [phase('prepare', 'preparation', -10, 10), phase('active', 'active', 0)]);
   const group = buildTimelineLayout([acrossYear], YEAR).events[0];

@@ -103,6 +103,40 @@ h1:focus,main:focus{outline:none}[hidden]{display:none!important}
 .live-card .card-body>.button{margin-top:18px}
 .live-card .card-body>.chips{margin-top:16px}
 .live-featured .live-meta{margin-top:10px;margin-bottom:0}
+/* Navlab's event imagery and Print Mode-inspired date token. */
+.event-card{min-width:0}
+.event-media{position:relative;isolation:isolate;display:grid;grid-template-columns:112px minmax(0,1fr);align-items:start;gap:14px;padding:14px;min-height:160px;flex-shrink:0;overflow:hidden;background:var(--event-color);color:var(--event-ink)}
+.event-fallback{position:absolute;inset:0;overflow:hidden;background:var(--event-color)}
+.event-fallback::before,.event-fallback::after{content:"";position:absolute;width:75%;aspect-ratio:1;border:1px solid currentColor;border-radius:50%;opacity:.22;right:-14%;top:-50%;box-shadow:0 0 0 22px var(--event-color),0 0 0 23px currentColor,0 0 0 46px var(--event-color),0 0 0 47px currentColor}
+.event-fallback::after{right:-30%;top:32%;opacity:.12}
+.event-fallback-shape{position:absolute;width:46%;aspect-ratio:1;right:4%;top:30%;background:currentColor;opacity:.12;border-radius:24%;transform:rotate(-22deg)}
+.event-pattern-1 .event-fallback::before{border-radius:22%;transform:rotate(35deg);top:-70%;right:-5%}
+.event-pattern-1 .event-fallback-shape{border-radius:50%;right:13%;top:36%}
+.event-pattern-2 .event-fallback::before{width:85%;right:-25%;top:-20%;border-radius:0;transform:rotate(-35deg)}
+.event-pattern-2 .event-fallback-shape{border-radius:0;transform:rotate(35deg);right:-3%;top:60%}
+.event-fallback-kind{position:absolute;right:20px;bottom:18px;max-width:55%;font-size:10px;line-height:1.4;font-weight:800;letter-spacing:.1em;text-transform:uppercase;text-align:right}
+.event-image-backdrop{position:absolute;inset:-48px;background-position:center;background-size:cover;filter:blur(32px) saturate(.8);pointer-events:none}
+.event-media.has-event-image .event-fallback{visibility:hidden}
+.event-media>img{position:relative;z-index:1;grid-column:2;grid-row:1;align-self:center;justify-self:center;display:block;width:auto;height:auto;min-height:0;max-width:100%;max-height:132px;object-fit:contain;border-radius:9px;background:transparent}
+.event-media:not(:has(.event-date-token)){grid-template-columns:minmax(0,1fr)}
+.event-media:not(:has(.event-date-token)):has(>img){padding:0;min-height:0;aspect-ratio:16/9}
+.event-media:not(:has(.event-date-token))>img{grid-column:1;align-self:stretch;width:100%;height:100%;max-height:none;border-radius:0;background:transparent}
+.event-date-token{position:relative;z-index:2;grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:center;gap:4px;width:112px;max-width:100%;padding:11px 9px 10px;border-radius:13px;background:#fff;color:#27272a;box-shadow:0 3px 16px #0002;text-align:center;line-height:1.25;overflow-wrap:anywhere}
+.event-date-month{font-size:10px;font-weight:800;letter-spacing:.07em;color:#64242e}
+.event-date-day{font-size:36px;line-height:1;font-weight:800;letter-spacing:-.06em}
+.event-date-label{font-size:10px;font-weight:800;line-height:1.5}
+.event-date-time{display:block;width:100%;font-size:11px;font-weight:750;line-height:1.5;border-top:1px solid #e4e4e7;padding-top:6px;margin-top:2px}
+.event-date-time>span{display:block}
+.event-card .card-body>.button{margin-top:auto;padding-top:11px}
+.event-card .card-body h3+.button{margin-top:20px}
+/* Featured artwork leads the card; its date belongs with the invitation. */
+.live-featured>.featured-event-media{display:block;padding:0;min-height:0;aspect-ratio:16/9}
+.live-featured>.featured-event-media>img{width:100%;height:100%;max-height:none;border-radius:0;object-fit:contain}
+.featured-event-summary{display:flex;align-items:center;gap:20px}
+.featured-event-copy{min-width:0;flex:1;overflow-wrap:anywhere}
+.featured-event-summary>.event-date-token{flex-shrink:0}
+.live-featured .hero-actions{gap:10px}
+@media(max-width:760px){.event-media{min-height:160px;gap:12px;padding:12px}.featured-event-summary{gap:14px}.live-featured .card-body{padding:20px 16px}.live-featured h2{font-size:23px}}
 .quick-links-row{display:flex;flex-wrap:wrap;gap:12px}
 .quick-links-row>.button{flex:0 1 180px;min-width:0;min-height:48px;padding:12px 16px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-shadow:none}
 .quick-links-row>.button:hover{background:var(--tint);color:var(--red)}

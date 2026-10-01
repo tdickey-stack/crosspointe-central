@@ -1,5 +1,5 @@
 /* Isolated Central preview: anonymous public content, no admin or shared preferences. */
-import {mountCentralContent} from "./navlab-content.js?v=8";
+import {mountCentralContent} from "./navlab-content.js?v=11";
 import {mountGroupDirectory} from "./group-directory.js";
 import {mountSundayStudy} from "./navlab-study.js?v=1";
 import {createSundayPlayer} from "./navlab-player.js?v=2";

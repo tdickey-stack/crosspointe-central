@@ -1,4 +1,5 @@
 import {HIGHLIGHT_TYPES, highlightCandidates, defaultHighlightKeys, resolveHighlightKeys} from "./navlab-promotions.js?v=1";
+import {createEventMedia, createEventDateToken, eventLocationMeta} from "./navlab-event-card.js?v=3";
 
 const DEFAULT_ENDPOINT = "https://central.crosspointe.tv/api/central-data";
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -23,11 +24,6 @@ function safeHttpUrl(value) {
   } catch (_error) {
     return "";
   }
-}
-
-function safeImageUrl(value) {
-  const url = safeHttpUrl(value);
-  return /^https:/i.test(url) ? url : "";
 }
 
 function safeCalendarUrl(value, endpoint) {
@@ -66,11 +62,12 @@ function metaFor(item) {
       .filter(Boolean).join(" · ");
 }
 
-function card(item, {detailsLabel = "Learn more", onDetails} = {}) {
-  const article = element("article", "live-card card");
+function card(item, {detailsLabel = "Learn more", onDetails, event = false} = {}) {
+  const article = element("article", `live-card card${event ? " event-card" : ""}`);
+  if (event) article.append(createEventMedia(item, {kind: item.labKind === "registrations" ? "Registration" : "Event"}));
   const body = element("div", "card-body");
   if (text(item.status_label)) body.append(element("p", "eyebrow", text(item.status_label)));
-  const meta = metaFor(item);
+  const meta = event ? eventLocationMeta(item) : metaFor(item);
   if (meta) body.append(element("p", "live-meta", meta));
   body.append(element("h3", "", text(item.title) || "CrossPointe"));
   if (!onDetails && text(item.description)) body.append(element("p", "live-description", text(item.description)));
@@ -155,18 +152,19 @@ function createFeaturedCard(data, showDetails) {
   const featured = data && data.featuredEvent;
   if (enabled(settings.featured_event_enabled) && featured && isFutureEvent(featured) && text(featured.title)) {
     const featuredCard = element("article", "live-featured card");
-    const imageUrl = safeImageUrl(featured.image_url);
-    if (imageUrl) {
-      const image = document.createElement("img");
-      image.src = imageUrl;
-      image.alt = "";
-      image.loading = "eager";
-      image.addEventListener("error", () => image.remove(), {once: true});
-      featuredCard.append(image);
-    }
+    featuredCard.classList.add("event-card");
+    const media = createEventMedia(featured, {kind: "Featured event", eager: true, showDate: false});
+    media.classList.add("featured-event-media");
+    featuredCard.append(media);
     const body = element("div", "card-body");
-    body.append(element("p", "eyebrow", "Featured event"), element("h2", "", text(featured.title)));
-    if (metaFor(featured)) body.append(element("p", "live-meta", metaFor(featured)));
+    const summary = element("div", "featured-event-summary");
+    const date = createEventDateToken(featured);
+    if (date) summary.append(date);
+    const copy = element("div", "featured-event-copy");
+    copy.append(element("p", "eyebrow", "Featured event"), element("h2", "", text(featured.title)));
+    if (eventLocationMeta(featured)) copy.append(element("p", "live-meta", eventLocationMeta(featured)));
+    summary.append(copy);
+    body.append(summary);
     const details = element("button", "button", "View event");
     details.type = "button";
     details.addEventListener("click", () => showDetails(featured, details));
@@ -379,10 +377,12 @@ function highlightCard(candidate, actions, {today = false} = {}) {
   const {type, title, item} = candidate;
   const article = element("article", `highlight-card highlight-${type} card`);
   article.dataset.sourceKey = candidate.key;
-  const artwork = element("div", "highlight-artwork");
-  artwork.append(stepArtwork(HIGHLIGHT_TYPES[type].icon), element("p", "highlight-kind", today ? "Today" : HIGHLIGHT_TYPES[type].label));
+  const isEvent = type === "events" || type === "registrations";
+  if (isEvent) article.classList.add("event-card");
+  const artwork = isEvent ? createEventMedia(item, {kind: today ? "Today" : HIGHLIGHT_TYPES[type].label}) : element("div", "highlight-artwork");
+  if (!isEvent) artwork.append(stepArtwork(HIGHLIGHT_TYPES[type].icon), element("p", "highlight-kind", HIGHLIGHT_TYPES[type].label));
   const body = element("div", "card-body");
-  const meta = today ? [text(item.time), text(item.location || item.venue)].filter(Boolean).join(" · ") : type === "serveNeeds" ? text(item.ministry) :
+  const meta = isEvent ? eventLocationMeta(item) : type === "serveNeeds" ? text(item.ministry) :
     type === "campaigns" ? "Church-wide focus" : text(item.date) || text(item.status_label) || "Sign up at CrossPointe";
   if (meta) body.append(element("p", "live-meta", meta));
   body.append(element("h3", "", title));
@@ -522,7 +522,7 @@ function renderEvents(root, data, showDetails) {
   const render = (kind) => {
     const matching = events.filter((item) => kind === "all" || item.labKind === kind);
     count.textContent = `${matching.length} ${kind === "registrations" ? "registrations" : "listings"}`;
-    grid.replaceChildren(...matching.map((item) => card(item, {onDetails: showDetails})));
+    grid.replaceChildren(...matching.map((item) => card(item, {onDetails: showDetails, event: true})));
     if (!matching.length) grid.append(element("p", "live-status card", "Nothing is listed here right now. Check back soon."));
   };
   [["all", "All events"], ["events", "Events"], ["registrations", "Registrations"]].forEach(([kind, label], index) => {

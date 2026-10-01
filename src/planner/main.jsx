@@ -47,10 +47,13 @@ import {describeRecurrence, expandRecurrence, normalizeRecurrence} from "./recur
 import {buildOccurrencePlan, buildSeriesPlan, skipOccurrencePlan} from "./series.js";
 import {RecurrenceFields, recurrenceForFrequency} from "./recurrence-controls.jsx";
 import {isStarterPlaybookId} from "./seed-data.js";
+import {PromotionTimelineView} from "./timeline-view.jsx";
 import "./planner.css";
+import "./timeline.css";
 
 const EDIT_PERMISSIONS = new Set(["propose", "edit", "approve", "admin"]);
 const VIEW_STORAGE_KEY = "central-promotion-planner-calendar-view";
+const THEME_STORAGE_KEY = "central-promotion-planner-theme";
 const MOBILE_WEEK_CALENDAR_QUERY = "(max-width: 840px)";
 const COMPACT_CALENDAR_QUERY = "(max-width: 620px)";
 
@@ -67,6 +70,7 @@ const NAV_ITEMS = [
   {id: "overview", label: "Overview", icon: "◫"},
   {id: "requests", label: "Requests", icon: "◇"},
   {id: "calendar", label: "Calendar", icon: "▦"},
+  {id: "timeline", label: "Timeline", icon: "≋"},
   {id: "campaigns", label: "Campaigns", icon: "◆"},
   {id: "content", label: "Content", icon: "●"},
   {id: "reports", label: "Announcement Brief", icon: "▧"},
@@ -453,7 +457,7 @@ function EmptyState({title, copy, action}) {
   );
 }
 
-function AppHeader({authState, activeView, onMenu}) {
+function AppHeader({authState, activeView, onMenu, theme, toggleTheme}) {
   return (
     <header className="planner-header">
       <button className="planner-mobile-menu" onClick={onMenu} aria-label="Open navigation">☰</button>
@@ -463,6 +467,7 @@ function AppHeader({authState, activeView, onMenu}) {
         <strong>{NAV_ITEMS.find((item) => item.id === activeView)?.label}</strong>
       </div>
       <div className="planner-user-chip">
+        <button className="planner-theme-toggle" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={toggleTheme}><span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span><span className="planner-theme-label">{theme === "dark" ? "Light mode" : "Dark mode"}</span></button>
         {authState.user?.photoURL
           ? <img src={authState.user.photoURL} alt="" referrerPolicy="no-referrer" />
           : <span>{String(authState.user?.displayName || authState.user?.email || "P")[0]}</span>}
@@ -2596,14 +2601,15 @@ function LaneDialog({lane, playbooks, onClose, onSave}) {
   );
 }
 
-function PlannerApp({authState}) {
+function PlannerApp({authState, theme, toggleTheme}) {
   const [storedWorkspace, setWorkspace] = useState(null);
   const today = useBusinessDate();
   const [calendarRange, setCalendarRange] = useState(null);
   const [reportRange, setReportRange] = useState(null);
+  const [timelineRange, setTimelineRange] = useState(null);
   const workspace = useMemo(() => withLevel2StandingLane(storedWorkspace, {
-    now: today, ranges: [calendarRange, reportRange].filter(Boolean),
-  }), [storedWorkspace, today, calendarRange, reportRange]);
+    now: today, ranges: [calendarRange, reportRange, timelineRange].filter(Boolean),
+  }), [storedWorkspace, today, calendarRange, reportRange, timelineRange]);
   const [activeView, setActiveView] = useState("overview");
   const [overviewWeekOffset, setOverviewWeekOffset] = useState(0);
   const [mobileNav, setMobileNav] = useState(false);
@@ -2615,6 +2621,7 @@ function PlannerApp({authState}) {
   const [editingContent, setEditingContent] = useState(null);
   const [editingBriefContent, setEditingBriefContent] = useState(null);
   const [selectedPlay, setSelectedPlay] = useState(null);
+  const [selectedTimelineGroup, setSelectedTimelineGroup] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [seriesEditor, setSeriesEditor] = useState(null);
   const [occurrenceEditor, setOccurrenceEditor] = useState(null);
@@ -2730,6 +2737,7 @@ function PlannerApp({authState}) {
 
   let content = null;
   if (activeView === "calendar") content = <CalendarView workspace={workspace} onRangeChange={setCalendarRange} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
+  else if (activeView === "timeline") content = <PromotionTimelineView workspace={workspace} today={today} onRangeChange={setTimelineRange} onOpenCampaign={setSelectedCampaign} onOpenGroup={(group) => { const campaign = workspace.campaigns.find((item) => item.id === group.campaignId); if (isStandaloneContent(group) && campaign) setSelectedCampaign(campaign); else setSelectedTimelineGroup(group); }} />;
   else if (activeView === "requests") content = <RequestsView workspace={workspace} canEdit={canEdit} onOpenRequest={setSelectedRequest} />;
   else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} onEditSeries={(series, campaign) => setSeriesEditor({mode: "retry", series, campaign})} />;
   else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
@@ -2775,7 +2783,7 @@ function PlannerApp({authState}) {
 
   return (
     <div className="planner-app">
-      <AppHeader authState={authState} activeView={activeView} onMenu={() => setMobileNav(true)} />
+      <AppHeader authState={authState} activeView={activeView} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMobileNav(true)} />
       <Sidebar activeView={activeView} setActiveView={setActiveView} open={mobileNav} close={() => setMobileNav(false)} />
       <main className="planner-main">
         {!workspace.isSeeded && (
@@ -2792,6 +2800,7 @@ function PlannerApp({authState}) {
         {message && <div className="planner-toast is-success" role="status"><span>{message}</span><button onClick={() => setMessage("")}>×</button></div>}
         {content}
       </main>
+      {selectedTimelineGroup && <CalendarPromotionBriefDialog group={selectedTimelineGroup} workspace={workspace} onClose={() => setSelectedTimelineGroup(null)} onOpenPlay={(play) => { setSelectedTimelineGroup(null); setSelectedPlay(play); }} onOpenCampaign={(campaign) => { setSelectedTimelineGroup(null); setSelectedCampaign(campaign); }} />}
       {newCampaignOpen && <NewCampaignDialog workspace={workspace} onClose={() => setNewCampaignOpen(false)} onGenerate={async (payload) => {
         if (payload.kind === "series") {
           await saveSeriesPlan(payload.plan, `${payload.plan.series.name} recurring campaign added.`);
@@ -2863,8 +2872,21 @@ function PlannerApp({authState}) {
 
 function Root() {
   const authState = usePlannerAuth();
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.colorScheme === "light" ? "light" : "dark");
+  useEffect(() => {
+    document.documentElement.dataset.colorScheme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#ffffff" : "#18181b");
+    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* Keep the toggle available when storage is blocked. */ }
+  }, [theme]);
+  useEffect(() => {
+    const syncTheme = (event) => {
+      if (event.key === THEME_STORAGE_KEY || event.key === null) setTheme(event.newValue === "light" ? "light" : "dark");
+    };
+    window.addEventListener("storage", syncTheme);
+    return () => window.removeEventListener("storage", syncTheme);
+  }, []);
   if (authState.status !== "ready") return <AccessScreen authState={authState} />;
-  return <PlannerApp authState={authState} />;
+  return <PlannerApp authState={authState} theme={theme} toggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} />;
 }
 
 const root = document.getElementById("planner-root");

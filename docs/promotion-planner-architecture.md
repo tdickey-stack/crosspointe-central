@@ -39,6 +39,21 @@ The repository had no calendar component or calendar UI dependency. Planner uses
 
 FullCalendar is only the display and interaction layer. It does not calculate campaign weeks, late submissions, capacity, Level 4 slots, Level 2 coverage, priorities, conflicts, or Smuggle opportunities.
 
+## Timeline and appearance
+
+Timeline uses the same effective promotion inventory as Calendar, with quarter
+and year ranges and a level filter. Saved campaign windows, pinned playbook
+phases, event dates, and actual promotion dates share one horizontal grid.
+Non-overlapping campaigns reuse lanes within their level; standalone content
+follows campaign levels, and Level 2 fallback coverage has a separate strip.
+Promotion date markers open the existing calendar brief. Historical ranges
+retain completed campaigns; archived occurrences and missed/skipped promotions
+are excluded. Timeline reads do not change schedules.
+
+The header offers Light mode / Dark mode. Promotion Planner remembers its own
+`central-promotion-planner-theme` preference, applies it before the bundle loads,
+and synchronizes changes between open tabs. Dark remains the initial default.
+
 ## Business logic boundary
 
 `src/planner/domain.js` contains pure, testable rules:

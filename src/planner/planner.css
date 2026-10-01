@@ -37,6 +37,43 @@
   font-synthesis: none;
 }
 
+:root[data-color-scheme="light"] {
+  color-scheme: light;
+  --planner-red: #d92d20;
+  --planner-red-soft: rgba(217, 45, 32, 0.09);
+  --planner-bg: #f5f5f3;
+  --planner-shell: #ffffff;
+  --planner-panel: #fbfbfa;
+  --planner-panel-raised: #e9e9e6;
+  --planner-line: rgba(24, 24, 27, 0.12);
+  --planner-line-strong: rgba(24, 24, 27, 0.22);
+  --planner-text: #18181b;
+  --planner-muted: #626269;
+  --planner-soft: #71717a;
+  --planner-mint: #147d6b;
+  --planner-blue: #087baa;
+  --planner-amber: #9a5200;
+  --planner-purple: #7655c5;
+  --planner-shadow: 0 24px 70px rgba(24, 24, 27, 0.16);
+  --fc-classic-background: #ffffff;
+  --fc-classic-faint: rgba(24, 24, 27, 0.035);
+  --fc-classic-muted: rgba(24, 24, 27, 0.07);
+  --fc-classic-strong: rgba(24, 24, 27, 0.12);
+  --fc-classic-foreground: #18181b;
+  --fc-classic-faint-foreground: #71717a;
+  --fc-classic-muted-foreground: #626269;
+  --fc-classic-border: rgba(24, 24, 27, 0.12);
+  --fc-classic-strong-border: rgba(24, 24, 27, 0.22);
+  --fc-classic-button: #e9e9e6;
+  --fc-classic-button-border: rgba(24, 24, 27, 0.14);
+  --fc-classic-button-foreground: #18181b;
+  --fc-classic-button-strong: #d92d20;
+  --fc-classic-button-strong-border: #d92d20;
+  --fc-classic-primary: #087baa;
+  --fc-classic-primary-foreground: #ffffff;
+  --fc-classic-today: rgba(217, 45, 32, 0.07);
+}
+
 * { box-sizing: border-box; }
 html { min-width: 320px; min-height: 100%; background: var(--planner-bg); }
 body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(circle at 8% -10%, rgba(239, 62, 45, 0.12), transparent 35rem), var(--planner-bg); color: var(--planner-text); }
@@ -68,6 +105,9 @@ a { text-decoration: none; }
 .planner-user-chip small { color: var(--planner-muted); font-size: .58rem; text-transform: capitalize; }
 .planner-user-chip > button { width: 32px; height: 32px; border-radius: 50%; background: transparent; color: var(--planner-muted); cursor: pointer; }
 .planner-user-chip > button:hover { background: var(--planner-panel-raised); color: #fff; }
+.planner-user-chip > .planner-theme-toggle { display: inline-flex; width: auto; min-height: 34px; height: auto; flex: 0 0 auto; align-items: center; justify-content: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--planner-line); border-radius: 999px; background: transparent; color: var(--planner-muted); cursor: pointer; font-size: .58rem; font-weight: 800; white-space: nowrap; }
+.planner-user-chip > .planner-theme-toggle:hover, .planner-user-chip > .planner-theme-toggle:focus-visible { border-color: var(--planner-line-strong); background: var(--planner-panel-raised); color: var(--planner-text); outline: 0; }
+.planner-theme-toggle > span[aria-hidden="true"] { color: var(--planner-amber); font-size: .9rem; line-height: 1; }
 .planner-mobile-menu { display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--planner-panel); cursor: pointer; }
 
 .planner-sidebar {
@@ -653,6 +693,308 @@ a { text-decoration: none; }
 .planner-toast.is-error { border-color: rgba(239,62,45,.34); background: #3b2323; color: #ffd3ce; }
 .planner-toast button { background: transparent; color: inherit; cursor: pointer; font-size: 1rem; }
 
+/* The Planner defaults to its established dark presentation. This layer only
+   replaces colors when the saved page-level color scheme requests light UI. */
+:root[data-color-scheme="light"] body {
+  background: radial-gradient(circle at 8% -10%, rgba(217, 45, 32, .08), transparent 35rem), var(--planner-bg);
+}
+
+:root[data-color-scheme="light"] .planner-header {
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 12px 40px rgba(24, 24, 27, .09);
+}
+:root[data-color-scheme="light"] .planner-sidebar { background: rgba(255, 255, 255, .88); }
+:root[data-color-scheme="light"] .planner-user-chip > img,
+:root[data-color-scheme="light"] .planner-user-chip > span {
+  border-color: var(--planner-line-strong);
+  background: var(--planner-panel-raised);
+}
+:root[data-color-scheme="light"] .planner-user-chip > button:hover,
+:root[data-color-scheme="light"] .planner-sidebar nav button:hover,
+:root[data-color-scheme="light"] .planner-tool-link:hover,
+:root[data-color-scheme="light"] .planner-tool-link:focus-visible,
+:root[data-color-scheme="light"] .planner-central-link:hover,
+:root[data-color-scheme="light"] .planner-central-link:focus-visible {
+  color: var(--planner-text);
+}
+:root[data-color-scheme="light"] .planner-sidebar nav button:hover,
+:root[data-color-scheme="light"] .planner-tool-link:hover,
+:root[data-color-scheme="light"] .planner-tool-link:focus-visible { background: rgba(24, 24, 27, .045); }
+:root[data-color-scheme="light"] .planner-sidebar nav button.is-active {
+  border-color: rgba(217, 45, 32, .24);
+  background: linear-gradient(135deg, rgba(217, 45, 32, .13), rgba(217, 45, 32, .055));
+  color: var(--planner-text);
+}
+
+:root[data-color-scheme="light"] .planner-button.is-primary { color: #fff; }
+:root[data-color-scheme="light"] .planner-button.is-primary:hover { background: #bc2418; }
+:root[data-color-scheme="light"] .planner-button.is-secondary { color: var(--planner-text); }
+:root[data-color-scheme="light"] .planner-button.is-secondary:hover { color: var(--planner-text); }
+:root[data-color-scheme="light"] .planner-button.is-danger { background: #b42318; color: #fff; }
+:root[data-color-scheme="light"] .planner-button.is-danger:hover:not(:disabled) { background: #921d14; }
+:root[data-color-scheme="light"] .planner-button.is-danger.is-quiet,
+:root[data-color-scheme="light"] .planner-inline-error,
+:root[data-color-scheme="light"] .planner-inventory-row-controls > p { color: #b42318 !important; }
+:root[data-color-scheme="light"] .planner-text-button:hover { color: #a52117; }
+
+:root[data-color-scheme="light"] .planner-panel {
+  background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(251, 251, 250, .98));
+  box-shadow: 0 18px 50px rgba(24, 24, 27, .07);
+}
+:root[data-color-scheme="light"] .planner-metric-card {
+  background: linear-gradient(150deg, #fff, #f2f2ef);
+}
+:root[data-color-scheme="light"] .planner-metric-card:hover {
+  background: linear-gradient(150deg, #fff, #e9e9e6);
+}
+:root[data-color-scheme="light"] .planner-badge {
+  background: rgba(24, 24, 27, .04);
+}
+:root[data-color-scheme="light"] .planner-badge.is-scheduled,
+:root[data-color-scheme="light"] .planner-badge.is-active,
+:root[data-color-scheme="light"] .planner-badge.is-on-time,
+:root[data-color-scheme="light"] .planner-badge.is-covered,
+:root[data-color-scheme="light"] .planner-badge.is-available {
+  border-color: rgba(20, 125, 107, .3);
+  background: rgba(20, 125, 107, .08);
+  color: #116858;
+}
+:root[data-color-scheme="light"] .planner-badge.is-rescheduled,
+:root[data-color-scheme="light"] .planner-badge.is-opportunity,
+:root[data-color-scheme="light"] .planner-badge.is-awareness {
+  border-color: rgba(8, 123, 170, .3);
+  background: rgba(8, 123, 170, .08);
+  color: #075f85;
+}
+:root[data-color-scheme="light"] .planner-badge.is-conflict,
+:root[data-color-scheme="light"] .planner-badge.is-missed,
+:root[data-color-scheme="light"] .planner-badge.is-needs-decision,
+:root[data-color-scheme="light"] .planner-badge.is-late {
+  border-color: rgba(180, 35, 24, .3);
+  background: rgba(217, 45, 32, .08);
+  color: #b42318;
+}
+:root[data-color-scheme="light"] .planner-badge.is-full,
+:root[data-color-scheme="light"] .planner-badge.is-interest,
+:root[data-color-scheme="light"] .planner-badge.is-typical,
+:root[data-color-scheme="light"] .planner-badge.is-above-typical {
+  border-color: rgba(154, 82, 0, .3);
+  background: rgba(154, 82, 0, .08);
+  color: #7a4100;
+}
+:root[data-color-scheme="light"] .planner-badge.is-smuggle,
+:root[data-color-scheme="light"] .planner-badge.is-urgency {
+  border-color: rgba(118, 85, 197, .3);
+  background: rgba(118, 85, 197, .08);
+  color: #5d3fa5;
+}
+:root[data-color-scheme="light"] .planner-level-badge {
+  background: color-mix(in srgb, var(--level-color) 12%, #fff);
+  color: color-mix(in srgb, var(--level-color) 62%, #18181b);
+}
+:root[data-color-scheme="light"] .planner-content-badge,
+:root[data-color-scheme="light"] .planner-content-date strong { color: #a43170; }
+:root[data-color-scheme="light"] .planner-request-source { color: #075f85; }
+:root[data-color-scheme="light"] .planner-request-source.is-general { color: #5d3fa5; }
+:root[data-color-scheme="light"] .planner-rule-icon { color: #a52117; }
+:root[data-color-scheme="light"] .planner-remove-button:hover { color: #b42318; }
+
+:root[data-color-scheme="light"] .planner-request-row:hover,
+:root[data-color-scheme="light"] .planner-campaign-row:hover,
+:root[data-color-scheme="light"] .planner-content-row:hover,
+:root[data-color-scheme="light"] .planner-playbook-list > button:hover,
+:root[data-color-scheme="light"] .planner-week-toggle:hover { background: rgba(24, 24, 27, .04); }
+:root[data-color-scheme="light"] .planner-request-source-heading,
+:root[data-color-scheme="light"] .planner-series-occurrences button,
+:root[data-color-scheme="light"] .planner-report-types label,
+:root[data-color-scheme="light"] .planner-report-inclusions label,
+:root[data-color-scheme="light"] .planner-brief-entry,
+:root[data-color-scheme="light"] .planner-brief-content-preview,
+:root[data-color-scheme="light"] .planner-recurrence-toggles button,
+:root[data-color-scheme="light"] .planner-recurrence-choice button,
+:root[data-color-scheme="light"] .planner-rule-card,
+:root[data-color-scheme="light"] .planner-lane-flow span,
+:root[data-color-scheme="light"] .planner-calendar-brief-facts > div,
+:root[data-color-scheme="light"] .planner-campaign-arc li,
+:root[data-color-scheme="light"] .planner-calendar-brief-play,
+:root[data-color-scheme="light"] .planner-smuggle-option,
+:root[data-color-scheme="light"] .planner-regeneration-metrics > span,
+:root[data-color-scheme="light"] .planner-regeneration-list > div,
+:root[data-color-scheme="light"] .planner-series-preview-list details,
+:root[data-color-scheme="light"] .planner-detail-hero,
+:root[data-color-scheme="light"] .planner-inventory-summary > span,
+:root[data-color-scheme="light"] .planner-inventory-row,
+:root[data-color-scheme="light"] .planner-campaign-detail-summary > div {
+  background: rgba(255, 255, 255, .72);
+}
+:root[data-color-scheme="light"] .planner-request-platforms,
+:root[data-color-scheme="light"] .planner-calendar-next-step,
+:root[data-color-scheme="light"] .planner-smuggle-decline,
+:root[data-color-scheme="light"] .planner-detail-note,
+:root[data-color-scheme="light"] .planner-inventory-row-controls {
+  background: rgba(24, 24, 27, .025);
+}
+:root[data-color-scheme="light"] .planner-request-platforms span,
+:root[data-color-scheme="light"] .planner-meter { background: rgba(24, 24, 27, .07); }
+:root[data-color-scheme="light"] .planner-play-row,
+:root[data-color-scheme="light"] .planner-overview-campaign-day { background: rgba(24, 24, 27, .035); }
+:root[data-color-scheme="light"] .planner-play-row:hover,
+:root[data-color-scheme="light"] .planner-overview-campaign-day:hover,
+:root[data-color-scheme="light"] .planner-overview-campaign-day:focus-visible { background: rgba(24, 24, 27, .065); }
+:root[data-color-scheme="light"] .planner-agenda-day > time strong,
+:root[data-color-scheme="light"] .planner-series-expand:hover,
+:root[data-color-scheme="light"] .planner-series-occurrences button,
+:root[data-color-scheme="light"] .planner-report-types label:has(input:checked),
+:root[data-color-scheme="light"] .planner-report-inclusions strong,
+:root[data-color-scheme="light"] .planner-report-preview-header > div:last-child strong,
+:root[data-color-scheme="light"] .planner-brief-notes strong,
+:root[data-color-scheme="light"] .planner-brief-copy > strong,
+:root[data-color-scheme="light"] .planner-announcement-script > article h4,
+:root[data-color-scheme="light"] .planner-playbook-list > button:hover,
+:root[data-color-scheme="light"] .planner-playbook-list > button.is-active,
+:root[data-color-scheme="light"] .planner-markdown h4,
+:root[data-color-scheme="light"] .planner-markdown h5,
+:root[data-color-scheme="light"] .planner-markdown h6,
+:root[data-color-scheme="light"] .planner-brief-content-preview section > strong,
+:root[data-color-scheme="light"] .planner-recurrence-toggles button.is-active,
+:root[data-color-scheme="light"] .planner-recurrence-choice button.is-active,
+:root[data-color-scheme="light"] .planner-week-toggle,
+:root[data-color-scheme="light"] .planner-preview-metrics strong,
+:root[data-color-scheme="light"] .planner-regeneration-metrics strong,
+:root[data-color-scheme="light"] .planner-inventory-summary strong { color: var(--planner-text); }
+
+:root[data-color-scheme="light"] .planner-play-row .planner-play-smuggle,
+:root[data-color-scheme="light"] .planner-overview-campaign-day-type em,
+:root[data-color-scheme="light"] .planner-brief-announcements .planner-brief-smuggle,
+:root[data-color-scheme="light"] .planner-calendar-brief-play em,
+:root[data-color-scheme="light"] .planner-smuggle-note-heading .planner-text-button { color: #6544b2; }
+:root[data-color-scheme="light"] .planner-brief-smuggled-into strong,
+:root[data-color-scheme="light"] .planner-calendar-event.is-campaign-day li.has-smuggle em,
+:root[data-color-scheme="light"] .planner-smuggle-note-heading .planner-text-button:hover { color: #50328f; }
+:root[data-color-scheme="light"] .planner-late-callout {
+  background: linear-gradient(135deg, rgba(217, 45, 32, .09), rgba(255, 255, 255, .95));
+}
+
+:root[data-color-scheme="light"] .planner-segmented button.is-active {
+  background: var(--planner-text);
+  color: #fff;
+}
+:root[data-color-scheme="light"] .planner-filter-select select,
+:root[data-color-scheme="light"] .planner-field input,
+:root[data-color-scheme="light"] .planner-field select,
+:root[data-color-scheme="light"] .planner-field textarea,
+:root[data-color-scheme="light"] .planner-week-editor-heading input,
+:root[data-color-scheme="light"] .planner-play-editor-row input,
+:root[data-color-scheme="light"] .planner-play-editor-row select,
+:root[data-color-scheme="light"] .planner-markdown-editor {
+  background: #fff;
+  color: var(--planner-text);
+}
+:root[data-color-scheme="light"] .planner-markdown-toolbar { background: rgba(24, 24, 27, .025); }
+:root[data-color-scheme="light"] .planner-markdown-toolbar button:hover {
+  background: rgba(24, 24, 27, .05);
+  color: var(--planner-text);
+}
+:root[data-color-scheme="light"] .planner-markdown code {
+  background: rgba(24, 24, 27, .07);
+  color: #a52117;
+}
+
+:root[data-color-scheme="light"] .planner-calendar-panel .fc {
+  --fc-border-color: rgba(24, 24, 27, .11);
+  --fc-neutral-bg-color: rgba(24, 24, 27, .035);
+  --fc-list-event-hover-bg-color: rgba(24, 24, 27, .05);
+}
+:root[data-color-scheme="light"] .planner-calendar-panel .fc .fc-button {
+  background: var(--planner-panel-raised);
+  color: var(--planner-text);
+}
+:root[data-color-scheme="light"] .planner-calendar-panel .planner-calendar-button { color: var(--planner-text) !important; }
+:root[data-color-scheme="light"] .planner-calendar-panel .fc .fc-button:hover,
+:root[data-color-scheme="light"] .planner-calendar-panel .fc .fc-button:focus { background: #dededb; }
+:root[data-color-scheme="light"] .planner-calendar-panel .fc .fc-daygrid-day { background: rgba(255, 255, 255, .58); }
+:root[data-color-scheme="light"] .planner-calendar-panel .fc .fc-daygrid-day.fc-day-today { background: rgba(217, 45, 32, .055); }
+:root[data-color-scheme="light"] .planner-calendar-panel .fc .fc-day-today .fc-daygrid-day-number { color: var(--planner-text); }
+:root[data-color-scheme="light"] .planner-calendar-panel .planner-level-calendar-event,
+:root[data-color-scheme="light"] .planner-calendar-panel .fc .fc-popover .planner-calendar-event,
+:root[data-color-scheme="light"] .planner-calendar-panel [role="dialog"] .planner-calendar-event,
+:root[data-color-scheme="light"] [role="dialog"] .planner-calendar-event,
+:root[data-color-scheme="light"] .planner-calendar-view-listWeek .planner-calendar-event.is-week {
+  background: color-mix(in srgb, var(--calendar-level-color) 12%, #fff) !important;
+  color: color-mix(in srgb, var(--calendar-level-color) 50%, #18181b) !important;
+}
+:root[data-color-scheme="light"] .planner-calendar-panel .planner-level-calendar-event {
+  --fc-event-contrast-color: color-mix(in srgb, var(--calendar-level-color) 50%, #18181b) !important;
+}
+:root[data-color-scheme="light"] .planner-calendar-panel .planner-level-calendar-event .planner-calendar-event {
+  color: color-mix(in srgb, var(--calendar-level-color) 50%, #18181b) !important;
+}
+:root[data-color-scheme="light"] .planner-calendar-event .planner-level-badge,
+:root[data-color-scheme="light"] .planner-calendar-event .planner-content-badge {
+  border-color: rgba(24, 24, 27, .28);
+  background: rgba(255, 255, 255, .42);
+}
+:root[data-color-scheme="light"] .planner-calendar-list-day-header { color: var(--planner-text); }
+:root[data-color-scheme="light"] .planner-calendar-list-event:focus-visible .planner-calendar-event.is-week { outline-color: var(--planner-text); }
+
+:root[data-color-scheme="light"] .planner-series-row.has-alert,
+:root[data-color-scheme="light"] .planner-series-save-warning,
+:root[data-color-scheme="light"] .planner-report-preview-header > div:last-child span.has-alert,
+:root[data-color-scheme="light"] .planner-brief-announcements > div.has-alert,
+:root[data-color-scheme="light"] .planner-calendar-brief-play.has-alert,
+:root[data-color-scheme="light"] .planner-timeliness-card.is-late,
+:root[data-color-scheme="light"] .planner-detail-note.is-alert,
+:root[data-color-scheme="light"] .planner-delete-confirmation {
+  background: rgba(217, 45, 32, .07);
+}
+:root[data-color-scheme="light"] .planner-series-save-warning small,
+:root[data-color-scheme="light"] .planner-report-preview-header > div:last-child span.has-alert strong,
+:root[data-color-scheme="light"] .planner-brief-announcements > div.has-alert strong,
+:root[data-color-scheme="light"] .planner-timeliness-card > p,
+:root[data-color-scheme="light"] .planner-regeneration-metrics > span.has-alert,
+:root[data-color-scheme="light"] .planner-delete-confirmation p { color: #9f2117; }
+:root[data-color-scheme="light"] .planner-report-closing,
+:root[data-color-scheme="light"] .planner-brief-copy.is-sample,
+:root[data-color-scheme="light"] .planner-announcement-script > article.is-closing,
+:root[data-color-scheme="light"] .planner-campaign-arc li.is-current { background: rgba(217, 45, 32, .055); }
+:root[data-color-scheme="light"] .planner-announcement-script {
+  background: linear-gradient(145deg, rgba(217, 45, 32, .055), rgba(255, 255, 255, .86) 35%);
+}
+:root[data-color-scheme="light"] .planner-detail-note.is-smuggle,
+:root[data-color-scheme="light"] .planner-smuggle-explainer,
+:root[data-color-scheme="light"] .planner-brief-smuggled-into,
+:root[data-color-scheme="light"] .planner-overview-campaign-day-type.has-smuggle,
+:root[data-color-scheme="light"] .planner-calendar-event.is-campaign-day li.has-smuggle { background: rgba(118, 85, 197, .07); }
+:root[data-color-scheme="light"] .planner-timeliness-card { background: rgba(20, 125, 107, .07); }
+:root[data-color-scheme="light"] .planner-detail-note.is-skipped { background: rgba(98, 98, 105, .055); }
+:root[data-color-scheme="light"] .planner-series-detail-bar { background: rgba(8, 123, 170, .065); }
+
+:root[data-color-scheme="light"] .planner-modal-backdrop { background: rgba(24, 24, 27, .48); }
+:root[data-color-scheme="light"] .planner-modal { background: var(--planner-shell); }
+:root[data-color-scheme="light"] .planner-modal > header { background: rgba(255, 255, 255, .94); }
+:root[data-color-scheme="light"] .planner-calendar-phase-card {
+  background: color-mix(in srgb, var(--planner-brief-accent) 8%, #fff);
+}
+:root[data-color-scheme="light"] .planner-calendar-phase-card > strong {
+  color: color-mix(in srgb, var(--planner-brief-accent) 50%, #18181b);
+}
+:root[data-color-scheme="light"] .planner-detail-list > div { background: var(--planner-shell); }
+
+:root[data-color-scheme="light"] .planner-access-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(245, 245, 243, .98));
+}
+:root[data-color-scheme="light"] .planner-seed-banner p { color: #704313; }
+:root[data-color-scheme="light"] .planner-toast {
+  border-color: rgba(20, 125, 107, .3);
+  background: #e7f5f1;
+  color: #174e45;
+}
+:root[data-color-scheme="light"] .planner-toast.is-error {
+  border-color: rgba(180, 35, 24, .3);
+  background: #fcebea;
+  color: #8d1d15;
+}
+
 @media (max-width: 1120px) {
   .planner-metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .planner-dashboard-grid { grid-template-columns: 1fr; }
@@ -671,6 +1013,8 @@ a { text-decoration: none; }
   .planner-mobile-menu { display: grid; place-items: center; }
   .planner-header-context { justify-items: start; padding-left: 10px; }
   .planner-user-chip > div, .planner-user-chip > button { display: none; }
+  .planner-user-chip > .planner-theme-toggle { display: inline-flex; width: 36px; min-height: 36px; padding: 0; }
+  .planner-theme-toggle .planner-theme-label { display: none; }
   .planner-sidebar { transform: translateX(-105%); transition: transform 240ms var(--planner-ease); }
   .planner-sidebar.is-open { transform: translateX(0); }
   .planner-sidebar-scrim { position: fixed; z-index: 44; inset: 76px 0 0; display: block; background: rgba(0,0,0,.62); }

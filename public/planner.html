@@ -6,6 +6,14 @@
     <meta name="theme-color" content="#18181b">
     <meta name="description" content="CrossPointe Central Promotion Planner.">
     <title>Promotion Planner · CrossPointe Central</title>
+    <script>
+      (function() {
+        var theme = "dark";
+        try { if (localStorage.getItem("central-promotion-planner-theme") === "light") theme = "light"; } catch (error) {}
+        document.documentElement.dataset.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", theme === "light" ? "#ffffff" : "#18181b");
+      }());
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,7 +33,8 @@
           });
         }
 
-        window.CENTRAL_PLANNER_FIREBASE_READY =
+        var localPreview = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(location.hostname) && new URLSearchParams(location.search).get("preview") === "1";
+        window.CENTRAL_PLANNER_FIREBASE_READY = localPreview ? Promise.resolve() :
           loadScript("/__/firebase/11.10.0/firebase-app-compat.js")
             .then(function() {
               return loadScript("/__/firebase/11.10.0/firebase-auth-compat.js");

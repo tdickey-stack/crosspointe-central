@@ -1126,6 +1126,7 @@
     bulletinEditingFrontContentId: "",
     bulletinFrontContentDescriptionDraft: "",
     bulletinEventFilter: "week1",
+    bulletinEventSearch: "",
     bulletinSync: null,
     bulletinError: "",
     bulletinMessage: "",
@@ -4649,6 +4650,11 @@
   }
 
   function handleAdminInput_(event) {
+    if (event.target.hasAttribute("data-admin-bulletin-event-search")) {
+      updateBulletinEventSearch_(event.target.value);
+      return;
+    }
+
     if (
       event.type === "change" &&
       event.target.hasAttribute("data-admin-bulletin-featured-bw-image")
@@ -4751,11 +4757,13 @@
       }
       if (
         fallbackBlockField === "imageSide" ||
-        fallbackBlockField === "size"
+        fallbackBlockField === "size" ||
+        fallbackBlockField === "layout3Side"
       ) {
         adminState.bulletinError = "";
         renderAdmin_();
       }
+      syncBulletinLayout3CustomDraftFit_();
       return;
     }
 
@@ -5985,7 +5993,11 @@
     if (currentPage.id === "bulletin" && adminState.bulletinLoaded) {
       syncBulletinEventImages_(appEl);
       syncBulletinFrontFit_();
-      if (document.fonts) document.fonts.ready.then(syncBulletinFrontFit_);
+      syncBulletinLayout3CustomDraftFit_();
+      if (document.fonts) document.fonts.ready.then(function() {
+        syncBulletinFrontFit_();
+        syncBulletinLayout3CustomDraftFit_();
+      });
       Array.prototype.forEach.call(
           appEl.querySelectorAll(".central-bulletin-print-root img"),
           function(image) {
@@ -6670,6 +6682,7 @@
     var errorHeading = getBulletinErrorHeading_();
     var fullPage = getBulletinPrintFormat_() === "full-page";
     var readable = getBulletinLayout_() === "readable";
+    var autoBack = readable && draft.layout3Side === "back";
 
     return [
       "<div class=\"central-admin-modal central-admin-bulletin-block-modal\" role=\"presentation\">",
@@ -6722,15 +6735,16 @@
         guidanceHtml: renderBulletinFrontContentDescriptionGuidance_(
             draft.description, {maximum: 800, recommended: null},
         ),
-        hint: "Spaces and Markdown count toward the limit. Print fit depends on block size, title, and image. " + (readable ? "Check the preview after saving; text stays at least 12pt." : "Front-page copy may shorten to fit.") + " Use **bold**, *italics*, headings, and lists.",
+        hint: (readable ? "Spaces and Markdown count toward the 800-character editing limit; it does not guarantee printed fit. The fit status checks your current edits at 12pt." : "Spaces and Markdown count toward the limit. Print fit depends on block size, title, and image. Front-page copy may shorten to fit.") + " Use **bold**, *italics*, headings, and lists.",
         value: draft.description,
         rows: 4,
         maxLength: 800,
         wide: true,
       }),
-      "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-block-size\">",
-      "<legend>Printed Size</legend>",
-      (readable ? [2, 3] : [1, 2, 3]).map(function(size) {
+      readable ? '<p class="central-admin-note" role="status" aria-live="polite" data-admin-bulletin-custom-fit>Checking current block fit…</p>' : '',
+      autoBack ? '<p class="central-admin-note">Back-page cards size automatically to fit their content.</p>' : "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-block-size\">",
+      autoBack ? "" : "<legend>Printed Size</legend>",
+      (autoBack ? [] : readable ? [2, 3] : [1, 2, 3]).map(function(size) {
         var active = Number(draft.size || 2) === size;
         var descriptions = [
           "A compact card with a smaller footprint.",
@@ -6750,7 +6764,7 @@
           "</small></span></label>",
         ].join("");
       }).join(""),
-      "</fieldset>",
+      autoBack ? "" : "</fieldset>",
       "<fieldset class=\"central-admin-bulletin-hero-source central-admin-bulletin-block-image-side\">",
       "<legend>Image Placement</legend>",
       "<label class=\"", draft.imageSide === "left" ? "is-active" : "",
@@ -7849,7 +7863,7 @@
 
   function getPrintModeStepDefinition_(step) {
     if (getBulletinLayout_() === "readable" && Number(step) === 3) return {label: "Front Content", description: "Reserve the hero and generosity, then choose content for two flexible front slots."};
-    if (getBulletinLayout_() === "readable" && Number(step) === 4) return {label: "Back Content", description: "Choose individual events and flexible content for six back slots."};
+    if (getBulletinLayout_() === "readable" && Number(step) === 4) return {label: "Back Content", description: "Choose individual events and flexible content; card heights adjust automatically."};
     var definition =
       PRINT_MODE_STEPS[Math.max(0, getPrintModeStepIndex_(step))] ||
       PRINT_MODE_STEPS[0];
@@ -8202,12 +8216,11 @@
       layout.items.splice(prior ? previousItems.indexOf(prior) : layout.items.length, 0, target);
       var usage = getBulletinLayout3Capacity_();
       var growing = target.side !== "off" && (!prior || target.side !== prior.side || target.size > prior.size);
-      var invalid = growing && (usage[target.side] > (target.side === "front" ? 2 : 6) ||
-        (target.side === "back" && !packBulletinLayout3Back_(getBulletinLayout3Entries_("back"))));
+      var invalid = growing && target.side === "front" && usage.front > 2;
       adminState.bulletinDraft.fallbackBlocks = previousBlocks;
       if (invalid) {
         layout.items = previousItems;
-        adminState.bulletinError = "Not enough slots on the " + target.side + ". Choose Not included to save this block, or free space first. The back allows at most two Large blocks.";
+        adminState.bulletinError = "Not enough slots on the front. Choose Back or Not included to save this block, or free space first.";
         renderAdmin_();
         return;
       }
@@ -8957,7 +8970,6 @@
     if (getBulletinLayout_() === "readable") return renderBulletinLayout3Step_(canSave, "back");
     var headings = adminState.bulletinDraft.headings || {};
     var events = getBulletinEventDraftsInWindow_();
-    var visibleEvents = getFilteredBulletinEventDrafts_(events);
     var selectedEventCount = events.filter(function(item) {
       return item.included;
     }).length;
@@ -8990,11 +9002,7 @@
             weekCounts,
             selectedEventCount,
         ) +
-        (visibleEvents.length ?
-          "<div class=\"central-admin-bulletin-events-grid\">" +
-            visibleEvents.map(renderBulletinEventEditor_).join("") +
-          "</div>" :
-          renderAdminNote_("No events match this view.")) :
+        renderBulletinEventResults_(events, canSave, false) :
         renderAdminNote_(
             "No non-featured Central events fall in this Print Mode window.",
         ),
@@ -9229,7 +9237,6 @@
     var featured = getBulletinFeaturedEvent_();
     var manualHeroIsActive = isBulletinManualHeroActive_();
     var events = getBulletinEventDraftsInWindow_();
-    var visibleEvents = getFilteredBulletinEventDrafts_(events);
     var selectedEventCount = events.filter(function(item) {
       return item.included;
     }).length;
@@ -9296,11 +9303,7 @@
             weekCounts,
             selectedEventCount,
         ) +
-        (visibleEvents.length ?
-          "<div class=\"central-admin-bulletin-events-grid\">" +
-            visibleEvents.map(renderBulletinEventEditor_).join("") +
-          "</div>" :
-          renderAdminNote_("No events match this view.")) :
+        renderBulletinEventResults_(events, canSave, false) :
         renderAdminNote_("No non-featured Central events fall in this bulletin window."),
       "</div>",
     ].join("");
@@ -9483,6 +9486,7 @@
       totalCount,
       weekCounts,
       includedCount,
+      options,
   ) {
     var filters = Array.from(
         {length: PRINT_MODE_EVENT_WEEK_COUNT},
@@ -9501,6 +9505,7 @@
 
     return [
       "<div class=\"central-admin-bulletin-event-toolbar\">",
+      renderBulletinEventSearch_(),
       "<div class=\"central-admin-bulletin-event-filters\" role=\"group\" aria-label=\"Filter bulletin events\">",
       filters.map(function(filter) {
         var active = adminState.bulletinEventFilter === filter.id;
@@ -9513,13 +9518,83 @@
         ].join("");
       }).join(""),
       "</div>",
+      options && options.readable ? "" : [
       "<div class=\"central-admin-bulletin-event-bulk\">",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"include\">Include All</button>",
-      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"exclude\">Exclude All</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"include\">", String(adminState.bulletinEventSearch || "").trim() ? "Include Results" : "Include All", "</button>",
+      "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"exclude\">", String(adminState.bulletinEventSearch || "").trim() ? "Exclude Results" : "Exclude All", "</button>",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary\" data-admin-action=\"bulk-bulletin-events\" data-admin-bulletin-bulk=\"week1-default\">Reset to Week 1</button>",
       "</div>",
+      ].join(""),
       "</div>",
     ].join("");
+  }
+
+  function renderBulletinEventSearch_() {
+    return '<label class="central-admin-bulletin-event-search"><span>Search events</span>' +
+      '<input type="search" data-admin-bulletin-event-search maxlength="200" autocomplete="off" placeholder="Name, location, or details" value="' +
+      escapeAttr_(adminState.bulletinEventSearch || "") + '" aria-describedby="bulletin-event-search-help">' +
+      '<small id="bulletin-event-search-help">Search all 28 days, then use the filters to narrow the results.</small></label>';
+  }
+
+  function getBulletinEventSelectionItems_(readable) {
+    var events = getBulletinEventDraftsInWindow_();
+    if (!readable) return events;
+    var selected = getBulletinLayout3Entries_("back");
+    return events.map(function(item) {
+      var placement = selected.find(function(entry) { return entry.key === "event:" + item.id; });
+      return Object.assign({}, item, {included: !!placement, layout3Size: placement ? placement.size : 1});
+    });
+  }
+
+  function renderBulletinEventResultCount_(visibleCount, totalCount) {
+    return 'Showing ' + visibleCount + ' of ' + totalCount + ' events';
+  }
+
+  function renderBulletinEventResultCards_(events, canSave, readable) {
+    var visibleEvents = getFilteredBulletinEventDrafts_(events);
+    return visibleEvents.length ? '<div class="central-admin-bulletin-events-grid">' +
+      visibleEvents.map(function(item) {
+        return renderBulletinEventEditor_(item, {readable: readable, canSave: canSave});
+      }).join('') + '</div>' :
+      '<p class="central-admin-note">' + (String(adminState.bulletinEventSearch || "").trim() ?
+        'No events match your search. Try another term or choose All 28 Days.' : 'No events match this view.') + '</p>';
+  }
+
+  function renderBulletinEventResults_(events, canSave, readable) {
+    return '<div data-admin-bulletin-event-results data-readable="' + !!readable + '" data-can-save="' + !!canSave + '">' +
+      '<p class="central-admin-note" role="status" aria-live="polite" data-admin-bulletin-event-result-count>' +
+      renderBulletinEventResultCount_(getFilteredBulletinEventDrafts_(events).length, events.length) + '</p>' +
+      '<div data-admin-bulletin-event-result-list>' + renderBulletinEventResultCards_(events, canSave, readable) + '</div></div>';
+  }
+
+  function updateBulletinEventSearch_(value) {
+    var wasSearching = !!String(adminState.bulletinEventSearch || "").trim();
+    adminState.bulletinEventSearch = String(value || "").slice(0, 200);
+    if (!wasSearching && adminState.bulletinEventSearch.trim()) adminState.bulletinEventFilter = "all";
+    syncBulletinEventSearchResults_();
+  }
+
+  function syncBulletinEventSearchResults_() {
+    var results = appEl && appEl.querySelector("[data-admin-bulletin-event-results]");
+    if (!results) return;
+    var readable = results.getAttribute("data-readable") === "true";
+    var canSave = results.getAttribute("data-can-save") === "true";
+    var events = getBulletinEventSelectionItems_(readable);
+    results.querySelector("[data-admin-bulletin-event-result-count]").textContent =
+      renderBulletinEventResultCount_(getFilteredBulletinEventDrafts_(events).length, events.length);
+    results.querySelector("[data-admin-bulletin-event-result-list]").innerHTML =
+      renderBulletinEventResultCards_(events, canSave, readable);
+    Array.prototype.forEach.call(appEl.querySelectorAll("[data-admin-bulletin-filter]"), function(button) {
+      var active = button.getAttribute("data-admin-bulletin-filter") === adminState.bulletinEventFilter;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    var searching = !!adminState.bulletinEventSearch.trim();
+    Array.prototype.forEach.call(appEl.querySelectorAll("[data-admin-bulletin-bulk]"), function(button) {
+      var mode = button.getAttribute("data-admin-bulletin-bulk");
+      if (mode === "include" || mode === "exclude") button.textContent =
+        (mode === "include" ? "Include " : "Exclude ") + (searching ? "Results" : "All");
+    });
   }
 
   function renderBulletinChoice_(type, id, label, checked, radio, disabled) {
@@ -9630,8 +9705,7 @@
         "<p class=\"is-empty\">No description from Planning Center.</p>",
       readable ? "" : renderBulletinEventDescriptionGuidance_(item),
       "</div>",
-      readable && item.included ? renderBulletinLayout3Segments_("event:" + item.id, "size",
-          item.layout3Size || 1, [[1, "Standard"], [2, "Large · 2 slots"]], canSave) : "",
+      readable && item.included ? '<p class="central-admin-note">Card height adjusts to the printed content.</p>' : "",
       "<button type=\"button\" class=\"central-admin-link-button is-secondary central-admin-bulletin-event-edit\" data-admin-action=\"edit-bulletin-event\" data-admin-bulletin-event-id=\"",
       escapeAttr_(item.id), "\"", canSave ? "" : " disabled", ">Edit Print Copy</button>",
       "</article>",
@@ -9721,25 +9795,49 @@
 
   function getBulletinLayout3Capacity_() {
     return {front: getBulletinLayout3Entries_("front").reduce(function(n, item) { return n + item.size; }, 0),
-      back: getBulletinLayout3Entries_("back").reduce(function(n, item) { return n + item.size; }, 0)};
+      back: getBulletinLayout3Entries_("back").length};
   }
 
-  // Fit whole cards into two three-slot columns. Backtracking avoids avoidable gaps.
-  function packBulletinLayout3Back_(entries) {
-    var result = [];
-    function place(index, heights) {
-      if (index === entries.length) return true;
-      for (var column = 0; column < 2; column += 1) {
-        var size = entries[index].size;
-        if (heights[column] + size > 3) continue;
-        result[index] = {column: column + 1, row: heights[column] + 1};
-        heights[column] += size;
-        if (place(index + 1, heights)) return true;
-        heights[column] -= size;
-      }
-      return false;
+  // Keep reading order contiguous: top-to-bottom on the left, then the right.
+  function getBulletinLayout3BackSplit_(heights, gap) {
+    if (heights.length < 2) return heights.length;
+    var total = heights.reduce(function(sum, height) { return sum + height; }, 0);
+    var left = 0;
+    var bestSplit = 1;
+    var bestHeight = Infinity;
+    for (var split = 1; split < heights.length; split += 1) {
+      left += heights[split - 1];
+      var tallest = Math.max(left + gap * (split - 1),
+          total - left + gap * (heights.length - split - 1));
+      if (tallest < bestHeight) { bestHeight = tallest; bestSplit = split; }
     }
-    return place(0, [0, 0]) ? result : null;
+    return bestSplit;
+  }
+
+  function renderBulletinLayout3BackColumns_(entries) {
+    var split = Math.ceil(entries.length / 2);
+    return [entries.slice(0, split), entries.slice(split)].map(function(column, index) {
+      return '<div class="b3-back-column" data-b3-region="' + (index ? 'Right column' : 'Left column') + '">' +
+        column.map(function(entry) {
+          return renderBulletinLayout3Card_(Object.assign({}, entry, {size: 1}));
+        }).join('') + '</div>';
+    }).join('');
+  }
+
+  function layoutBulletinLayout3Back_(root, measuredSplit) {
+    var firstSplit = 0;
+    Array.prototype.forEach.call(root.querySelectorAll('.b3-back-slots'), function(slots, index) {
+      var columns = slots.querySelectorAll('.b3-back-column');
+      if (columns.length !== 2) return;
+      var cards = Array.prototype.slice.call(slots.querySelectorAll('[data-bulletin-preview-key]'));
+      // offsetHeight stays in print pixels when the visible preview is scaled.
+      var split = typeof measuredSplit === "number" ? measuredSplit : getBulletinLayout3BackSplit_(
+          cards.map(function(card) { return card.offsetHeight; }),
+          parseFloat(window.getComputedStyle(columns[0]).rowGap) || 0);
+      cards.forEach(function(card, cardIndex) { columns[cardIndex < split ? 0 : 1].appendChild(card); });
+      if (!index) firstSplit = split;
+    });
+    return firstSplit;
   }
 
   function setBulletinLayout3Placement_(key, field, value) {
@@ -9757,11 +9855,9 @@
     var usage = getBulletinLayout3Capacity_();
     var addsSpace = next.side !== "off" && (!old || old.side !== next.side || next.size > old.size);
     var error = "";
-    if (addsSpace && usage[next.side] > (next.side === "front" ? 2 : 6)) {
+    if (addsSpace && next.side === "front" && usage.front > 2) {
       error = "The " + next.side + " is full. Move or remove another item before adding this " +
         (next.size === 2 ? "Large block (2 slots)." : "item (1 slot).");
-    } else if (addsSpace && next.side === "back" && !packBulletinLayout3Back_(getBulletinLayout3Entries_("back"))) {
-      error = "The back has room for at most two Large blocks: each needs two stacked slots in one column. Choose Standard or remove a Large block.";
     }
     if (error) {
       layout.items = before;
@@ -9774,15 +9870,7 @@
   }
 
   function getBulletinLayout3DisplayEntries_(side) {
-    var entries = getBulletinLayout3Entries_(side);
-    if (side !== "back") return entries;
-    var positions = packBulletinLayout3Back_(entries);
-    if (!positions) return entries;
-    return entries.map(function(entry, index) {
-      return {entry: entry, position: positions[index]};
-    }).sort(function(a, b) {
-      return a.position.column - b.position.column || a.position.row - b.position.row;
-    }).map(function(card) { return card.entry; });
+    return getBulletinLayout3Entries_(side);
   }
 
   function moveBulletinLayout3Item_(key, direction) {
@@ -9796,18 +9884,6 @@
     var swap = entries[index];
     entries[index] = entries[target];
     entries[target] = swap;
-    if (current.side === "back") {
-      var positions = packBulletinLayout3Back_(entries);
-      var visualOrder = positions && positions.map(function(position, i) {
-        return {index: i, position: position};
-      }).sort(function(a, b) {
-        return a.position.column - b.position.column || a.position.row - b.position.row;
-      });
-      if (!visualOrder || visualOrder.some(function(item, i) { return item.index !== i; })) {
-        adminState.bulletinError = "That order leaves a gap too small for a Large block. Move a Standard block first, or change a block to Standard.";
-        return;
-      }
-    }
     var keys = entries.map(function(entry) { return entry.key; });
     var ordered = entries.map(function(entry) {
       return layout.items.find(function(item) { return item.key === entry.key; });
@@ -9823,7 +9899,7 @@
   function renderBulletinLayout3Budget_() {
     var usage = getBulletinLayout3Capacity_();
     return '<div class="b3-editor-budget"><strong>Front: ' + usage.front +
-      '/2 slots · Back: ' + usage.back + '/6 slots</strong><p>Select items below. Standard uses 1 slot; Large uses 2.</p></div>';
+      '/2 slots · Back: ' + usage.back + ' cards</strong><p>Front: Standard uses 1 slot; Large uses 2. Back cards size automatically; the print check measures the complete page.</p></div>';
   }
 
   function renderBulletinLayout3Segments_(key, field, value, options, canSave) {
@@ -9852,7 +9928,7 @@
       '<strong>' + escapeHtml_(title) + '</strong></span></label>' +
       '<div class="b3-choice-tools">' + (selected ?
         renderBulletinLayout3Segments_(entry.key, "side", placement.side, [["front", "Front"], ["back", "Back"]], canSave) +
-        renderBulletinLayout3Segments_(entry.key, "size", placement.size, [[1, "Standard"], [2, "Large · 2 slots"]], canSave) : '') +
+        (placement.side === "front" ? renderBulletinLayout3Segments_(entry.key, "size", placement.size, [[1, "Standard"], [2, "Large · 2 slots"]], canSave) : '<span class="central-admin-note">Automatic height</span>') : '') +
       '<button type="button" class="central-admin-link-button is-secondary central-admin-bulletin-print-copy-button" ' + edit +
         (canSave ? '' : ' disabled') + '>' + (type === "custom" ? 'Edit Block' : 'Edit Print Copy') + '</button></div></div>';
   }
@@ -9870,24 +9946,12 @@
   }
 
   function renderBulletinLayout3Events_(canSave) {
-    var selected = getBulletinLayout3Entries_("back");
-    var events = getBulletinEventDraftsInWindow_().map(function(item) {
-      var placement = selected.find(function(entry) { return entry.key === "event:" + item.id; });
-      return Object.assign({}, item, {included: !!placement, layout3Size: placement ? placement.size : 1});
-    });
-    var visibleEvents = getFilteredBulletinEventDrafts_(events);
-    var counts = getBulletinEventWeekCounts_(events);
-    var filters = ["week1", "week2", "week3", "week4", "included", "all"];
-    return '<div class="central-admin-item"><h3>Events</h3><div class="central-admin-bulletin-event-filters" role="group" aria-label="Filter bulletin events">' +
-      filters.map(function(filter, index) {
-        var count = index < 4 ? counts[index] : filter === "included" ? events.filter(function(item) { return item.included; }).length : events.length;
-        return '<button type="button" class="central-admin-bulletin-filter' + (adminState.bulletinEventFilter === filter ? ' is-active' : '') +
-          '" data-admin-action="filter-bulletin-events" data-admin-bulletin-filter="' + filter + '" aria-pressed="' + (adminState.bulletinEventFilter === filter) + '">' +
-          (index < 4 ? 'Week ' + (index + 1) : filter === "included" ? 'Included' : 'All 28 Days') + ' <span>' + count + '</span></button>';
-      }).join('') + '</div><p>Standard uses 1 slot; Large uses 2. Choose Large when a thumbnail, registration QR, or longer print copy needs more room.</p>' +
-      '<div class="central-admin-bulletin-events-grid">' + visibleEvents.map(function(item) {
-        return renderBulletinEventEditor_(item, {readable: true, canSave: canSave});
-      }).join('') + '</div>' + (!visibleEvents.length ? '<p>No events match this view.</p>' : '') + '</div>';
+    var events = getBulletinEventSelectionItems_(true);
+    return '<div class="central-admin-item"><h3>Events</h3>' +
+      renderBulletinEventFilterBar_(events.length, getBulletinEventWeekCounts_(events),
+        events.filter(function(item) { return item.included; }).length, {readable: true}) +
+      '<p>Cards use the height their content needs in two columns. Review the complete page before printing.</p>' +
+      renderBulletinEventResults_(events, canSave, true) + '</div>';
   }
 
   function renderBulletinLayout3Step_(canSave, side) {
@@ -9945,7 +10009,7 @@
     };
   }
 
-  function renderBulletinLayout3EventMedia_(item, image) {
+  function renderBulletinLayout3EventMedia_(item, image, options) {
     // Same stable CP-CM-1.3 palette used by Navlab; the QR always stays black/white.
     var colors = ["#EF3E2D", "#33BECC", "#64242E", "#FAC8C3", "#4BC3A7", "#4BB8E9", "#5558A6"];
     var key = String(item.planning_center_event_id || item.title || item.id || "CrossPointe");
@@ -9953,8 +10017,11 @@
     for (var character of key) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
     var url = getBulletinEventSourceUrl_(item.registration_url);
     var svg = url && window.PrintModeQr ? window.PrintModeQr.renderSvg(url) : "";
-    return '<div class="b3-event-media"><div class="b3-event-thumbnail" aria-hidden="true" style="--b3-event-color:' + colors[hash % colors.length] + '">' +
-      (image ? '<img src="' + escapeAttr_(image) + '" alt="" data-bulletin-event-image>' : '') + '</div>' +
+    var thumbnail = options && options.includeThumbnail === false ? '' :
+      '<div class="b3-event-thumbnail" aria-hidden="true" style="--b3-event-color:' + colors[hash % colors.length] + '">' +
+      (image ? '<img src="' + escapeAttr_(image) + '" alt="" data-bulletin-event-image>' : '') + '</div>';
+    if (!thumbnail && !url) return '';
+    return '<div class="b3-event-media">' + thumbnail +
       (url ? svg ? '<a class="b3-event-qr" href="' + escapeAttr_(url) + '">' + svg +
         '<span>' + escapeHtml_(item.registration_button_text || "Register") + '</span></a>' :
         '<p class="b3-qr-error" data-b3-qr-error>Registration QR code could not be generated.</p>' : '') + '</div>';
@@ -9984,7 +10051,7 @@
         '" data-b3-region="' + escapeAttr_(title) + '" data-bulletin-preview-key="' + escapeAttr_(entry.key) + '"' +
         (position ? ' style="grid-column:' + position.column + ';grid-row:' + position.row + ' / span ' + entry.size + '"' : '') + '>' +
         '<div class="b3-event-heading"><h2>' + escapeHtml_(title) + '</h2>' + renderBulletinLayout3Meta_(item) + '</div>' +
-        '<div class="b3-event-content">' + renderBulletinLayout3EventMedia_(item, getBulletinEventSourceUrl_(item.image_url)) +
+        '<div class="b3-event-content">' + renderBulletinLayout3EventMedia_(item, '', {includeThumbnail: false}) +
         '<div class="b3-event-copy">' +
         (item.description && item.includeDescription !== false ? '<div class="b3-copy">' + renderAdminMarkdownLite_(item.description) + '</div>' : '') + '</div></div></article>';
     }
@@ -10006,12 +10073,8 @@
       '</h1></div><p class="b3-service-date">Sunday, ' + escapeHtml_(formatBulletinLongDate_(draft.serviceDate)) + '</p></header>';
     var entries = getBulletinLayout3Entries_(side);
     if (side === "back") {
-      var positions = packBulletinLayout3Back_(entries);
-      var ordered = entries.map(function(entry, index) { return {entry: entry, position: positions && positions[index]}; });
-      if (positions) ordered.sort(function(a, b) { return a.position.column - b.position.column || a.position.row - b.position.row; });
-      return header + '<div class="b3-back-slots" data-b3-region="Back slots">' + ordered.map(function(card) {
-        return renderBulletinLayout3Card_(card.entry, card.position);
-      }).join('') + '</div><footer class="b3-footer" data-b3-region="Details footer"><img class="b3-qr" src="/central-bulletin-qr.png" alt="QR code for central.crosspointe.tv"><p>Full details and next steps<br><strong>central.crosspointe.tv</strong></p></footer>';
+      return header + '<div class="b3-back-slots" data-b3-region="Back content">' +
+        renderBulletinLayout3BackColumns_(entries) + '</div><footer class="b3-footer" data-b3-region="Details footer"><img class="b3-qr" src="/central-bulletin-qr.png" alt="QR code for central.crosspointe.tv"><p>Full details and next steps<br><strong>central.crosspointe.tv</strong></p></footer>';
     }
     var hero = getBulletinFrontHero_();
     var heroImage = hero.source === "featured" ? getBulletinFeaturedPrintImageUrl_(hero) : getBulletinFallbackImageUrl_(hero.image_url);
@@ -10065,9 +10128,9 @@
     var problems = [];
     var usage = getBulletinLayout3Capacity_();
     if (usage.front > 2) problems.push("Front uses " + usage.front + "/2 slots");
-    if (usage.back > 6) problems.push("Back uses " + usage.back + "/6 slots");
-    if (usage.back <= 6 && !packBulletinLayout3Back_(getBulletinLayout3Entries_("back"))) problems.push("Back allows at most two Large blocks");
+    var backSplit;
     try {
+      backSplit = layoutBulletinLayout3Back_(holder);
       if (holder.querySelector("[data-b3-qr-error]")) problems.push("Registration QR code unavailable; reload Print Mode before printing");
       Array.prototype.forEach.call(holder.querySelectorAll("[data-b3-region]"), function(region) {
         if (region.scrollWidth > region.clientWidth + 1 ||
@@ -10077,7 +10140,7 @@
         }
       });
     } finally { holder.remove(); }
-    return {fits: !problems.length, level: 0, copyLines: [], overflow: problems.length,
+    return {fits: !problems.length, level: 0, copyLines: [], overflow: problems.length, backSplit: backSplit,
       message: problems.length ? "Needs attention — " + problems.join("; ") + ". Shorten copy, remove an optional image, or change the selection before printing. Text stays at 12pt or larger." :
         "Both sides fit at 12pt or larger. Print at 100% scale and check a paper proof."};
   }
@@ -11053,6 +11116,68 @@
         messageElement.textContent = state.message;
       }
     });
+  }
+
+  function measureBulletinLayout3CustomDraftFit_() {
+    var draft = adminState.bulletinFallbackBlockDraft || {};
+    var side = draft.layout3Side;
+    var size = Number(draft.size) === 3 ? 2 : 1;
+    if (side !== "front" && side !== "back") return {fits: false, selected: false, size: size,
+      message: "Choose Front or Back to check printed fit. The 800-character limit is an editing limit."};
+    var entries = getBulletinLayout3Entries_(side).slice();
+    var editingId = adminState.bulletinFallbackBlockEditingId;
+    var key = "custom:" + (editingId || "unsaved-fit-draft");
+    if (!editingId) while (entries.some(function(entry) { return entry.key === key; })) key += "-new";
+    var candidate = {key: key, type: "custom", size: size, side: side, item: Object.assign({}, draft)};
+    var index = editingId ? entries.findIndex(function(entry) { return entry.key === key; }) : -1;
+    if (index < 0) entries.push(candidate);
+    else entries[index] = candidate;
+    var usedSlots = entries.reduce(function(total, entry) { return total + entry.size; }, 0);
+    if (side === "front" && usedSlots > 2) {
+      return {fits: false, selected: true, size: size,
+        message: "Not enough slots for this placement. Move or remove another item, or choose Not included to save the draft."};
+    }
+    var holder = document.createElement("div");
+    holder.setAttribute("aria-hidden", "true");
+    holder.style.cssText = "position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none;";
+    holder.innerHTML = renderBulletinPanel_(side, false);
+    appEl.appendChild(holder);
+    try {
+      var slots = holder.querySelector(side === "back" ? ".b3-back-slots" : ".b3-front-slots");
+      if (!slots) return {fits: false, selected: true, size: size, message: "Could not check block fit. Reopen the editor before printing."};
+      slots.innerHTML = side === "back" ? renderBulletinLayout3BackColumns_(entries) : entries.map(function(entry) {
+        return renderBulletinLayout3Card_(entry);
+      }).join("");
+      if (side === "back") layoutBulletinLayout3Back_(holder);
+      var card = Array.prototype.find.call(slots.querySelectorAll("[data-bulletin-preview-key]"), function(region) {
+        return region.getAttribute("data-bulletin-preview-key") === key;
+      });
+      var fits = !!card && card.scrollWidth <= card.clientWidth + 1 &&
+        (card.scrollHeight <= card.clientHeight + 1 || !bulletinLayout3ContentOverflows_(card));
+      if (side === "back") {
+        fits = fits && Array.prototype.every.call(holder.querySelectorAll('[data-b3-region]'), function(region) {
+          return region.scrollWidth <= region.clientWidth + 1 &&
+            (region.scrollHeight <= region.clientHeight + 1 || !bulletinLayout3ContentOverflows_(region));
+        });
+        return {fits: fits, selected: true, size: size, message: fits ?
+          "Current block and the complete back page fit at 12pt or larger. Card heights adjust automatically." :
+          "The back page is too full with these edits. Shorten copy, move an item to the front, or remove an item. No text has been removed."};
+      }
+      return {fits: fits, selected: true, size: size, message: fits ?
+        "Current " + (size === 2 ? "Large" : "Standard") + " block fits at 12pt or larger, including the complete description, title, and optional image." :
+        size === 1 ? "Current Standard block clips content. Choose Large or shorten the copy. No text has been removed." :
+          "Current Large block clips content. Shorten the copy or remove the optional image. No text has been removed."};
+    } finally { holder.remove(); }
+  }
+
+  function syncBulletinLayout3CustomDraftFit_() {
+    if (getBulletinLayout_() !== "readable" || !appEl || !adminState.bulletinFallbackBlockEditorOpen) return;
+    var notice = appEl.querySelector("[data-admin-bulletin-custom-fit]");
+    if (!notice) return;
+    var fit = measureBulletinLayout3CustomDraftFit_();
+    notice.textContent = fit.message;
+    notice.className = fit.fits ? "central-admin-note" : "central-admin-print-mode-error";
+    notice.setAttribute("data-fits", String(fit.fits));
   }
 
   function getBulletinFrontContentDescriptionGuidanceState_(value, limits) {
@@ -20416,19 +20541,14 @@
       getBulletinEventDraftsInWindow_();
     var filter = String(adminState.bulletinEventFilter || "week1");
 
-    if (filter === "included") {
-      return source.filter(function(item) {
-        return item.included;
-      });
-    }
-
-    if (/^week[1-4]$/.test(filter)) {
-      return source.filter(function(item) {
-        return getBulletinEventWeek_(item) === filter;
-      });
-    }
-
-    return source;
+    var terms = String(adminState.bulletinEventSearch || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return source.filter(function(item) {
+      if (filter === "included" && !item.included) return false;
+      if (/^week[1-4]$/.test(filter) && getBulletinEventWeek_(item) !== filter) return false;
+      if (!terms.length) return true;
+      var text = [item.title, item.description, item.location, item.date, item.time].join(" ").toLowerCase();
+      return terms.every(function(term) { return text.indexOf(term) !== -1; });
+    });
   }
 
   function updateBulletinEventBulkInclusion_(mode) {
@@ -20439,6 +20559,7 @@
         item.included = getBulletinEventWeek_(item) === "week1";
       });
       adminState.bulletinEventFilter = "week1";
+      adminState.bulletinEventSearch = "";
       return;
     }
 
@@ -20447,6 +20568,7 @@
     }
 
     var shouldInclude = mode === "include";
+    if (String(adminState.bulletinEventSearch || "").trim()) events = getFilteredBulletinEventDrafts_(events);
     events.forEach(function(item) {
       item.included = shouldInclude;
     });
@@ -21397,7 +21519,10 @@
   }
 
   function applyBulletinFrontFit_(fit) {
-    if (getBulletinLayout_() === "readable") return;
+    if (getBulletinLayout_() === "readable") {
+      layoutBulletinLayout3Back_(appEl, fit.backSplit);
+      return;
+    }
     Array.prototype.forEach.call(
         appEl.querySelectorAll(".central-bulletin-panel-front"),
         function(panel) {

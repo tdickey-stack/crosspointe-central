@@ -45,7 +45,6 @@ function placementContext(draft) {
     "normalizeBulletinLayout3_",
     "getBulletinLayout3_",
     "getBulletinLayout3Capacity_",
-    "packBulletinLayout3Back_",
     "setBulletinLayout3Placement_",
   ], {
     adminState,
@@ -67,7 +66,6 @@ function choiceContext(draft, initialStep = 3) {
     "normalizeBulletinLayout3_",
     "getBulletinLayout3_",
     "getBulletinLayout3Capacity_",
-    "packBulletinLayout3Back_",
     "setBulletinLayout3Placement_",
     "updateBulletinChoice_",
   ], {
@@ -111,7 +109,6 @@ function fallbackSaveContext(adminState) {
     "normalizeBulletinLayout3_",
     "getBulletinLayout3_",
     "getBulletinLayout3Capacity_",
-    "packBulletinLayout3Back_",
     "saveBulletinFallbackBlock_",
   ], {
     PRINT_MODE_MAX_CUSTOM_BLOCKS: 8,
@@ -141,6 +138,7 @@ function measureLayout3({
 } = {}) {
   let removed = false;
   let appended = false;
+  let layouts = 0;
   const holder = {
     style: {},
     innerHTML: "",
@@ -156,7 +154,6 @@ function measureLayout3({
       () => ({size: 1}),
   );
   const context = loadFunctions([
-    "packBulletinLayout3Back_",
     "bulletinLayout3ContentOverflows_",
     "measureBulletinLayout3Fit_",
   ], {
@@ -175,10 +172,16 @@ function measureLayout3({
     renderBulletinPanel_: (side) => `<section>${side}</section>`,
     getBulletinLayout3Capacity_: () => usage,
     getBulletinLayout3Entries_: () => entries,
+    layoutBulletinLayout3Back_: (root) => {
+      assert.equal(root, holder);
+      layouts += 1;
+      return 4;
+    },
   });
   const result = context.measureBulletinLayout3Fit_();
   assert.equal(appended, true);
   assert.equal(removed, true);
+  assert.equal(layouts, 1);
   return result;
 }
 
@@ -478,7 +481,7 @@ test("a rejected Layout 3 checkbox restores its checked state", () => {
   assert.match(context.adminState.bulletinError, /front is full/);
 });
 
-test("front and back capacity failures roll placement moves back", () => {
+test("front capacity still rolls moves back while back accepts more cards", () => {
   const draft = {
     layout3: {items: [
       {key: "campaign:f1", side: "front", size: 1},
@@ -502,17 +505,26 @@ test("front and back capacity failures roll placement moves back", () => {
 
   assert.equal(
       context.setBulletinLayout3Placement_("campaign:f1", "side", "back"),
-      false,
+      true,
   );
-  assert.deepEqual(plain(draft.layout3.items), before);
-  assert.match(context.adminState.bulletinError, /back is full/);
+  assert.equal(context.getBulletinLayout3Capacity_().front, 1);
+  assert.equal(context.getBulletinLayout3Capacity_().back, 7);
+  assert.equal(context.adminState.bulletinError, "");
 });
 
-test("Large events and custom blocks use two slots and back packing is exact", () => {
+test("back capacity counts cards and ignores legacy Standard or Large sizes", () => {
   const context = loadFunctions([
     "normalizeBulletinLayout3_",
-    "packBulletinLayout3Back_",
-  ]);
+    "getBulletinLayout3Capacity_",
+  ], {
+    getBulletinLayout3Entries_: (side) => side === "front" ? [
+      {key: "campaign:front", size: 2},
+    ] : [
+      {key: "custom:large", size: 2},
+      {key: "event:event-1", size: 2},
+      {key: "campaign:standard", size: 1},
+    ],
+  });
   const normalized = plain(context.normalizeBulletinLayout3_({items: [
     {key: "custom:large", side: "back", size: 2},
     {key: "event:event-1", side: "front", size: 2},
@@ -522,27 +534,13 @@ test("Large events and custom blocks use two slots and back packing is exact", (
     {key: "custom:large", side: "back", size: 2},
     {key: "event:event-1", side: "back", size: 2},
   ]);
-  assert.equal(
-      context.packBulletinLayout3Back_(
-          Array.from({length: 6}, () => ({size: 1})),
-      ).length,
-      6,
-  );
-  assert.equal(
-      context.packBulletinLayout3Back_([
-        {size: 2}, {size: 2}, {size: 1}, {size: 1},
-      ]).length,
-      4,
-  );
-  assert.equal(
-      context.packBulletinLayout3Back_([
-        {size: 2}, {size: 2}, {size: 2},
-      ]),
-      null,
-  );
+  assert.deepEqual(plain(context.getBulletinLayout3Capacity_()), {
+    front: 2,
+    back: 3,
+  });
 });
 
-test("back order moves preserve the packed visual order", () => {
+test("back display and order moves preserve the exact requested order", () => {
   const adminState = {
     bulletinDraft: {layout3: {items: [
       {key: "custom:large-1", side: "back", size: 2},
@@ -556,7 +554,6 @@ test("back order moves preserve the packed visual order", () => {
   const context = loadFunctions([
     "normalizeBulletinLayout3_",
     "getBulletinLayout3_",
-    "packBulletinLayout3Back_",
     "getBulletinLayout3DisplayEntries_",
     "moveBulletinLayout3Item_",
   ], {
@@ -574,40 +571,123 @@ test("back order moves preserve the packed visual order", () => {
 
   assert.deepEqual(displayKeys(), [
     "custom:large-1",
-    "custom:standard-1",
     "custom:large-2",
+    "custom:standard-1",
     "custom:standard-2",
   ]);
 
   context.moveBulletinLayout3Item_("custom:large-2", "up");
-  assert.deepEqual(plain(adminState.bulletinDraft.layout3.items), original);
-  assert.deepEqual(displayKeys(), [
-    "custom:large-1",
-    "custom:standard-1",
-    "custom:large-2",
-    "custom:standard-2",
-  ]);
-  assert.match(adminState.bulletinError, /gap too small for a Large block/);
-  assert.deepEqual(dirty, []);
-
-  context.moveBulletinLayout3Item_("custom:large-1", "down");
   assert.deepEqual(
       plain(adminState.bulletinDraft.layout3.items).map((item) => item.key),
       [
-        "custom:standard-1",
-        "custom:large-1",
         "custom:large-2",
+        "custom:large-1",
+        "custom:standard-1",
         "custom:standard-2",
       ],
   );
   assert.deepEqual(displayKeys(), [
-    "custom:standard-1",
-    "custom:large-1",
     "custom:large-2",
+    "custom:large-1",
+    "custom:standard-1",
     "custom:standard-2",
   ]);
   assert.equal(adminState.bulletinError, "");
   assert.deepEqual(dirty, ["bulletin"]);
+  assert.notDeepEqual(plain(adminState.bulletinDraft.layout3.items), original);
+});
+
+test("back split keeps contiguous order and minimizes the taller column", () => {
+  const context = loadFunctions(["getBulletinLayout3BackSplit_"]);
+
+  assert.equal(context.getBulletinLayout3BackSplit_([], 12), 0);
+  assert.equal(context.getBulletinLayout3BackSplit_([84], 12), 1);
+  assert.equal(
+      context.getBulletinLayout3BackSplit_([100, 20, 20, 80], 10),
+      2,
+  );
+  assert.equal(
+      context.getBulletinLayout3BackSplit_([120, 20, 20, 80], 10),
+      1,
+  );
+});
+
+test("back layout measures natural card heights and moves a contiguous split", () => {
+  const cards = [100, 20, 20, 80].map((offsetHeight, index) => ({
+    key: `card-${index + 1}`,
+    offsetHeight,
+  }));
+  const moved = [[], []];
+  const columns = moved.map((items) => ({
+    appendChild(card) {
+      items.push(card.key);
+    },
+  }));
+  const slots = {
+    querySelectorAll(selector) {
+      if (selector === ".b3-back-column") return columns;
+      if (selector === "[data-bulletin-preview-key]") return cards;
+      throw new Error(`Unexpected selector: ${selector}`);
+    },
+  };
+  const context = loadFunctions([
+    "getBulletinLayout3BackSplit_",
+    "layoutBulletinLayout3Back_",
+  ], {
+    window: {
+      getComputedStyle(column) {
+        assert.equal(column, columns[0]);
+        return {rowGap: "10px"};
+      },
+    },
+  });
+  const root = {
+    querySelectorAll(selector) {
+      assert.equal(selector, ".b3-back-slots");
+      return [slots];
+    },
+  };
+
+  assert.equal(context.layoutBulletinLayout3Back_(root), 2);
+  assert.deepEqual(moved, [
+    ["card-1", "card-2"],
+    ["card-3", "card-4"],
+  ]);
+});
+
+test("back column rendering ignores saved sizes without mutating entries", () => {
+  const entries = [
+    {key: "event:one", size: 2},
+    {key: "custom:two", size: 1},
+    {key: "campaign:three", size: 2},
+  ];
+  const before = plain(entries);
+  const rendered = [];
+  const context = loadFunctions(["renderBulletinLayout3BackColumns_"], {
+    renderBulletinLayout3Card_(entry) {
+      rendered.push(plain(entry));
+      return `<article data-bulletin-preview-key="${entry.key}"></article>`;
+    },
+  });
+
+  const html = context.renderBulletinLayout3BackColumns_(entries);
+  assert.equal((html.match(/class="b3-back-column"/g) || []).length, 2);
+  assert.deepEqual(rendered.map((entry) => entry.key), entries.map((entry) => entry.key));
+  assert.deepEqual(rendered.map((entry) => entry.size), [1, 1, 1]);
+  assert.deepEqual(entries, before);
+});
+
+test("Readable fit reapplies the measured split to visible and print roots", () => {
+  const appEl = {};
+  const calls = [];
+  const context = loadFunctions(["applyBulletinFrontFit_"], {
+    appEl,
+    getBulletinLayout_: () => "readable",
+    layoutBulletinLayout3Back_: (...args) => calls.push(args),
+  });
+
+  context.applyBulletinFrontFit_({backSplit: 3});
+  assert.deepEqual(calls, [[appEl, 3]]);
 });
 
 test("over-capacity imports stay editable and can be reduced", () => {
@@ -753,6 +833,50 @@ test("saving a new Layout 3 block leaves its legacy selection off", () => {
   assert.deepEqual(effects.dirty, ["bulletin"]);
 });
 
+test("saving a back custom block is not capped by the old six-slot policy", () => {
+  const existingItems = Array.from({length: 7}, (_unused, index) => ({
+    key: `campaign:back-${index + 1}`,
+    side: "back",
+    size: 2,
+  }));
+  const adminState = {
+    bulletinDraft: {
+      fallbackBlocks: [],
+      frontContentOrder: ["campaigns", "serveNeeds"],
+      backContentOrder: [],
+      layout3: {items: existingItems},
+    },
+    bulletinFallbackBlockEditingId: "",
+    bulletinFallbackBlockEditorOpen: true,
+    bulletinFallbackBlockDraft: {
+      eyebrow: "New",
+      title: "Eighth back card",
+      description: "Complete copy",
+      imageUrl: "",
+      imageStoragePath: "",
+      imageSide: "right",
+      size: 3,
+      includeOnFront: false,
+      includeOnBack: false,
+      layout3Side: "back",
+    },
+    bulletinError: "",
+    bulletinMessage: "",
+  };
+  const {context, effects} = fallbackSaveContext(adminState);
+
+  context.saveBulletinFallbackBlock_();
+
+  assert.equal(adminState.bulletinError, "");
+  assert.equal(adminState.bulletinDraft.layout3.items.length, 8);
+  assert.deepEqual(plain(adminState.bulletinDraft.layout3.items.at(-1)), {
+    key: "custom:fallback-9ix",
+    side: "back",
+    size: 2,
+  });
+  assert.deepEqual(effects.dirty, ["bulletin"]);
+});
+
 test("an invalid Layout 3 block move rolls back block and arrangement", () => {
   const originalBlock = {
     id: "custom-1",
@@ -811,7 +935,7 @@ test("an invalid Layout 3 block move rolls back block and arrangement", () => {
   assert.equal(effects.renders, 1);
 });
 
-test("Layout 3 fit measurement catches back overflow without false positives", () => {
+test("Layout 3 fit uses measured geometry without a back card-count limit", () => {
   const exactRegion = {
     scrollHeight: 100,
     clientHeight: 100,
@@ -822,10 +946,11 @@ test("Layout 3 fit measurement catches back overflow without false positives", (
   };
   const exact = measureLayout3({
     regions: [exactRegion],
-    usage: {front: 2, back: 6},
+    usage: {front: 2, back: 9},
   });
   assert.equal(exact.fits, true);
   assert.equal(exact.overflow, 0);
+  assert.equal(exact.backSplit, 4);
 
   const overflowingBackRegion = {
     scrollHeight: 103,
@@ -953,9 +1078,16 @@ test("Readable events retain the familiar checked and disabled card UI", () => {
     "renderBulletinChoice_",
     "renderBulletinEventEditor_",
     "renderBulletinLayout3Segments_",
+    "getBulletinEventSelectionItems_",
+    "renderBulletinEventFilterBar_",
+    "renderBulletinEventSearch_",
+    "renderBulletinEventResultCount_",
+    "renderBulletinEventResultCards_",
+    "renderBulletinEventResults_",
     "renderBulletinLayout3Events_",
   ], {
     adminState: {bulletinEventFilter: "all"},
+    PRINT_MODE_EVENT_WEEK_COUNT: 4,
     getBulletinLayout3Entries_: () => [{key: "event:event-1", size: 2}],
     getBulletinEventDraftsInWindow_: () => [event],
     getFilteredBulletinEventDrafts_: (events) => events,
@@ -971,12 +1103,13 @@ test("Readable events retain the familiar checked and disabled card UI", () => {
   assert.match(html, /central-admin-bulletin-event-schedule/);
   assert.match(html, /central-admin-bulletin-event-copy/);
   assert.doesNotMatch(html, /<select/);
-  assert.match(html, /data-admin-action="set-bulletin-layout3"[^>]*data-admin-layout3-value="2"[^>]*aria-pressed="true"[^>]*disabled/);
+  assert.match(html, /Card height adjusts to the printed content/);
+  assert.doesNotMatch(html, /data-admin-action="set-bulletin-layout3"/);
   assert.doesNotMatch(html, /data-admin-layout3-field="side"/);
 });
 
 test("Layout 3 flexible rows use checkboxes and selected-only segments", () => {
-  const renderRow = (type, selected) => {
+  const renderRow = (type, selected, side = "front") => {
     const item = {
       id: `${type}-1`,
       title: `${type} title`,
@@ -994,7 +1127,7 @@ test("Layout 3 flexible rows use checkboxes and selected-only segments", () => {
     ], {
       getBulletinLayout3_: () => ({items: [{
         key,
-        side: selected ? "front" : "off",
+        side: selected ? side : "off",
         size: 2,
       }]}),
       getBulletinFallbackImageUrl_: () => "",
@@ -1017,6 +1150,11 @@ test("Layout 3 flexible rows use checkboxes and selected-only segments", () => {
     assert.match(selected, /aria-label="Placement"/);
     assert.match(selected, /aria-label="Size"/);
     assert.doesNotMatch(selected, /<select/);
+
+    const back = renderRow(type, true, "back");
+    assert.match(back, /Automatic height/);
+    assert.match(back, /aria-label="Placement"/);
+    assert.doesNotMatch(back, /aria-label="Size"/);
 
     const unselected = renderRow(type, false);
     assert.match(

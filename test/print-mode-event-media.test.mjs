@@ -334,7 +334,7 @@ test("saving persists editorial event fields and strips source metadata", () => 
   }]);
 });
 
-test("Layout 3 event cards render an image rail, QR, and complete escaped caption", () => {
+test("Layout 3 event cards omit photos while retaining QR and complete escaped caption", () => {
   const {context, qrCalls} = renderContext();
   const item = {
     id: "instance-1",
@@ -354,7 +354,7 @@ test("Layout 3 event cards render an image rail, QR, and complete escaped captio
 
   assert.deepEqual(qrCalls, ["https://crosspointe.tv/register?event=fall"]);
   assert.match(html, /class="b3-event-media/);
-  assert.match(html, /src="https:\/\/images\.example\.org\/fall\.jpg\?size=large&amp;crop=wide"/);
+  assert.doesNotMatch(html, /<img|b3-event-thumbnail|data-bulletin-event-image/);
   assert.match(html, /data-test-qr="true"/);
   assert.match(html, /Register &lt;Your&gt; Booth &amp; Bring Friends/);
   assert.doesNotMatch(html, /Register <Your>/);
@@ -378,7 +378,83 @@ test("Layout 3 featured hero uses the same event media and registration QR", () 
   assert.deepEqual(qrCalls, ["https://crosspointe.tv/featured-form"]);
   assert.match(html, /class="b3-hero"/);
   assert.match(html, /class="b3-event-media/);
+  assert.match(html, /src="https:\/\/images\.example\.org\/featured\.jpg"/);
+  assert.match(html, /b3-event-thumbnail|data-bulletin-event-image/);
   assert.match(html, /Reserve Your Place/);
+});
+
+test("Layout 3 event cards without photos retain QR without decorative thumbnails", () => {
+  const {context, qrCalls} = renderContext();
+  const html = context.renderBulletinLayout3Card_({
+    key: "event:missing-photo",
+    type: "event",
+    size: 2,
+    item: {
+      title: "Community Dinner",
+      image_url: "",
+      registration_url: "https://crosspointe.tv/dinner",
+      registration_button_text: "",
+    },
+  });
+  assert.deepEqual(qrCalls, ["https://crosspointe.tv/dinner"]);
+  assert.match(html, /data-test-qr/);
+  assert.match(html, />Register<\/span>/);
+  assert.doesNotMatch(html, /<img|b3-event-thumbnail|--b3-event-color/);
+});
+
+test("Layout 3 event cards without safe registration omit the entire media rail", () => {
+  const {context, qrCalls} = renderContext();
+  for (const registration_url of ["", "http://crosspointe.tv/form", "javascript:alert(1)", "https://editor:secret@crosspointe.tv/form"]) {
+    for (const image_url of ["", "https://images.example.org/fall.jpg"]) {
+      const html = context.renderBulletinLayout3Card_({
+        key: "event:no-registration",
+        type: "event",
+        size: 1,
+        item: {
+          title: "Open House",
+          description: "Details have the full card width.",
+          image_url,
+          registration_url,
+          registration_button_text: "Register now",
+        },
+      });
+      assert.match(html, /Details have the full card width/);
+      assert.doesNotMatch(html, /b3-event-media|b3-event-thumbnail|<img|b3-event-qr|Register now/);
+    }
+  }
+  assert.deepEqual(qrCalls, []);
+});
+
+test("Layout 3 event cards still report QR generation failure without a thumbnail", () => {
+  const {context} = renderContext();
+  context.window.PrintModeQr.renderSvg = () => "";
+  const html = context.renderBulletinLayout3Card_({
+    key: "event:qr-failure",
+    type: "event",
+    size: 1,
+    item: {
+      title: "Dinner",
+      image_url: "https://images.example.org/dinner.jpg",
+      registration_url: "https://crosspointe.tv/dinner",
+    },
+  });
+  assert.match(html, /data-b3-qr-error/);
+  assert.match(html, /Registration QR code could not be generated/);
+  assert.doesNotMatch(html, /<img|b3-event-thumbnail/);
+});
+
+test("Layout 3 featured hero with registration retains its fallback when a photo is missing", () => {
+  const {context} = renderContext({
+    source: "featured",
+    title: "Fall Festival",
+    image_url: "",
+    registration_url: "https://crosspointe.tv/featured-form",
+    includeDescription: false,
+  });
+  const html = context.renderBulletinLayout3_("front");
+  assert.match(html, /b3-event-thumbnail/);
+  assert.match(html, /--b3-event-color:/);
+  assert.doesNotMatch(html, /data-bulletin-event-image/);
 });
 
 test("Layout 3 event media omits registration UI without a safe destination", () => {

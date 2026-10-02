@@ -5939,6 +5939,42 @@ button:disabled {
   gap: 8px;
 }
 
+[data-app-route="admin"] .central-admin-bulletin-event-search {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--cp-text-strong);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+[data-app-route="admin"] .central-admin-bulletin-event-search input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: 11px;
+  background: var(--cp-surface);
+  color: var(--cp-text-strong);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+[data-app-route="admin"] .central-admin-bulletin-event-search input:focus-visible {
+  outline: 2px solid var(--cp-red);
+  outline-offset: 2px;
+}
+
+[data-app-route="admin"] .central-admin-bulletin-event-search small {
+  color: var(--cp-muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 [data-app-route="admin"] .central-admin-bulletin-filter {
   appearance: none;
   display: inline-flex;
@@ -9154,11 +9190,22 @@ button:disabled {
 .central-bulletin-panel.is-bulletin-layout-readable .b3-back-slots {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  grid-auto-flow: column;
   gap: var(--b3-gap);
   min-width: 0;
   min-height: 0;
+}
+
+.central-bulletin-panel.is-bulletin-layout-readable .b3-back-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--b3-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.central-bulletin-panel.is-bulletin-layout-readable .b3-back-column > .b3-card {
+  flex: 0 0 auto;
+  height: auto;
 }
 
 .central-bulletin-panel.is-bulletin-layout-readable .b3-card {
@@ -9181,9 +9228,7 @@ button:disabled {
 }
 
 .central-bulletin-panel.is-bulletin-layout-readable
-.b3-front-slots > .b3-card.is-large,
-.central-bulletin-panel.is-bulletin-layout-readable
-.b3-back-slots > .b3-card.is-large {
+.b3-front-slots > .b3-card.is-large {
   grid-row: span 2;
 }
 
@@ -9249,16 +9294,19 @@ button:disabled {
   line-height: 1.08;
 }
 
-/* Event artwork and registration share the rail beside readable print copy. */
+/* Back-page copy uses the full card width unless a registration QR needs a rail. */
 .central-bulletin-panel.is-bulletin-layout-readable .b3-event-card {
   display: flex;
   gap: 0.08in;
 }
 .central-bulletin-panel.is-bulletin-layout-readable .b3-event-content {
   display: grid;
-  grid-template-columns: 1.05in minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   column-gap: 0.12in;
+}
+.central-bulletin-panel.is-bulletin-layout-readable .b3-event-content:has(> .b3-event-media) {
+  grid-template-columns: 1.05in minmax(0, 1fr);
 }
 .central-bulletin-panel.is-bulletin-layout-readable .b3-hero:has(> .b3-event-media) {
   grid-template-columns: 1.7in minmax(0, 1fr);

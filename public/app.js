@@ -104,6 +104,11 @@ var sundayStreamPlaybackStateKnown = false;
 var sundayStreamPlaybackPaused = false;
 var sundayStreamPlaybackConnectTimer = 0;
 var sundayStreamPlaybackConnectAttempts = 0;
+var sundayStreamPlaybackSuppressed = true;
+var sundayStreamPlaybackResetUrl = "";
+var sundayStreamPlaybackClosePending = false;
+var sundayStreamPlaybackConfirmedPaused = null;
+var sundayStreamPresence = null;
 var calendarMenuIdCounter = 0;
 var centralThemeMediaQuery = null;
 var centralThemeOverride = "";
@@ -2367,6 +2372,184 @@ function renderSunday(sunday, setlist) {
   ].join(""), "sunday");
 }
 
+function renderSundayStreamPresenceBadge_(compact) {
+  return '<span class="sunday-stream-presence' +
+    (compact ? ' sunday-stream-presence-mini' : '') +
+    '" data-sunday-stream-presence hidden tabindex="0" title="An estimate of active streams on Central; one stream may include several people.">' +
+    '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>' +
+    '<span data-sunday-stream-presence-count></span>' +
+    (compact ? '' : '<span>Watching on Central</span>') + '</span>';
+}
+
+function updateSundayStreamPresenceCount_(count) {
+  var available = Number.isSafeInteger(count) && count >= 0;
+  document.querySelectorAll("[data-sunday-stream-presence]").forEach(function(el) {
+    el.hidden = !available;
+    el.setAttribute("aria-label", available ? count + " watching on Central. Estimated active streams." : "");
+    var countEl = el.querySelector("[data-sunday-stream-presence-count]");
+    if (countEl) countEl.textContent = available ? count.toLocaleString(undefined, {notation: "compact", maximumFractionDigits: 1}) : "";
+  });
+}
+
+function isSundayStreamPresenceEligible_() {
+  if (!isSundayModeActive_() || !sundayStreamPlaybackIframe ||
+      !sundayStreamPlaybackOrigin || sundayStreamPlaybackSuppressed) return false;
+  try {
+    var configured = new URL(currentCentralData.sundaySettings.sunday_livestream_url);
+    var embedded = new URL(sundayStreamPlaybackIframe.getAttribute("src"));
+    return configured.protocol === "https:" &&
+      configured.hostname === "control.resi.io" &&
+      !configured.username && !configured.password &&
+      configured.href === embedded.href && configured.origin === sundayStreamPlaybackOrigin;
+  } catch (error) {
+    return false;
+  }
+}
+
+function matchesSundayStreamPresenceUrl_(streamUrl) {
+  if (typeof streamUrl !== "string" || !isSundayStreamPresenceEligible_()) return false;
+  try {
+    return new URL(streamUrl).href ===
+      new URL(sundayStreamPlaybackIframe.getAttribute("src")).href;
+  } catch (error) {
+    return false;
+  }
+}
+
+function initSundayStreamPresence_() {
+  if (!isSundayStreamPresenceEligible_()) return;
+  var randomValues = new Uint8Array(16);
+  if (!window.crypto || !window.crypto.getRandomValues) return;
+  window.crypto.getRandomValues(randomValues);
+  var state = {
+    sessionId: Array.from(randomValues, function(value) {
+      return value.toString(16).padStart(2, "0");
+    }).join(""),
+    streamKey: "", streamUrl: "", sequence: 0, confirmedPlaying: false, postedActive: false,
+    pollTimer: 0, heartbeatTimer: 0, requestId: 0, pollTimeout: 0, pollController: null,
+  };
+  sundayStreamPresence = state;
+  state.pollTimer = window.setInterval(function() {
+    pollSundayStreamPresence_(state);
+  }, 15000);
+  state.heartbeatTimer = window.setInterval(function() {
+    if (state === sundayStreamPresence && state.confirmedPlaying && state.streamKey) {
+      postSundayStreamPresence_(state, true);
+    }
+  }, 20000);
+  pollSundayStreamPresence_(state);
+}
+
+function pollSundayStreamPresence_(state) {
+  if (state !== sundayStreamPresence) return;
+  if (!isSundayStreamPresenceEligible_()) {
+    teardownSundayStreamPresence_();
+    return;
+  }
+  var requestId = ++state.requestId;
+  if (state.pollController) state.pollController.abort();
+  window.clearTimeout(state.pollTimeout);
+  state.pollController = new AbortController();
+  state.pollTimeout = window.setTimeout(function() {
+    if (state === sundayStreamPresence && requestId === state.requestId) {
+      state.requestId += 1;
+      state.pollController.abort();
+      state.pollTimeout = 0;
+      updateSundayStreamPresenceCount_(null);
+    }
+  }, 10000);
+  fetch("/api/livestream-presence", {cache: "no-store", credentials: "omit",
+    signal: state.pollController.signal})
+      .then(function(response) {
+        if (!response.ok) throw new Error("Presence unavailable");
+        return response.json();
+      }).then(function(data) {
+        if (state !== sundayStreamPresence || requestId !== state.requestId) return;
+        if (!isSundayStreamPresenceEligible_()) {
+          teardownSundayStreamPresence_();
+          return;
+        }
+        if (!data || data.available !== true || typeof data.streamKey !== "string" ||
+            !data.streamKey || !matchesSundayStreamPresenceUrl_(data.streamUrl) ||
+            !Number.isSafeInteger(data.count) || data.count < 0) {
+          if (state.postedActive) postSundayStreamPresence_(state, false);
+          state.streamKey = "";
+          state.streamUrl = "";
+          updateSundayStreamPresenceCount_(null);
+          return;
+        }
+        if (state.streamKey !== data.streamKey) {
+          if (state.postedActive) postSundayStreamPresence_(state, false);
+          state.streamKey = data.streamKey;
+          state.streamUrl = data.streamUrl;
+          if (state.confirmedPlaying) postSundayStreamPresence_(state, true);
+        }
+        updateSundayStreamPresenceCount_(data.count);
+      }).catch(function() {
+        if (state === sundayStreamPresence && requestId === state.requestId) {
+          updateSundayStreamPresenceCount_(null);
+        }
+      }).finally(function() {
+        if (requestId === state.requestId) {
+          window.clearTimeout(state.pollTimeout);
+          state.pollTimeout = 0;
+        }
+      });
+}
+
+function postSundayStreamPresence_(state, active) {
+  if (!state.streamKey) return;
+  if (active && (state !== sundayStreamPresence ||
+      !matchesSundayStreamPresenceUrl_(state.streamUrl))) return;
+  state.postedActive = active;
+  var sequence = ++state.sequence;
+  fetch("/api/livestream-presence", {
+    method: "POST", credentials: "omit", keepalive: !active,
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({sessionId: state.sessionId, streamKey: state.streamKey,
+      active: active, sequence: sequence}),
+  }).then(function(response) {
+    if (!response.ok) throw new Error("Presence unavailable");
+    return response.json();
+  }).then(function(data) {
+    if (state === sundayStreamPresence && sequence === state.sequence &&
+        (!data || data.available !== true)) updateSundayStreamPresenceCount_(null);
+  }).catch(function() {
+    if (state === sundayStreamPresence && sequence === state.sequence) {
+      updateSundayStreamPresenceCount_(null);
+    }
+  });
+}
+
+function setSundayStreamPresencePlaying_(playing) {
+  var state = sundayStreamPresence;
+  if (!state || state.confirmedPlaying === playing) return;
+  state.confirmedPlaying = playing;
+  if (playing || state.postedActive) postSundayStreamPresence_(state, playing);
+}
+
+function teardownSundayStreamPresence_() {
+  var state = sundayStreamPresence;
+  sundayStreamPresence = null;
+  if (state) {
+    window.clearTimeout(state.pollTimeout);
+    if (state.pollController) state.pollController.abort();
+    window.clearInterval(state.pollTimer);
+    window.clearInterval(state.heartbeatTimer);
+    if (state.postedActive) postSundayStreamPresence_(state, false);
+  }
+  updateSundayStreamPresenceCount_(null);
+}
+
+function handleSundayStreamPresencePageHide_() {
+  sundayStreamPlaybackSuppressed = true;
+  teardownSundayStreamPresence_();
+}
+
+function handleSundayStreamPresencePageShow_(event) {
+  if (event.persisted && sundayStreamPlaybackIframe) handleSundayStreamPlaybackIframeLoad_();
+}
+
 function renderSundayLivestream(sundaySettings) {
   var streamUrl = String((sundaySettings && sundaySettings.sunday_livestream_url) || "").trim();
 
@@ -2377,7 +2560,9 @@ function renderSundayLivestream(sundaySettings) {
       "<div class=\"sunday-stream-copy\">",
         "<div class=\"sunday-stream-copy-main\">",
           "<div class=\"section-kicker\">Live Right Now</div>",
-          "<h3>", escapeHtml((sundaySettings && sundaySettings.sunday_livestream_title) || "Watch Live"), "</h3>",
+          "<div class=\"sunday-stream-heading\"><h3>", escapeHtml((sundaySettings && sundaySettings.sunday_livestream_title) || "Watch Live"), "</h3>",
+            renderSundayStreamPresenceBadge_(false),
+          "</div>",
           (sundaySettings && sundaySettings.sunday_livestream_note) ?
             "<p>" + escapeHtml(sundaySettings.sunday_livestream_note) + "</p>" :
             "",
@@ -2392,6 +2577,7 @@ function renderSundayLivestream(sundaySettings) {
         "<div class=\"sunday-stream-player\" id=\"sunday-stream-player\" data-sunday-stream-player>",
           "<div class=\"sunday-stream-frame\">",
             "<iframe allow=\"autoplay; fullscreen\" allowfullscreen=\"true\" class=\"resi-video-frame\" src=\"", escapeAttr(streamUrl), "\" title=\"CrossPointe Livestream\"></iframe>",
+            renderSundayStreamPresenceBadge_(true),
             "<div class=\"sunday-stream-gesture-surface\" role=\"group\" tabindex=\"0\" aria-label=\"Mini player. Tap to return to the live section, drag to move, or pinch to resize.\" title=\"Tap to return. Drag to move. Pinch to resize.\" onpointerdown=\"beginSundayStreamMiniPlayerGesture(event)\" onkeydown=\"handleSundayStreamMiniPlayerMoveKeydown(event)\">",
               "<button type=\"button\" class=\"sunday-stream-overlay-action sunday-stream-overlay-playback\" data-sunday-stream-playback data-playback-state=\"connecting\" data-analytics-event=\"livestream_action\" data-analytics-action=\"toggle_playback\" aria-label=\"Connecting to livestream controls\" title=\"Connecting to livestream controls\" onclick=\"toggleSundayStreamPlayback(event)\" disabled>",
                 "<span class=\"sunday-stream-playback-icon sunday-stream-playback-play\" aria-hidden=\"true\"></span>",
@@ -2577,10 +2763,37 @@ function waitForSundayStreamStageThenDock_(startedAt) {
   });
 }
 
+function requestSundayStreamClosePause_() {
+  if (!sundayStreamPlaybackIframe || !sundayStreamPlaybackIframe.contentWindow ||
+      !sundayStreamPlaybackOrigin) return false;
+  try {
+    sundayStreamPlaybackIframe.contentWindow.postMessage({
+      name: "pause", args: [],
+    }, sundayStreamPlaybackOrigin);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 function closeSundayStreamMiniPlayer() {
+  sundayStreamPlaybackClosePending = sundayStreamPlaybackConfirmedPaused !== true;
+  setSundayStreamPresencePlaying_(false);
+  var pausedInPlace = sundayStreamPlaybackConnected &&
+    !sundayStreamPlaybackSuppressed && requestSundayStreamClosePause_();
+  if (pausedInPlace) {
+    sundayStreamPlaybackPaused = true;
+    sundayStreamPlaybackStateKnown = true;
+    updateSundayStreamPlaybackButton_();
+  } else {
+    sundayStreamPlaybackClosePending = true;
+    sundayStreamPlaybackSuppressed = true;
+    teardownSundayStreamPresence_();
+  }
   var iframeEl = document.querySelector(".sunday-stream-player iframe");
   var playerEl = document.querySelector("[data-sunday-stream-player]");
   var streamUrl = iframeEl ? iframeEl.getAttribute("src") : "";
+  sundayStreamPlaybackResetUrl = pausedInPlace ? "" : streamUrl;
 
   if (sundayStreamReturnAnimationFrame) {
     window.cancelAnimationFrame(sundayStreamReturnAnimationFrame);
@@ -2589,17 +2802,16 @@ function closeSundayStreamMiniPlayer() {
 
   cancelSundayStreamPlayerAnimation_();
 
+  var closeFinished = false;
   var finishClose = function() {
+    if (closeFinished || !iframeEl || !iframeEl.isConnected ||
+        iframeEl !== sundayStreamPlaybackIframe) return;
+    closeFinished = true;
     sundayStreamMiniPlayerEnabled = false;
     syncSundayStreamMiniPlayer_();
 
-    if (iframeEl && streamUrl) {
+    if (!pausedInPlace && iframeEl && streamUrl) {
       iframeEl.setAttribute("src", "about:blank");
-      window.setTimeout(function() {
-        if (iframeEl.isConnected) {
-          iframeEl.setAttribute("src", streamUrl);
-        }
-      }, 0);
     }
   };
 
@@ -2620,6 +2832,7 @@ function closeSundayStreamMiniPlayer() {
       sundayStreamPlayerAnimation = null;
       finishClose();
     };
+    sundayStreamPlayerAnimation.oncancel = finishClose;
     return;
   }
 
@@ -2647,10 +2860,19 @@ function initSundayStreamPlaybackControl_() {
       handleSundayStreamPlaybackIframeLoad_,
   );
   window.addEventListener("message", handleSundayStreamPlaybackMessage_);
+  window.addEventListener("pagehide", handleSundayStreamPresencePageHide_);
+  window.addEventListener("pageshow", handleSundayStreamPresencePageShow_);
   handleSundayStreamPlaybackIframeLoad_();
 }
 
 function teardownSundayStreamPlaybackControl_() {
+  sundayStreamPlaybackConfirmedPaused = null;
+  sundayStreamPlaybackClosePending = false;
+  sundayStreamPlaybackSuppressed = true;
+  sundayStreamPlaybackResetUrl = "";
+  teardownSundayStreamPresence_();
+  window.removeEventListener("pagehide", handleSundayStreamPresencePageHide_);
+  window.removeEventListener("pageshow", handleSundayStreamPresencePageShow_);
   if (sundayStreamPlaybackConnectTimer) {
     window.clearTimeout(sundayStreamPlaybackConnectTimer);
     sundayStreamPlaybackConnectTimer = 0;
@@ -2673,18 +2895,31 @@ function teardownSundayStreamPlaybackControl_() {
 }
 
 function handleSundayStreamPlaybackIframeLoad_() {
+  if (sundayStreamPlaybackResetUrl) {
+    if (sundayStreamPlaybackIframe &&
+        sundayStreamPlaybackIframe.getAttribute("src") === "about:blank") {
+      var resetUrl = sundayStreamPlaybackResetUrl;
+      sundayStreamPlaybackResetUrl = "";
+      sundayStreamPlaybackIframe.setAttribute("src", resetUrl);
+    }
+    return;
+  }
+  teardownSundayStreamPresence_();
   if (sundayStreamPlaybackConnectTimer) {
     window.clearTimeout(sundayStreamPlaybackConnectTimer);
     sundayStreamPlaybackConnectTimer = 0;
   }
 
   sundayStreamPlaybackOrigin = getSundayStreamPlaybackOrigin_();
+  sundayStreamPlaybackConfirmedPaused = null;
   sundayStreamPlaybackConnected = false;
   sundayStreamPlaybackStateKnown = false;
   sundayStreamPlaybackConnectAttempts = 0;
   updateSundayStreamPlaybackButton_();
 
+  sundayStreamPlaybackSuppressed = !sundayStreamPlaybackOrigin;
   if (sundayStreamPlaybackOrigin) {
+    initSundayStreamPresence_();
     sendSundayStreamPlaybackConnect_();
   }
 }
@@ -2742,6 +2977,8 @@ function sendSundayStreamPlaybackConnect_() {
 
 function handleSundayStreamPlaybackMessage_(event) {
   if (
+    sundayStreamPlaybackSuppressed ||
+    !sundayStreamPlaybackOrigin ||
     !sundayStreamPlaybackIframe ||
     event.source !== sundayStreamPlaybackIframe.contentWindow ||
     event.origin !== sundayStreamPlaybackOrigin ||
@@ -2753,6 +2990,7 @@ function handleSundayStreamPlaybackMessage_(event) {
 
   if (event.data.kind === "player-ready") {
     sundayStreamPlaybackConnected = true;
+    if (sundayStreamPlaybackClosePending) requestSundayStreamClosePause_();
     if (sundayStreamPlaybackConnectTimer) {
       window.clearTimeout(sundayStreamPlaybackConnectTimer);
       sundayStreamPlaybackConnectTimer = 0;
@@ -2776,6 +3014,7 @@ function handleSundayStreamPlaybackMessage_(event) {
   }
 
   if (event.data.name === "play-result" && event.data.ok === false) {
+    setSundayStreamPresencePlaying_(false);
     sundayStreamPlaybackPaused = true;
     sundayStreamPlaybackStateKnown = true;
     updateSundayStreamPlaybackButton_();
@@ -2783,18 +3022,30 @@ function handleSundayStreamPlaybackMessage_(event) {
 }
 
 function applySundayStreamPlaybackSnapshot_(snapshot) {
+  if (sundayStreamPlaybackSuppressed) return;
   if (!snapshot || typeof snapshot !== "object") return;
 
+  var paused;
   if (typeof snapshot.paused === "boolean") {
-    sundayStreamPlaybackPaused = snapshot.paused;
+    paused = snapshot.paused;
   } else if (typeof snapshot.playing === "boolean") {
-    sundayStreamPlaybackPaused = !snapshot.playing;
+    paused = !snapshot.playing;
   } else {
     return;
   }
 
+  sundayStreamPlaybackConfirmedPaused = paused;
+  // A queued playing snapshot must not undo Close while its pause is pending.
+  // After a confirmed pause, the embedded player's next Play can count again.
+  if (sundayStreamPlaybackClosePending && !paused) {
+    requestSundayStreamClosePause_();
+    return;
+  }
+  sundayStreamPlaybackClosePending = false;
+  sundayStreamPlaybackPaused = paused;
   sundayStreamPlaybackConnected = true;
   sundayStreamPlaybackStateKnown = true;
+  setSundayStreamPresencePlaying_(!sundayStreamPlaybackPaused);
   updateSundayStreamPlaybackButton_();
 }
 
@@ -2815,7 +3066,12 @@ function toggleSundayStreamPlayback(event) {
   }
 
   var previousPausedState = sundayStreamPlaybackPaused;
+  var previousClosePending = sundayStreamPlaybackClosePending;
+  var previousConfirmedPaused = sundayStreamPlaybackConfirmedPaused;
   var command = sundayStreamPlaybackPaused ? "play" : "pause";
+  if (command === "pause") setSundayStreamPresencePlaying_(false);
+  if (command === "play") sundayStreamPlaybackClosePending = false;
+  sundayStreamPlaybackConfirmedPaused = null;
   sundayStreamPlaybackPaused = !sundayStreamPlaybackPaused;
   updateSundayStreamPlaybackButton_();
 
@@ -2826,6 +3082,8 @@ function toggleSundayStreamPlayback(event) {
     }, sundayStreamPlaybackOrigin);
   } catch (error) {
     sundayStreamPlaybackPaused = previousPausedState;
+    sundayStreamPlaybackClosePending = previousClosePending;
+    sundayStreamPlaybackConfirmedPaused = previousConfirmedPaused;
     updateSundayStreamPlaybackButton_();
   }
 }

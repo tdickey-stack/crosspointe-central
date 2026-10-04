@@ -3886,6 +3886,56 @@ body.modal-open {
   letter-spacing: -0.03em;
 }
 
+.sunday-stream-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.sunday-stream-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--cp-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.sunday-stream-presence[hidden],
+.sunday-stream-presence-mini {
+  display: none;
+}
+
+.sunday-stream-presence svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.sunday-stream-presence:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.sunday-stream-player.is-floating .sunday-stream-presence-mini:not([hidden]) {
+  display: inline-flex;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: rgba(15, 15, 17, 0.78);
+  color: #fff;
+  pointer-events: none;
+}
+
 .sunday-stream-copy p {
   margin: 10px 0 0;
   color: var(--cp-muted);

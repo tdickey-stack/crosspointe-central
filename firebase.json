@@ -555,6 +555,14 @@
         }
       },
       {
+        "source": "/api/livestream-presence",
+        "function": {
+          "functionId": "centralLivestreamPresence",
+          "region": "us-central1",
+          "pinTag": false
+        }
+      },
+      {
         "source": "/api/embed/**",
         "function": {
           "functionId": "centralEmbedPublic",

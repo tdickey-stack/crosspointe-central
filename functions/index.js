@@ -1,5 +1,11 @@
 import {createPublicGroupsHandler} from "./groups/handler.js";
 import {createPublicGroupsService} from "./groups/service.js";
+import {createPresenceHandler} from "./livestream-presence/handler.js";
+import {
+  cleanupPresence,
+  createFirestorePresenceStore,
+  createPresenceService,
+} from "./livestream-presence/service.js";
 import {parseEventDescription} from "./planning-center/event-description.js";
 import crypto from "node:crypto";
 
@@ -785,6 +791,68 @@ const YOUVERSION_BOOK_LOOKUP = buildYouVersionBookLookup_();
 const YOUVERSION_BOOK_KEYS = Object.keys(YOUVERSION_BOOK_LOOKUP).sort(
     (a, b) => b.length - a.length,
 );
+
+let livestreamPresenceSettingsCache = null;
+let livestreamPresenceSettingsPending = null;
+const livestreamPresenceService = createPresenceService({
+  store: createFirestorePresenceStore(firestore),
+  loadConfiguration: async (environment) => {
+    if (!livestreamPresenceSettingsCache ||
+        Date.now() - livestreamPresenceSettingsCache.loadedAt >= 15000) {
+      if (!livestreamPresenceSettingsPending) {
+        // Read published settings directly: unlike Central's general fallback,
+        // a failed read must make this estimate unavailable, not produce zero.
+        livestreamPresenceSettingsPending = Promise.all([
+          firestore.doc(CENTRAL_PUBLIC_SETTINGS_DOC_PATH).get(),
+          firestore.doc(CENTRAL_PUBLIC_SUNDAY_SETTINGS_DOC_PATH).get(),
+        ]).then(([settings, sundaySettings]) => {
+          livestreamPresenceSettingsCache = {
+            loadedAt: Date.now(),
+            settings: toCentralSettingsFromFirestoreDoc_(settings),
+            sundaySettings: toCentralSundaySettingsFromFirestoreDoc_(
+                sundaySettings,
+            ),
+          };
+        }).finally(() => {
+          livestreamPresenceSettingsPending = null;
+        });
+      }
+      await livestreamPresenceSettingsPending;
+    }
+    const {settings, sundaySettings} = livestreamPresenceSettingsCache;
+    const mode = getSundayModeData_(
+        settings, {}, [], sundaySettings, environment,
+    );
+    return {
+      enabled: mode.enabled,
+      timezone: mode.timezone,
+      url: sundaySettings.sunday_livestream_url,
+    };
+  },
+});
+
+export const centralLivestreamPresence = onRequest({
+  region: "us-central1",
+  cors: false,
+  maxInstances: 6,
+  concurrency: 40,
+  timeoutSeconds: 15,
+  memory: "256MiB",
+}, createPresenceHandler({
+  service: livestreamPresenceService,
+  emulator: process.env.FUNCTIONS_EMULATOR === "true",
+}));
+
+export const centralLivestreamPresenceCleanup = onSchedule({
+  region: "us-central1",
+  schedule: "17 * * * *",
+  timeZone: "America/Chicago",
+  maxInstances: 1,
+  timeoutSeconds: 300,
+  memory: "256MiB",
+}, async () => {
+  await cleanupPresence(firestore);
+});
 
 export const centralData = onRequest(
     {

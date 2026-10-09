@@ -1,3 +1,9 @@
+import {
+  createHomePromotionsService,
+  resolveHomePromotionHighlights,
+} from "./home-promotions/service.js";
+import {createHomePromotionsHandler} from "./home-promotions/handler.js";
+import {assertHomePromotionAccess} from "./home-promotions/access.js";
 import {createPublicGroupsHandler} from "./groups/handler.js";
 import {createPublicGroupsService} from "./groups/service.js";
 import {createPresenceHandler} from "./livestream-presence/handler.js";
@@ -854,6 +860,52 @@ export const centralLivestreamPresenceCleanup = onSchedule({
   await cleanupPresence(firestore);
 });
 
+const homePromotionsService = createHomePromotionsService({
+  firestore,
+  timestampFromMillis: (millis) => admin.firestore.Timestamp.fromMillis(millis),
+  serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
+});
+
+export const homePromotionsAdmin = onRequest({
+  region: "us-central1",
+  cors: false,
+  secrets: [...PLANNING_CENTER_SECRETS, CENTRAL_CALENDAR_SIGNING_KEY],
+}, createHomePromotionsHandler({
+  service: homePromotionsService,
+  verifyAccess: async (request, write) => {
+    const actor = await verifyCentralAdminRequest_(request);
+    if (!isAllowedCentralAdminEmail_(actor.email)) {
+      const error = new Error("Use an authorized CrossPointe account.");
+      error.status = 403;
+      error.code = "admin-email-required";
+      throw error;
+    }
+    return assertHomePromotionAccess(actor, write);
+  },
+  loadPublicData: async (request) => filterExpiredCentralEvents(
+      await buildCentralDataPayload_(getCentralDataEnvironment_(request)),
+  ),
+}));
+
+/**
+ * Resolve saved placements at response time, including cached source responses.
+ * @param {object} data Current public content.
+ * @return {Promise<object>} Content plus eligible Home highlights.
+ */
+async function withHomeHighlights_(data) {
+  const visibleData = filterExpiredCentralEvents(data);
+  try {
+    const homeHighlights = await homePromotionsService
+        .publicProjection(visibleData);
+    return {...visibleData, homeHighlights};
+  } catch (error) {
+    // A schedule read failure must not take down the rest of Central.
+    console.error("Unable to resolve Home highlights", error);
+    return {...visibleData,
+      homeHighlights: resolveHomePromotionHighlights([], visibleData)};
+  }
+}
+
 export const centralData = onRequest(
     {
       region: "us-central1",
@@ -890,7 +942,7 @@ export const centralData = onRequest(
           cachedEntry.data = refreshedData;
           response.set("Cache-Control", "no-store");
           response.status(200).json(
-              filterExpiredCentralEvents(refreshedData),
+              await withHomeHighlights_(refreshedData),
           );
           return;
         }
@@ -899,7 +951,7 @@ export const centralData = onRequest(
           const pendingPayload = await cachedEntry.promise;
           response.set("Cache-Control", "no-store");
           response.status(200).json(
-              filterExpiredCentralEvents(pendingPayload),
+              await withHomeHighlights_(pendingPayload),
           );
           return;
         }
@@ -934,7 +986,7 @@ export const centralData = onRequest(
         const payload = await payloadPromise;
 
         response.set("Cache-Control", "no-store");
-        response.status(200).json(filterExpiredCentralEvents(payload));
+        response.status(200).json(await withHomeHighlights_(payload));
       } catch (error) {
         response.status(500).json({
           error: error && error.message ?
@@ -5154,6 +5206,9 @@ function toCentralCampaignFromFirestoreDoc_(snapshot) {
 
   return {
     id: String(snapshot && snapshot.id || "").trim(),
+    published_at: serializeAdminTimestampForJson_(
+        data.createdAt || snapshot && snapshot.createTime || data.updatedAt,
+    ),
     active: isTruthyValue_(data.active) ? "TRUE" : "FALSE",
     title: String(data.title || "").trim(),
     description: String(data.description || "").trim(),
@@ -5218,6 +5273,9 @@ function toCentralServeNeedFromFirestoreDoc_(snapshot) {
 
   return {
     id: String(snapshot && snapshot.id || "").trim(),
+    published_at: serializeAdminTimestampForJson_(
+        data.createdAt || snapshot && snapshot.createTime || data.updatedAt,
+    ),
     active: isTruthyValue_(data.active) ? "TRUE" : "FALSE",
     need: String(data.need || "").trim(),
     ministry: String(data.ministry || "").trim(),

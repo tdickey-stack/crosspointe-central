@@ -68,6 +68,7 @@ class FakeEventTarget {
   addEventListener(type, listener) { if (!this.listeners.has(type)) this.listeners.set(type, new Set()); this.listeners.get(type).add(listener); }
   removeEventListener(type, listener) { this.listeners.get(type)?.delete(listener); }
   emit(type, event = {}) { for (const listener of this.listeners.get(type) || []) listener(event); }
+  dispatchEvent(event) { this.emit(event.type, event); return true; }
 }
 
 function environment() {
@@ -82,6 +83,9 @@ function environment() {
     flushFrames() { const frames = this.frames.splice(0); frames.forEach((callback) => callback()); },
     setTimeout() { return 1; },
     clearTimeout() {},
+    CustomEvent: class {
+      constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
+    },
   });
   const document = new FakeEventTarget();
   Object.assign(document, {
@@ -217,6 +221,72 @@ test("accepts playback state only from the active Resi frame and origin", () => 
     message: {name: "play", args: []},
     origin: "https://control.resi.io",
   });
+});
+
+test("emits explicit opened, confirmed playback, and closed lifecycle events", () => {
+  const {window, host} = environment();
+  const events = [];
+  window.addEventListener("central:livestream-player", (event) => events.push(event.detail));
+  const player = createSundayPlayer({host});
+  player.configure({sunday_livestream_url: "https://control.resi.io/webplayer/video.html?id=one"});
+  player.open();
+  const iframe = find(host, "lab-player__iframe");
+  window.emit("message", {
+    source: iframe.contentWindow,
+    origin: "https://control.resi.io",
+    data: {name: "playing", value: {playing: true}},
+  });
+  find(host, "lab-player__close").emit("click");
+
+  assert.deepEqual(events.map(({phase, playing}) => ({phase, playing})), [
+    {phase: "opened", playing: undefined},
+    {phase: "playback", playing: true},
+    {phase: "closed", playing: false},
+  ]);
+  assert.ok(events.every((event) => event.iframe === iframe));
+});
+
+test("BFCache restore reconnects before emitting a fresh presence lifecycle", () => {
+  const {window, host} = environment();
+  const events = [];
+  window.addEventListener("central:livestream-player", (event) => events.push(event.detail));
+  const player = createSundayPlayer({host});
+  player.configure({sunday_livestream_url: "https://control.resi.io/webplayer/video.html?id=one"});
+  player.open();
+  const iframe = find(host, "lab-player__iframe");
+  window.emit("message", {
+    source: iframe.contentWindow,
+    origin: "https://control.resi.io",
+    data: {name: "playing", value: {playing: true}},
+  });
+  const messagesBeforeRestore = iframe.contentWindow.messages.length;
+
+  window.emit("pageshow", {persisted: true});
+  assert.equal(events.at(-1).phase, "restored");
+  assert.equal(events.at(-1).playing, undefined);
+  assert.ok(iframe.contentWindow.messages.length > messagesBeforeRestore);
+  assert.equal(find(host, "lab-player__playback").dataset.playbackState, "connecting");
+
+  window.emit("message", {
+    source: iframe.contentWindow,
+    origin: "https://control.resi.io",
+    data: {name: "paused", value: {paused: false}},
+  });
+  assert.deepEqual(events.slice(-2).map(({phase, playing}) => ({phase, playing})), [
+    {phase: "restored", playing: undefined},
+    {phase: "playback", playing: true},
+  ]);
+});
+
+test("opening an already active iframe does not restart presence", () => {
+  const {window, host} = environment();
+  const events = [];
+  window.addEventListener("central:livestream-player", (event) => events.push(event.detail));
+  const player = createSundayPlayer({host});
+  player.configure({sunday_livestream_url: "https://control.resi.io/webplayer/video.html?id=one"});
+  assert.equal(player.open(), true);
+  assert.equal(player.open(), true);
+  assert.deepEqual(events.map((event) => event.phase), ["opened"]);
 });
 
 test("constrains mini geometry above the mobile navigation and removes playback only on close", () => {

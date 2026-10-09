@@ -6,7 +6,7 @@ import test from "node:test";
 const source = readFileSync(new URL("../public/navlab.js", import.meta.url), "utf8")
     .replace(/^import .*;$/gm, "");
 
-function preview(hash = "#home", {mobile = true, reducedMotion = false} = {}) {
+function preview(hash = "#home", {mobile = true, reducedMotion = false, production = false} = {}) {
   const node = (id) => ({
     id, dataset: {}, style: {setProperty() {}}, listeners: {}, attributes: {},
     addEventListener(type, callback) { (this.listeners[type] ||= []).push(callback); },
@@ -50,6 +50,7 @@ function preview(hash = "#home", {mobile = true, reducedMotion = false} = {}) {
     querySelectorAll: (selector) => selector === ".view" ? views : links,
     querySelector: (selector) => selector === "dialog[open]" ? null : byId(selector),
   });
+  document.documentElement.dataset.productionShell = String(production);
   const location = {hash};
   const history = {pushState: (_, __, value) => { location.hash = value; }};
   const media = new Map();
@@ -67,6 +68,7 @@ function preview(hash = "#home", {mobile = true, reducedMotion = false} = {}) {
   let frameId = 0;
   const window = Object.assign(node("window"), {
     scrollY: 0,
+    dispatchEvent() {},
     matchMedia,
     scrollTo(options) { this.scrollY = options.top; },
     requestAnimationFrame(callback) { const id = ++frameId; frames.set(id, callback); return id; },
@@ -80,6 +82,7 @@ function preview(hash = "#home", {mobile = true, reducedMotion = false} = {}) {
   // Keep both requests unresolved to verify that startup/navigation never waits.
   const pending = new Promise(() => {});
   vm.runInNewContext(source, {
+    CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
     document, location, history, window, setTimeout: () => 1, clearTimeout() {},
     ResizeObserver: class { observe() {} },
     mountGroupDirectory() { loads.groups++; return pending; },
@@ -374,4 +377,39 @@ test("turning Sunday preview off cancels active mobile motion before restoring H
   assert.equal(page.location.hash, "#home");
   assert.equal(page.selected(), "home");
   assert.equal(page.pager.dataset.sliding, undefined);
+});
+
+
+test("production uses published Sunday Mode and preserves the current tab through schedule changes", () => {
+  const page = preview("#groups", {production: true});
+  page.receiveData({sundayMode: {enabled: true}});
+  assert.equal(page.selected(), "groups");
+  assert.equal(page.pager.scrollLeft, 1170);
+  assert.equal(page.byId("home-content").hidden, true);
+  page.receiveData({sundayMode: {enabled: false}});
+  assert.equal(page.selected(), "groups");
+  assert.equal(page.pager.scrollLeft, 780);
+  assert.equal(page.byId("home-content").hidden, false);
+});
+
+test("production notes deep links retain a draft workspace without forcing Sunday Home", () => {
+  const page = preview("#sermon-notes", {production: true});
+  page.receiveData({sundayMode: {enabled: false}, sunday: {date: "October 11, 2026"}});
+  assert.equal(page.selected(), "notes");
+  assert.equal(page.byId("home-content").hidden, false);
+  assert.equal(page.studyCalls.length, 1);
+  page.receiveData({sundayMode: {enabled: true}});
+  page.receiveData({sundayMode: {enabled: false}});
+  assert.equal(page.selected(), "notes");
+  assert.equal(page.studyCalls.length, 1);
+});
+
+test("legacy incoming links select their destination and Wayfinder invites remain intact", () => {
+  for (const [hash, destination] of [["#upcoming-events", "events"], ["#registrations", "events"],
+    ["#serve-needs", "next-steps"], ["#serve%2Dneeds", "next-steps"], ["#bad%ZZ", "home"], ["#current-campaigns", "next-steps"], ["#resources", "next-steps"],
+    ["#this-sunday", "home"], ["#wayfinder-invite=example", "home"]]) {
+    const page = preview(hash, {production: true});
+    assert.equal(page.selected(), destination);
+    assert.equal(page.location.hash, hash);
+  }
 });

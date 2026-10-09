@@ -1,0 +1,514 @@
+[data-app-route="admin"] .home-promotions {
+  display: grid;
+  gap: 16px;
+}
+
+[data-app-route="admin"] .home-promotions-hero {
+  align-content: start;
+}
+
+[data-app-route="admin"] .home-promotions-hero > p {
+  max-width: 760px;
+  line-height: 1.55;
+}
+
+[data-app-route="admin"] .home-promotions-boundary {
+  padding-top: 10px;
+  border-top: 1px solid rgba(39, 39, 42, 0.08);
+  font-size: 0.82rem;
+}
+
+[data-app-route="admin"] .home-promotions-readonly,
+[data-app-route="admin"] .home-promotions-status,
+[data-app-route="admin"] .home-promotions-form-message {
+  min-height: 0;
+  color: var(--cp-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+[data-app-route="admin"] .home-promotions-readonly {
+  width: fit-content;
+  padding: 9px 12px;
+  border: 1px solid rgba(214, 138, 16, 0.24);
+  border-radius: 12px;
+  background: rgba(234, 179, 8, 0.1);
+  color: #854d0e;
+  font-weight: 750;
+}
+
+[data-app-route="admin"] .home-promotions-status:empty,
+[data-app-route="admin"] .home-promotions-form-message:empty {
+  display: none;
+}
+
+[data-app-route="admin"] .home-promotions-status:not(:empty) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid rgba(39, 39, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+[data-app-route="admin"] .home-promotions-status.is-success {
+  border-color: rgba(29, 143, 82, 0.22);
+  background: rgba(34, 197, 94, 0.08);
+  color: #166534;
+}
+
+[data-app-route="admin"] .home-promotions-status.is-error,
+[data-app-route="admin"] .home-promotions-form-message.is-error {
+  color: #b42318;
+}
+
+[data-app-route="admin"] .home-promotions-status.is-error {
+  border-color: rgba(180, 35, 24, 0.22);
+  background: rgba(239, 59, 45, 0.07);
+}
+
+[data-app-route="admin"] .home-promotions-top-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(420px, 1.28fr);
+  align-items: start;
+  gap: 16px;
+}
+
+[data-app-route="admin"] .home-promotions .central-admin-panel-header > div {
+  display: grid;
+  gap: 5px;
+}
+
+[data-app-route="admin"] .home-promotions .central-admin-panel-header p {
+  display: block;
+  max-width: 700px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+[data-app-route="admin"] .home-promotions-preview-list,
+[data-app-route="admin"] .home-promotions-warning-list,
+[data-app-route="admin"] .home-promotions-saved-list {
+  display: grid;
+  gap: 10px;
+}
+
+[data-app-route="admin"] .home-promotions-preview-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(39, 39, 42, 0.08);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(239, 59, 45, 0.08), rgba(255, 255, 255, 0.72));
+}
+
+[data-app-route="admin"] .home-promotions-slot {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--cp-red);
+  box-shadow: 0 10px 22px rgba(239, 59, 45, 0.2);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+[data-app-route="admin"] .home-promotions-preview-card > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+[data-app-route="admin"] .home-promotions-preview-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+[data-app-route="admin"] .home-promotions-preview-card small {
+  color: var(--cp-red);
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+[data-app-route="admin"] .home-promotions-selection {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border: 1px solid rgba(39, 39, 42, 0.09);
+  border-radius: 999px;
+  background: rgba(39, 39, 42, 0.055);
+  color: var(--cp-muted);
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+[data-app-route="admin"] .home-promotions-selection.is-automatic {
+  border-color: rgba(37, 99, 235, 0.16);
+  background: rgba(59, 130, 246, 0.08);
+  color: #1d4ed8;
+}
+
+[data-app-route="admin"] .home-promotions-selection.is-scheduled {
+  border-color: rgba(239, 59, 45, 0.18);
+  background: rgba(239, 59, 45, 0.08);
+  color: #b42318;
+}
+
+[data-app-route="admin"] .home-promotions-preview-card strong {
+  overflow: hidden;
+  color: var(--cp-text-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-app-route="admin"] .home-promotions-preview-card div > span {
+  color: var(--cp-muted);
+  font-size: 0.72rem;
+}
+
+[data-app-route="admin"] .home-promotions-form {
+  display: grid;
+  gap: 14px;
+}
+
+/* Keep the arrow on the select itself, independent of multi-line helper text. */
+[data-app-route="admin"] .home-promotions-form .is-select::after {
+  content: none;
+}
+
+[data-app-route="admin"] .home-promotions-form select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%23858585' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 18px center;
+  background-size: 10px 7px;
+}
+
+[data-app-route="admin"] .home-promotions-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+[data-app-route="admin"] .home-promotions-wide {
+  grid-column: 1 / -1;
+}
+
+[data-app-route="admin"] .home-promotions-start {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+[data-app-route="admin"] .home-promotions-start legend {
+  margin-bottom: 8px;
+  color: var(--cp-text-strong);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+[data-app-route="admin"] .home-promotions-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+[data-app-route="admin"] .home-promotions-radio {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  gap: 8px;
+  padding: 8px 13px;
+  border: 1px solid rgba(39, 39, 42, 0.1);
+  border-radius: 999px;
+  background: rgba(39, 39, 42, 0.04);
+  color: var(--cp-text-strong);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 780;
+}
+
+[data-app-route="admin"] .home-promotions-radio:has(input:checked) {
+  border-color: rgba(239, 59, 45, 0.4);
+  background: rgba(239, 59, 45, 0.09);
+  color: var(--cp-red);
+}
+
+[data-app-route="admin"] .home-promotions-radio:has(input:focus-visible) {
+  outline: 2px solid rgba(239, 59, 45, 0.24);
+  outline-offset: 2px;
+}
+
+[data-app-route="admin"] .home-promotions-radio input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--cp-red);
+}
+
+[data-app-route="admin"] .home-promotions-enabled {
+  align-self: end;
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid rgba(39, 39, 42, 0.1);
+  border-radius: 14px;
+  background: rgba(39, 39, 42, 0.035);
+}
+
+[data-app-route="admin"] .home-promotions-enabled small {
+  grid-column: 2;
+  color: var(--cp-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+[data-app-route="admin"] .home-promotions-form-message:not(:empty) {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(39, 39, 42, 0.04);
+}
+
+[data-app-route="admin"] .home-promotions-form-message.is-error {
+  background: rgba(239, 59, 45, 0.07);
+}
+
+[data-app-route="admin"] .home-promotions-empty {
+  padding: 15px;
+  border: 1px dashed rgba(39, 39, 42, 0.15);
+  border-radius: 15px;
+  background: rgba(39, 39, 42, 0.025);
+  color: var(--cp-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+[data-app-route="admin"] .home-promotions-empty.is-safe {
+  border-color: rgba(29, 143, 82, 0.2);
+  background: rgba(34, 197, 94, 0.06);
+  color: #166534;
+}
+
+[data-app-route="admin"] .home-promotions-warning {
+  display: grid;
+  gap: 4px;
+  padding: 13px 15px;
+  border: 1px solid rgba(214, 138, 16, 0.25);
+  border-radius: 16px;
+  background: rgba(234, 179, 8, 0.09);
+}
+
+[data-app-route="admin"] .home-promotions-warning strong {
+  color: #854d0e;
+}
+
+[data-app-route="admin"] .home-promotions-warning span,
+[data-app-route="admin"] .home-promotions-warning small {
+  color: var(--cp-muted);
+  line-height: 1.45;
+}
+
+[data-app-route="admin"] .home-promotions-warning span {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+[data-app-route="admin"] .home-promotions-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(39, 39, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(39, 39, 42, 0.035);
+}
+
+[data-app-route="admin"] .home-promotions-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+[data-app-route="admin"] .home-promotions-item-copy > span,
+[data-app-route="admin"] .home-promotions-item-copy > small {
+  color: var(--cp-muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+[data-app-route="admin"] .home-promotions-item-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+[data-app-route="admin"] .home-promotions-item-heading strong {
+  color: var(--cp-text-strong);
+}
+
+[data-app-route="admin"] .home-promotions-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding: 2px 8px;
+  border: 1px solid rgba(39, 39, 42, 0.09);
+  border-radius: 999px;
+  background: rgba(39, 39, 42, 0.06);
+  color: var(--cp-muted);
+  font-size: 0.61rem;
+  font-weight: 900;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+[data-app-route="admin"] .home-promotions-state.is-active {
+  border-color: rgba(29, 143, 82, 0.2);
+  background: rgba(34, 197, 94, 0.1);
+  color: #166534;
+}
+
+[data-app-route="admin"] .home-promotions-state.is-upcoming {
+  border-color: rgba(37, 99, 235, 0.2);
+  background: rgba(59, 130, 246, 0.09);
+  color: #1d4ed8;
+}
+
+[data-app-route="admin"] .home-promotions-state.is-unavailable {
+  border-color: rgba(180, 35, 24, 0.2);
+  background: rgba(239, 59, 45, 0.08);
+  color: #b42318;
+}
+
+[data-app-route="admin"] .home-promotions-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+[data-app-route="admin"] .home-promotions-item-actions .central-admin-link-button {
+  min-height: 36px;
+  padding: 0 13px;
+  font-size: 0.76rem;
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-boundary {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-readonly,
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-warning {
+  border-color: rgba(250, 204, 21, 0.2);
+  background: rgba(234, 179, 8, 0.08);
+  color: #fde68a;
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-warning strong {
+  color: #fde68a;
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-status:not(:empty),
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-preview-card,
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-radio,
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-enabled,
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-empty,
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-form-message:not(:empty),
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-item {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-preview-card {
+  background: linear-gradient(145deg, rgba(239, 59, 45, 0.12), rgba(255, 255, 255, 0.035));
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-status.is-success,
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-empty.is-safe {
+  color: #86efac;
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-status.is-error,
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-form-message.is-error,
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-state.is-unavailable {
+  color: #fca5a5;
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-state.is-active {
+  color: #86efac;
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-state.is-upcoming {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-selection.is-automatic {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"][data-app-route="admin"] .home-promotions-selection.is-scheduled {
+  color: #fca5a5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-app-route="admin"] .home-promotions * {
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 940px) {
+  [data-app-route="admin"] .home-promotions-top-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  [data-app-route="admin"] .home-promotions-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  [data-app-route="admin"] .home-promotions-wide {
+    grid-column: auto;
+  }
+
+  [data-app-route="admin"] .home-promotions-item {
+    grid-template-columns: 1fr;
+  }
+
+  [data-app-route="admin"] .home-promotions-item-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 460px) {
+  [data-app-route="admin"] .home-promotions-status:not(:empty) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-app-route="admin"] .home-promotions-status .central-admin-link-button,
+  [data-app-route="admin"] .home-promotions-form .central-admin-action-row,
+  [data-app-route="admin"] .home-promotions-form .central-admin-action-row .central-admin-link-button {
+    width: 100%;
+  }
+
+  [data-app-route="admin"] .home-promotions-form .central-admin-action-row {
+    display: grid;
+  }
+}

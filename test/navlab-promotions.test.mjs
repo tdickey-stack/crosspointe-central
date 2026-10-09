@@ -6,9 +6,54 @@ import {
   defaultHighlightKeys,
   highlightCandidates,
   resolveHighlightKeys,
+  scheduledHighlights,
 } from "../public/navlab-promotions.js";
 
 const NOW = Date.parse("2026-09-17T12:00:00.000Z");
+
+test("the client uses the server selection instead of inventing its own mix", () => {
+  const payload = data({campaigns: [{id: "a", title: "Available but not promoted"}]});
+  assert.deepEqual(scheduledHighlights(payload, NOW), []);
+  payload.homeHighlights = [];
+  assert.deepEqual(scheduledHighlights(payload, NOW), []);
+});
+
+test("automatic defaults render without a manual window and events expire at start", () => {
+  const payload = data({campaigns: [{id: "a", title: "Newest"}],
+    events: [{id: "e", title: "Next", starts_at: new Date(NOW + 1000).toISOString(),
+      ends_at: new Date(NOW + 5000).toISOString()}],
+    homeHighlights: [
+      {key: "events:e", selection: "automatic", endsAt: new Date(NOW + 1000).toISOString()},
+      {key: "campaigns:a", selection: "automatic"},
+    ]});
+  assert.deepEqual(scheduledHighlights(payload, NOW).map((entry) => entry.title), ["Next", "Newest"]);
+  assert.deepEqual(scheduledHighlights(payload, NOW + 1000).map((entry) => entry.title), ["Newest"]);
+});
+
+test("saved placements preserve server order, current source content, and exact expiry", () => {
+  const placement = (id, start = NOW - 1000, end = NOW + 1000) => ({
+    key: `campaigns:${id}`, startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString(),
+  });
+  const payload = data({campaigns: [{id: "a", title: "Updated"}, {id: "b", title: "Second"}],
+    homeHighlights: [placement("b"), placement("a"), placement("a"), placement("missing")]});
+  assert.deepEqual(scheduledHighlights(payload, NOW).map((entry) => entry.title), ["Second", "Updated"]);
+  assert.deepEqual(scheduledHighlights(payload, NOW + 1000), []);
+  assert.deepEqual(scheduledHighlights(payload, NOW - 1001), []);
+  payload.campaigns[0].active = false;
+  assert.deepEqual(scheduledHighlights(payload, NOW).map((entry) => entry.id), ["b"]);
+});
+
+test("saved cards cannot duplicate the hero or survive a source being removed", () => {
+  const event = {id: "a", title: "Featured", ends_at: "2026-09-18T12:00:00Z"};
+  const payload = data({events: [event], featuredEvent: event,
+    settings: {featured_event_enabled: true}, homeHighlights: [{key: "events:a",
+      startsAt: "2026-09-17T00:00:00Z", endsAt: "2026-09-19T00:00:00Z"}]});
+  assert.deepEqual(scheduledHighlights(payload, NOW), []);
+  payload.settings.featured_event_enabled = false;
+  assert.equal(scheduledHighlights(payload, NOW).length, 1);
+  payload.events = [];
+  assert.deepEqual(scheduledHighlights(payload, NOW), []);
+});
 
 function data(overrides = {}) {
   return {

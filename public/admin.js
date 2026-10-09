@@ -20,6 +20,7 @@
   var FIRST_ADMIN_BOOTSTRAP_ENDPOINT = "/api/admin/bootstrap-first-user";
   var PUBLISH_PREVIEW_CONTENT_ENDPOINT = "/api/admin/publish-preview-content";
   var BULLETIN_MODE_ENDPOINT = "/api/admin/bulletin-mode";
+  var homePromotionsView = null;
   var BULLETIN_CAMPAIGN_ICON_PATH = "/bulletin-campaign-icons/";
   var BULLETIN_CAMPAIGN_ICONS = [
     {id: "general", label: "General"},
@@ -196,6 +197,15 @@
       summary: "Main Central homepage copy plus the Sunday-mode hero and labels that belong on the Hub page.",
       collectionPath: DRAFT_HUB_SETTINGS_DOC_PATH,
       status: "Preview workflow",
+    },
+    {
+      id: "home-promotions",
+      label: "Home highlights",
+      route: "/admin/home-promotions",
+      pageAccessKey: "hub",
+      summary: "Choose and schedule the three highlights beneath the Home hero.",
+      collectionPath: "",
+      status: "Scheduled publishing",
     },
     {
       id: "bulletin",
@@ -378,6 +388,7 @@
       label: "Hub",
       pageIds: [
         "hub",
+        "home-promotions",
         "quick-links",
         "status-banner",
         "serve-needs",
@@ -5929,6 +5940,7 @@
     }
 
     if (!adminState.user) {
+      disposeHomePromotions_();
       appEl.innerHTML = renderAdminAccessGate_();
       return;
     }
@@ -5989,6 +6001,7 @@
     syncAdminCollectionActionsEntrance_();
     syncAdminQuickLinkReveal_();
     syncAdminUserEditorModal_();
+    syncHomePromotions_(currentPage);
     maybeLoadCurrentPageData_();
     if (currentPage.id === "bulletin" && adminState.bulletinLoaded) {
       syncBulletinEventImages_(appEl);
@@ -6008,6 +6021,71 @@
           },
       );
     }
+  }
+
+  function disposeHomePromotions_() {
+    if (homePromotionsView && homePromotionsView.cleanup) {
+      homePromotionsView.cleanup();
+    }
+    homePromotionsView = null;
+  }
+
+  function syncHomePromotions_(page) {
+    if (page.id !== "home-promotions" || !isActiveAdminUserRecord_()) {
+      disposeHomePromotions_();
+      return;
+    }
+    var root = document.getElementById("home-promotions-root");
+    if (!root) return;
+    var user = adminState.user;
+    var permission = getPageAccessLevel_("hub");
+    if (homePromotionsView && homePromotionsView.uid === user.uid &&
+        homePromotionsView.permission === permission) {
+      root.replaceWith(homePromotionsView.root);
+      return;
+    }
+    disposeHomePromotions_();
+    var view = {root: root, uid: user.uid, permission: permission};
+    homePromotionsView = view;
+    if (!document.getElementById("home-promotions-style")) {
+      var style = document.createElement("link");
+      style.id = "home-promotions-style";
+      style.rel = "stylesheet";
+      style.href = "/admin-home-promotions.css?v=1";
+      document.head.appendChild(style);
+    }
+    import("/admin-home-promotions.js?v=1").then(function(module) {
+      if (homePromotionsView !== view) return;
+      view.cleanup = module.mountHomePromotions(root, {
+        canEdit: isDirectPublishPermission_(permission),
+        request: function(method, payload) {
+          if (adminState.user !== user) {
+            return Promise.reject(new Error("Sign in again before managing Home highlights."));
+          }
+          return user.getIdToken().then(function(token) {
+            return fetch("/api/admin/home-promotions", {
+              method: method,
+              cache: "no-store",
+              headers: {Authorization: "Bearer " + token, "Content-Type": "application/json"},
+              body: method === "POST" ? JSON.stringify(payload) : undefined,
+            });
+          }).then(function(response) {
+            return response.json().then(function(result) {
+              if (!response.ok) {
+                var error = new Error(result.error || "Home highlights could not be saved.");
+                error.code = result.code;
+                throw error;
+              }
+              return result;
+            });
+          });
+        },
+      });
+    }).catch(function() {
+      if (homePromotionsView === view) {
+        root.textContent = "Home highlights could not load. Refresh this page to retry.";
+      }
+    });
   }
 
   function renderAdminAccessGate_() {
@@ -7004,6 +7082,9 @@
   }
 
   function renderAdminPagePanel_(currentPage) {
+    if (currentPage.id === "home-promotions") {
+      return "<section class=\"central-admin-panel\"><div id=\"home-promotions-root\" class=\"central-admin-page-body\">Loading Home highlights…</div></section>";
+    }
     if (currentPage.id === "overview") {
       return renderOverviewPagePanel_(currentPage);
     }

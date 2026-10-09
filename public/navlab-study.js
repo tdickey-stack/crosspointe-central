@@ -35,6 +35,18 @@ export function getProductionSundayNotesStorageKey(sunday) {
   return PRODUCTION_NOTES_KEY_PREFIX + text(sunday && sunday.date || "default");
 }
 
+export function isProductionSundayStudy(documentRef = globalThis.document) {
+  return documentRef?.documentElement?.dataset?.productionShell === "true";
+}
+
+export function getSundayNotesStoragePlan(sunday, production = false) {
+  const previewKey = getSundayNotesStorageKey(sunday);
+  const productionKey = getProductionSundayNotesStorageKey(sunday);
+  return production ?
+    {storageKey: productionKey, migrationKey: previewKey, production: true} :
+    {storageKey: previewKey, migrationKey: productionKey, production: false};
+}
+
 export function getSundayStudyConfig(data = {}) {
   const sunday = data.sunday || {};
   const settings = data.sundaySettings || {};
@@ -174,6 +186,25 @@ export function parseStoredSundayNotes(storedValue, documentRef = globalThis.doc
     // Older Central drafts were stored as plain text.
   }
   return legacyNotesToHtml(raw);
+}
+
+export function loadSundayNotesDraft(
+    storageRef,
+    storagePlan,
+    documentRef = globalThis.document,
+) {
+  let stored = storageRef.getItem(storagePlan.storageKey);
+  const migrated = stored === null;
+  if (migrated) stored = storageRef.getItem(storagePlan.migrationKey);
+
+  const html = parseStoredSundayNotes(stored, documentRef);
+  if (migrated && stored !== null) {
+    storageRef.setItem(storagePlan.storageKey, JSON.stringify({
+      type: "rich-text-v1",
+      html: sanitizeSundayNotesHtml(html, documentRef),
+    }));
+  }
+  return {html, migrated: migrated && stored !== null};
 }
 
 function makeElement(tagName, className, label) {
@@ -394,8 +425,11 @@ export function mountSundayStudy(root, {data = {}, theme = "light"} = {}) {
   }
 
   const config = getSundayStudyConfig(data);
-  const storageKey = getSundayNotesStorageKey(config.sunday);
-  const productionStorageKey = getProductionSundayNotesStorageKey(config.sunday);
+  const storage = getSundayNotesStoragePlan(
+      config.sunday,
+      isProductionSundayStudy(document),
+  );
+  const {storageKey, production: productionMode} = storage;
   const cleanups = [];
   let destroyed = false;
   let activePanel = "notes";
@@ -496,7 +530,11 @@ export function mountSundayStudy(root, {data = {}, theme = "light"} = {}) {
   root.replaceChildren(shell);
 
   const mobile = window.matchMedia("(max-width: 760px)");
-  let storageFallback = "Ready to save on this device";
+  const savedDraftStatus = productionMode ?
+    "Saved on this device" : "Saved in this Navigation Lab preview";
+  const readyDraftStatus = productionMode ?
+    "Ready to save on this device" : "Ready to save in this preview";
+  let storageFallback = readyDraftStatus;
   const setStatus = (message, persistent = false) => {
     window.clearTimeout(statusTimer);
     status.textContent = message;
@@ -506,20 +544,10 @@ export function mountSundayStudy(root, {data = {}, theme = "light"} = {}) {
   };
 
   try {
-    let stored = window.localStorage.getItem(storageKey);
-    const importedFromProduction = stored === null;
-    if (importedFromProduction) {
-      stored = window.localStorage.getItem(productionStorageKey);
-    }
-    editor.innerHTML = parseStoredSundayNotes(stored);
-    if (importedFromProduction && stored !== null) {
-      const safeHtml = sanitizeSundayNotesHtml(editor.innerHTML);
-      window.localStorage.setItem(storageKey, JSON.stringify({type: "rich-text-v1", html: safeHtml}));
-      storageFallback = "Saved in this Navigation Lab preview";
-    } else {
-      storageFallback = plainNotesText(editor).trim() ?
-        "Saved in this Navigation Lab preview" : "Ready to save in this preview";
-    }
+    const loadedDraft = loadSundayNotesDraft(window.localStorage, storage, document);
+    editor.innerHTML = loadedDraft.html;
+    storageFallback = plainNotesText(editor).trim() ?
+      savedDraftStatus : readyDraftStatus;
     setStatus(storageFallback, true);
   } catch (_error) {
     storageFallback = "Saving on this device is unavailable. Keep this page open.";
@@ -530,7 +558,7 @@ export function mountSundayStudy(root, {data = {}, theme = "light"} = {}) {
     const safeHtml = sanitizeSundayNotesHtml(editor.innerHTML);
     try {
       window.localStorage.setItem(storageKey, JSON.stringify({type: "rich-text-v1", html: safeHtml}));
-      storageFallback = "Saved in this Navigation Lab preview";
+      storageFallback = savedDraftStatus;
       setStatus("Saved just now");
     } catch (_error) {
       storageFallback = "Could not save on this device. Keep this page open.";
@@ -665,11 +693,14 @@ export function mountSundayStudy(root, {data = {}, theme = "light"} = {}) {
   });
 
   clearButton.addEventListener("click", () => {
-    if (!window.confirm("Clear your sermon notes in this Navigation Lab preview?")) return;
+    const clearPrompt = productionMode ?
+      "Clear your saved sermon notes on this device?" :
+      "Clear your sermon notes in this Navigation Lab preview?";
+    if (!window.confirm(clearPrompt)) return;
     editor.replaceChildren();
     try {
       window.localStorage.setItem(storageKey, JSON.stringify({type: "rich-text-v1", html: ""}));
-      storageFallback = "Ready to save in this preview";
+      storageFallback = readyDraftStatus;
       setStatus("Notes cleared", true);
     } catch (_error) {
       storageFallback = "Could not save this change. Keep this page open.";

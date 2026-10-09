@@ -41,6 +41,36 @@
     ],
     "headers": [
       {
+        "source": "/",
+        "headers": [{"key": "Cache-Control", "value": "no-store"}]
+      },
+      {
+        "source": "/admin{,/**}",
+        "headers": [{"key": "Cache-Control", "value": "no-store"}, {"key": "X-Robots-Tag", "value": "noindex, nofollow"}]
+      },
+      {
+        "source": "/legacy{,/**,.html}",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          },
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      },
+      {
+        "source": "/central-public-*",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
         "source": "/navlab{,/**,.html,.css,.js,-*.js,-*.css}",
         "headers": [{"key": "Cache-Control", "value": "no-store"}]
       },
@@ -328,8 +358,14 @@
       {
         "source": "/annual-planner{,/**,.html,.css,.js}",
         "headers": [
-          {"key": "Cache-Control", "value": "no-store"},
-          {"key": "X-Robots-Tag", "value": "noindex, nofollow"}
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          },
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
         ]
       },
       {
@@ -392,6 +428,14 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/admin{,/**}",
+        "destination": "/legacy.html"
+      },
+      {
+        "source": "/legacy{,/**}",
+        "destination": "/legacy.html"
+      },
       {
         "source": "/navlab{,/**}",
         "destination": "/navlab.html"
@@ -588,6 +632,14 @@
         "source": "/api/admin/publish-preview-content",
         "function": {
           "functionId": "publishPreviewContent",
+          "pinTag": false
+        }
+      },
+      {
+        "source": "/api/admin/home-promotions",
+        "function": {
+          "functionId": "homePromotionsAdmin",
+          "region": "us-central1",
           "pinTag": false
         }
       },
@@ -888,10 +940,10 @@
       "enabled": true,
       "port": 4000
     },
-	"hub": {
-	  "enabled": true,
-	  "port": 4400
-	},
+    "hub": {
+      "enabled": true,
+      "port": 4400
+    },
     "singleProjectMode": true
   },
   "auth": {

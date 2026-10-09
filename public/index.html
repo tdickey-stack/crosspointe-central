@@ -11,9 +11,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/group-directory.css">
   <link rel="stylesheet" href="/navlab.css?v=17">
+  <link rel="stylesheet" href="/central-loader.css?v=1">
   <link rel="stylesheet" href="/navlab-study.css?v=1">
   <link rel="stylesheet" href="/navlab-player.css?v=3">
-  <script type="module" src="/navlab.js?v=23"></script>
+  <script type="module" src="/navlab.js?v=24"></script>
   <meta name="application-name" content="CrossPointe Central">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -31,6 +32,66 @@
   <script defer src="/wayfinder-chat.js"></script>
 </head>
 <body>
+    <div
+      id="central-loader"
+      class="central-loader"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="central-loader-door central-loader-door-left"></div>
+      <div class="central-loader-door central-loader-door-right"></div>
+
+      <div class="central-loader-content">
+        <div class="central-loader-badge">CrossPointe Central</div>
+
+        <div class="central-loader-standard-visual">
+          <div class="central-loader-ring">
+            <div class="central-loader-orbit" aria-hidden="true">
+              <span class="central-loader-dot central-loader-dot-1"></span>
+              <span class="central-loader-dot central-loader-dot-2"></span>
+              <span class="central-loader-dot central-loader-dot-3"></span>
+              <span class="central-loader-dot central-loader-dot-4"></span>
+              <span class="central-loader-dot central-loader-dot-5"></span>
+              <span class="central-loader-dot central-loader-dot-6"></span>
+            </div>
+            <div class="central-loader-ring-core">
+              <div class="central-loader-logo">
+                <img
+                  src="/loader-icon.svg"
+                  alt=""
+                  class="central-loader-logo-mark"
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="central-loader-copy">
+          <p class="central-loader-kicker">Opening Your Hub</p>
+          <h1 id="central-loader-title">Loading CrossPointe Central...</h1>
+          <p id="central-loader-detail">
+            Pulling in the latest Sunday details, events, and resources.
+          </p>
+        </div>
+
+        <button id="central-loader-retry" type="button" hidden>Reload Central</button>
+        <div class="central-loader-progress">
+          <div
+            id="central-loader-percent"
+            class="central-loader-percent"
+            role="progressbar"
+            aria-label="Loading CrossPointe Central"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            0%
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <div id="central-site" inert>
   <a class="skip" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="header-inner">
@@ -72,6 +133,9 @@
   </main>
   <div id="sunday-player-host"></div>
   <dialog id="detail-dialog" aria-labelledby="detail-title"><button class="dialog-close" aria-label="Close details">×</button><p class="eyebrow" id="detail-kicker"></p><h2 id="detail-title"></h2><p id="detail-meta" class="detail-meta"></p><p id="detail-copy"></p><div id="detail-links" class="hero-actions"></div><button class="button" id="detail-done">Back to browsing</button></dialog>
+  </div>
+  <script src="/central-loader.js?v=1"></script>
+  <noscript><style>#central-loader { display: none; }</style></noscript>
   <noscript><p>CrossPointe Central needs JavaScript to load content and switch views.</p></noscript>
 </body>
 </html>

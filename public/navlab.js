@@ -407,6 +407,10 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
       }
       if (currentView === "notes") ensureStudy();
     },
+  }).then((data) => {
+    if (production) window.CentralLoader?.finish(Boolean(data));
+  }).catch(() => {
+    if (production) window.CentralLoader?.fail();
   });
   ensureGroups();
 })();

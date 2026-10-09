@@ -42,12 +42,46 @@ function safeCalendarUrl(value, endpoint) {
   return safeHttpUrl(raw);
 }
 
-function appendLink(parent, label, url, secondary = false) {
+export function navlabAnalyticsMetadata(type, item = {}) {
+  const normalizedType = text(type) || (item.source === "Planning Center Registrations" ? "registrations" : "events");
+  const sectionId = {
+    campaigns: "campaigns",
+    events: "events",
+    nextSteps: "next_step",
+    registrations: "registrations",
+    resources: "resources",
+    serveNeeds: "serve_needs",
+  }[normalizedType] || normalizedType;
+  const contentLabel = text(item.need || item.title);
+  // Match the production client: only public source identity fields (or the
+  // public title fallback) become analytics identifiers.
+  const contentId = text(item.id || item.event_id || item.registration_id || contentLabel);
+  return {sectionId, contentId, contentLabel};
+}
+
+export function applyNavlabAnalyticsAttributes(node, metadata = {}) {
+  if (!node || typeof node.setAttribute !== "function") return node;
+  const attributes = {
+    "data-analytics-section": metadata.sectionId,
+    "data-analytics-event": metadata.event,
+    "data-analytics-action": metadata.action,
+    "data-analytics-content-id": metadata.contentId,
+    "data-analytics-content-label": metadata.contentLabel,
+    "data-calendar-provider": metadata.calendarProvider,
+  };
+  for (const [name, value] of Object.entries(attributes)) {
+    if (text(value)) node.setAttribute(name, text(value));
+  }
+  return node;
+}
+
+function appendLink(parent, label, url, secondary = false, analytics = {}) {
   if (!url) return;
   const link = element("a", `button${secondary ? " secondary" : ""}`, label);
   link.href = url;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
+  applyNavlabAnalyticsAttributes(link, analytics);
   parent.append(link);
 }
 
@@ -102,7 +136,10 @@ function metaFor(item) {
 
 function card(item, {detailsLabel = "Learn more", onDetails, event = false} = {}) {
   const article = element("article", `live-card card${event ? " event-card" : ""}`);
-  if (event) article.append(createEventMedia(item, {kind: item.labKind === "registrations" ? "Registration" : "Event"}));
+  if (event) {
+    applyNavlabAnalyticsAttributes(article, navlabAnalyticsMetadata(item.labKind, item));
+    article.append(createEventMedia(item, {kind: item.labKind === "registrations" ? "Registration" : "Event"}));
+  }
   const body = element("div", "card-body");
   if (text(item.status_label)) body.append(element("p", "eyebrow", text(item.status_label)));
   const meta = event ? eventLocationMeta(item) : metaFor(item);
@@ -112,6 +149,12 @@ function card(item, {detailsLabel = "Learn more", onDetails, event = false} = {}
   if (onDetails) {
     const button = element("button", "button secondary", detailsLabel);
     button.type = "button";
+    const analytics = navlabAnalyticsMetadata(item.labKind, item);
+    applyNavlabAnalyticsAttributes(button, {
+      action: "view_event",
+      contentId: analytics.contentId,
+      contentLabel: analytics.contentLabel,
+    });
     button.addEventListener("click", () => onDetails(item, button));
     body.append(button);
   }
@@ -119,8 +162,10 @@ function card(item, {detailsLabel = "Learn more", onDetails, event = false} = {}
   return article;
 }
 
-function section(title, eyebrow, gridClass = "") {
+function section(title, eyebrow, gridClass = "", analyticsSection = "") {
   const node = element("section", `live-section${gridClass ? ` ${gridClass}` : ""}`);
+  applyNavlabAnalyticsAttributes(node, {sectionId: text(analyticsSection || title)
+      .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "section"});
   const heading = element("div", "section-heading");
   const headingCopy = element("div");
   if (eyebrow) headingCopy.append(element("p", "eyebrow", eyebrow));
@@ -146,6 +191,8 @@ function createDialogController(endpoint, allowCalendarIntegrations) {
 
   return (item, sourceFocus) => {
     if (!dialog || !title || !kicker || !meta || !copy) return;
+    const analytics = navlabAnalyticsMetadata(item.labKind, item);
+    applyNavlabAnalyticsAttributes(dialog, analytics);
     title.textContent = text(item.title) || "CrossPointe Event";
     kicker.textContent = item.labKind === "registrations" || item.source === "Planning Center Registrations" ?
       "Registration" : "Event";
@@ -153,11 +200,22 @@ function createDialogController(endpoint, allowCalendarIntegrations) {
     copy.textContent = text(item.description) || "More details will be posted here as they become available.";
     if (links) {
       links.replaceChildren();
-      appendLink(links, text(item.registration_button_text) || "Register", safeHttpUrl(item.registration_url));
+      appendLink(links, text(item.registration_button_text) || "Register", safeHttpUrl(item.registration_url), false, {
+        event: "registration_click",
+        action: "registration_outbound",
+        contentId: analytics.contentId,
+        contentLabel: analytics.contentLabel,
+      });
       appendLink(links, "View event", safeHttpUrl(item.church_center_url || item.button_url), true);
       if (allowCalendarIntegrations) {
-        appendLink(links, "Google Calendar", safeHttpUrl(item.calendar_url), true);
-        appendLink(links, "Download calendar", safeCalendarUrl(item.calendar_file_url, endpoint), true);
+        appendLink(links, "Google Calendar", safeHttpUrl(item.calendar_url), true, {
+          event: "calendar_add", action: "add_to_calendar", contentId: analytics.contentId,
+          contentLabel: analytics.contentLabel, calendarProvider: "google",
+        });
+        appendLink(links, "Download calendar", safeCalendarUrl(item.calendar_file_url, endpoint), true, {
+          event: "calendar_add", action: "add_to_calendar", contentId: analytics.contentId,
+          contentLabel: analytics.contentLabel, calendarProvider: "apple",
+        });
       }
     }
     const returnFocus = () => sourceFocus && sourceFocus.focus({preventScroll: true});
@@ -193,6 +251,8 @@ function createFeaturedCard(data, showDetails) {
   if (enabled(settings.featured_event_enabled) && featured && isFutureEvent(featured) && text(featured.title)) {
     const featuredCard = element("article", "live-featured card");
     featuredCard.classList.add("event-card");
+    const analytics = navlabAnalyticsMetadata(featured.labKind, featured);
+    applyNavlabAnalyticsAttributes(featuredCard, analytics);
     const media = createEventMedia(featured, {kind: "Featured event", eager: true, showDate: false});
     media.classList.add("featured-event-media");
     featuredCard.append(media);
@@ -207,9 +267,15 @@ function createFeaturedCard(data, showDetails) {
     body.append(summary);
     const details = element("button", "button", "View event");
     details.type = "button";
+    applyNavlabAnalyticsAttributes(details, {
+      action: "view_event", contentId: analytics.contentId, contentLabel: analytics.contentLabel,
+    });
     details.addEventListener("click", () => showDetails(featured, details));
     const featuredActions = element("div", "hero-actions");
-    appendLink(featuredActions, text(featured.registration_button_text) || "Register", safeHttpUrl(featured.registration_url));
+    appendLink(featuredActions, text(featured.registration_button_text) || "Register", safeHttpUrl(featured.registration_url), false, {
+      event: "registration_click", action: "registration_outbound",
+      contentId: analytics.contentId, contentLabel: analytics.contentLabel,
+    });
     details.classList.add("secondary");
     featuredActions.append(details);
     body.append(featuredActions);
@@ -250,6 +316,7 @@ function renderHome(root, data, showDetails, onNavigate, interests) {
   root.replaceChildren();
 
   const hero = element("section", "live-hero");
+  applyNavlabAnalyticsAttributes(hero, {sectionId: "hero"});
   const copy = element("div", "live-hero-copy");
   copy.append(element("p", "eyebrow", text(settings.site_title) || "CrossPointe Central"));
   const heading = element("h1", "", text(settings.hero_heading) || "Stay connected.");
@@ -270,13 +337,14 @@ function renderHome(root, data, showDetails, onNavigate, interests) {
 
   if (data && data.banner && text(data.banner.message || data.banner.text || data.banner.title)) {
     const banner = element("aside", "live-banner card");
+    applyNavlabAnalyticsAttributes(banner, {sectionId: "status_banner"});
     if (text(data.banner.title)) banner.append(element("h2", "", text(data.banner.title)));
     if (text(data.banner.message)) banner.append(element("p", "", text(data.banner.message)));
     appendCentralLink(banner, text(data.banner.button_text) || "Learn more", data.banner.button_url, onNavigate, false);
     modules.set("statusBanner", banner);
   }
   if (text(sunday.date) || text(sunday.sermon_title) || text(sunday.note)) {
-    const sundaySection = section("This Sunday", "Worship + Word", "two");
+    const sundaySection = section("This Sunday", "Worship + Word", "two", "sunday");
     sundaySection.node.id = "this-sunday";
     const sundayCard = card({title: sunday.sermon_title || "Sunday Worship", description: sunday.note, location: sunday.speaker ? `With ${sunday.speaker}` : "", time: sunday.scripture || ""});
     const sundayBody = sundayCard.querySelector(".card-body");
@@ -293,7 +361,7 @@ function renderHome(root, data, showDetails, onNavigate, interests) {
   }
   const quickLinks = Array.isArray(data && data.quickLinks) ? data.quickLinks : [];
   if (quickLinks.length) {
-    const content = section("Quick links", "Fast access");
+    const content = section("Quick links", "Fast access", "", "quick_links");
     content.node.id = "quick-links";
     content.grid.className = "quick-links-row";
     quickLinks.forEach((item) => {
@@ -319,6 +387,7 @@ function renderSundayHome(root, data, showDetails, onNavigate, onWatch, interest
   const settings = data.sundaySettings || {};
   root.replaceChildren();
   const hero = element("section", "sunday-home-hero card");
+  applyNavlabAnalyticsAttributes(hero, {sectionId: "sunday_hero"});
   const copy = element("div", "sunday-home-copy");
   copy.append(element("p", "eyebrow", text(sunday.date) || "Sunday at CrossPointe"));
   const title = element("h1", "", text(sunday.sermon_title) || "Sunday Worship");
@@ -346,7 +415,7 @@ function renderSundayHome(root, data, showDetails, onNavigate, onWatch, interest
   hero.append(welcome); root.append(hero);
 
   if (canWatch) {
-    const watchSection = section("Watch Live", "Join from wherever you are");
+    const watchSection = section("Watch Live", "Join from wherever you are", "", "watch_live");
     watchSection.node.classList.add("sunday-watch-section");
     watchSection.grid.className = "sunday-watch-grid";
     const anchor = element("div", "sunday-watch-anchor card"); anchor.id = "sunday-watch-anchor";
@@ -358,19 +427,19 @@ function renderSundayHome(root, data, showDetails, onNavigate, onWatch, interest
   }
   const worship = createWorshipCard(data.setlist);
   if (worship) {
-    const content = section("This morning’s worship", "Sing with us");
+    const content = section("This morning’s worship", "Sing with us", "", "sermon_worship");
     content.grid.className = "sunday-worship-grid";
     content.grid.append(worship); root.append(content.node);
   }
   const featured = createFeaturedCard(data, showDetails);
   if (featured) {
-    const content = section("Coming up at CrossPointe", "Beyond Sunday");
+    const content = section("Coming up at CrossPointe", "Beyond Sunday", "", "upcoming_events");
     content.node.classList.add("sunday-featured-section");
     content.grid.className = "sunday-featured-grid";
     content.grid.append(featured); root.append(content.node);
   }
   renderHighlights(root, data, showDetails, onNavigate, interests);
-  const quick = section("Quick links", "Stay connected"); quick.grid.className = "quick-links-row";
+  const quick = section("Quick links", "Stay connected", "", "quick_links"); quick.grid.className = "quick-links-row";
   quick.node.id = "sunday-quick-links";
   for (const item of Array.isArray(data.quickLinks) ? data.quickLinks : []) {
     appendCentralLink(quick.grid, text(item.button_text || item.title), item.button_url || item.url, onNavigate);
@@ -405,6 +474,10 @@ function appendSourceAction(parent, type, item, {showDetails, onNavigate, intere
   if (type === "events" || type === "registrations") {
     const button = element("button", "button secondary", type === "registrations" ? "View registration" : "View event");
     button.type = "button";
+    const analytics = navlabAnalyticsMetadata(type, item);
+    applyNavlabAnalyticsAttributes(button, {
+      action: "view_event", contentId: analytics.contentId, contentLabel: analytics.contentLabel,
+    });
     button.addEventListener("click", () => showDetails({...item, labKind: type}, button));
     parent.append(button);
   } else if (type === "serveNeeds") {
@@ -425,6 +498,7 @@ function appendSourceAction(parent, type, item, {showDetails, onNavigate, intere
 function highlightCard(candidate, actions, {today = false} = {}) {
   const {type, title, item} = candidate;
   const article = element("article", `highlight-card highlight-${type} card`);
+  applyNavlabAnalyticsAttributes(article, navlabAnalyticsMetadata(type, item));
   article.dataset.sourceKey = candidate.key;
   const isEvent = type === "events" || type === "registrations";
   if (isEvent) article.classList.add("event-card");
@@ -448,7 +522,7 @@ function renderHighlights(root, data, showDetails, onNavigate, interests) {
   const previous = root.querySelector(".home-highlights");
   const signature = JSON.stringify(highlights);
   if (previous?.dataset.highlights === signature) return;
-  const content = section("At CrossPointe", "Find your next connection");
+  const content = section("At CrossPointe", "Find your next connection", "", "home_highlights");
   content.node.classList.add("home-highlights");
   content.node.dataset.highlights = signature;
   content.node.hidden = highlights.length === 0;
@@ -468,17 +542,19 @@ function renderNextSteps(root, data, onNavigate, interests) {
     ["resources", "Resources", "Keep growing", "book"],
   ];
   const config = Array.isArray(data.settings?.homepage_modules) ? data.settings.homepage_modules : [];
+  const analyticsSections = {nextSteps: "next_step", campaigns: "current_campaigns", serveNeeds: "serve_needs", resources: "resources"};
   for (const [id, title, eyebrow, defaultIcon] of sections) {
     const setting = config.find((entry) => entry.id === id);
     if (setting?.enabled === false || setting?.enabled === "false") continue;
     const items = Array.isArray(data[id]) ? data[id] : [];
     if (!items.length) continue;
-    const content = section(title, eyebrow);
+    const content = section(title, eyebrow, "", analyticsSections[id]);
     content.node.classList.add("steps-section");
     content.node.id = {nextSteps: "next-step", campaigns: "current-campaigns", serveNeeds: "serve-needs", resources: "resources"}[id] || "";
     for (const item of items) {
       const name = text(item.need || item.title);
       const article = element("article", "step-card card");
+      applyNavlabAnalyticsAttributes(article, navlabAnalyticsMetadata(id, item));
       const icon = id === "nextSteps" ? (/bapti/i.test(name) ? "water" : /group/i.test(name) ? "people" : /foundation/i.test(name) ? "book" : defaultIcon) : defaultIcon;
       const body = element("div", "card-body");
       body.append(stepArtwork(icon));
@@ -519,7 +595,7 @@ export function todayEventItems(data, now = Date.now()) {
 function renderEvents(root, data, showDetails) {
   root.replaceChildren();
   window.clearInterval(todayRefreshTimer);
-  const today = section("Today at CrossPointe", "Happening today");
+  const today = section("Today at CrossPointe", "Happening today", "", "today_at_crosspointe");
   today.node.classList.add("today-section");
   today.node.id = "today-at-crosspointe";
   let previousToday;
@@ -536,7 +612,7 @@ function renderEvents(root, data, showDetails) {
   refreshToday();
   root.append(today.node);
   todayRefreshTimer = window.setInterval(refreshToday, 60_000);
-  const upcoming = section("Upcoming events & registrations", "Plan ahead");
+  const upcoming = section("Upcoming events & registrations", "Plan ahead", "", "upcoming_events");
   upcoming.node.id = "upcoming-events";
   const events = [...(Array.isArray(data && data.events) ? data.events : []).map((item) => ({...item, labKind: "events"})), ...(Array.isArray(data && data.registrations) ? data.registrations : []).map((item) => ({...item, labKind: "registrations"}))];
   const tools = element("div", "live-event-tools");

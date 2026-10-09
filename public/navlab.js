@@ -402,6 +402,7 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
           sizePager();
         }
         window.dispatchEvent(new CustomEvent("central:data", {detail: data}));
+        window.centralAnalyticsService?.observeSections(byId(currentView));
         if (firstData) scrollLegacyTarget();
       }
       if (currentView === "notes") ensureStudy();

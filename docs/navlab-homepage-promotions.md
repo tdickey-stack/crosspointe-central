@@ -4,9 +4,10 @@ Handoff: September 17, 2026. Continue on `dev`.
 
 ## October 9 implementation: saved schedules and automatic defaults
 
-The scheduling feature is implemented locally. This section supersedes the
-historical preview-only scheduling status below. It has not been deployed or
-used to change production promotions.
+The scheduling feature and public-navigation integration are deployed to the
+dev Hosting channel. This section supersedes the historical preview-only
+status below. Production Hosting remains unchanged; no production promotion
+records were created during testing.
 
 - **Admin → Hub → Home highlights** (`/admin/home-promotions`) selects existing
   Events, Registrations, Campaigns, and Serve Needs. Editors can schedule a start
@@ -99,8 +100,13 @@ uncommitted seasonal files. The existing workflow deploys the additive
 publishing the dev Hosting channel. This does not change production Hosting.
 Do not deploy an older main backend over this preview while it is being tested.
 
-Before main launch: verify the hosted dev root/Admin/legacy routes, desktop and
-mobile navigation, forms, automatic highlights, Sunday mode, and notes. Real
+Hosted dev checks confirmed root/Admin/legacy routing and matching asset hashes,
+automatic Event/Campaign/Serve highlights, the published dev Sunday setting,
+event/calendar details, Bible loading, player/mini-player/close, and mobile
+form layout with no horizontal overflow. Local notes survived a refresh. CI
+builds and tests, including Firestore emulator access/persistence, passed.
+Admin authentication was checked at the signed-out boundary; no live interest
+form was submitted. Before main launch, complete signed-in Admin checks. Real
 Google Docs authorization/create/open needs the exact preview origin registered
 with the configured Google OAuth client; repository tests cannot establish that.
 Physical-phone keyboard and notification permission flows also need device QA.

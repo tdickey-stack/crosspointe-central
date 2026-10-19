@@ -1,5 +1,4 @@
-// Local design-preview selections only. Saved promotion schedules will be resolved
-// by the server against these same public source records in a later phase.
+// Public source references shared by the highlight renderer and design helpers.
 export const HIGHLIGHT_TYPES = Object.freeze({
   events: {label: "Event", plural: "Events", icon: "calendar"},
   registrations: {label: "Registration", plural: "Registrations", icon: "ticket"},
@@ -55,4 +54,26 @@ export function defaultHighlightKeys(candidates, featuredId = "") {
 export function resolveHighlightKeys(candidates, keys) {
   const byKey = new Map(candidates.map((entry) => [entry.key, entry]));
   return [...new Set(keys)].map((key) => byKey.get(key)).filter(Boolean).slice(0, 3);
+}
+
+// The server selects scheduled placements and automatic defaults. Re-check
+// expiry locally while a visitor keeps Home open; refresh discovers replacements.
+export function scheduledHighlights(data, now = Date.now()) {
+  const candidates = new Map(highlightCandidates(data, now).map((item) => [item.key, item]));
+  const featured = data?.featuredEvent;
+  const featuredEnabled = /^(true|1|yes|on)$/i.test(text(data?.settings?.featured_event_enabled));
+  const featuredId = featuredEnabled ? text(featured?.planning_center_instance_id || featured?.id) : "";
+  const seen = new Set();
+  return (Array.isArray(data?.homeHighlights) ? data.homeHighlights : []).flatMap((placement) => {
+    const start = Date.parse(placement?.startsAt);
+    const end = Date.parse(placement?.endsAt);
+    const automatic = placement?.selection === "automatic";
+    const candidate = candidates.get(placement?.key);
+    if (!candidate || seen.has(candidate.key) ||
+        (!automatic && (!Number.isFinite(start) || !Number.isFinite(end) || start > now || end <= now)) ||
+        (automatic && placement.endsAt && (!Number.isFinite(end) || end <= now)) ||
+        (candidate.type === "events" && candidate.id === featuredId)) return [];
+    seen.add(candidate.key);
+    return [candidate];
+  }).slice(0, 3);
 }

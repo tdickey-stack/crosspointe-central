@@ -89,6 +89,14 @@ export function createSundayPlayer({host, onReturn} = {}) {
   let connectAttempts = 0;
   let connectTimer = 0;
 
+  function emitLifecycle(phase, detail = {}) {
+    if (typeof window.dispatchEvent !== "function" ||
+      typeof window.CustomEvent !== "function") return;
+    window.dispatchEvent(new window.CustomEvent("central:livestream-player", {
+      detail: {phase, iframe, streamUrl: activeUrl, ...detail},
+    }));
+  }
+
   function currentViewport() {
     const visual = window.visualViewport;
     return visual ? {
@@ -288,6 +296,15 @@ export function createSundayPlayer({host, onReturn} = {}) {
     if (playbackOrigin) sendConnect();
   }
 
+  function handlePageShow(event) {
+    if (destroyed || !iframe || !event || event.persisted !== true) return;
+    // BFCache preserves the iframe but not the authority of its last playback
+    // snapshot. Reconnect before presence can treat the restored stream as
+    // active again.
+    handleIframeLoad();
+    emitLifecycle("restored");
+  }
+
   function applyPlaybackSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== "object") return;
     if (typeof snapshot.paused === "boolean") playbackPaused = snapshot.paused;
@@ -296,6 +313,7 @@ export function createSundayPlayer({host, onReturn} = {}) {
     playbackConnected = true;
     playbackKnown = true;
     updatePlaybackButton();
+    emitLifecycle("playback", {playing: !playbackPaused});
   }
 
   function handlePlaybackMessage(event) {
@@ -315,6 +333,7 @@ export function createSundayPlayer({host, onReturn} = {}) {
       playbackPaused = true;
       playbackKnown = true;
       updatePlaybackButton();
+      emitLifecycle("playback", {playing: false});
     }
   }
 
@@ -329,6 +348,7 @@ export function createSundayPlayer({host, onReturn} = {}) {
 
   function close() {
     if (!iframe) return;
+    emitLifecycle("closed", {playing: false});
     stopPointerOperation();
     stopPlaybackBridge();
     iframe.remove();
@@ -471,6 +491,7 @@ export function createSundayPlayer({host, onReturn} = {}) {
     userMinimized = false;
     miniWidth = clampMiniWidth(miniWidth || defaultMiniWidth());
     syncLayout();
+    emitLifecycle("opened");
     return true;
   }
 
@@ -497,6 +518,7 @@ export function createSundayPlayer({host, onReturn} = {}) {
     window.removeEventListener("resize", scheduleLayout);
     window.visualViewport?.removeEventListener("resize", scheduleLayout);
     window.visualViewport?.removeEventListener("scroll", scheduleLayout);
+    window.removeEventListener("pageshow", handlePageShow);
     root.remove();
   }
 
@@ -518,6 +540,7 @@ export function createSundayPlayer({host, onReturn} = {}) {
   resizeHandle.addEventListener("keydown", resizeFromKeyboard);
   document.addEventListener("scroll", scheduleLayout, true);
   window.addEventListener("resize", scheduleLayout);
+  window.addEventListener("pageshow", handlePageShow);
   window.visualViewport?.addEventListener("resize", scheduleLayout);
   window.visualViewport?.addEventListener("scroll", scheduleLayout);
 

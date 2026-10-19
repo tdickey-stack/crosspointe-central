@@ -1,0 +1,42 @@
+html.central-whats-new-open,
+html.central-whats-new-open body { overflow: hidden; }
+#central-whats-new-modal {
+  width: min(560px, calc(100% - 32px));
+  max-height: min(82dvh, 760px);
+  margin: auto;
+  padding: 28px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  background: var(--hero);
+  color: var(--text);
+  box-shadow: 0 24px 70px #0005;
+}
+#central-whats-new-modal[open] { animation: central-whats-new-in .3s cubic-bezier(.16,1,.3,1); }
+#central-whats-new-modal::backdrop { background: #0f0f10a3; backdrop-filter: blur(4px); }
+#central-whats-new-modal .whats-new-close {
+  position: absolute; top: 14px; right: 14px; width: 38px; height: 38px;
+  border-radius: 50%; background: var(--soft); color: var(--text); font-size: 24px; line-height: 1;
+}
+#central-whats-new-modal .whats-new-kicker { color: var(--red); font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; padding-right: 38px; }
+#central-whats-new-modal .whats-new-version { display: inline-flex; align-items: center; min-height: 32px; margin-top: 12px; padding: 0 12px; border-radius: 999px; background: var(--tint); color: var(--red); font-size: 13px; font-weight: 800; }
+#central-whats-new-modal h2 { margin: 16px 0 0; font-size: clamp(27px,3vw,37px); line-height: 1.08; }
+#central-whats-new-modal .whats-new-body { margin-top: 20px; color: var(--muted); font-size: 16px; line-height: 1.7; overflow-wrap: anywhere; }
+#central-whats-new-modal .whats-new-body > :first-child { margin-top: 0; }
+#central-whats-new-modal .whats-new-body > :last-child { margin-bottom: 0; }
+#central-whats-new-modal .whats-new-body :is(p,ul,ol) { margin: 0 0 14px; }
+#central-whats-new-modal .whats-new-body :is(ul,ol) { padding-left: 1.3rem; }
+#central-whats-new-modal .whats-new-body li > :is(ul,ol) { margin: 8px 0 0; }
+#central-whats-new-modal .whats-new-body li + li { margin-top: 6px; }
+#central-whats-new-modal .whats-new-heading { margin: 22px 0 8px; color: var(--text); font-size: 18px; font-weight: 800; }
+#central-whats-new-modal .whats-new-body strong { color: var(--text); }
+#central-whats-new-modal .whats-new-body code { background: var(--soft); padding: 2px 6px; border-radius: 6px; }
+#central-whats-new-modal .whats-new-actions { display: flex; margin-top: 24px; }
+#central-whats-new-modal .whats-new-actions button { min-width: 180px; }
+@keyframes central-whats-new-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 560px) {
+  #central-whats-new-modal { padding: 24px 20px; }
+  #central-whats-new-modal .whats-new-actions button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { #central-whats-new-modal[open] { animation: none; } }

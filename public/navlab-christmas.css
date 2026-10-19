@@ -1,0 +1,479 @@
+/* Christmas At The Movies styling for the Navigation Lab.
+ * Every rule is gated so normal Navlab remains unchanged. */
+
+:root[data-seasonal-experience="christmas-at-the-movies"] {
+  --catm-velvet: #7b1020;
+  --catm-velvet-deep: #35060d;
+  --catm-evergreen: #123f32;
+  --catm-evergreen-deep: #071d18;
+  --catm-gold: #f4c768;
+  --catm-gold-bright: #ffe7a8;
+  --catm-cream: #fff5dc;
+
+  --bg: #f4ead7;
+  --surface: #fffaf0;
+  --soft: #f1e3cd;
+  --text: #30231e;
+  --muted: #766157;
+  --border: rgba(104, 69, 43, 0.24);
+  --red: var(--catm-velvet);
+  --accent: var(--catm-evergreen);
+  --tint: #efe0c7;
+  --shadow: 0 12px 32px rgba(62, 35, 21, 0.1);
+  --hero:
+    radial-gradient(circle at 82% 12%, rgba(244, 199, 104, 0.22), transparent 24rem),
+    radial-gradient(circle at 8% 112%, rgba(123, 16, 32, 0.3), transparent 28rem),
+    linear-gradient(135deg, var(--catm-evergreen), var(--catm-evergreen-deep) 68%, #020907);
+
+  /* The dynamically loaded reader uses Central's production token names. */
+  --cp-muted: var(--muted);
+  --cp-border: var(--border);
+  --cp-surface-elevated: var(--surface);
+  --cp-input-bg: var(--soft);
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] {
+  --bg: #07110e;
+  --surface: #14211b;
+  --soft: #1d2d25;
+  --text: #f4eadb;
+  --muted: #c5b5a1;
+  --border: rgba(244, 199, 104, 0.22);
+  --red: var(--catm-gold);
+  --accent: #8e1528;
+  --tint: rgba(244, 199, 104, 0.13);
+  --shadow: 0 16px 38px rgba(0, 0, 0, 0.34);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] body {
+  background:
+    radial-gradient(circle at 50% 0, rgba(123, 16, 32, 0.11), transparent 32rem),
+    var(--bg);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] :is(button, a, input, select):focus-visible {
+  outline-color: var(--red);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] :is(.site-header, .navigation, .lab-note, .live-hero-copy, .sunday-home-hero) :focus-visible {
+  outline-color: var(--catm-gold-bright);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-editor:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-note {
+  border-color: rgba(244, 199, 104, 0.28);
+  background: var(--catm-velvet-deep);
+  color: rgba(255, 245, 220, 0.76);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-note > span,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-note .lab-description {
+  color: var(--catm-cream);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-preview-toggle,
+:root[data-seasonal-experience="christmas-at-the-movies"] #christmas-toggle {
+  border-color: rgba(244, 199, 104, 0.38);
+  background: rgba(255, 245, 220, 0.1);
+  color: var(--catm-cream);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-preview-toggle span,
+:root[data-seasonal-experience="christmas-at-the-movies"] #christmas-toggle span {
+  background: rgba(255, 245, 220, 0.13);
+  color: var(--catm-gold-bright);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-preview-toggle[aria-pressed="true"],
+:root[data-seasonal-experience="christmas-at-the-movies"] #christmas-toggle[aria-pressed="true"] {
+  border-color: var(--catm-gold);
+  background: var(--catm-gold);
+  color: var(--catm-evergreen-deep);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-preview-toggle[aria-pressed="true"] span,
+:root[data-seasonal-experience="christmas-at-the-movies"] #christmas-toggle[aria-pressed="true"] span {
+  background: var(--catm-evergreen-deep);
+  color: var(--catm-cream);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .site-header {
+  border-color: rgba(244, 199, 104, 0.28);
+  background: var(--catm-evergreen-deep);
+  box-shadow: 0 8px 28px rgba(2, 9, 7, 0.18);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .brand,
+:root[data-seasonal-experience="christmas-at-the-movies"] .theme-button {
+  color: var(--catm-cream);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .navigation {
+  border-color: rgba(244, 199, 104, 0.2);
+  background: rgba(255, 245, 220, 0.1);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .navigation a {
+  color: rgba(255, 245, 220, 0.76);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .navigation a:hover {
+  color: var(--catm-gold-bright);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .navigation a[aria-current="page"] {
+  background: var(--catm-gold);
+  color: var(--catm-evergreen-deep);
+  box-shadow: 0 4px 14px rgba(2, 9, 7, 0.24);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .card {
+  border-color: var(--border);
+  box-shadow:
+    inset 0 0 0 1px rgba(244, 199, 104, 0.07),
+    var(--shadow);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .button,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-google {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .button.secondary {
+  border: 1px solid var(--border);
+  background: var(--soft);
+  color: var(--text);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .eyebrow,
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-meta,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-kicker,
+:root[data-seasonal-experience="christmas-at-the-movies"] .detail-meta {
+  color: var(--red);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-hero,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 2px solid var(--catm-gold);
+  background: var(--hero);
+  color: var(--catm-cream);
+  box-shadow: 0 18px 42px rgba(7, 29, 24, 0.24);
+}
+
+.navlab-marquee { display: none; }
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-hero > *,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .navlab-marquee {
+  display: block;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: var(--catm-gold-bright);
+  filter: drop-shadow(0 0 3px rgba(244, 199, 104, 0.7));
+  pointer-events: none;
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-hero h1,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-watch-start,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-hero h1,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-welcome h2,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-meta .sunday-home-series {
+  color: var(--catm-cream);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-hero-copy > p:not(.eyebrow),
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-meta,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-note,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-welcome p {
+  color: rgba(255, 245, 220, 0.78);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-hero-copy > .eyebrow,
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-copy > .eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 18px;
+  padding: 5px 10px;
+  border: 1px solid rgba(244, 199, 104, 0.44);
+  border-radius: 999px;
+  background: rgba(53, 6, 13, 0.38);
+  color: var(--catm-cream);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-hero-copy > .eyebrow::before {
+  background: var(--catm-gold);
+  box-shadow: 0 0 9px rgba(244, 199, 104, 0.58);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .sunday-home-welcome {
+  border-color: rgba(244, 199, 104, 0.28);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .navlab-catm-brand {
+  display: block;
+  width: min(420px, 100%);
+  margin: 0 0 18px;
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .navlab-catm-brand img {
+  display: block;
+  width: 100%;
+  max-height: 100px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.3));
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-featured,
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-card,
+:root[data-seasonal-experience="christmas-at-the-movies"] .step-card,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-panel {
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .live-banner {
+  border-left-color: var(--catm-velvet);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .event-date-token {
+  border: 1px solid rgba(123, 16, 32, 0.16);
+  background: var(--catm-cream);
+  color: #30231e;
+  box-shadow: 0 5px 18px rgba(53, 6, 13, 0.22);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .event-date-month,
+:root[data-seasonal-experience="christmas-at-the-movies"] .event-date-label {
+  color: var(--catm-velvet);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .event-date-time {
+  border-color: rgba(123, 16, 32, 0.2);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .chips button {
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .chips button[aria-pressed="true"] {
+  border-color: var(--catm-evergreen);
+  background: var(--catm-evergreen);
+  color: var(--catm-cream);
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .chips button[aria-pressed="true"] {
+  border-color: var(--catm-gold);
+  background: var(--catm-gold);
+  color: var(--catm-evergreen-deep);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .highlight-card {
+  --highlight-bg: #e7dec7;
+  --highlight-ink: var(--catm-evergreen);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .highlight-registrations {
+  --highlight-bg: #f0d9d8;
+  --highlight-ink: var(--catm-velvet);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .highlight-campaigns {
+  --highlight-bg: #dce8dc;
+  --highlight-ink: var(--catm-evergreen);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .highlight-serveNeeds {
+  --highlight-bg: #f3e3bd;
+  --highlight-ink: #64451b;
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .highlight-card {
+  --highlight-bg: #26362e;
+  --highlight-ink: var(--catm-gold-bright);
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .highlight-registrations {
+  --highlight-bg: #421b24;
+  --highlight-ink: #ffd7d8;
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .highlight-campaigns {
+  --highlight-bg: #1d382d;
+  --highlight-ink: #d8ead9;
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .highlight-serveNeeds {
+  --highlight-bg: #45371f;
+  --highlight-ink: var(--catm-gold-bright);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .step-art {
+  background: #f1dfbf;
+  color: var(--catm-velvet);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .step-art-water,
+:root[data-seasonal-experience="christmas-at-the-movies"] .step-art-people,
+:root[data-seasonal-experience="christmas-at-the-movies"] .step-art-book {
+  background: #dce8dc;
+  color: var(--catm-evergreen);
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .step-art,
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .step-art-water,
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .step-art-people,
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .step-art-book {
+  background: rgba(244, 199, 104, 0.13);
+  color: var(--catm-gold-bright);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] #detail-dialog {
+  border-color: rgba(123, 16, 32, 0.24);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 26px 80px rgba(53, 6, 13, 0.34);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] #detail-dialog::backdrop {
+  background: rgba(7, 29, 24, 0.78);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .dialog-close,
+:root[data-seasonal-experience="christmas-at-the-movies"] #detail-done {
+  background: var(--soft);
+  color: var(--text);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-toolbar,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-format,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-tool,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-editor,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-switcher {
+  border-color: var(--border);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-format.is-active,
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-format[aria-pressed="true"],
+:root[data-seasonal-experience="christmas-at-the-movies"] .lab-study-switch[aria-selected="true"] {
+  border-color: var(--catm-evergreen);
+  background: var(--catm-evergreen);
+  color: var(--catm-cream);
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .lab-study-format.is-active,
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .lab-study-format[aria-pressed="true"],
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] .lab-study-switch[aria-selected="true"] {
+  border-color: var(--catm-gold);
+  background: var(--catm-gold);
+  color: var(--catm-evergreen-deep);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] #live-groups[data-group-directory] {
+  color-scheme: light;
+  --groups-ink: #30231e;
+  --groups-muted: #766157;
+  --groups-line: rgba(104, 69, 43, 0.24);
+  --groups-red: var(--catm-velvet);
+  --groups-red-dark: var(--catm-velvet);
+  --groups-surface: #fffaf0;
+  --groups-soft: #f1e3cd;
+  --groups-focus: rgba(123, 16, 32, 0.25);
+  --groups-shadow: 0 12px 32px rgba(62, 35, 21, 0.1);
+  --groups-lede: #57453d;
+  --groups-toolbar: rgba(255, 250, 240, 0.94);
+  --groups-label: #57453d;
+  --groups-input: #f9efdd;
+  --groups-control-border: rgba(104, 69, 43, 0.26);
+  --groups-placeholder: #806b60;
+  --groups-hint: #766157;
+  --groups-card-border: rgba(104, 69, 43, 0.22);
+  --groups-type-bg: rgba(123, 16, 32, 0.09);
+  --groups-type-ink: var(--catm-velvet);
+  --groups-meta: #665148;
+  --groups-icon: #806b60;
+  --groups-action: var(--catm-evergreen);
+  --groups-action-ink: #ffffff;
+  --groups-action-hover: #1c5a48;
+}
+
+:root[data-theme="dark"][data-seasonal-experience="christmas-at-the-movies"] #live-groups[data-group-directory] {
+  color-scheme: dark;
+  --groups-ink: #f4eadb;
+  --groups-muted: #c5b5a1;
+  --groups-line: rgba(244, 199, 104, 0.22);
+  --groups-red: var(--catm-gold);
+  --groups-red-dark: var(--catm-gold);
+  --groups-surface: #14211b;
+  --groups-soft: #1d2d25;
+  --groups-focus: rgba(244, 199, 104, 0.3);
+  --groups-shadow: 0 16px 38px rgba(0, 0, 0, 0.34);
+  --groups-lede: #dfd1be;
+  --groups-toolbar: #14211b;
+  --groups-label: #dfd1be;
+  --groups-input: #1d2d25;
+  --groups-control-border: rgba(244, 199, 104, 0.26);
+  --groups-placeholder: #a99784;
+  --groups-hint: #c5b5a1;
+  --groups-card-border: rgba(244, 199, 104, 0.2);
+  --groups-type-bg: rgba(244, 199, 104, 0.12);
+  --groups-type-ink: var(--catm-gold-bright);
+  --groups-meta: #d0c0ac;
+  --groups-icon: #c5b5a1;
+  --groups-action: var(--catm-gold);
+  --groups-action-ink: var(--catm-evergreen-deep);
+  --groups-action-hover: var(--catm-gold-bright);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .group-dialog::backdrop {
+  background: rgba(7, 29, 24, 0.8);
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .group-card-attendance.is-drop-in {
+  background: #dce8dc;
+  color: #184c3d;
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .group-card-attendance.is-connect-first {
+  background: var(--catm-gold-bright);
+  color: #4b3211;
+}
+
+@media (max-width: 760px) {
+  :root[data-seasonal-experience="christmas-at-the-movies"] .navigation {
+    border-color: rgba(244, 199, 104, 0.28);
+    background: var(--catm-evergreen-deep);
+    box-shadow: 0 -7px 24px rgba(2, 9, 7, 0.28);
+  }
+
+  :root[data-seasonal-experience="christmas-at-the-movies"] .navigation a[aria-current="page"] {
+    background: var(--catm-gold);
+  }
+
+  :root[data-seasonal-experience="christmas-at-the-movies"] .navlab-catm-brand {
+    width: min(300px, 100%);
+    margin-bottom: 14px;
+  }
+
+  :root[data-seasonal-experience="christmas-at-the-movies"] .navlab-catm-brand img {
+    max-height: 80px;
+  }
+}

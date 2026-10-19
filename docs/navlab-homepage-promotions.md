@@ -2,6 +2,151 @@
 
 Handoff: September 17, 2026. Continue on `dev`.
 
+## October 19 readiness review
+
+This review was performed on `codex/catm-popcorn-loader`. Most of the remaining
+navigation and Home highlights changes match work already present on `main`;
+the older branch must preserve those newer changes when integrated. The sections
+below retain their original dates and are historical status, not current release
+claims.
+
+The reviewed working tree includes the current main loading screen and What's
+New announcement integration. Christmas decorations are restricted to the
+Navlab preview, and the light seasonal Sunday view uses readable cream text for
+the watch button. Asset versions were updated for the changed scripts/styles.
+
+Validation completed:
+
+- Public navigation: 115 tests passed.
+- Home highlights: 45 unit tests passed; all three additional Firestore emulator
+  tests passed, including simultaneous overlapping creates saving exactly one
+  placement.
+- Analytics, Admin access, livestream, print-mode client, and seasonal regression
+  commands passed. Syntax checks and targeted Home highlights lint passed.
+- Desktop and 390px mobile browser checks covered loading, announcements,
+  event filtering/details, the interest form, and light/dark seasonal Home and
+  Sunday previews. No horizontal overflow was observed in the mobile preview.
+- Repository-wide backend lint still reports 395 existing errors; this review
+  does not claim a clean global lint result.
+
+Authenticated Admin writes, Google OAuth export, notification delivery, and
+physical-device verification remain outside this local check. No production
+records were written. This readiness review does not commit, push, or deploy.
+A temporary merge preflight identified historical conflicts in the Home
+highlights emulator test, `navlab-content.js`, and `navlab.html`; the reviewed
+working versions contain the intended combined content, but integration still
+requires resolving those conflicts.
+
+## October 9 implementation: saved schedules and automatic defaults
+
+The scheduling feature and public-navigation integration are deployed to the
+dev Hosting channel. This section supersedes the historical preview-only
+status below. Production Hosting remains unchanged; no production promotion
+records were created during testing.
+
+- **Admin → Hub → Home highlights** (`/admin/home-promotions`) selects existing
+  Events, Registrations, Campaigns, and Serve Needs. Editors can schedule a start
+  and required end, set numeric priority, edit, pause, or resume a placement.
+- Homepage `edit`, `approve`, and `admin` permissions may save. Other Homepage
+  readers can inspect. Existing legacy Settings-to-Homepage permission fallback
+  is preserved. Writes go through the authenticated API; the browser cannot
+  read or write schedule records directly.
+- Schedules live at `centralAdmin/root/homePromotions`, separate from source-list
+  publication. Optimistic revisions prevent stale edits, client-generated IDs
+  make create retries idempotent, and duplicate overlapping placements of the
+  same source are rejected.
+- Dates are entered in **Central time (America/Chicago)**. Explicit offsets are
+  sent to the server and stored as timestamps. Invalid and ambiguous DST wall
+  times are rejected with guidance. Start is inclusive; end is exclusive.
+- Active eligible schedules fill the first three positions in priority order.
+  Remaining positions use the **next not-yet-started Event**, **most recently
+  published Campaign**, then **most recently published Serve Need**. Registrations
+  can be scheduled but are not automatic defaults. Missing categories are
+  omitted. The main hero stays event-only and its event cannot duplicate a
+  highlight; source IDs are deduplicated.
+- Campaign/Serve recency uses first publication (`createdAt`, then document
+  creation time for older records), exposed as public `published_at`. Editing an
+  old source does not make it newest. Without any timestamp, feed order is the
+  deterministic tie-breaker.
+- A source may appear automatically outside its manual window or when its
+  placement is paused. Scheduling controls priority; source visibility still
+  controls whether the item can appear at all. The editor explains this and
+  labels the current three cards **Scheduled** or **Automatic**.
+- Current/upcoming/paused/expired placements remain visible in the admin, with
+  warnings for more than three overlapping schedules. Cards retain their normal
+  browse sections and actions. Hidden/unpublished/expired sources are excluded.
+- `/api/central-data` resolves `homeHighlights` on every response, including
+  responses using cached source data. Schedule read failure preserves automatic
+  defaults and the rest of Central. Navlab consumes this projection instead of
+  its old sample dropdowns, refreshes it every minute while visible, and removes
+  expired placements locally without resetting notes, navigation, or playback.
+- Hosted Navlab uses same-origin `/api/central-data`. The standalone port-8765
+  static preview still reads the public production feed; the new projection
+  requires the backend release. A local review harness was tested against a demo
+  Firestore emulator with sample content, without production writes.
+
+Validation: scheduling/selection/auth/DST tests, real emulator transactions,
+client denial of direct private schedule reads/writes, and desktop/mobile
+light/dark rendering. Browser checks covered save, reload persistence,
+priority/overlap, pausing all schedules to restore automatic defaults, and a
+mixed scheduled/automatic public Home. Physical phone and real production-origin
+OAuth verification remain separate.
+
+Release wiring includes the new admin endpoint plus `centralData` in the dev
+function deployment allowlist, and focused unit/emulator checks in both CI jobs.
+Dev and main share backend services; deploys must remain serialized.
+
+### October 9 public-navigation integration
+
+The navigation shell is now `public/index.html`. The previous shell is retained
+byte-for-byte as `public/legacy.html`, with explicit `/admin{,/**}` and
+`/legacy{,/**}` routes before the public fallback. Admin's pathname-sensitive
+boot is preserved. `/legacy` is also available for comparison and rollback.
+The production shell has no lab controls, no noindex meta, and no seasonal boot.
+Christmas styling and the approved popcorn loader remain a separate release.
+
+- Published `sundayMode.enabled` controls Sunday Home on startup and minute
+  refresh. Mode changes preserve the current tab, mounted notes, and player.
+  Direct notes links remain available outside the Sunday window without forcing
+  Sunday Home. A mounted editor stays tied to its original Sunday/date until a
+  deliberate reload, protecting an in-progress draft across date rollover.
+- Existing section hashes, including encoded names, route to their corresponding
+  tabs/sections. Registration links select the registration filter. Wayfinder
+  invitation hashes remain intact for the existing redemption flow.
+- Serve and contact Campaign cards open accessible forms that use the existing
+  same-origin APIs. Forms validate required fields, expose server errors, retain
+  focus, and serialize public item IDs rather than internal contact addresses.
+- Production Notes uses the established `central-sermon-notes-*` namespace. If
+  absent, a preview draft can be copied into it. Existing or explicitly cleared
+  drafts always win; neither source namespace is deleted. Navlab remains isolated.
+- Manifest, icons, Firebase auth, analytics, notification controls, Wayfinder,
+  and authorized staff workspace navigation are retained. Footer controls stay
+  accessible inside the active mobile tab. Public inline event editing remains
+  in `/legacy`; staff can manage events through Admin.
+- Livestream presence still represents estimated active streams on Central.
+  Only confirmed playback from the exact connected Resi iframe counts; closing,
+  pausing, changing streams, or leaving withdraws presence. Tab changes retain
+  one iframe and mini-player.
+
+Release target is **dev only**. The navigation release is assembled from
+`origin/dev` in a separate worktree, excluding the Christmas loader commit and
+uncommitted seasonal files. The existing workflow deploys the additive
+`centralData`/Home promotions backend to the shared Firebase project before
+publishing the dev Hosting channel. This does not change production Hosting.
+Do not deploy an older main backend over this preview while it is being tested.
+
+Hosted dev checks confirmed root/Admin/legacy routing and matching asset hashes,
+automatic Event/Campaign/Serve highlights, the published dev Sunday setting,
+event/calendar details, Bible loading, player/mini-player/close, and mobile
+form layout with no horizontal overflow. Local notes survived a refresh. CI
+builds and tests, including Firestore emulator access/persistence, passed.
+Admin authentication was checked at the signed-out boundary; no live interest
+form was submitted. Before main launch, complete signed-in Admin checks. Real
+Google Docs authorization/create/open needs the exact preview origin registered
+with the configured Google OAuth client; repository tests cannot establish that.
+Physical-phone keyboard and notification permission flows also need device QA.
+Do not describe a dev push as production deployment.
+
 ## September 17 implementation progress
 
 The first implementation phase is now a local `/navlab` UI preview:

@@ -1,18 +1,21 @@
-/* Isolated Central preview: anonymous public content, no admin or shared preferences. */
-import {mountCentralContent} from "./navlab-content.js?v=11";
+/* Shared navigation for the public Central shell and the isolated design lab. */
+import {mountCentralContent} from "./navlab-content.js?v=16";
 import {mountGroupDirectory} from "./group-directory.js";
-import {mountSundayStudy} from "./navlab-study.js?v=1";
+import {mountSundayStudy} from "./navlab-study.js?v=2";
 import {createSundayPlayer} from "./navlab-player.js?v=2";
 (() => {
   const byId = (id) => document.getElementById(id);
   const dialog = byId("detail-dialog");
+  const production = document.documentElement.dataset.productionShell === "true";
+  let notesRequested = false;
   let sundayMode = false;
   let centralData = null;
   let study = null;
   const player = createSundayPlayer({
     host: byId("sunday-player-host"),
     onReturn: () => {
-      setSundayMode(true);
+      if (!production) setSundayMode(true);
+      else goTo("home");
       byId("sunday-watch-anchor")?.scrollIntoView({block: "center", behavior: "instant"});
     },
   });
@@ -36,7 +39,7 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
     if (groupsStarted) return;
     groupsStarted = true;
     mountGroupDirectory(byId("live-groups"), {
-      endpoint: "https://central.crosspointe.tv/api/groups",
+      endpoint: production ? "/api/groups" : "https://central.crosspointe.tv/api/groups",
       fallbackUrl: "https://crosspointetv.churchcenter.com/groups",
     });
   }
@@ -152,25 +155,45 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
     });
     highlightView(next);
     const title = next === "next-steps" ? "Next Steps" : next[0].toUpperCase() + next.slice(1);
-    document.title = `${title} · Central Navigation Lab`;
+    document.title = `${title} · ${production ? "CrossPointe Central" : "Central Navigation Lab"}`;
+    if (production) {
+      window.centralAnalyticsService?.setPageMode(sundayMode ? "sunday_mode" : "homepage");
+      window.centralAnalyticsService?.observeSections(byId(next));
+    }
     if (focus) focusHeading(next);
   }
 
+  function readFragment() {
+    try { return decodeURIComponent(location.hash.slice(1)); }
+    catch (_) { return location.hash.slice(1); }
+  }
+  function scrollLegacyTarget() {
+    const fragment = readFragment();
+    if (!legacyDestinations[fragment] || legacyDestinations[fragment] !== currentView) return;
+    const target = {sunday: sundayMode ? "sunday-home-title" : "this-sunday",
+      "this-sunday": sundayMode ? "sunday-home-title" : "this-sunday",
+      "quick-links": sundayMode ? "sunday-quick-links" : "quick-links",
+      "watch-live": sundayMode ? "sunday-watch-anchor" : "this-sunday",
+      registrations: "upcoming-events"}[fragment] || fragment;
+    byId(target)?.scrollIntoView?.({block: "start", behavior: "instant"});
+    if (fragment === "registrations") document.querySelector('[data-event-filter="registrations"]')?.click();
+  }
   function focusHeading(next) {
     byId(next === "home" && sundayMode ? "sunday-home-title" : `${next}-title`)?.focus({preventScroll: true});
+    if (production) scrollLegacyTarget();
   }
 
   function setSundayMode(enabled, showHome = true) {
     cancelPageMotion();
     sundayMode = enabled;
-    destinations = enabled ? ["home", "notes", "next-steps", "groups", "events"] : ["home", "next-steps", "groups", "events"];
+    destinations = (enabled || (production && notesRequested)) ? ["home", "notes", "next-steps", "groups", "events"] : ["home", "next-steps", "groups", "events"];
     document.documentElement.dataset.sundayPreview = String(enabled);
-    byId("notes-link").hidden = !enabled;
+    byId("notes-link").hidden = !destinations.includes("notes");
     byId("home-content").hidden = enabled;
     byId("sunday-home-content").hidden = !enabled;
     byId("home").setAttribute("aria-labelledby", enabled ? "sunday-home-title" : "home-title");
-    byId("sunday-toggle").setAttribute("aria-pressed", String(enabled));
-    byId("sunday-toggle-state").textContent = enabled ? "On" : "Off";
+    byId("sunday-toggle")?.setAttribute("aria-pressed", String(enabled));
+    if (byId("sunday-toggle-state")) byId("sunday-toggle-state").textContent = enabled ? "On" : "Off";
     player.setSundayMode(enabled);
     clearTimeout(scrollTimer);
     pendingNavigation = null;
@@ -185,14 +208,25 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
       sizePager();
     }
   }
-  byId("sunday-toggle").addEventListener("click", () => setSundayMode(!sundayMode));
+  byId("sunday-toggle")?.addEventListener("click", () => setSundayMode(!sundayMode));
 
+  const legacyDestinations = {
+    "this-sunday": "home", sunday: "home", "sermon-notes": "notes",
+    "upcoming-events": "events", registrations: "events", "today-at-crosspointe": "events",
+    "next-step": "next-steps", resources: "next-steps", "serve-needs": "next-steps",
+    "current-campaigns": "next-steps", "quick-links": "home", "watch-live": "home",
+  };
+  function requestNotes() {
+    if (production) { notesRequested = true; setSundayMode(sundayMode, false); }
+    else if (!sundayMode) setSundayMode(true, false);
+  }
   function navigate() {
-    const requested = location.hash.slice(1);
+    const raw = readFragment();
+    const requested = legacyDestinations[raw] || raw;
     if (requested === "main") return;
-    if (requested === "notes" && !sundayMode) setSundayMode(true, false);
+    if (requested === "notes" && (!sundayMode || production)) requestNotes();
     const next = destinations.includes(requested) ? requested : "home";
-    if (next === currentView && !mobile.matches) return;
+    if (next === currentView && !mobile.matches) { if (production) scrollLegacyTarget(); return; }
     if (dialog.open) dialog.close();
     const initial = !currentView;
     const previous = currentView;
@@ -282,6 +316,11 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
     sizePager();
   });
   window.addEventListener("resize", sizePager);
+  window.addEventListener("navlabseasonchange", () => {
+    cancelPageMotion();
+    lastPagerWidth = 0;
+    sizePager();
+  });
   reduceMotion.addEventListener("change", () => {
     if (!reduceMotion.matches || !stopPageMotion) return;
     cancelPageMotion();
@@ -305,13 +344,20 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     byId("theme-toggle").setAttribute("aria-pressed", String(dark));
     document.querySelector('meta[name="theme-color"]').content = dark ? "#18181b" : "#f4f4f5";
+    window.NavlabSeasonal?.syncThemeColor();
     study?.setTheme(dark ? "dark" : "light");
   }
-  setTheme(window.matchMedia("(prefers-color-scheme: dark)").matches);
-  byId("theme-toggle").addEventListener("click", () => setTheme(document.documentElement.dataset.theme !== "dark"));
+  let preferredTheme;
+  try { if (production) preferredTheme = localStorage.getItem("central-theme-override-v2"); } catch (_) {}
+  setTheme(preferredTheme === "dark" || (preferredTheme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches));
+  byId("theme-toggle").addEventListener("click", () => {
+    setTheme(document.documentElement.dataset.theme !== "dark");
+    try { if (production) localStorage.setItem("central-theme-override-v2", document.documentElement.dataset.theme); } catch (_) {}
+  });
   history.scrollRestoration = "manual";
   function goTo(destination) {
-    if (destination === "notes" && !sundayMode) setSundayMode(true, false);
+    destination = legacyDestinations[destination] || destination;
+    if (destination === "notes") requestNotes();
     if (!destinations.includes(destination)) return;
     if (location.hash !== `#${destination}`) history.pushState(null, "", `#${destination}`);
     navigate();
@@ -332,7 +378,9 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
   // Start both public feeds without waiting for either. Central content already
   // prepares Events/Next Steps; warm Groups while the visitor browses Home.
   mountCentralContent({
-    endpoint: "https://central.crosspointe.tv/api/central-data",
+    endpoint: document.documentElement.dataset.centralEndpoint ||
+      ((location.hostname === "127.0.0.1" || location.hostname === "localhost") && location.port === "8765" ?
+        "https://central.crosspointe.tv/api/central-data" : "/api/central-data"),
     onNavigate: goTo,
     onWatch: () => {
       goTo("home");
@@ -340,11 +388,29 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
       player.open();
     },
     onData: (data) => {
+      const firstData = !centralData;
       centralData = data;
       player.configure(data.sundaySettings || {});
       player.setHomeAnchor(byId("sunday-watch-anchor"));
+      if (production) {
+        const enabled = data.sundayMode?.enabled === true;
+        if (enabled !== sundayMode) {
+          // A schedule transition must not steal the visitor's tab or discard notes.
+          if (currentView === "notes") notesRequested = true;
+          setSundayMode(enabled, false);
+          selectView(currentView);
+          sizePager();
+        }
+        window.dispatchEvent(new CustomEvent("central:data", {detail: data}));
+        window.centralAnalyticsService?.observeSections(byId(currentView));
+        if (firstData) scrollLegacyTarget();
+      }
       if (currentView === "notes") ensureStudy();
     },
+  }).then((data) => {
+    if (production) window.CentralLoader?.finish(Boolean(data));
+  }).catch(() => {
+    if (production) window.CentralLoader?.fail();
   });
   ensureGroups();
 })();

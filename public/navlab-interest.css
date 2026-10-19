@@ -1,0 +1,167 @@
+.navlab-interest-dialog {
+  width: min(640px, calc(100% - 32px));
+  max-height: min(86dvh, 820px);
+  margin: auto;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  padding: 28px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 70px #0005;
+}
+
+.navlab-interest-dialog::backdrop {
+  background: #15151baa;
+  backdrop-filter: blur(4px);
+}
+
+.navlab-interest-dialog[open] {
+  animation: navlab-interest-reveal .28s cubic-bezier(.16, 1, .3, 1);
+}
+
+.navlab-interest-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.navlab-interest-kicker {
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.navlab-interest-meta {
+  display: inline-flex;
+  margin-top: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--tint);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.navlab-interest-title {
+  margin-top: 14px;
+  padding-right: 38px;
+  font-size: clamp(27px, 4vw, 36px);
+}
+
+.navlab-interest-copy {
+  margin-top: 14px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.navlab-interest-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.navlab-interest-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.navlab-interest-field.is-wide,
+.navlab-interest-error,
+.navlab-interest-actions {
+  grid-column: 1 / -1;
+}
+
+.navlab-interest-field span {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.navlab-interest-field input,
+.navlab-interest-field select,
+.navlab-interest-field textarea {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.navlab-interest-field textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.navlab-interest-field input:focus-visible,
+.navlab-interest-field select:focus-visible,
+.navlab-interest-field textarea:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.navlab-interest-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.navlab-interest-actions {
+  display: flex;
+  margin-top: 4px;
+}
+
+.navlab-interest-actions .button:disabled {
+  cursor: wait;
+  opacity: .66;
+}
+
+.navlab-interest-success .navlab-interest-actions {
+  margin-top: 24px;
+}
+
+@keyframes navlab-interest-reveal {
+  from { opacity: 0; transform: translateY(18px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 560px) {
+  .navlab-interest-dialog {
+    width: calc(100% - 24px);
+    max-height: calc(100dvh - 24px);
+    padding: 24px 18px 18px;
+    border-radius: 22px;
+  }
+
+  .navlab-interest-form {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .navlab-interest-field.is-wide,
+  .navlab-interest-error,
+  .navlab-interest-actions {
+    grid-column: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navlab-interest-dialog[open] { animation: none; }
+}

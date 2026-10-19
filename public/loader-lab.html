@@ -56,6 +56,9 @@
     >
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/christmas-movies.css">
+    <link rel="stylesheet" href="/catm-popcorn-lab.css">
+    <script src="/catm-popcorn-lab.js"></script>
+    <script src="/catm-popcorn-audio.js"></script>
     <style>
       body.loader-lab-page {
         min-height: 100vh;
@@ -162,7 +165,8 @@
         flex-wrap: nowrap;
       }
 
-      .loader-lab-modes button {
+      .loader-lab-modes button,
+      .loader-lab-sound {
         min-height: 24px;
         border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 999px;
@@ -178,6 +182,11 @@
       .loader-lab-modes::-webkit-scrollbar {
         display: none;
       }
+
+      .loader-lab-progress-heading { display: flex; align-items: center; gap: 10px; }
+      .loader-lab-progress-heading label { flex: 1; }
+      .loader-lab-sound { flex-shrink: 0; }
+      .loader-lab-sound[aria-pressed="true"] { color: #ffe7a8; border-color: #b99550; }
 
       .loader-lab-modes button.active {
         border-color: rgba(244, 199, 104, 0.72);
@@ -358,53 +367,12 @@
         </div>
 
         <div class="catm-loader-brand" aria-hidden="true">
-          <img src="/CATM_LOGO.svg" alt="" class="catm-loader-series-logo">
-          <div class="catm-loader-popcorn">
-            <img
-              src="/LoaderPopcornBucket.svg"
-              alt=""
-              class="catm-loader-popcorn-base"
-            >
-            <div class="catm-loader-popcorn-fill">
-              <img src="/LoaderPopcornBucket.svg" alt="">
-            </div>
-            <div class="catm-loader-popcorn-animated">
-              <div class="catm-loader-source-pile">
-                <img src="/LoaderPopcornBucket.svg" alt="">
-              </div>
-              <div class="catm-loader-kernels">
-                <span class="catm-loader-kernel" data-threshold="4" style="--kernel-x: 49%; --kernel-y: 39%; --kernel-size: 28px; --kernel-rotate: -8deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="8" style="--kernel-x: 40%; --kernel-y: 37%; --kernel-size: 25px; --kernel-rotate: 14deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="13" style="--kernel-x: 58%; --kernel-y: 37%; --kernel-size: 27px; --kernel-rotate: -18deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="18" style="--kernel-x: 32%; --kernel-y: 34%; --kernel-size: 24px; --kernel-rotate: 22deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="24" style="--kernel-x: 68%; --kernel-y: 34%; --kernel-size: 26px; --kernel-rotate: 9deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="30" style="--kernel-x: 47%; --kernel-y: 31%; --kernel-size: 32px; --kernel-rotate: -13deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="36" style="--kernel-x: 56%; --kernel-y: 29%; --kernel-size: 24px; --kernel-rotate: 19deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="42" style="--kernel-x: 38%; --kernel-y: 28%; --kernel-size: 29px; --kernel-rotate: -24deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="48" style="--kernel-x: 63%; --kernel-y: 26%; --kernel-size: 30px; --kernel-rotate: 12deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="54" style="--kernel-x: 29%; --kernel-y: 25%; --kernel-size: 23px; --kernel-rotate: -5deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="60" style="--kernel-x: 72%; --kernel-y: 23%; --kernel-size: 24px; --kernel-rotate: 26deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="66" style="--kernel-x: 49%; --kernel-y: 22%; --kernel-size: 31px; --kernel-rotate: -16deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="72" style="--kernel-x: 41%; --kernel-y: 18%; --kernel-size: 25px; --kernel-rotate: 11deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="78" style="--kernel-x: 59%; --kernel-y: 17%; --kernel-size: 28px; --kernel-rotate: -21deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="84" style="--kernel-x: 33%; --kernel-y: 15%; --kernel-size: 22px; --kernel-rotate: 17deg;"></span>
-                <span class="catm-loader-kernel catm-loader-ticket" data-threshold="88" style="--kernel-x: 63%; --kernel-y: 14%; --kernel-rotate: 10deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="90" style="--kernel-x: 68%; --kernel-y: 13%; --kernel-size: 24px; --kernel-rotate: -10deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="95" style="--kernel-x: 50%; --kernel-y: 11%; --kernel-size: 29px; --kernel-rotate: 23deg;"></span>
-                <span class="catm-loader-kernel" data-threshold="99" style="--kernel-x: 43%; --kernel-y: 7%; --kernel-size: 23px; --kernel-rotate: -19deg;"></span>
-              </div>
-              <span class="catm-loader-flyaway catm-loader-flyaway-left" data-threshold="31"></span>
-              <span class="catm-loader-flyaway catm-loader-flyaway-right" data-threshold="68"></span>
-              <span class="catm-loader-flyaway catm-loader-flyaway-center" data-threshold="94"></span>
-              <div class="catm-loader-bucket-shell">
-                <img src="/EMPTY-BUCKET.svg" alt="">
-              </div>
-            </div>
-            <img
-              src="/LoaderPopcornBucket.svg"
-              alt=""
-              class="catm-loader-popcorn-final"
-            >
+          <div class="catm-lab-logo-stack">
+            <img src="/CATM_LOGO.svg" alt="" class="catm-loader-series-logo">
+            <img src="/catm-logo-e-overlay.svg" alt="" class="catm-lab-logo-e">
+          </div>
+          <div class="catm-lab-popcorn" id="catm-lab-popcorn">
+            <img src="/LoaderPopcornBucket.svg" alt="" class="catm-lab-fallback">
           </div>
         </div>
 
@@ -424,9 +392,9 @@
             aria-label="Loading CrossPointe Central"
             aria-valuemin="0"
             aria-valuemax="100"
-            aria-valuenow="64"
+            aria-valuenow="0"
           >
-            64%
+            0%
           </div>
         </div>
       </div>
@@ -447,18 +415,30 @@
         </div>
 
         <div class="loader-lab-row">
+          <div class="loader-lab-progress-heading">
           <label for="loader-progress">
             Progress
-            <output id="loader-progress-output" for="loader-progress">64%</output>
+            <output id="loader-progress-output" for="loader-progress">0%</output>
           </label>
+          <button id="loader-sound-toggle" class="loader-lab-sound" type="button" aria-pressed="true">Sound: On</button>
+          </div>
           <input
             id="loader-progress"
             class="loader-lab-range"
             type="range"
             min="0"
             max="100"
-            value="64"
+            value="0"
           >
+        </div>
+
+        <div class="loader-lab-modes loader-lab-playback" aria-label="Loading simulations">
+          <button id="loader-play-normal" type="button">Play loading</button>
+          <button id="loader-play-fast" type="button">Fast</button>
+          <button id="loader-play-slow" type="button">Slow</button>
+          <button id="loader-play-stalled" type="button">Pause midway</button>
+          <button id="loader-play-stop" type="button">Stop</button>
+          <span id="loader-play-status" role="status">Ready to preview</span>
         </div>
 
         <div class="loader-lab-buttons">
@@ -500,8 +480,26 @@
         var normalModeButton = document.getElementById("loader-mode-normal");
         var catmModeButton = document.getElementById("loader-mode-catm");
         var motionButton = document.getElementById("loader-motion-toggle");
+        var soundButton = document.getElementById("loader-sound-toggle");
+        var soundEnabled = true;
+        var soundState = "off";
+        var audioPlaying = false;
+        function syncSoundButton() {
+          soundButton.setAttribute("aria-pressed", String(soundEnabled));
+          soundButton.dataset.audioState = soundState;
+          soundButton.textContent = !soundEnabled ? "Sound: Off" : soundState === "unavailable" ? "Sound: Retry" : soundState === "loading" ? "Sound: Loading…" : "Sound: On";
+        }
+        var popcornAudio = window.CatmPopcornAudio.create({onState: function(state) {
+          soundState = state;
+          syncSoundButton();
+        }});
+        function startSound() {
+          if (soundEnabled && document.documentElement.hasAttribute("data-seasonal-experience")) popcornAudio.start();
+        }
         var sequenceTimeout = 0;
-        var reducedMotion = false;
+        var motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+        var forcedReducedMotion = false;
+        var reducedMotion = motionPreference.matches;
         var allButtons = [
           closedButton,
           collapseButton,
@@ -546,87 +544,101 @@
           });
         }
 
-        function syncPopcorn(progress) {
-          var popcorn = loader.querySelector(".catm-loader-popcorn-animated");
-          if (!popcorn) return;
+        var popcornController = null;
+        var playbackFrame = 0;
+        var playbackToken = 0;
+        var stalledPaused = false;
+        var playStatus = document.getElementById("loader-play-status");
+        var playButtons = Array.from(document.querySelectorAll(".loader-lab-playback button"));
+        playButtons.forEach(function(button) { button.disabled = true; });
 
-          var clamped = Math.max(0, Math.min(100, Number(progress) || 0));
-          var previous = Number(popcorn.getAttribute("data-progress"));
-          if (!Number.isFinite(previous)) previous = 0;
-
-          var kernels = popcorn.querySelectorAll(".catm-loader-kernel");
-          var previousCount = 0;
-          var nextCount = 0;
-          var newlyPopped = 0;
-
-          kernels.forEach(function(kernel) {
-            var threshold = Number(kernel.getAttribute("data-threshold")) || 0;
-            var wasPopped = kernel.classList.contains("is-popped");
-            var shouldPop = clamped >= threshold;
-
-            if (wasPopped) previousCount += 1;
-            if (shouldPop) nextCount += 1;
-
-            if (shouldPop && !wasPopped) {
-              kernel.style.animationDelay = Math.min(newlyPopped * 42, 210) + "ms";
-              newlyPopped += 1;
-            }
-
-            kernel.classList.toggle("is-popped", shouldPop);
+        window.CatmPopcornLab.create(document.getElementById("catm-lab-popcorn"))
+          .then(function(controller) {
+            popcornController = controller;
+            controller.setProgress(slider.value);
+            controller.setReducedMotion(reducedMotion);
+            playButtons.forEach(function(button) { button.disabled = false; });
+          }).catch(function(error) {
+            playStatus.textContent = "Artwork could not load. Refresh to try again.";
+            console.error(error);
           });
 
-          if (nextCount > previousCount) {
-            popcorn.classList.remove("is-popping");
-            void popcorn.offsetWidth;
-            popcorn.classList.add("is-popping");
-          }
-
-          var flyawayToTrigger = null;
-          popcorn.querySelectorAll(".catm-loader-flyaway").forEach(function(kernel) {
-            var threshold = Number(kernel.getAttribute("data-threshold")) || 0;
-            var crossedThreshold = previous < threshold && clamped >= threshold;
-
-            if (clamped < threshold) {
-              kernel.classList.remove("is-flying");
-            } else if (crossedThreshold) {
-              flyawayToTrigger = kernel;
-            }
-          });
-
-          if (flyawayToTrigger) {
-            flyawayToTrigger.classList.remove("is-flying");
-            void flyawayToTrigger.offsetWidth;
-            flyawayToTrigger.classList.add("is-flying");
-          }
-
-          popcorn.setAttribute("data-progress", clamped.toFixed(2));
+        function stopPlayback() {
+          audioPlaying = false;
+          popcornAudio.stop();
+          playbackToken += 1;
+          stalledPaused = false;
+          document.getElementById("loader-play-stalled").textContent = "Pause midway";
+          if (playbackFrame) cancelAnimationFrame(playbackFrame);
+          playbackFrame = 0;
+          playButtons.forEach(function(button) { button.classList.remove("active"); });
         }
 
-        function setProgress(value) {
+        function setProgress(value, animate) {
           var next = Math.max(0, Math.min(100, Number(value) || 0));
           var progressValue = next.toFixed(2) + "%";
-          var progressRatio = (next / 100).toFixed(3);
           var progressText = Math.round(next) + "%";
-
           loader.style.setProperty("--central-loader-progress", progressValue);
-          loader.style.setProperty("--central-loader-progress-ratio", progressRatio);
-          loader.style.setProperty(
-            "--catm-source-pile-radius-x",
-            Math.max(0.01, 48 * (next / 100)).toFixed(2) + "%"
-          );
-          loader.style.setProperty(
-            "--catm-source-pile-radius-y",
-            Math.max(0.01, 50 * (next / 100)).toFixed(2) + "%"
-          );
+          loader.style.setProperty("--central-loader-progress-ratio", (next / 100).toFixed(3));
           slider.value = String(next);
           output.textContent = progressText;
           percent.textContent = progressText;
           percent.setAttribute("aria-valuenow", String(Math.round(next)));
           syncDots(next);
-          syncPopcorn(next);
+          if (popcornController) popcornController.setProgress(next, {animate: !!animate});
+          popcornAudio.setProgress(next);
+        }
+
+        function playLoading(mode) {
+          var resume = mode === "stalled" && stalledPaused;
+          stopPlayback();
+          setClosedState();
+          if (popcornController) popcornController.setActive(document.documentElement.hasAttribute("data-seasonal-experience"));
+          setProgress(resume ? 48 : 0);
+          audioPlaying = true;
+          startSound();
+          var token = playbackToken;
+          var duration = mode === "fast" ? 1100 : mode === "slow" ? 12000 : mode === "stalled" ? (resume ? 3500 : 2500) : 6000;
+          document.getElementById("loader-play-" + mode).classList.add("active");
+          playStatus.textContent = "Loading preview…";
+          var startedAt = performance.now();
+          function tick(now) {
+            if (token !== playbackToken) return;
+            var elapsed = now - startedAt;
+            var fraction = Math.min(1, elapsed / duration);
+            var progress;
+            if (mode === "stalled") {
+              progress = resume ? 48 + fraction * 52 : fraction * 48;
+            } else {
+              progress = fraction * 100;
+            }
+            setProgress(progress, true);
+            if (fraction < 1) playbackFrame = requestAnimationFrame(tick);
+            else {
+              playbackFrame = 0;
+              if (mode === "stalled" && !resume) {
+                audioPlaying = false;
+                popcornAudio.stop();
+                stalledPaused = true;
+                document.getElementById("loader-play-stalled").textContent = "Resume";
+                playStatus.textContent = "Waiting at 48% · press Resume";
+                return;
+              }
+              (popcornController ? popcornController.whenIdle() : Promise.resolve()).then(function() {
+                if (token !== playbackToken) return;
+                audioPlaying = false;
+                popcornAudio.stop();
+                playStatus.textContent = "Complete · ready to reveal";
+                playButtons.forEach(function(button) { button.classList.remove("active"); });
+              });
+            }
+          }
+          playbackFrame = requestAnimationFrame(tick);
         }
 
         function setSeasonalMode(enabled) {
+          stopPlayback();
+          if (popcornController) popcornController.setActive(enabled);
           document.documentElement.toggleAttribute(
             "data-seasonal-experience",
             enabled
@@ -640,6 +652,7 @@
 
           normalModeButton.classList.toggle("active", !enabled);
           catmModeButton.classList.toggle("active", enabled);
+          soundButton.disabled = !enabled;
           var url = new URL(window.location.href);
           if (enabled) {
             url.searchParams.set("season", "catm");
@@ -650,30 +663,32 @@
           setClosedState();
         }
 
-        function toggleReducedMotion() {
-          reducedMotion = !reducedMotion;
-          if (reducedMotion) {
-            document.documentElement.setAttribute(
-              "data-reduced-motion-preview",
-              "true"
-            );
-          } else {
-            document.documentElement.removeAttribute(
-              "data-reduced-motion-preview"
-            );
-          }
+        function syncMotionPreference() {
+          reducedMotion = forcedReducedMotion || motionPreference.matches;
+          document.documentElement.toggleAttribute("data-reduced-motion-preview", reducedMotion);
+          if (reducedMotion) document.documentElement.setAttribute("data-reduced-motion-preview", "true");
+          if (popcornController) popcornController.setReducedMotion(reducedMotion);
           motionButton.classList.toggle("active", reducedMotion);
-          motionButton.textContent = "Reduced Motion: " +
-            (reducedMotion ? "On" : "Off");
+          motionButton.disabled = motionPreference.matches;
+          motionButton.textContent = motionPreference.matches ? "Reduced Motion: System" : "Reduced Motion: " + (reducedMotion ? "On" : "Off");
         }
+        function toggleReducedMotion() {
+          forcedReducedMotion = !forcedReducedMotion;
+          syncMotionPreference();
+        }
+        motionPreference.addEventListener("change", syncMotionPreference);
+        syncMotionPreference();
 
         function setClosedState() {
           clearSequenceTimeout();
+          if (popcornController) popcornController.setActive(document.documentElement.hasAttribute("data-seasonal-experience"));
           loader.classList.remove("is-hidden", "is-revealing", "is-collapsing");
           setActiveButton(closedButton);
         }
 
         function setCollapseState() {
+          stopPlayback();
+          if (popcornController) popcornController.setActive(false);
           clearSequenceTimeout();
           loader.classList.remove("is-hidden");
           loader.classList.remove("is-revealing");
@@ -686,11 +701,13 @@
           sequenceTimeout = window.setTimeout(function() {
             loader.classList.add("is-revealing");
             sequenceTimeout = 0;
-          }, 680);
+          }, reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 80 : 680);
           setActiveButton(openButton);
         }
 
         function setHiddenState() {
+          stopPlayback();
+          if (popcornController) popcornController.setActive(false);
           clearSequenceTimeout();
           loader.classList.add("is-hidden");
           loader.classList.remove("is-revealing", "is-collapsing");
@@ -698,15 +715,29 @@
         }
 
         slider.addEventListener("input", function(event) {
+          stopPlayback();
           setProgress(event.target.value);
+          playStatus.textContent = "Paused at " + Math.round(event.target.value) + "%";
         });
 
+        playButtons.forEach(function(button) {
+          button.addEventListener("click", function() {
+            var mode = button.id.replace("loader-play-", "");
+            if (mode === "stop") {
+              stopPlayback();
+              setProgress(slider.value);
+              playStatus.textContent = "Paused at " + Math.round(slider.value) + "%";
+            } else playLoading(mode);
+          });
+        });
         closedButton.addEventListener("click", setClosedState);
         collapseButton.addEventListener("click", setCollapseState);
         openButton.addEventListener("click", setOpenState);
         hiddenButton.addEventListener("click", setHiddenState);
         resetButton.addEventListener("click", function() {
-          setProgress(64);
+          stopPlayback();
+          setProgress(0);
+          playStatus.textContent = "Ready to preview";
           setClosedState();
         });
         normalModeButton.addEventListener("click", function() {
@@ -716,6 +747,26 @@
           setSeasonalMode(true);
         });
         motionButton.addEventListener("click", toggleReducedMotion);
+        soundButton.addEventListener("click", function() {
+          if (soundState === "unavailable" && soundEnabled) {
+            if (audioPlaying) startSound();
+            else { soundState = "off"; syncSoundButton(); }
+            return;
+          }
+          soundEnabled = !soundEnabled;
+          if (!soundEnabled) popcornAudio.stop();
+          else if (audioPlaying) startSound();
+          syncSoundButton();
+        });
+        document.addEventListener("visibilitychange", function() {
+          if (document.hidden) {
+            stopPlayback();
+            setProgress(slider.value);
+            playStatus.textContent = "Paused at " + Math.round(slider.value) + "%";
+          }
+        });
+        window.addEventListener("pagehide", function() { stopPlayback(); });
+
 
         setProgress(slider.value);
         setSeasonalMode(

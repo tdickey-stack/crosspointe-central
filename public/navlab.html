@@ -1,24 +1,28 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light" data-app-route="public">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#f4f4f5">
+  <script src="/seasonal-config.js"></script>
+  <script src="/seasonal-experience.js"></script>
+  <script src="/navlab-seasonal.js?v=1"></script>
   <title>Navigation Lab · CrossPointe Central</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/group-directory.css">
-  <link rel="stylesheet" href="/navlab.css?v=16">
+  <link rel="stylesheet" href="/navlab.css?v=18">
   <link rel="stylesheet" href="/navlab-study.css?v=1">
   <link rel="stylesheet" href="/navlab-player.css?v=3">
-  <script type="module" src="/navlab.js?v=23"></script>
+  <link rel="stylesheet" href="/navlab-christmas.css?v=3">
+  <script type="module" src="/navlab.js?v=25"></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
-  <div class="lab-note"><span>Navigation lab</span><span class="lab-description">Live content preview</span><button id="sunday-toggle" class="sunday-preview-toggle" type="button" aria-label="Sunday Mode preview" aria-pressed="false">Sunday Mode <span id="sunday-toggle-state">Off</span></button></div>
+  <div class="lab-note"><span>Navigation lab</span><span class="lab-description">Live content preview</span><div class="lab-preview-toggles"><button id="christmas-toggle" class="sunday-preview-toggle" type="button" aria-label="Christmas preview" aria-pressed="false" hidden>Christmas <span id="christmas-toggle-state">Off</span></button><button id="sunday-toggle" class="sunday-preview-toggle" type="button" aria-label="Sunday Mode preview" aria-pressed="false">Sunday Mode <span id="sunday-toggle-state">Off</span></button></div></div>
   <header class="site-header">
     <div class="header-inner">
       <a class="brand" href="#home" aria-label="CrossPointe Central home"><img src="/favicon.svg" alt=""><span class="brand-wordmark"><strong>CrossPointe</strong><span>Central</span></span></a>

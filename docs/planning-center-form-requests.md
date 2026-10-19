@@ -12,7 +12,7 @@ Supported forms:
   field `7301964` selects Yes option `7963996` and field `7452308` selects Yes
   option `8136339`.
 - General Promotion: Planning Center form `1229879`. Every new submission is
-  accepted and its event date always requires manual review.
+  accepted for review as a promotion window, without an event date.
 
 The Event/Promo free-text date is preserved. Central fills the primary date
 only when its conservative parser can understand the answer; otherwise the
@@ -97,6 +97,16 @@ fields, including the proposed name and reviewed event date, then either:
 
 - create the campaign with a selected level/playbook; or
 - dismiss the request.
+
+For General Promotion requests, the requested end suggests an inclusive
+**Promote through** date. The selected playbook calculates the start. Creative
+can change the end or playbook; differences from the requested bounds are
+flagged for review without blocking approval. Missing ends require an editor's
+choice, and expired ends must be moved forward before conversion. Original
+requested bounds remain unchanged, including reversed bounds that need review.
+The campaign has no event date or registration deadline; request conversion
+preserves its original date metadata. Previously converted event campaigns
+remain event-based.
 
 Campaign conversion is one atomic Firestore batch: the campaign, its Scheduled
 Plays, and the request's converted state either all commit or none commit. The

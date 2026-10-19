@@ -1,6 +1,10 @@
 import {
   addDays,
   buildSmuggleRelationships,
+  campaignDisplayDate,
+  campaignPlayIdFactory,
+  campaignPlayIsAutomaticTombstone,
+  isPromotionWindow,
   compareCampaignPriority,
   dateKey,
   differenceInDays,
@@ -125,15 +129,13 @@ function protectedPlay(play, today) {
 }
 
 function protectedCampaign(campaign, today) {
-  return campaign?.status === "completed" || String(campaign?.eventDate || "") < today;
+  let displayDate = "";
+  try { displayDate = campaignDisplayDate(campaign); } catch { /* Incomplete campaigns remain editable. */ }
+  return campaign?.status === "completed" || displayDate < today;
 }
 
 function automaticallyRemovedPlay(play) {
-  return play?.status === "skipped" && [
-    "Removed from the active plan by recurrence update.",
-    "Skipped because this date is no longer in the recurring series.",
-    "Skipped because the recurring series ended.",
-  ].includes(String(play.lateReason || ""));
+  return campaignPlayIsAutomaticTombstone(play);
 }
 
 function withoutWriteMetadata(value) {
@@ -165,6 +167,7 @@ function resetCapacityResult(play, isProtected) {
 }
 
 function campaignDeadline(campaign) {
+  if (isPromotionWindow(campaign)) return validateDate(campaign.campaignEndDate, "Campaign end date");
   const eventDate = validateDate(campaign.eventDate, "Campaign event date");
   if (!campaign.registrationDeadline) return eventDate;
   const deadline = validateDate(campaign.registrationDeadline, "Campaign registration deadline");
@@ -312,7 +315,7 @@ function applyWorkspaceCapacity({campaigns, plays, capacityRules, protectedIds, 
   const persistedIds = new Set(plays.map((play) => play.id));
   const effective = withLevel2StandingLane({campaigns, scheduledPlays: plays, capacityRules, standingLanes, playbooks}, {
     now: generatedAt, checkCapacity: false,
-    ranges: campaigns.map((campaign) => ({startDate: campaign.recommendedStartDate, endDate: campaign.eventDate})),
+    ranges: campaigns.map((campaign) => ({startDate: campaign.recommendedStartDate, endDate: campaignDisplayDate(campaign)})),
   });
   const social = allocateLevel4WithProtected({campaigns, plays: effective.scheduledPlays, protectedIds});
   const capacity = evaluateCapacityWithProtected({campaigns, plays: social.plays, capacityRules, protectedIds});
@@ -332,11 +335,17 @@ function removedPlay(previous, reason) {
 }
 
 function mergeGeneratedPlays({campaign, playbook, existing, generatedAt, today, protectedIds = new Set(), occurrenceMove = false}) {
-  const generated = generateCampaignSchedule({campaign, playbook, generatedAt});
+  const generated = generateCampaignSchedule({
+    campaign,
+    playbook,
+    generatedAt,
+    idFactory: campaignPlayIdFactory({campaign, playbook, existingPlays: existing}),
+  });
   const priorById = new Map(existing.map((play) => [play.id, play]));
   const generatedIds = new Set(generated.plays.map((play) => play.id));
   const next = [];
   let preserved = 0;
+  let skipped = 0;
   generated.plays.forEach((play) => {
     const previous = priorById.get(play.id);
     if (!previous) {
@@ -361,9 +370,90 @@ function mergeGeneratedPlays({campaign, playbook, existing, generatedAt, today, 
       preserved += 1;
     } else {
       next.push(removedPlay(previous, "Removed from the active plan by recurrence update."));
+      if (previous.status !== "skipped") skipped += 1;
     }
   });
-  return {campaign: generated.campaign, plays: next, preserved};
+  return {campaign: generated.campaign, plays: next, preserved, skipped};
+}
+
+function playbookIdentity(record) {
+  return `${String(record?.playbookId || "")}@${Number(record?.playbookVersion || 1)}`;
+}
+
+function equivalentWorkKey(play) {
+  return [play?.resourceId, play?.playType, play?.channel, play?.scheduledDate]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .join("|");
+}
+
+function mergeCampaignEditPlays({campaign, originalCampaign, playbook, existing, generatedAt, today, protectedIds, occurrenceMove}) {
+  const selectedIdentity = playbookIdentity({playbookId: playbook.id, playbookVersion: playbook.version});
+  const changingPlaybook = playbookIdentity(originalCampaign || campaign) !== selectedIdentity || existing.some((play) =>
+    playbookIdentity(play) !== selectedIdentity && !automaticallyRemovedPlay(play),
+  );
+  const idFactory = campaignPlayIdFactory({campaign, playbook, existingPlays: existing, forceScoped: changingPlaybook});
+  if (!idFactory.usesScopedIds) {
+    return mergeGeneratedPlays({campaign, playbook, existing, generatedAt, today, protectedIds, occurrenceMove});
+  }
+
+  const generated = generateCampaignSchedule({
+    campaign,
+    playbook,
+    generatedAt,
+    idFactory,
+  });
+  const priorById = new Map(existing.map((play) => [play.id, play]));
+  const generatedIds = new Set(generated.plays.map((play) => play.id));
+  const preservedDifferentIds = existing.filter((play) =>
+    !generatedIds.has(play.id) &&
+    !automaticallyRemovedPlay(play) &&
+    (protectedPlay(play, today) || protectedIds.has(play.id)),
+  );
+  const equivalentProtected = new Map();
+  preservedDifferentIds.forEach((play) => {
+    const key = equivalentWorkKey(play);
+    equivalentProtected.set(key, (equivalentProtected.get(key) || 0) + 1);
+  });
+  const next = [];
+  let preserved = 0;
+  let skipped = 0;
+  generated.plays.forEach((play) => {
+    const previous = priorById.get(play.id);
+    if (previous && (protectedPlay(previous, today) || protectedIds.has(previous.id)) && !automaticallyRemovedPlay(previous)) {
+      next.push(previous);
+      preserved += 1;
+      return;
+    }
+    if (!previous) {
+      if (String(play.originalScheduledDate || "") < today) return;
+      const key = equivalentWorkKey(play);
+      const equivalentCount = equivalentProtected.get(key) || 0;
+      if (equivalentCount > 0) {
+        equivalentProtected.set(key, equivalentCount - 1);
+        return;
+      }
+      next.push(play);
+      return;
+    }
+    if (automaticallyRemovedPlay(previous)) protectedIds.delete(previous.id);
+    const originalScheduledDate = previous.originalScheduledDate || play.originalScheduledDate;
+    next.push({
+      ...previous,
+      ...play,
+      originalScheduledDate,
+      manuallyAdjusted: occurrenceMove && play.scheduledDate !== originalScheduledDate,
+    });
+  });
+  existing.filter((play) => !generatedIds.has(play.id)).forEach((previous) => {
+    if (!automaticallyRemovedPlay(previous) && (protectedPlay(previous, today) || protectedIds.has(previous.id))) {
+      next.push(previous);
+      preserved += 1;
+    } else {
+      next.push(removedPlay(previous, "Removed from the active plan by campaign edit."));
+      if (previous.status !== "skipped") skipped += 1;
+    }
+  });
+  return {campaign: generated.campaign, plays: next, preserved, skipped};
 }
 
 function buildWrites({originalCampaigns, originalPlays, desiredCampaigns, desiredPlays, conflicts, summary, series, expectedWorkspace = null, fromDate = "", seedCampaignId = ""}) {
@@ -446,6 +536,7 @@ export function buildSeriesPlan({
   const occurrenceDates = nextSeries.status === "active" ? expandRecurrence(nextSeries.recurrence) : [];
   const seed = seedCampaignId ? campaigns.find((campaign) => campaign.id === seedCampaignId) : null;
   if (seedCampaignId && !seed) throw new Error("The campaign selected for conversion could not be found.");
+  if (isPromotionWindow(seed)) throw new Error("Promotion-window campaigns cannot become recurring series.");
   if (seed?.seriesId && seed.seriesId !== nextSeries.id) {
     throw new Error("The campaign selected for conversion already belongs to another series.");
   }
@@ -566,8 +657,132 @@ export function buildSeriesPlan({
   });
 }
 
+export function buildCampaignEditPlan({
+  campaign,
+  updates = {},
+  playbook,
+  campaigns = [],
+  plays = [],
+  capacityRules = [],
+  standingLanes = [],
+  playbooks = [],
+  generatedAt = new Date(),
+} = {}) {
+  if (!campaign?.id) throw new Error("A saved campaign is required.");
+  if (campaign.status !== "active") throw new Error("Only an active campaign can be edited.");
+  if (campaign.campaignType === "standalone-content") throw new Error("Standalone content uses its own editor.");
+  const promotionWindow = isPromotionWindow(campaign);
+  const recurring = Boolean(campaign.seriesId || campaign.occurrenceKey);
+  if (promotionWindow && recurring) throw new Error("Promotion-window campaigns cannot be recurring occurrences.");
+  if (recurring && (!campaign.seriesId || !campaign.occurrenceKey)) {
+    throw new Error("A recurring occurrence must include its series and occurrence identity.");
+  }
+  if (!playbook?.id || !Array.isArray(playbook.weeks)) throw new Error("A valid selected playbook is required.");
+  const level = positiveInteger(playbook.level, "Playbook level", 5);
+  const campaignType = String(playbook.campaignType || "").trim();
+  if (!campaignType || campaignType === "standalone-content") throw new Error("A campaign playbook is required.");
+  const playbookVersion = positiveInteger(playbook.version || 1, "Playbook version");
+  const today = dateKey(generatedAt);
+  const allowedUpdates = [
+    "name", "eventDetails", "sampleAnnouncement", "notes",
+    ...(promotionWindow ? ["campaignEndDate"] : ["eventDate", "deadlineOffsetDays"]),
+  ];
+  const applied = Object.fromEntries(allowedUpdates.filter((key) => Object.hasOwn(updates, key)).map((key) => [key, updates[key]]));
+  const eventDate = promotionWindow ? "" : validateDate(applied.eventDate || campaign.eventDate, "Campaign event date");
+  const campaignEndDate = promotionWindow
+    ? validateDate(applied.campaignEndDate || campaign.campaignEndDate, "Campaign end date")
+    : campaign.campaignEndDate;
+  const persistedDeadlineOffset = promotionWindow ? null : (campaign.deadlineOffsetDays != null
+    ? Number(campaign.deadlineOffsetDays)
+    : (campaign.registrationDeadline
+      ? differenceInDays(campaign.eventDate, campaign.registrationDeadline)
+      : null));
+  const deadlineOffsetDays = promotionWindow ? null : (Object.hasOwn(applied, "deadlineOffsetDays")
+    ? (applied.deadlineOffsetDays == null || applied.deadlineOffsetDays === "" ? null : Number(applied.deadlineOffsetDays))
+    : persistedDeadlineOffset);
+  if (deadlineOffsetDays != null && (!Number.isInteger(deadlineOffsetDays) || deadlineOffsetDays < 0 || deadlineOffsetDays > 365)) {
+    throw new Error("Deadline offset must be from 0 to 365 days.");
+  }
+  const nextCampaign = {
+    ...campaign,
+    ...applied,
+    id: campaign.id,
+    submittedAt: campaign.submittedAt,
+    eventDate,
+    campaignEndDate,
+    deadlineOffsetDays,
+    registrationDeadline: promotionWindow ? "" : registrationDeadline(eventDate, deadlineOffsetDays),
+    level,
+    campaignType,
+    playbookId: playbook.id,
+    playbookVersion,
+    status: "active",
+    ...(recurring ? {
+      seriesId: campaign.seriesId,
+      occurrenceKey: campaign.occurrenceKey,
+      seriesRevision: campaign.seriesRevision,
+      recurrenceException: true,
+    } : {}),
+  };
+  const existing = plays.filter((play) => play.campaignId === campaign.id);
+  const workspaceCampaigns = campaigns.some((item) => item.id === campaign.id) ? campaigns : [...campaigns, campaign];
+  const protectedIds = new Set([
+    ...plays.filter((play) => protectedPlay(play, today)).map((play) => play.id),
+    ...smuggledBeneficiaryPlayIds({plays, campaigns: workspaceCampaigns}),
+  ]);
+  const generated = mergeCampaignEditPlays({
+    campaign: nextCampaign,
+    originalCampaign: campaign,
+    playbook,
+    existing,
+    generatedAt,
+    today,
+    protectedIds,
+    occurrenceMove: recurring && eventDate !== campaign.eventDate,
+  });
+  const campaignById = new Map(workspaceCampaigns.map((item) => [item.id, item]));
+  campaignById.set(campaign.id, {
+    ...campaign,
+    ...generated.campaign,
+    ...(recurring ? {
+      seriesId: campaign.seriesId,
+      occurrenceKey: campaign.occurrenceKey,
+      seriesRevision: campaign.seriesRevision,
+      recurrenceException: true,
+    } : {}),
+  });
+  const playById = new Map(plays.map((play) => [play.id, play]));
+  generated.plays.forEach((play) => playById.set(play.id, play));
+  [...playById.values()].filter((play) => protectedPlay(play, today)).forEach((play) => protectedIds.add(play.id));
+  const allocated = applyWorkspaceCapacity({
+    campaigns: [...campaignById.values()],
+    plays: [...playById.values()],
+    capacityRules,
+    protectedIds,
+    standingLanes,
+    playbooks,
+    generatedAt,
+  });
+  return buildWrites({
+    originalCampaigns: workspaceCampaigns,
+    originalPlays: plays,
+    desiredCampaigns: [campaignById.get(campaign.id)],
+    desiredPlays: allocated.plays,
+    conflicts: allocated.conflicts,
+    summary: {
+      occurrences: 1,
+      promotions: generated.plays.filter((play) => !["skipped", "missed"].includes(play.status)).length,
+      preserved: generated.preserved,
+      skipped: generated.skipped,
+    },
+    series: null,
+    expectedWorkspace: {campaigns: workspaceCampaigns, plays, capacityRules},
+  });
+}
+
 export function buildOccurrencePlan({campaign, updates = {}, playbook, campaigns = [], plays = [], capacityRules = [], standingLanes = [], playbooks = [], generatedAt = new Date()} = {}) {
   if (!campaign?.id || !campaign.seriesId || !campaign.occurrenceKey) throw new Error("A recurring occurrence campaign is required.");
+  if (isPromotionWindow(campaign)) throw new Error("Promotion-window campaigns cannot be recurring occurrences.");
   if (!playbook?.id || !Array.isArray(playbook.weeks)) throw new Error("A valid pinned playbook is required.");
   if (playbook.id !== campaign.playbookId || Number(playbook.version || 1) !== Number(campaign.playbookVersion || 1)) {
     throw new Error(`Playbook ${campaign.playbookId} version ${campaign.playbookVersion} is required for this occurrence.`);

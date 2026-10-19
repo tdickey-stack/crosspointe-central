@@ -2,6 +2,41 @@
 
 Handoff: September 17, 2026. Continue on `dev`.
 
+## October 19 readiness review
+
+This review was performed on `codex/catm-popcorn-loader`. Most of the remaining
+navigation and Home highlights changes match work already present on `main`;
+the older branch must preserve those newer changes when integrated. The sections
+below retain their original dates and are historical status, not current release
+claims.
+
+The reviewed working tree includes the current main loading screen and What's
+New announcement integration. Christmas decorations are restricted to the
+Navlab preview, and the light seasonal Sunday view uses readable cream text for
+the watch button. Asset versions were updated for the changed scripts/styles.
+
+Validation completed:
+
+- Public navigation: 115 tests passed.
+- Home highlights: 45 unit tests passed; all three additional Firestore emulator
+  tests passed, including simultaneous overlapping creates saving exactly one
+  placement.
+- Analytics, Admin access, livestream, print-mode client, and seasonal regression
+  commands passed. Syntax checks and targeted Home highlights lint passed.
+- Desktop and 390px mobile browser checks covered loading, announcements,
+  event filtering/details, the interest form, and light/dark seasonal Home and
+  Sunday previews. No horizontal overflow was observed in the mobile preview.
+- Repository-wide backend lint still reports 395 existing errors; this review
+  does not claim a clean global lint result.
+
+Authenticated Admin writes, Google OAuth export, notification delivery, and
+physical-device verification remain outside this local check. No production
+records were written. This readiness review does not commit, push, or deploy.
+A temporary merge preflight identified historical conflicts in the Home
+highlights emulator test, `navlab-content.js`, and `navlab.html`; the reviewed
+working versions contain the intended combined content, but integration still
+requires resolving those conflicts.
+
 ## October 9 implementation: saved schedules and automatic defaults
 
 The scheduling feature and public-navigation integration are deployed to the

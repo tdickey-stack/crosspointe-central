@@ -187,6 +187,9 @@ h1:focus,main:focus{outline:none}[hidden]{display:none!important}
 /* The local preview toggle never changes Central's published Sunday settings. */
 .lab-note{display:flex;align-items:center;justify-content:center;gap:12px;padding:4px 16px;min-height:44px}
 .lab-note>span{margin:0}.lab-note .lab-description{font-weight:400;color:var(--muted)}
+.lab-preview-toggles{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.navlab-catm-brand{display:none}
+@media(max-width:480px){.lab-note{flex-wrap:wrap;justify-content:center}.lab-preview-toggles{justify-content:center;gap:6px}.lab-preview-toggles .sunday-preview-toggle{padding-inline:9px;font-size:10px}}
 .sunday-preview-toggle{display:inline-flex;align-items:center;gap:9px;background:var(--soft);border:1px solid var(--border);border-radius:999px;min-height:34px;padding:5px 12px;font-size:11px;font-weight:700}
 .sunday-preview-toggle span{margin:0;border-radius:999px;background:var(--surface);padding:1px 7px;font-size:10px;color:var(--muted)}
 .sunday-preview-toggle[aria-pressed=true]{background:var(--tint);color:var(--red)}

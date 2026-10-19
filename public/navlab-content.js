@@ -1,5 +1,6 @@
 import {HIGHLIGHT_TYPES, scheduledHighlights} from "./navlab-promotions.js?v=2";
 import {createEventMedia, createEventDateToken, eventLocationMeta} from "./navlab-event-card.js?v=3";
+import {createMarquee} from "./navlab-marquee.js?v=1";
 import {createInterestDialogController} from "./navlab-interest.js?v=1";
 
 const DEFAULT_ENDPOINT = "https://central.crosspointe.tv/api/central-data";
@@ -309,6 +310,25 @@ function createWorshipCard(songs) {
   setlistCard.append(setlistBody); return setlistCard;
 }
 
+function seasonalBrand() {
+  const brand = element("div", "navlab-catm-brand");
+  const logo = element("img");
+  logo.src = "/CATM_LOGO.svg";
+  logo.alt = "Christmas At The Movies";
+  logo.width = 647;
+  logo.height = 410;
+  brand.append(logo);
+  return brand;
+}
+
+export function appendSeasonalPreviewDecorations(hero, copy) {
+  const production = document.documentElement?.dataset?.productionShell === "true";
+  if (production || !window.NavlabSeasonal) return false;
+  hero.append(createMarquee());
+  copy.append(seasonalBrand());
+  return true;
+}
+
 function renderHome(root, data, showDetails, onNavigate, interests) {
   const settings = data && data.settings || {};
   const sunday = data && data.sunday || {};
@@ -319,6 +339,7 @@ function renderHome(root, data, showDetails, onNavigate, interests) {
   applyNavlabAnalyticsAttributes(hero, {sectionId: "hero"});
   const copy = element("div", "live-hero-copy");
   copy.append(element("p", "eyebrow", text(settings.site_title) || "CrossPointe Central"));
+  appendSeasonalPreviewDecorations(hero, copy);
   const heading = element("h1", "", text(settings.hero_heading) || "Stay connected.");
   heading.id = "home-title";
   heading.tabIndex = -1;
@@ -390,6 +411,7 @@ function renderSundayHome(root, data, showDetails, onNavigate, onWatch, interest
   applyNavlabAnalyticsAttributes(hero, {sectionId: "sunday_hero"});
   const copy = element("div", "sunday-home-copy");
   copy.append(element("p", "eyebrow", text(sunday.date) || "Sunday at CrossPointe"));
+  appendSeasonalPreviewDecorations(hero, copy);
   const title = element("h1", "", text(sunday.sermon_title) || "Sunday Worship");
   title.id = "sunday-home-title"; title.tabIndex = -1;
   copy.append(title);

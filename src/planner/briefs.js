@@ -44,8 +44,8 @@ function campaignSort(left, right) {
   const leftLevel = left.kind === "content" ? 6 : Number(left.level || 5);
   const rightLevel = right.kind === "content" ? 6 : Number(right.level || 5);
   return leftLevel - rightLevel ||
-    String(left.eventDate || left.firstPromotionDate).localeCompare(
-      String(right.eventDate || right.firstPromotionDate),
+    String(left.campaignEndDate || left.eventDate || left.firstPromotionDate).localeCompare(
+      String(right.campaignEndDate || right.eventDate || right.firstPromotionDate),
     ) ||
     left.name.localeCompare(right.name);
 }
@@ -89,6 +89,8 @@ export function buildPromotionBrief({
         name: safeText(campaign.name || play.campaignName || "Untitled campaign", 180),
         kind: content ? "content" : "campaign",
         level: content ? null : Number(campaign.level || play.campaignLevel || 5),
+        scheduleMode: content ? "" : campaign.scheduleMode === "promotion-window" ? "promotion-window" : "event",
+        campaignEndDate: safeText(campaign.campaignEndDate, 10),
         eventDate: safeText(campaign.eventDate, 10),
         registrationDeadline: safeText(campaign.registrationDeadline, 10),
         notes: safeText(campaign.notes, 2400),
@@ -224,9 +226,11 @@ function entryHeaderLayout(pdf, entry, continued = false) {
   const nameLines = wrap(pdf, `${entry.name}${suffix}`, 5.35).slice(0, 2);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7.5);
-  const scheduleLabel = entry.kind === "content" || !entry.eventDate
-    ? `${formatBriefDate(entry.firstPromotionDate)} - ${formatBriefDate(entry.lastPromotionDate)}`
-    : `Event ${formatBriefDate(entry.eventDate)}${entry.registrationDeadline ? `  |  Registration ${formatBriefDate(entry.registrationDeadline)}` : ""}`;
+  const scheduleLabel = entry.scheduleMode === "promotion-window"
+    ? `Promote through ${formatBriefDate(entry.campaignEndDate)}`
+    : entry.kind === "content" || !entry.eventDate
+      ? `${formatBriefDate(entry.firstPromotionDate)} - ${formatBriefDate(entry.lastPromotionDate)}`
+      : `Event ${formatBriefDate(entry.eventDate)}${entry.registrationDeadline ? `  |  Registration ${formatBriefDate(entry.registrationDeadline)}` : ""}`;
   const scheduleLines = wrap(pdf, scheduleLabel, 6.45).slice(0, 2);
   return {
     nameLines,
@@ -394,7 +398,7 @@ function drawEntry(pdf, brief, entry, startY) {
   const items = [
     ...entry.smuggledInto.map((relationship) => smuggledIntoLayout(pdf, relationship)),
     ...entry.announcements.map((announcement) => announcementLayout(pdf, announcement)),
-    ...textSectionLayouts(pdf, entry.eventDetails, "EVENT DETAILS", "event-details"),
+    ...textSectionLayouts(pdf, entry.eventDetails, entry.scheduleMode === "promotion-window" ? "CAMPAIGN DETAILS" : "EVENT DETAILS", "event-details"),
     ...textSectionLayouts(pdf, entry.notes, "NOTES", "notes"),
   ];
   const freshPageHeight = PDF_LAYOUT.contentBottom - PDF_LAYOUT.contentTop;

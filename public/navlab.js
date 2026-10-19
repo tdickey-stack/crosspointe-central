@@ -1,5 +1,5 @@
 /* Shared navigation for the public Central shell and the isolated design lab. */
-import {mountCentralContent} from "./navlab-content.js?v=15";
+import {mountCentralContent} from "./navlab-content.js?v=16";
 import {mountGroupDirectory} from "./group-directory.js";
 import {mountSundayStudy} from "./navlab-study.js?v=2";
 import {createSundayPlayer} from "./navlab-player.js?v=2";

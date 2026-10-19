@@ -18,6 +18,9 @@ import {
   buildSmuggleRelationships,
   businessLocalToIso,
   businessNowInputValue,
+  campaignDisplayDate,
+  isPromotionWindow,
+  promotionWindowComparison,
   cancelSmuggle,
   dateKey,
   evaluateCapacity,
@@ -43,8 +46,9 @@ import {
 } from "./briefs.js";
 import {parseBriefMarkdown} from "./markdown.js";
 import {createPlannerStore} from "./persistence.js";
+import {campaignFromPromotionRequest, isGeneralPromotionRequest, promotionRequestConversionUpdates, promotionRequestInitialForm} from "./requests.js";
 import {describeRecurrence, expandRecurrence, normalizeRecurrence} from "./recurrence.js";
-import {buildOccurrencePlan, buildSeriesPlan, skipOccurrencePlan} from "./series.js";
+import {buildCampaignEditPlan, buildSeriesPlan, skipOccurrencePlan} from "./series.js";
 import {RecurrenceFields, recurrenceForFrequency} from "./recurrence-controls.jsx";
 import {isStarterPlaybookId} from "./seed-data.js";
 import {PromotionTimelineView} from "./timeline-view.jsx";
@@ -120,17 +124,18 @@ function needsPromotionReview(play) {
     (play.conflictState && play.conflictState !== "none");
 }
 
-function phaseBrief(phase) {
+function phaseBrief(phase, campaign) {
   const normalized = String(phase || "").trim().toLowerCase();
-  if (normalized === "awareness") return "Build recognition and make the event easy to discover.";
+  if (normalized === "awareness") return isPromotionWindow(campaign) ? "Build recognition and make this opportunity easy to discover." : "Build recognition and make the event easy to discover.";
   if (normalized === "interest") return "Help people understand why this matters and move them toward a response.";
-  if (["urgency", "sprint"].includes(normalized)) return "Create a clear final invitation before the event or registration deadline.";
+  if (["urgency", "sprint"].includes(normalized)) return isPromotionWindow(campaign) ? "Create a clear final invitation before the promotion window ends." : "Create a clear final invitation before the event or registration deadline.";
   return "Keep the campaign moving with the promotion planned for this point in the timeline.";
 }
 
-function campaignTimingLabel(scheduledDate, eventDate) {
+function campaignTimingLabel(scheduledDate, eventDate, windowBased = false) {
   if (!scheduledDate || !eventDate) return "Date context unavailable";
   const days = Math.round((utcDateFromKey(eventDate).getTime() - utcDateFromKey(scheduledDate).getTime()) / 86400000);
+  if (windowBased) return days === 0 ? "Final promotion day" : days > 0 ? `${days} day${days === 1 ? "" : "s"} before promotions end` : `${Math.abs(days)} day${days === -1 ? "" : "s"} after promotions end`;
   if (days === 0) return "Event day";
   if (days === 1) return "1 day before the event";
   if (days > 1) return `${days} days before the event`;
@@ -169,6 +174,7 @@ function groupSmuggleOpportunities(opportunities) {
 
 function campaignDeadline(campaign) {
   if (!campaign) return "";
+  if (isPromotionWindow(campaign)) return campaign.campaignEndDate;
   return campaign.registrationDeadline && campaign.registrationDeadline < campaign.eventDate
     ? campaign.registrationDeadline
     : campaign.eventDate;
@@ -416,7 +422,7 @@ function seriesPlaybook(workspace, series) {
 }
 
 function occurrenceDate(campaign) {
-  return campaign?.occurrenceKey || campaign?.eventDate || "";
+  return campaign?.occurrenceKey || campaignDisplayDate(campaign) || "";
 }
 
 function registrationDeadlineOffset(campaign, fallback = null) {
@@ -850,12 +856,12 @@ function CalendarPromotionBriefDialog({group, workspace, onClose, onOpenPlay, on
           <span className="planner-kicker">Current phase</span>
           <h3>{phase}</h3>
           <strong>{weekLabel}</strong>
-          <p>{phaseBrief(phase)}</p>
+          <p>{phaseBrief(phase, campaign)}</p>
         </div>
         <dl className="planner-calendar-brief-facts">
           <div><dt>{ongoing ? "Coverage" : "Campaign position"}</dt><dd>{ongoing ? "Weekly fallback" : <>{weekNumbers.length > 1 ? `Weeks ${weekNumbers.join(" & ")}` : `Week ${primaryWeek}`} of {durationWeeks}</>}</dd></div>
-          <div><dt>Promotion date</dt><dd>{ongoing ? formatDate(group.scheduledDate) : campaignTimingLabel(group.scheduledDate, campaign.eventDate)}</dd></div>
-          {!ongoing && <div><dt>Event</dt><dd>{formatDate(campaign.eventDate)}</dd></div>}
+          <div><dt>Promotion date</dt><dd>{ongoing ? formatDate(group.scheduledDate) : campaignTimingLabel(group.scheduledDate, campaignDisplayDate(campaign), isPromotionWindow(campaign))}</dd></div>
+          {!ongoing && <div><dt>{isPromotionWindow(campaign) ? "Promote through" : "Event"}</dt><dd>{formatDate(campaignDisplayDate(campaign))}</dd></div>}
         </dl>
       </section>
 
@@ -1135,7 +1141,7 @@ function CampaignsView({workspace, onNewCampaign, onOpenCampaign, onEditSeries, 
   const seriesIds = new Set(series.map((item) => item.id));
   const oneOffs = campaigns
     .filter((campaign) => !isStandaloneContent(campaign) && (!campaign.seriesId || !seriesIds.has(campaign.seriesId)))
-    .sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate)));
+    .sort((left, right) => String(campaignDisplayDate(left)).localeCompare(String(campaignDisplayDate(right))));
   const seriesRows = series.map((item) => {
     const occurrences = campaigns.filter((campaign) => campaign.seriesId === item.id)
       .sort((left, right) => occurrenceDate(left).localeCompare(occurrenceDate(right)));
@@ -1149,13 +1155,13 @@ function CampaignsView({workspace, onNewCampaign, onOpenCampaign, onEditSeries, 
       <PageHeading
         eyebrow="Campaigns"
         title="Every promotion in motion"
-        copy="Campaigns turn each event playbook into a clear, date-specific promotion plan."
+        copy="Campaigns turn playbooks into clear promotion plans for events and general promotion windows."
         actions={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>＋ New campaign</button>}
       />
       <section className="planner-panel planner-table-panel">
         {hasCampaigns ? (
           <div className="planner-campaign-table">
-            <div className="planner-table-header"><span>Campaign</span><span>Event</span><span>Playbook</span><span /></div>
+            <div className="planner-table-header"><span>Campaign</span><span>Event / Promote through</span><span>Playbook</span><span /></div>
             {seriesRows.map(({series: item, occurrences, upcoming}) => {
               const expanded = expandedSeries.has(item.id);
               const activeOccurrences = occurrences.filter((campaign) => campaign.status !== "archived").length;
@@ -1178,8 +1184,8 @@ function CampaignsView({workspace, onNewCampaign, onOpenCampaign, onEditSeries, 
               const conflicts = workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id && play.status === "conflict").length;
               return (
                 <button className="planner-campaign-row" key={campaign.id} onClick={() => onOpenCampaign(campaign)}>
-                  <span className="planner-campaign-title"><LevelBadge level={campaign.level} /><span><strong>{campaign.name}</strong><small>{titleCase(campaign.campaignType)}</small></span>{conflicts > 0 && <StatusBadge status="conflict">{conflicts} conflict{conflicts === 1 ? "" : "s"}</StatusBadge>}</span>
-                  <span><strong>{formatDate(campaign.eventDate)}</strong><small>{campaign.currentWeek > 0 && campaign.currentWeek <= campaign.durationWeeks ? `Week ${campaign.currentWeek} of ${campaign.durationWeeks}` : "Upcoming"}</small></span>
+                  <span className="planner-campaign-title"><LevelBadge level={campaign.level} /><span><strong>{campaign.name}</strong><small>{isPromotionWindow(campaign) ? "General promotion" : titleCase(campaign.campaignType)}</small></span>{conflicts > 0 && <StatusBadge status="conflict">{conflicts} conflict{conflicts === 1 ? "" : "s"}</StatusBadge>}</span>
+                  <span><strong>{isPromotionWindow(campaign) ? "Through " : ""}{formatDate(campaignDisplayDate(campaign))}</strong><small>{campaign.currentWeek > 0 && campaign.currentWeek <= campaign.durationWeeks ? `Week ${campaign.currentWeek} of ${campaign.durationWeeks}` : "Upcoming"}</small></span>
                   <span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId}</strong><small>Version {campaign.playbookVersion}</small></span>
                   <span>›</span>
                 </button>
@@ -1380,7 +1386,29 @@ function requestDateLabel(request) {
     const end = request.requestedPromotionEnd ? formatDate(request.requestedPromotionEnd) : "No end";
     return `${start} – ${end}`;
   }
-  return "Manual date review needed";
+  return isGeneralPromotionRequest(request) ? "No promotion window requested" : "Manual date review needed";
+}
+
+function PromotionWindowReview({campaign}) {
+  if (!isPromotionWindow(campaign)) return null;
+  const comparison = promotionWindowComparison(campaign);
+  const messages = {
+    "start-before-request": "The playbook starts earlier than requested.",
+    "start-after-request": "The playbook starts later than requested.",
+    "end-before-request": "The selected end is earlier than requested.",
+    "end-after-request": "The selected end is later than requested.",
+    "invalid-request-order": "The requested end comes before the requested start. Review the submitted window.",
+  };
+  return <section className={`planner-detail-note planner-window-review ${comparison.mismatches.length ? "is-alert" : ""}`} aria-label="Promotion window comparison">
+    <strong>{comparison.mismatches.length ? "Window differs from the request" : "Promotion window"}</strong>
+    <dl className="planner-detail-list">
+      <div><dt>Requested</dt><dd>{comparison.requestedStart ? formatDate(comparison.requestedStart) : "No start provided"} – {comparison.requestedEnd ? formatDate(comparison.requestedEnd) : "No end provided"}</dd></div>
+      <div><dt>Planned</dt><dd>{formatDate(comparison.plannedStart)} – {formatDate(comparison.plannedEnd)} (inclusive)</dd></div>
+    </dl>
+    {comparison.mismatches.length > 0 && <ul>{comparison.mismatches.map((code) => <li key={code}>{messages[code] || code}</li>)}</ul>}
+    <p>The requested window is a preference. Creative can adjust the end date or playbook after reviewing the difference.</p>
+    {comparison.plannedEnd < dateKey(new Date()) && <p>This window has already ended. Choose a later end date to schedule new promotions.</p>}
+  </section>;
 }
 
 function RequestsView({workspace, canEdit, onOpenRequest}) {
@@ -1414,13 +1442,13 @@ function RequestsView({workspace, canEdit, onOpenRequest}) {
             </span>
             <span className="planner-request-date">
               <strong>{requestDateLabel(request)}</strong>
-              <small>{["needs-review", "manual-required"].includes(request.dateParseStatus) ? "Date needs review" : "Proposed event date"}</small>
+              <small>{isGeneralPromotionRequest(request) ? "Requested promotion window" : ["needs-review", "manual-required"].includes(request.dateParseStatus) ? "Date needs review" : "Proposed event date"}</small>
             </span>
             <span className="planner-request-submitted">
               <strong>{formatDate(request.submittedAt)}</strong>
               <small>Submitted</small>
             </span>
-            <StatusBadge status={["needs-review", "manual-required"].includes(request.dateParseStatus) ? "needs-decision" : request.status}>{request.status === "pending-review" ? ["needs-review", "manual-required"].includes(request.dateParseStatus) ? "Needs date" : "Ready to review" : request.status}</StatusBadge>
+            <StatusBadge status={request.status === "pending-review" && (isGeneralPromotionRequest(request) ? !request.requestedPromotionEnd : ["needs-review", "manual-required"].includes(request.dateParseStatus)) ? "needs-decision" : request.status}>{request.status === "pending-review" ? isGeneralPromotionRequest(request) ? request.requestedPromotionEnd ? "Review window" : "Needs end date" : ["needs-review", "manual-required"].includes(request.dateParseStatus) ? "Needs date" : "Ready to review" : request.status}</StatusBadge>
             <span className="planner-request-chevron">›</span>
           </button>
         )) : <EmptyState
@@ -1438,37 +1466,23 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
     item.active !== false &&
     (!isStarterPlaybookId(item.id) || !String(item.campaignType).startsWith("ongoing")),
   );
-  const [form, setForm] = useState({
-    name: request.proposedName || "",
-    eventDate: request.eventDate || "",
-    level: "",
-    playbookId: "",
-  });
+  const convertedCampaign = workspace.campaigns.find((item) => item.id === request.campaignId);
+  const windowBased = convertedCampaign ? isPromotionWindow(convertedCampaign) : isGeneralPromotionRequest(request);
+  const [form, setForm] = useState(() => ({...promotionRequestInitialForm(request), ...(convertedCampaign ? {
+    name: convertedCampaign.name, eventDate: convertedCampaign.eventDate || "",
+    campaignEndDate: convertedCampaign.campaignEndDate || "", level: String(convertedCampaign.level),
+    playbookId: convertedCampaign.playbookId,
+  } : {})}));
   const [saving, setSaving] = useState(false);
   const [dismissConfirm, setDismissConfirm] = useState(false);
   const playbooksForLevel = campaignPlaybooks.filter((item) => Number(item.level) === Number(form.level));
   const playbook = campaignPlaybooks.find((item) => item.id === form.playbookId);
   const preview = useMemo(() => {
-    if (!form.name.trim() || !form.eventDate || !playbook) return null;
-    const id = `pco-form-${request.sourceFormId}-${request.sourceSubmissionId}`
-      .replace(/[^a-zA-Z0-9_-]/g, "-")
-      .slice(0, 128);
+    if (request.status !== "pending-review" || !form.name.trim() || !(windowBased ? form.campaignEndDate : form.eventDate) || !playbook) return null;
+    const campaign = campaignFromPromotionRequest({request, form, playbook});
+    const id = campaign.id;
     const generated = generateCampaignSchedule({
-      campaign: {
-        id,
-        name: form.name.trim(),
-        eventDate: form.eventDate,
-        registrationDeadline: "",
-        submittedAt: request.submittedAt || new Date().toISOString(),
-        level: playbook.level,
-        campaignType: playbook.campaignType,
-        playbookId: playbook.id,
-        sourceEventId: `pco-form:${request.sourceFormId}:${request.sourceSubmissionId}`,
-        eventDetails: String(request.description || "").trim(),
-        sampleAnnouncement: "",
-        notes: String(request.notes || "").trim(),
-        status: "active",
-      },
+      campaign,
       playbook,
       generatedAt: new Date(),
     });
@@ -1476,7 +1490,7 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
     const combinedPlays = withLevel2StandingLane({...workspace,
       campaigns: combinedCampaigns, storedScheduledPlays: undefined,
       scheduledPlays: [...workspace.storedScheduledPlays, ...generated.plays],
-    }, {checkCapacity: false, ranges: [{startDate: generated.campaign.recommendedStartDate, endDate: generated.campaign.eventDate}]}).scheduledPlays;
+    }, {checkCapacity: false, ranges: [{startDate: generated.campaign.recommendedStartDate, endDate: campaignDisplayDate(generated.campaign)}]}).scheduledPlays;
     const level4 = allocateLevel4SocialSlots({plays: combinedPlays, campaigns: combinedCampaigns});
     const capacity = evaluateCapacity({
       plays: level4.plays,
@@ -1491,11 +1505,11 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
       plannedPlays: visiblePromotions(ownPlays),
       summary: scheduleSummary(ownPlays),
     };
-  }, [form, playbook, request, workspace]);
+  }, [form, playbook, request, workspace, windowBased]);
   const update = (key, value) => setForm((current) => ({...current, [key]: value}));
   const statusIsPending = request.status === "pending-review";
   return (
-    <Modal title={request.proposedName || "Promotion request"} eyebrow="Planning Center request" onClose={onClose} size="wide">
+    <Modal title={request.proposedName || "Promotion request"} eyebrow="Planning Center request" onClose={saving ? () => {} : onClose} size="wide">
       <div className="planner-request-review-grid">
         <section className="planner-request-source-details">
           <div className="planner-request-source-heading">
@@ -1505,7 +1519,7 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
           <dl className="planner-detail-list">
             <div><dt>Ministry</dt><dd>{request.ministry || "Not provided"}</dd></div>
             <div><dt>Submission ID</dt><dd>{request.sourceSubmissionId || "Not provided"}</dd></div>
-            <div><dt>Original date response</dt><dd>{request.rawEventDateText || "Not included"}</dd></div>
+            {!windowBased && <div><dt>Original date response</dt><dd>{request.rawEventDateText || "Not included"}</dd></div>}
             <div><dt>Requested promotion window</dt><dd>{request.requestedPromotionStart || request.requestedPromotionEnd ? requestDateLabel({...request, eventDate: "", rawEventDateText: ""}) : "Not included"}</dd></div>
           </dl>
           {request.description && <div className="planner-detail-note"><strong>Description</strong><p>{request.description}</p></div>}
@@ -1515,21 +1529,22 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
         </section>
         <section className="planner-request-conversion">
           <div className="planner-form-grid">
-            <Field label="Campaign / Event name" wide><input autoFocus value={form.name} disabled={!canEdit || !statusIsPending} onChange={(event) => update("name", event.target.value)} /></Field>
-            <Field label="Primary event date" help={["needs-review", "manual-required"].includes(request.dateParseStatus) ? "This request requires a manually confirmed date." : "Confirm or correct the proposed date."}><input type="date" value={form.eventDate} disabled={!canEdit || !statusIsPending} onChange={(event) => update("eventDate", event.target.value)} /></Field>
-            <Field label="Promotion level"><select value={form.level} disabled={!canEdit || !statusIsPending} onChange={(event) => setForm((current) => ({...current, level: event.target.value, playbookId: ""}))}><option value="">Choose a level</option>{[1, 2, 3, 4, 5].filter((level) => campaignPlaybooks.some((item) => Number(item.level) === level)).map((level) => <option key={level} value={level}>Level {level}</option>)}</select></Field>
-            <Field label="Promotion playbook" wide><select value={form.playbookId} disabled={!canEdit || !statusIsPending || !form.level} onChange={(event) => update("playbookId", event.target.value)}><option value="">Choose a playbook</option>{playbooksForLevel.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+            <Field label={windowBased ? "Promotion name" : "Campaign / Event name"} wide><input autoFocus maxLength={140} value={form.name} disabled={!canEdit || !statusIsPending || saving} onChange={(event) => update("name", event.target.value)} /></Field>
+            <Field label={windowBased ? "Promote through" : "Primary event date"} help={windowBased ? (request.requestedPromotionEnd ? "Suggested from the requested end date. Includes this day; Creative can adjust it." : "No end date was requested. Choose the last day promotions may run.") : ["needs-review", "manual-required"].includes(request.dateParseStatus) ? "This request requires a manually confirmed date." : "Confirm or correct the proposed date."}><input type="date" value={windowBased ? form.campaignEndDate : form.eventDate} disabled={!canEdit || !statusIsPending || saving} onChange={(event) => update(windowBased ? "campaignEndDate" : "eventDate", event.target.value)} /></Field>
+            <Field label="Promotion level"><select value={form.level} disabled={!canEdit || !statusIsPending || saving} onChange={(event) => setForm((current) => ({...current, level: event.target.value, playbookId: ""}))}><option value="">Choose a level</option>{[1, 2, 3, 4, 5].filter((level) => campaignPlaybooks.some((item) => Number(item.level) === level)).map((level) => <option key={level} value={level}>Level {level}</option>)}</select></Field>
+            <Field label="Promotion playbook" wide><select value={form.playbookId} disabled={!canEdit || !statusIsPending || !form.level || saving} onChange={(event) => update("playbookId", event.target.value)}><option value="">Choose a playbook</option>{playbooksForLevel.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           </div>
           {!statusIsPending && <div className="planner-detail-note"><strong>{request.status === "converted" ? "Campaign created" : "Request dismissed"}</strong><p>{request.status === "converted" ? `This submission was converted to campaign ${request.campaignId || "(ID unavailable)"}.` : "This submission was reviewed and intentionally left out of the Planner."}</p></div>}
-          {statusIsPending && !preview && <EmptyState title="Complete the campaign details" copy="Confirm the name and primary event date, then deliberately choose a promotion level and playbook." />}
+          {statusIsPending && !preview && <EmptyState title="Complete the campaign details" copy={windowBased ? "Confirm the name and promote-through date, then choose a promotion level and playbook. The playbook determines the start." : "Confirm the name and primary event date, then deliberately choose a promotion level and playbook."} />}
           {statusIsPending && preview && <>
             <div className={`planner-timeliness-card ${preview.campaign.isOnTime ? "is-on-time" : "is-late"}`}>
               <div><span className="planner-kicker">Level {playbook.level} · {preview.campaign.durationWeeks}-week campaign</span><h3>Schedule preview</h3></div>
-              <dl><div><dt>Recommended start</dt><dd>{formatDate(preview.campaign.recommendedStartDate)}</dd></div><div><dt>Event</dt><dd>{formatDate(preview.campaign.eventDate)}</dd></div><div><dt>Submitted</dt><dd>{formatDate(preview.campaign.submittedAt)}</dd></div></dl>
+              <dl><div><dt>Recommended start</dt><dd>{formatDate(preview.campaign.recommendedStartDate)}</dd></div><div><dt>{windowBased ? "Promote through" : "Event"}</dt><dd>{formatDate(campaignDisplayDate(preview.campaign))}</dd></div><div><dt>Submitted</dt><dd>{formatDate(preview.campaign.submittedAt)}</dd></div></dl>
               {preview.summary.missed > 0 && <p>{preview.summary.missed} promotion{preview.summary.missed === 1 ? "" : "s"} already passed and will not be added.</p>}
             </div>
+            {windowBased && <PromotionWindowReview campaign={preview.campaign} />}
             <div className="planner-preview-metrics"><span><strong>{preview.plannedPlays.length}</strong> promotions</span><span><strong>{preview.summary.conflicts}</strong> conflicts</span></div>
-            <div className="planner-preview-list">{preview.plannedPlays.map((play) => <PlayRow key={play.id} play={play} onClick={() => {}} />)}</div>
+            <div className="planner-preview-list">{preview.plannedPlays.map((play) => <PlayRow key={play.id} play={play} showDate onClick={() => {}} />)}</div>
           </>}
         </section>
       </div>
@@ -1537,7 +1552,7 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
       <div className="planner-modal-actions">
         {canEdit && statusIsPending && !dismissConfirm && <button className="planner-button is-danger is-quiet" disabled={saving} onClick={() => setDismissConfirm(true)}>Dismiss</button>}
         <button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Close</button>
-        {canEdit && statusIsPending && <button className="planner-button is-primary" disabled={!preview || saving || dismissConfirm} onClick={async () => { setSaving(true); try { await onConvert(request, preview.campaign, preview.plannedPlays, form.eventDate); } catch (_error) { setSaving(false); } }}>{saving ? "Creating campaign…" : preview ? `Create campaign · ${preview.plannedPlays.length} promos` : "Create campaign"}</button>}
+        {canEdit && statusIsPending && <button className="planner-button is-primary" disabled={!preview || (windowBased && preview.campaign.campaignEndDate < dateKey(new Date())) || saving || dismissConfirm} onClick={async () => { setSaving(true); try { await onConvert(request, preview.campaign, preview.plannedPlays); } catch (_error) { setSaving(false); } }}>{saving ? "Creating campaign…" : preview ? `Create campaign · ${preview.plannedPlays.length} promos` : "Create campaign"}</button>}
       </div>
     </Modal>
   );
@@ -1550,14 +1565,14 @@ function BriefEntryPreview({entry, canEdit = false, onEditBriefContent}) {
       <header>
         <div>
           <PromotionKindBadge item={entry.kind === "content" ? {campaignType: STANDALONE_CONTENT_TYPE} : {level: entry.level}} />
-          <span><strong>{entry.name}</strong><small>{(entry.kind === "content" || !entry.eventDate) ? `${formatDate(entry.firstPromotionDate)}–${formatDate(entry.lastPromotionDate)}` : `Event ${formatDate(entry.eventDate)}`}</small></span>
+          <span><strong>{entry.name}</strong><small>{entry.scheduleMode === "promotion-window" ? `Promote through ${formatDate(entry.campaignEndDate)}` : (entry.kind === "content" || !entry.eventDate) ? `${formatDate(entry.firstPromotionDate)}–${formatDate(entry.lastPromotionDate)}` : `Event ${formatDate(entry.eventDate)}`}</small></span>
         </div>
         <div className="planner-brief-entry-actions">
-          {canEdit && entry.kind === "campaign" && entry.eventDate && <button className="planner-text-button" onClick={() => onEditBriefContent(entry.id)}>Edit brief content</button>}
+          {canEdit && entry.kind === "campaign" && (entry.eventDate || entry.scheduleMode === "promotion-window") && <button className="planner-text-button" onClick={() => onEditBriefContent(entry.id)}>Edit brief content</button>}
           <StatusBadge status={entry.smuggledInto.length && !entry.announcements.length ? "smuggle" : ""}>{entry.announcements.length ? `${entry.announcements.length} selected` : "Smuggle"}</StatusBadge>
         </div>
       </header>
-      {entry.registrationDeadline && <p className="planner-brief-deadline">Registration deadline · {formatDate(entry.registrationDeadline)}</p>}
+      {entry.scheduleMode !== "promotion-window" && entry.registrationDeadline && <p className="planner-brief-deadline">Registration deadline · {formatDate(entry.registrationDeadline)}</p>}
       {entry.smuggledInto.map((relationship) => (
         <div className="planner-brief-smuggled-into" key={relationship.id}>
           <StatusBadge status="smuggle">Smuggled into</StatusBadge>
@@ -1572,7 +1587,7 @@ function BriefEntryPreview({entry, canEdit = false, onEditBriefContent}) {
           </div>
         ))}
       </div>
-      {entry.eventDetails && <section className="planner-brief-copy"><strong>Event details</strong><PlannerMarkdown value={entry.eventDetails} /></section>}
+      {entry.eventDetails && <section className="planner-brief-copy"><strong>{entry.scheduleMode === "promotion-window" ? "Campaign details" : "Event details"}</strong><PlannerMarkdown value={entry.eventDetails} /></section>}
       {entry.notes && <p className="planner-brief-notes"><strong>Notes</strong>{entry.notes}</p>}
     </article>
   );
@@ -1675,7 +1690,7 @@ function ReportsView({workspace, onRangeChange, authState, canEdit, canEmail, in
       <PageHeading
         eyebrow="Announcement Brief"
         title="Build the Sunday announcement brief"
-        copy="Review the events on the first page, then combine their saved sample announcements into one speaker-ready script with an optional closing section."
+        copy="Review the campaigns on the first page, then combine their saved sample announcements into one speaker-ready script with an optional closing section."
         actions={<div className="planner-heading-action-group"><button className="planner-button is-secondary" disabled={!ready} onClick={() => {
           try {
             const result = downloadPromotionBriefPdf(brief);
@@ -1709,8 +1724,8 @@ function ReportsView({workspace, onRangeChange, authState, canEdit, canEmail, in
           {!dateRangeValid && <div className="planner-detail-note is-alert"><strong>Check the date range</strong><p>The end date must be the same as or later than the start date.</p></div>}
           <div className="planner-report-type-heading"><strong>Campaign content</strong><span>Optional</span></div>
           <div className="planner-report-inclusions">
-            <label><input type="checkbox" checked={includeEventDetails} onChange={(event) => setIncludeEventDetails(event.target.checked)} /><span><strong>Event details</strong><small>Include brief-ready details saved with each event.</small></span></label>
-            <label><input type="checkbox" checked={includeSampleAnnouncements} onChange={(event) => setIncludeSampleAnnouncements(event.target.checked)} /><span><strong>Combined announcement script</strong><small>Start a fresh PDF page with every saved sample announcement in event order.</small></span></label>
+            <label><input type="checkbox" checked={includeEventDetails} onChange={(event) => setIncludeEventDetails(event.target.checked)} /><span><strong>Campaign details</strong><small>Include brief-ready details saved with each campaign.</small></span></label>
+            <label><input type="checkbox" checked={includeSampleAnnouncements} onChange={(event) => setIncludeSampleAnnouncements(event.target.checked)} /><span><strong>Combined announcement script</strong><small>Start a fresh PDF page with every saved sample announcement in campaign order.</small></span></label>
           </div>
           {includeSampleAnnouncements && <div className="planner-report-closing">
             <div className="planner-report-type-heading"><strong>Closing section</strong><span>Optional</span></div>
@@ -2159,16 +2174,16 @@ function SeriesPlanPreview({plan, workspace, fallbackCampaigns = []}) {
   const skipsMissingMonths = rule?.missingDate === "skip" && ((rule.frequency === "monthly" && rule.monthlyMode === "date" && Number(rule.monthDay) > 28) || (rule.frequency === "yearly" && Number(rule.monthDay) > 28));
   return <>
     <div className="planner-preview-metrics">
-      <span><strong>{previewCampaigns.length}</strong> events</span>
+      <span><strong>{previewCampaigns.length}</strong> {plan.series ? (previewCampaigns.length === 1 ? "event" : "events") : (previewCampaigns.length === 1 ? "campaign" : "campaigns")}</span>
       <span><strong>{visibleSeriesPlays.length}</strong> promotions</span>
       <span><strong>{reviewCount}</strong> conflicts</span>
-      <span><strong>{plan.summary.preserved}</strong> preserved edits</span>
+      <span><strong>{plan.summary.preserved}</strong> {plan.series ? "preserved edits" : "preserved promotions"}</span>
     </div>
     {skipsMissingMonths && <div className="planner-detail-note"><strong>Short months are skipped</strong><p>If the selected day does not exist in a month or year, no event is created for that period. Choose the last-day policy to move those events to the final calendar day instead.</p></div>}
     {plan.summary.skipped > 0 && <div className="planner-detail-note"><strong>{plan.summary.skipped} existing promotion{plan.summary.skipped === 1 ? " is" : "s are"} no longer scheduled</strong><p>The preview includes promotions removed by this change. Completed and past work remains preserved.</p></div>}
     <div className="planner-series-preview-list">{previewCampaigns.map((campaign) => {
       const plays = seriesPlays.filter((play) => play.campaignId === campaign.id && !["missed", "skipped"].includes(play.status));
-      return <details key={campaign.id}><summary><span><strong>{formatDate(campaign.eventDate)}</strong><small>{plays.length} promotion{plays.length === 1 ? "" : "s"}</small></span><span>{plays.some(needsPromotionReview) ? "Needs review" : "Ready"}</span></summary><div>{plays.map((play) => <PlayRow key={play.id} play={play} showDate onClick={() => {}} />)}</div></details>;
+      return <details key={campaign.id}><summary><span><strong>{isPromotionWindow(campaign) ? "Promote through " : ""}{formatDate(campaignDisplayDate(campaign))}</strong><small>{plays.length} promotion{plays.length === 1 ? "" : "s"}</small></span><span>{plays.some(needsPromotionReview) ? "Needs review" : "Ready"}</span></summary><div>{plays.map((play) => <PlayRow key={play.id} play={play} showDate onClick={() => {}} />)}</div></details>;
     })}</div>
   </>;
 }
@@ -2354,12 +2369,12 @@ function CampaignBriefContentDialog({campaign, onClose, onSave}) {
   const [saving, setSaving] = useState(false);
   return <Modal title="Edit weekly brief content" eyebrow={campaign.name} onClose={onClose} size="wide">
     <div className="planner-form-grid">
-      <Field label="Event details" wide help="Use brief-ready wording. Supports headings, lists, bold, italics, and line breaks."><MarkdownTextEditor value={draft.eventDetails} onChange={(value) => setDraft((current) => ({...current, eventDetails: value}))} placeholder="Key event details, audience, location, or next step." /></Field>
-      <Field label="Sample announcement" wide help="Add optional example wording the communication team can adapt."><MarkdownTextEditor value={draft.sampleAnnouncement} onChange={(value) => setDraft((current) => ({...current, sampleAnnouncement: value}))} placeholder="Join us for **Event Name**…" /></Field>
+      <Field label={isPromotionWindow(campaign) ? "Campaign details" : "Event details"} wide help="Use brief-ready wording. Supports headings, lists, bold, italics, and line breaks."><MarkdownTextEditor value={draft.eventDetails} onChange={(value) => setDraft((current) => ({...current, eventDetails: value}))} placeholder="Key details, audience, location, or next step." /></Field>
+      <Field label="Sample announcement" wide help="Add optional example wording the communication team can adapt."><MarkdownTextEditor value={draft.sampleAnnouncement} onChange={(value) => setDraft((current) => ({...current, sampleAnnouncement: value}))} placeholder={isPromotionWindow(campaign) ? "Help our community by…" : "Join us for **Event Name**…"} /></Field>
     </div>
     {(draft.eventDetails || draft.sampleAnnouncement) && <div className="planner-brief-content-preview">
       <span className="planner-kicker">Formatting preview</span>
-      {draft.eventDetails && <section><strong>Event details</strong><PlannerMarkdown value={draft.eventDetails} /></section>}
+      {draft.eventDetails && <section><strong>{isPromotionWindow(campaign) ? "Campaign details" : "Event details"}</strong><PlannerMarkdown value={draft.eventDetails} /></section>}
       {draft.sampleAnnouncement && <section><strong>Sample announcement</strong><PlannerMarkdown value={draft.sampleAnnouncement} /></section>}
     </div>}
     <div className="planner-modal-actions">
@@ -2442,32 +2457,60 @@ function SeriesEditorDialog({mode, campaign, series = null, workspace, onClose, 
   </Modal>;
 }
 
-function OccurrenceEditorDialog({campaign, series, workspace, onClose, onSave}) {
-  const playbook = seriesPlaybook(workspace, {...series, playbookId: campaign.playbookId, playbookVersion: campaign.playbookVersion});
-  const [form, setForm] = useState({name: campaign.name, eventDate: campaign.eventDate, sourceEventId: campaign.sourceEventId || "", eventDetails: campaign.eventDetails || "", sampleAnnouncement: campaign.sampleAnnouncement || "", notes: campaign.notes || "", deadlineOffsetDays: registrationDeadlineOffset(campaign, series.deadlineOffsetDays) ?? ""});
+function CampaignEditorDialog({campaign, series = null, workspace, onClose, onSave}) {
+  const windowBased = isPromotionWindow(campaign);
+  const pinned = seriesPlaybook(workspace, campaign);
+  const choiceKey = (item) => `${item.id}@${item.version}`;
+  const available = workspace.playbooks.filter((item) => item.active !== false &&
+    (!isStarterPlaybookId(item.id) || !String(item.campaignType).startsWith("ongoing")));
+  const choices = pinned && !available.some((item) => choiceKey(item) === choiceKey(pinned))
+    ? [pinned, ...available] : available;
+  const [form, setForm] = useState({name: campaign.name, eventDate: campaign.eventDate, campaignEndDate: campaign.campaignEndDate || "",
+    level: String(campaign.level), playbookKey: `${campaign.playbookId}@${campaign.playbookVersion}`,
+    eventDetails: campaign.eventDetails || "", sampleAnnouncement: campaign.sampleAnnouncement || "",
+    notes: campaign.notes || "", deadlineOffsetDays: registrationDeadlineOffset(campaign) ?? ""});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const playbook = choices.find((item) => choiceKey(item) === form.playbookKey);
+  const update = (key, value) => { setForm((current) => ({...current, [key]: value})); setSaveError(""); };
   const previewState = useMemo(() => {
-    if (!playbook || !form.name.trim() || !form.eventDate) return {plan: null, error: playbook ? "" : "The pinned playbook version is unavailable."};
+    if (!playbook || !form.name.trim() || !(windowBased ? form.campaignEndDate : form.eventDate)) return {plan: null, error: ""};
     try {
-      const {sourceEventId: _sourceEventId, ...editable} = form;
-      return {plan: buildOccurrencePlan({campaign, updates: {...editable, deadlineOffsetDays: form.deadlineOffsetDays === "" ? null : Number(form.deadlineOffsetDays)}, playbook, campaigns: workspace.campaigns, plays: workspace.storedScheduledPlays, capacityRules: workspace.capacityRules, standingLanes: workspace.standingLanes, playbooks: workspace.playbooks, generatedAt: new Date()}), error: ""};
-    } catch (previewError) { return {plan: null, error: previewError.message || "This occurrence could not be previewed."}; }
-  }, [campaign, form, playbook, workspace]);
-  return <Modal title="Edit this occurrence" eyebrow={`${series.name} · ${formatDate(occurrenceDate(campaign))}`} onClose={onClose} size="wide">
-    <div className="planner-campaign-builder"><form onSubmit={(event) => event.preventDefault()}><div className="planner-form-grid">
-      <Field label="Event name" wide><input value={form.name} onChange={(event) => setForm({...form, name: event.target.value})} /></Field>
-      <Field label="Event date" help={`Its place in the series remains ${formatDate(occurrenceDate(campaign))}.`}><input type="date" value={form.eventDate} onChange={(event) => setForm({...form, eventDate: event.target.value})} /></Field>
-      <Field label="Registration deadline"><div className="planner-inline-number"><input type="number" min="0" max="365" value={form.deadlineOffsetDays} onChange={(event) => setForm({...form, deadlineOffsetDays: event.target.value === "" ? "" : Number(event.target.value)})} /><span>days before this event</span></div></Field>
-      <Field label="Source Event ID" help="The original source link stays fixed."><input value={form.sourceEventId} disabled /></Field>
-      <Field label="Event details" wide><MarkdownTextEditor value={form.eventDetails} onChange={(value) => setForm({...form, eventDetails: value})} /></Field>
-      <Field label="Sample announcement" wide><MarkdownTextEditor value={form.sampleAnnouncement} onChange={(value) => setForm({...form, sampleAnnouncement: value})} /></Field>
-      <Field label="Notes" wide><textarea value={form.notes} onChange={(event) => setForm({...form, notes: event.target.value})} /></Field>
-    </div></form><section className="planner-schedule-preview">
-      {previewState.error && <div className="planner-detail-note is-alert" role="alert"><strong>Review this occurrence</strong><p>{previewState.error}</p></div>}
-      {previewState.plan && <><div className="planner-timeliness-card"><div><span className="planner-kicker">Occurrence exception</span><h3>{formatDate(form.eventDate)}</h3></div><p>The original series date stays recorded. Changes here apply only to this event and its promotions.</p></div><SeriesPlanPreview plan={previewState.plan} workspace={workspace} fallbackCampaigns={[campaign]} /></>}
-      {saveError && <div className="planner-detail-note is-alert" role="alert"><strong>Occurrence not saved</strong><p>{saveError}</p></div>}
-      <div className="planner-modal-actions"><button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button><button className="planner-button is-primary" disabled={saving || !previewState.plan} onClick={async () => { setSaving(true); setSaveError(""); try { await onSave(previewState.plan); } catch (actionError) { setSaveError(actionError.message || "The occurrence could not be saved."); setSaving(false); } }}>{saving ? "Saving…" : "Save occurrence"}</button></div>
+      return {plan: buildCampaignEditPlan({campaign, updates: {...form,
+        deadlineOffsetDays: form.deadlineOffsetDays === "" ? null : Number(form.deadlineOffsetDays)},
+        playbook, campaigns: workspace.campaigns, plays: workspace.storedScheduledPlays,
+        capacityRules: workspace.capacityRules, standingLanes: workspace.standingLanes,
+        playbooks: workspace.playbooks, generatedAt: new Date()}), error: ""};
+    } catch (previewError) { return {plan: null, error: previewError.message || "This campaign could not be previewed."}; }
+  }, [campaign, form, playbook, workspace, windowBased]);
+  const plan = previewState.plan;
+  const otherChanges = plan?.plays.filter((play) => play.campaignId !== campaign.id) || [];
+  return <Modal title={series ? "Edit this occurrence" : "Edit campaign"} eyebrow={campaign.name} onClose={saving ? () => {} : onClose} size="wide">
+    <div className="planner-campaign-builder"><form onSubmit={(event) => event.preventDefault()}>
+      <fieldset className="planner-campaign-edit-fields" disabled={saving}>
+        <div className="planner-form-grid">
+          <Field label={windowBased ? "Promotion name" : "Campaign / Event name"} wide><input autoFocus maxLength={140} value={form.name} onChange={(event) => update("name", event.target.value)} /></Field>
+          <Field label={windowBased ? "Promote through" : "Event date"} help={windowBased ? "Includes this day. The playbook determines the start." : series ? `Its place in the series remains ${formatDate(occurrenceDate(campaign))}.` : "Promotions are planned backward from this date."}><input type="date" value={windowBased ? form.campaignEndDate : form.eventDate} onChange={(event) => update(windowBased ? "campaignEndDate" : "eventDate", event.target.value)} /></Field>
+          {!windowBased && <Field label="Registration deadline"><div className="planner-inline-number"><input type="number" min="0" max="365" value={form.deadlineOffsetDays} onChange={(event) => update("deadlineOffsetDays", event.target.value)} /><span>days before this event</span></div></Field>}
+          <Field label="Promotion level"><select value={form.level} onChange={(event) => { setForm((current) => ({...current, level: event.target.value, playbookKey: ""})); setSaveError(""); }}>{[1, 2, 3, 4, 5].filter((level) => choices.some((item) => Number(item.level) === level)).map((level) => <option key={level} value={level}>Level {level}</option>)}</select></Field>
+          <Field label="Promotion playbook"><select value={form.playbookKey} onChange={(event) => update("playbookKey", event.target.value)}><option value="">Choose a playbook</option>{choices.filter((item) => Number(item.level) === Number(form.level)).map((item) => <option key={choiceKey(item)} value={choiceKey(item)}>{item.name} · v{item.version}{choiceKey(item) === `${campaign.playbookId}@${campaign.playbookVersion}` ? " (saved)" : ""}</option>)}</select></Field>
+          <Field label={windowBased ? "Campaign details" : "Event details"} wide><MarkdownTextEditor value={form.eventDetails} onChange={(value) => update("eventDetails", value)} /></Field>
+          <Field label="Sample announcement" wide><MarkdownTextEditor value={form.sampleAnnouncement} onChange={(value) => update("sampleAnnouncement", value)} /></Field>
+          <Field label="Notes" wide><textarea maxLength={3000} value={form.notes} onChange={(event) => update("notes", event.target.value)} /></Field>
+        </div>
+      </fieldset>
+    </form><section className="planner-schedule-preview">
+      <div className="planner-detail-note"><strong>Review the revised promotion plan</strong><p>Future automatic promotions are redistributed using the selected playbook and available capacity. Completed, past, locked, manually adjusted, and Smuggle-linked promotions stay protected; review those separately if they need to change.</p>{series && <p>This change applies only to this occurrence. The series and its other events keep their playbook.</p>}</div>
+      {previewState.error && <div className="planner-detail-note is-alert" role="alert"><strong>Review this campaign</strong><p>{previewState.error}</p></div>}
+      {!plan && !previewState.error && <EmptyState title="Choose the revised plan" copy={windowBased ? "Confirm the name, promote-through date, promotion level, and playbook to preview the changes." : "Confirm the name, event date, promotion level, and playbook to preview the changes."} />}
+      {plan && <>
+        <div className="planner-timeliness-card"><div><span className="planner-kicker">Level {playbook.level} · {playbook.durationWeeks}-week campaign</span><h3>{playbook.name}</h3></div><p>Recommended start: {formatDate((plan.campaigns[0] || campaign).recommendedStartDate)}. {windowBased ? "Promote through" : "Event"}: {formatDate(windowBased ? form.campaignEndDate : form.eventDate)}. The original submission date stays recorded.</p></div>
+        {windowBased && <PromotionWindowReview campaign={plan.campaigns[0] || campaign} />}
+        <SeriesPlanPreview plan={plan} workspace={workspace} fallbackCampaigns={[campaign]} />
+        {otherChanges.length > 0 && <details className="planner-detail-note"><summary><strong>{otherChanges.length} promotion{otherChanges.length === 1 ? "" : "s"} in other campaigns affected by capacity</strong></summary><p>These updated placements and conflict flags are included when you save.</p>{otherChanges.map((play) => <PlayRow key={play.id} play={play} showDate onClick={() => {}} />)}</details>}
+      </>}
+      {saveError && <div className="planner-detail-note is-alert" role="alert"><strong>Campaign not saved</strong><p>{saveError}</p></div>}
+      <div className="planner-modal-actions"><button className="planner-button is-secondary" disabled={saving} onClick={onClose}>Cancel</button><button className="planner-button is-primary" disabled={saving || !plan || (!plan.campaigns.length && !plan.plays.length)} onClick={async () => { setSaving(true); setSaveError(""); try { await onSave(plan); } catch (actionError) { setSaveError(actionError.message || "The campaign could not be saved."); setSaving(false); } }}>{saving ? "Saving…" : "Save revised campaign"}</button></div>
     </section></div>
   </Modal>;
 }
@@ -2489,7 +2532,7 @@ function EndSeriesDialog({campaign, series, workspace, onClose, onSave}) {
   </Modal>;
 }
 
-function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEditContent, onEditBriefContent, onDelete, onCancelSmuggle, onRepeat, onEditOccurrence, onEditFuture, onRetrySeries, onSkipOccurrence, onEndSeries, onNavigateOccurrence}) {
+function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEditContent, onEditBriefContent, onDelete, onCancelSmuggle, onRepeat, onEditCampaign, onEditOccurrence, onEditFuture, onRetrySeries, onSkipOccurrence, onEndSeries, onNavigateOccurrence}) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -2523,14 +2566,15 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEd
   return (
     <Modal title={campaign.name} eyebrow={standalone ? "Content" : `Level ${campaign.level} campaign`} onClose={onClose} size="wide">
       <div className="planner-campaign-detail-summary">
-        <div><span>{standalone ? "Schedule" : "Event date"}</span><strong>{standalone ? seriesSchedule : formatDate(campaign.eventDate)}</strong></div>{standalone ? <><div><span>Repeat</span><strong>{contentSeries?.label || "One time"}</strong></div><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div>{eventSeries && <div><span>Series date</span><strong>{formatDate(occurrenceDate(campaign))}</strong></div>}</>}
+        <div><span>{standalone ? "Schedule" : isPromotionWindow(campaign) ? "Promote through" : "Event date"}</span><strong>{standalone ? seriesSchedule : formatDate(campaignDisplayDate(campaign))}</strong></div>{standalone ? <><div><span>Repeat</span><strong>{contentSeries?.label || "One time"}</strong></div><div><span>Content type</span><strong>{plays[0]?.playType || "Content"}</strong></div><div><span>Channel</span><strong>{plays[0]?.channel || "Not set"}</strong></div></> : <><div><span>Playbook</span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId} · v{campaign.playbookVersion}</strong></div><div><span>Recommended start</span><strong>{formatDate(campaign.recommendedStartDate)}</strong></div>{eventSeries && <div><span>Series date</span><strong>{formatDate(occurrenceDate(campaign))}</strong></div>}</>}
       </div>
       {eventSeries && <div className="planner-series-detail-bar"><div><span className="planner-kicker">Recurring series</span><strong>{eventSeriesLabel}</strong><small>Playbook version {eventSeries.playbookVersion} is pinned · {seriesOccurrences.length} recorded event dates</small></div><div><button className="planner-button is-secondary" disabled={!previousOccurrence} onClick={() => previousOccurrence && onNavigateOccurrence(previousOccurrence)}>← Previous</button><button className="planner-button is-secondary" disabled={!nextOccurrence} onClick={() => nextOccurrence && onNavigateOccurrence(nextOccurrence)}>Next →</button></div></div>}
       {eventSeries?.saveState === "saving" && <div className="planner-detail-note is-alert"><strong>Finish the interrupted series save</strong><p>Editing, skipping, and ending are paused until the original series plan is saved completely.</p></div>}
       <div className="planner-preview-metrics"><span><strong>{summary.total}</strong> {standalone ? "occurrences" : "promotions"}</span>{!standalone && <span><strong>{summary.conflicts}</strong> conflicts</span>}{intentionallySkipped.length > 0 && <span><strong>{intentionallySkipped.length}</strong> not running</span>}</div>
-      {campaign.eventDetails && <div className="planner-detail-note planner-campaign-brief-copy"><strong>Event details</strong><PlannerMarkdown value={campaign.eventDetails} /></div>}
+      {campaign.eventDetails && <div className="planner-detail-note planner-campaign-brief-copy"><strong>{isPromotionWindow(campaign) ? "Campaign details" : "Event details"}</strong><PlannerMarkdown value={campaign.eventDetails} /></div>}
       {campaign.sampleAnnouncement && <div className="planner-detail-note planner-campaign-brief-copy"><strong>Sample announcement</strong><PlannerMarkdown value={campaign.sampleAnnouncement} /></div>}
       {campaign.notes && <div className="planner-detail-note"><strong>Notes</strong><p>{campaign.notes}</p></div>}
+      {isPromotionWindow(campaign) && <PromotionWindowReview campaign={campaign} />}
       {guestRelationships.map((relationship) => <div className="planner-detail-note is-smuggle" key={relationship.id}>
         <div className="planner-smuggle-note-heading"><strong>{relationship.beneficiaryPlayType} smuggled into Level {relationship.hostCampaignLevel} {relationship.hostCampaignName}</strong>{canEdit && <button className="planner-text-button" disabled={Boolean(cancellingSmuggleId)} onClick={async () => {
           setCancellingSmuggleId(relationship.id);
@@ -2552,7 +2596,8 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEd
       {actionError && <div className="planner-detail-note is-alert" role="alert"><strong>Change not saved</strong><p>{actionError}</p></div>}
       <div className="planner-modal-actions">
         {canEdit && !confirmDelete && !eventSeries && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmDelete(true)}>Delete {standalone ? "content" : "campaign"}</button>}
-        {canEdit && !standalone && !eventSeries && !confirmDelete && <button className="planner-button is-secondary" onClick={() => onRepeat(campaign)}>Repeat campaign</button>}
+        {canEdit && !standalone && !isPromotionWindow(campaign) && !eventSeries && !confirmDelete && <button className="planner-button is-secondary" onClick={() => onRepeat(campaign)}>Repeat campaign</button>}
+        {canEdit && !standalone && !eventSeries && campaign.status === "active" && !confirmDelete && <button className="planner-button is-primary" onClick={() => onEditCampaign(campaign)}>Edit campaign</button>}
         {canEdit && !standalone && !eventSeries && !confirmDelete && <button className="planner-button is-secondary" onClick={() => onEditBriefContent(campaign)}>Edit brief content</button>}
         {canEdit && eventSeries?.saveState === "saving" && <button className="planner-button is-primary" onClick={() => onRetrySeries(campaign, eventSeries)}>Review and retry save</button>}
         {canEdit && eventSeries && eventSeries.saveState !== "saving" && !confirmSkip && <button className="planner-button is-danger is-quiet" onClick={() => setConfirmSkip(true)}>Skip occurrence</button>}
@@ -2747,7 +2792,13 @@ function PlannerApp({authState, theme, toggleTheme}) {
     const saved = await perform(() => store.savePlaybook(playbook), isNew ? `Added ${playbook.name}.` : `Saved ${playbook.name} as a new version.`);
     setWorkspace((current) => {
       const exists = current.playbooks.some((item) => item.id === saved.id);
-      return {...current, playbooks: exists ? current.playbooks.map((item) => item.id === saved.id ? saved : item) : [...current.playbooks, saved]};
+      const versions = (current.playbookVersions || []).filter((item) =>
+        (item.playbookId || item.id) !== saved.id || Number(item.version) !== Number(saved.version),
+      );
+      return {...current,
+        playbooks: exists ? current.playbooks.map((item) => item.id === saved.id ? saved : item) : [...current.playbooks, saved],
+        playbookVersions: [...versions, {...saved, playbookId: saved.id}],
+      };
     });
     return saved;
   }} onDelete={async (playbook) => {
@@ -2825,25 +2876,14 @@ function PlannerApp({authState, theme, toggleTheme}) {
         setEditingContent(null); setActiveView("content");
       }} />}
       {selectedPlay && <PlayDialog play={selectedPlay} campaign={workspace.campaigns.find((item) => item.id === selectedPlay.campaignId)} smuggleRelationship={smuggleByHostPlay.get(selectedPlay.id)} canEdit={canEdit} onClose={() => setSelectedPlay(null)} onSave={updatePlay} onCancelSmuggle={removeSmuggle} />}
-      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onEditBriefContent={(campaign) => { setSelectedCampaign(null); setEditingBriefContent(campaign); }} onDelete={deleteCampaign} onCancelSmuggle={removeSmuggle} onRepeat={(campaign) => { setSelectedCampaign(null); setSeriesEditor({mode: "convert", campaign, series: null}); }} onEditOccurrence={(campaign, series) => { setSelectedCampaign(null); setOccurrenceEditor({campaign, series}); }} onEditFuture={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "future", campaign, series}); }} onRetrySeries={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "retry", campaign, series}); }} onEndSeries={(campaign, series) => { setSelectedCampaign(null); setEndingSeries({campaign, series}); }} onSkipOccurrence={async (campaign) => { const plan = skipOccurrencePlan({campaign, plays: workspace.storedScheduledPlays, generatedAt: new Date()}); await saveSeriesPlan(plan, `${campaign.name} on ${formatDate(occurrenceDate(campaign))} was skipped.`); setSelectedCampaign(null); }} onNavigateOccurrence={setSelectedCampaign} />}
+      {selectedCampaign && <CampaignDialog campaign={selectedCampaign} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedCampaign(null)} onOpenPlay={(play) => { setSelectedCampaign(null); setSelectedPlay(play); }} onEditContent={(campaign) => { setSelectedCampaign(null); setEditingContent(campaign); }} onEditBriefContent={(campaign) => { setSelectedCampaign(null); setEditingBriefContent(campaign); }} onDelete={deleteCampaign} onCancelSmuggle={removeSmuggle} onRepeat={(campaign) => { setSelectedCampaign(null); setSeriesEditor({mode: "convert", campaign, series: null}); }} onEditCampaign={(campaign) => { setSelectedCampaign(null); setOccurrenceEditor({campaign, series: null}); }} onEditOccurrence={(campaign, series) => { setSelectedCampaign(null); setOccurrenceEditor({campaign, series}); }} onEditFuture={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "future", campaign, series}); }} onRetrySeries={(campaign, series) => { setSelectedCampaign(null); setSeriesEditor({mode: "retry", campaign, series}); }} onEndSeries={(campaign, series) => { setSelectedCampaign(null); setEndingSeries({campaign, series}); }} onSkipOccurrence={async (campaign) => { const plan = skipOccurrencePlan({campaign, plays: workspace.storedScheduledPlays, generatedAt: new Date()}); await saveSeriesPlan(plan, `${campaign.name} on ${formatDate(occurrenceDate(campaign))} was skipped.`); setSelectedCampaign(null); }} onNavigateOccurrence={setSelectedCampaign} />}
       {seriesEditor && <SeriesEditorDialog {...seriesEditor} workspace={workspace} onClose={() => setSeriesEditor(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${plan.series.name} recurring schedule was saved.`); setSeriesEditor(null); setActiveView("campaigns"); }} />}
-      {occurrenceEditor && <OccurrenceEditorDialog {...occurrenceEditor} workspace={workspace} onClose={() => setOccurrenceEditor(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${occurrenceEditor.campaign.name} occurrence was updated.`); setOccurrenceEditor(null); }} />}
+      {occurrenceEditor && <CampaignEditorDialog {...occurrenceEditor} workspace={workspace} onClose={() => setOccurrenceEditor(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${occurrenceEditor.campaign.name} promotion plan was updated.`); setOccurrenceEditor(null); }} />}
       {endingSeries && <EndSeriesDialog {...endingSeries} workspace={workspace} onClose={() => setEndingSeries(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${endingSeries.series.name} was ended from ${formatDate(occurrenceDate(endingSeries.campaign))}.`); setEndingSeries(null); setActiveView("campaigns"); }} />}
       {editingBriefContent && <CampaignBriefContentDialog campaign={editingBriefContent} onClose={() => setEditingBriefContent(null)} onSave={saveCampaignBriefContent} />}
-      {selectedRequest && <RequestReviewDialog request={selectedRequest} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedRequest(null)} onConvert={async (request, campaign, plays, eventDate) => {
-        const dateWasChanged = eventDate !== request.eventDate || ["needs-review", "manual-required"].includes(request.dateParseStatus);
+      {selectedRequest && <RequestReviewDialog request={selectedRequest} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedRequest(null)} onConvert={async (request, campaign, plays) => {
         const {result, savedRequest, updates} = await perform(async () => {
-          const updates = {
-            proposedName: campaign.name,
-            eventDate,
-            eventDates: dateWasChanged ? [eventDate] : request.eventDates?.length ? request.eventDates : [eventDate],
-            eventDateEnd: dateWasChanged ? "" : request.eventDateEnd || "",
-            dateParseStatus: dateWasChanged ? "manual" : request.dateParseStatus || "parsed",
-            dateParseKind: dateWasChanged ? "single" : request.dateParseKind || "single",
-            dateSource: dateWasChanged ? "manual-review" : request.dateSource || "form-parser",
-            status: "converted",
-            campaignId: campaign.id,
-          };
+          const updates = promotionRequestConversionUpdates(request, campaign);
           const result = await store.convertPromotionRequest(
             request.id,
             campaign,

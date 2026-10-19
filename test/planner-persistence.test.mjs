@@ -78,14 +78,16 @@ function createFakeFirestore(initialDocuments = {}) {
     batch() {
       const writes = [];
       return {
-        set(reference, payload) {
-          writes.push({reference, payload});
+        set(reference, payload, options = {}) {
+          writes.push({reference, payload, options});
         },
         async commit() {
           committedBatchSizes.push(writes.length);
-          writes.forEach(({reference, payload}) => {
+          writes.forEach(({reference, payload, options}) => {
             writtenPaths.push(reference.path);
-            documents.set(reference.path, payload);
+            documents.set(reference.path, options.merge
+              ? {...documents.get(reference.path), ...payload}
+              : payload);
           });
         },
       };
@@ -160,6 +162,93 @@ test("campaign persistence bounds the two brief-ready Markdown fields", () => {
     }, "planner-admin", "server-timestamp");
     assert.equal(payload.eventDetails.length, 3000);
     assert.equal(payload.sampleAnnouncement, "Join us for **Sunday**.");
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("promotion-window campaigns serialize and normalize without inventing an event date", () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    firebase: {
+      firestore: {
+        Timestamp: {fromDate: (value) => value},
+      },
+    },
+  };
+  const campaign = {
+    name: "Community Story",
+    eventDate: "",
+    registrationDeadline: "",
+    scheduleMode: "promotion-window",
+    campaignEndDate: "2026-09-06",
+    requestedPromotionStart: "2026-08-23",
+    requestedPromotionEnd: "2026-09-06",
+    submittedAt: "2026-08-16T15:30:00.000Z",
+    recommendedStartDate: "2026-08-23",
+    isOnTime: true,
+    daysLate: 0,
+    weeksLate: 0,
+    level: 3,
+    campaignType: "standard",
+    playbookId: "level-3-standard",
+    playbookVersion: 1,
+    durationWeeks: 3,
+    sourceEventId: "pco-form:1229879:456789",
+    eventDetails: "Share a ministry story.",
+    sampleAnnouncement: "Watch for this story.",
+    notes: "",
+    status: "active",
+  };
+  try {
+    const payload = plannerPersistenceInternals.campaignForCloud(
+      campaign,
+      "planner-admin",
+      "server-timestamp",
+    );
+    assert.equal(payload.eventDate, null);
+    assert.equal(payload.registrationDeadline, null);
+    assert.equal(payload.scheduleMode, "promotion-window");
+    assert.equal(payload.campaignEndDate.toISOString(), "2026-09-06T12:00:00.000Z");
+    assert.equal(payload.requestedPromotionStart.toISOString(), "2026-08-23T12:00:00.000Z");
+    const normalized = plannerPersistenceInternals.normalizeCampaign(payload);
+    assert.equal(normalized.eventDate, "");
+    assert.equal(normalized.campaignEndDate, "2026-09-06");
+    assert.equal(normalized.requestedPromotionStart, "2026-08-23");
+    assert.equal(normalized.requestedPromotionEnd, "2026-09-06");
+    const reversedSourceBounds = plannerPersistenceInternals.campaignForCloud({
+      ...campaign,
+      requestedPromotionStart: "2026-09-06",
+      requestedPromotionEnd: "2026-08-23",
+    }, "planner-admin", "server-timestamp");
+    assert.equal(reversedSourceBounds.requestedPromotionStart.toISOString(), "2026-09-06T12:00:00.000Z");
+    assert.equal(reversedSourceBounds.requestedPromotionEnd.toISOString(), "2026-08-23T12:00:00.000Z");
+
+    const legacy = plannerPersistenceInternals.campaignForCloud({
+      ...campaign,
+      eventDate: "2026-09-06",
+      scheduleMode: undefined,
+      campaignEndDate: undefined,
+      requestedPromotionStart: undefined,
+      requestedPromotionEnd: undefined,
+    }, "planner-admin", "server-timestamp");
+    assert.equal(legacy.eventDate.toISOString(), "2026-09-06T12:00:00.000Z");
+    assert.equal(Object.hasOwn(legacy, "scheduleMode"), false);
+    assert.equal(Object.hasOwn(legacy, "campaignEndDate"), false);
+
+    assert.throws(() => plannerPersistenceInternals.campaignForCloud({
+      ...campaign, campaignEndDate: "",
+    }, "planner-admin", "server-timestamp"), /inclusive end date/);
+    assert.throws(() => plannerPersistenceInternals.campaignForCloud({
+      ...campaign, eventDate: "2026-09-06",
+    }, "planner-admin", "server-timestamp"), /cannot have an event date/);
+    assert.throws(() => plannerPersistenceInternals.campaignForCloud({
+      ...campaign, seriesId: "series-a",
+    }, "planner-admin", "server-timestamp"), /cannot recur/);
+    assert.throws(() => plannerPersistenceInternals.campaignForCloud({
+      ...campaign, requestedPromotionStart: "not-a-date",
+    }, "planner-admin", "server-timestamp"), /valid dates/);
   } finally {
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
@@ -426,6 +515,13 @@ test("request conversion commits the campaign, promos, and review state atomical
   const firestore = createFakeFirestore({
     [`${PLANNER_COLLECTIONS.requests}/${requestId}`]: {
       status: "pending-review",
+      proposedName: "Community Story",
+      eventDate: null,
+      eventDates: [],
+      eventDateEnd: null,
+      dateParseStatus: "manual-required",
+      dateParseKind: null,
+      dateSource: "manual-review",
     },
   });
   const previousWindow = globalThis.window;
@@ -445,7 +541,12 @@ test("request conversion commits the campaign, promos, and review state atomical
       {
         id: campaignId,
         name: "Community Story",
-        eventDate: "2026-09-06",
+        eventDate: "",
+        registrationDeadline: "",
+        scheduleMode: "promotion-window",
+        campaignEndDate: "2026-09-06",
+        requestedPromotionStart: "2026-08-23",
+        requestedPromotionEnd: "2026-09-06",
         submittedAt: "2026-08-16T15:30:00.000Z",
         recommendedStartDate: "2026-08-23",
         isOnTime: true,
@@ -495,6 +596,14 @@ test("request conversion commits the campaign, promos, and review state atomical
     ]));
     assert.equal(result.request.status, "converted");
     assert.equal(result.request.campaignId, campaignId);
+    const persistedRequest = firestore.documents.get(
+      `${PLANNER_COLLECTIONS.requests}/${requestId}`,
+    );
+    assert.equal(persistedRequest.eventDate, null);
+    assert.deepEqual(persistedRequest.eventDates, []);
+    assert.equal(persistedRequest.dateParseStatus, "manual-required");
+    assert.equal(persistedRequest.dateParseKind, null);
+    assert.equal(persistedRequest.dateSource, "manual-review");
   } finally {
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;

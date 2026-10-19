@@ -120,6 +120,37 @@ test("campaign phases come from the pinned version, merge adjacent names, and st
   ]);
 });
 
+test("promotion-window campaigns use their inclusive end date and expose no event marker", () => {
+  const promotion = campaign("invite-window", {
+    scheduleMode: "promotion-window",
+    recommendedStartDate: "",
+    campaignEndDate: "2027-01-14",
+    eventDate: "",
+    durationWeeks: 2,
+  });
+  const layout = buildPromotionTimeline(workspace({
+    campaigns: [promotion],
+    scheduledPlays: [play("invite", promotion.id, "2027-01-14")],
+    playbookVersions: [{
+      playbookId: "standard",
+      version: 1,
+      weeks: [
+        {weekNumber: 1, phase: "Awareness"},
+        {weekNumber: 2, phase: "Invitation"},
+      ],
+    }],
+  }), Q1);
+  const group = layout.groups[0];
+  assert.deepEqual([group.startDate, group.endDate], ["2027-01-01", "2027-01-14"]);
+  assert.equal(group.isPromotionWindow, true);
+  assert.equal(group.eventDate, "");
+  assert.equal(group.campaignEndDate, "2027-01-14");
+  assert.deepEqual(group.phases.map(({name, startDate, endDate}) => ({name, startDate, endDate})), [
+    {name: "Awareness", startDate: "2027-01-01", endDate: "2027-01-07"},
+    {name: "Invitation", startDate: "2027-01-08", endDate: "2027-01-14"},
+  ]);
+});
+
 test("legacy campaigns derive their window while saved dates and manually moved plays determine the actual envelope", () => {
   const legacy = campaign("legacy", {
     recommendedStartDate: "",

@@ -116,6 +116,47 @@ test("promotion brief PDF produces a readable PDF document", () => {
   assert.ok(result.pdf.getNumberOfPages() >= 1);
 });
 
+test("promotion brief preserves window scheduling without inventing event milestones", () => {
+  const brief = buildPromotionBrief({
+    campaigns: [
+      {
+        id: "window",
+        name: "Invite Your One",
+        level: 2,
+        scheduleMode: "promotion-window",
+        campaignEndDate: "2026-09-12",
+        eventDate: "",
+        registrationDeadline: "",
+      },
+      {
+        id: "event",
+        name: "Fall Gathering",
+        level: 3,
+        eventDate: "2026-09-20",
+        registrationDeadline: "2026-09-18",
+      },
+    ],
+    scheduledPlays: [
+      {id: "window-play", campaignId: "window", campaignName: "Invite Your One", campaignLevel: 2, playType: "Stage Announcement", channel: "Sunday / Stage", scheduledDate: "2026-08-23", status: "scheduled"},
+      {id: "event-play", campaignId: "event", campaignName: "Fall Gathering", campaignLevel: 3, playType: "Stage Announcement", channel: "Sunday / Stage", scheduledDate: "2026-08-23", status: "scheduled"},
+    ],
+    selectedPlayTypes: ["Stage Announcement"],
+    startDate: "2026-08-23",
+    endDate: "2026-08-29",
+  });
+  const windowEntry = brief.entries.find((entry) => entry.id === "window");
+  assert.equal(windowEntry.scheduleMode, "promotion-window");
+  assert.equal(windowEntry.campaignEndDate, "2026-09-12");
+  assert.equal(windowEntry.eventDate, "");
+  const eventEntry = brief.entries.find((entry) => entry.id === "event");
+  const windowCommands = createPromotionBriefPdf({...brief, entries: [windowEntry]}).pdf.internal.pages.slice(1).flat().join("\n");
+  const eventCommands = createPromotionBriefPdf({...brief, entries: [eventEntry]}).pdf.internal.pages.slice(1).flat().join("\n");
+  assert.match(windowCommands, /Promote through Sep 12, 2026/);
+  assert.doesNotMatch(windowCommands, /Event |Registration/);
+  assert.match(eventCommands, /Event Sep 20, 2026/);
+  assert.match(eventCommands, /Registration Sep 18, 2026/);
+});
+
 test("promotion brief filename uses the upcoming Sunday and Central creation date", () => {
   assert.equal(
     promotionBriefFilename({

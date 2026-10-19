@@ -20,7 +20,12 @@ import {
 import {cloneStarterData} from "../src/planner/seed-data.js";
 import {defaultRecurrence} from "../src/planner/recurrence.js";
 import {generateCampaignSchedule, withLevel2StandingLane} from "../src/planner/domain.js";
-import {buildSeriesPlan, buildOccurrencePlan, skipOccurrencePlan} from "../src/planner/series.js";
+import {
+  buildCampaignEditPlan,
+  buildSeriesPlan,
+  buildOccurrencePlan,
+  skipOccurrencePlan,
+} from "../src/planner/series.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..");
@@ -108,6 +113,20 @@ function campaignPayload() {
   };
 }
 
+function promotionWindowCampaignPayload(overrides = {}) {
+  return {
+    ...campaignPayload(),
+    eventDate: null,
+    registrationDeadline: null,
+    recommendedStartDate: date("2026-08-23"),
+    scheduleMode: "promotion-window",
+    campaignEndDate: date("2026-09-06"),
+    requestedPromotionStart: date("2026-08-23"),
+    requestedPromotionEnd: date("2026-09-06"),
+    ...overrides,
+  };
+}
+
 function scheduledPlayPayload() {
   return {
     schemaVersion: 1,
@@ -141,6 +160,38 @@ function scheduledPlayPayload() {
     updatedByUid: "editor",
     createdAt: serverTime(),
     updatedAt: serverTime(),
+  };
+}
+
+function starterPlaybook(id) {
+  return structuredClone(cloneStarterData().playbooks.find((item) => item.id === id));
+}
+
+async function seedPlaybook(db, id, overrides = {}) {
+  const playbook = {...starterPlaybook(id), ...overrides};
+  const timestamp = serverTime();
+  await assertSucceeds(db.doc(`centralPromotionPlaybooks/${id}`).set(
+      plannerPersistenceInternals.playbookMetaForCloud(playbook, "editor", timestamp),
+  ));
+  if (overrides.omitVersion !== true) {
+    await assertSucceeds(db.doc(`centralPromotionPlaybookVersions/${id}_v${playbook.version}`).set(
+        plannerPersistenceInternals.playbookVersionForCloud(playbook, "editor", timestamp),
+    ));
+  }
+  return playbook;
+}
+
+function campaignPlaybookSwitch(overrides = {}) {
+  return {
+    playbookId: "level-3-standard",
+    playbookVersion: 1,
+    level: 3,
+    campaignType: "standard",
+    durationWeeks: 3,
+    recommendedStartDate: date("2026-09-26"),
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+    ...overrides,
   };
 }
 
@@ -353,6 +404,78 @@ test("create rejects oversized, mistyped, and extra fields", async () => {
   await assertFails(db.doc("centralPromotionStandingLanes/extra-field").set({...lanePayload(), role: "admin"}));
 });
 
+test("promotion-window campaigns require a bounded non-recurring window shape", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const reference = db.doc("centralPromotionCampaigns/window-campaign");
+  await assertSucceeds(reference.set(promotionWindowCampaignPayload()));
+  const noRequestedBounds = promotionWindowCampaignPayload();
+  noRequestedBounds.requestedPromotionStart = null;
+  noRequestedBounds.requestedPromotionEnd = null;
+  await assertSucceeds(db.doc("centralPromotionCampaigns/window-without-request-bounds").set(
+      noRequestedBounds,
+  ));
+  const missingEnd = promotionWindowCampaignPayload();
+  delete missingEnd.campaignEndDate;
+  await assertFails(db.doc("centralPromotionCampaigns/window-missing-end").set(
+      missingEnd,
+  ));
+  await assertFails(db.doc("centralPromotionCampaigns/window-bad-end").set(
+      promotionWindowCampaignPayload({campaignEndDate: "2026-09-06"}),
+  ));
+  await assertFails(db.doc("centralPromotionCampaigns/window-with-event").set(
+      promotionWindowCampaignPayload({eventDate: date("2026-09-06")}),
+  ));
+  await assertFails(db.doc("centralPromotionCampaigns/window-with-registration").set(
+      promotionWindowCampaignPayload({registrationDeadline: date("2026-09-01")}),
+  ));
+  await assertFails(db.doc("centralPromotionCampaigns/window-standalone").set(
+      promotionWindowCampaignPayload({campaignType: "standalone-content"}),
+  ));
+  await assertSucceeds(db.doc("centralPromotionCampaignSeries/series-breakfast").set(recurrenceCloud()));
+  await assertFails(db.doc("centralPromotionCampaigns/window-recurring").set(
+      promotionWindowCampaignPayload({
+        seriesId: "series-breakfast",
+        occurrenceKey: date("2026-09-06"),
+        seriesRevision: 1,
+        recurrenceException: true,
+      }),
+  ));
+  await assertFails(db.doc("centralPromotionCampaigns/window-mode-type").set(
+      promotionWindowCampaignPayload({scheduleMode: 42}),
+  ));
+  await assertSucceeds(db.doc("centralPromotionCampaigns/window-reversed-request").set(
+      promotionWindowCampaignPayload({
+        requestedPromotionStart: date("2026-09-06"),
+        requestedPromotionEnd: date("2026-08-23"),
+      }),
+  ));
+  await assertSucceeds(reference.update({
+    campaignEndDate: date("2026-09-13"),
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    scheduleMode: firebase.firestore.FieldValue.delete(),
+    campaignEndDate: firebase.firestore.FieldValue.delete(),
+    requestedPromotionStart: firebase.firestore.FieldValue.delete(),
+    requestedPromotionEnd: firebase.firestore.FieldValue.delete(),
+    eventDate: date("2026-09-13"),
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(reference.update({
+    requestedPromotionEnd: date("2026-09-13"),
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(environment.authenticatedContext("viewer").firestore()
+    .doc(reference.path).update({
+      campaignEndDate: date("2026-09-20"),
+      updatedByUid: "viewer",
+      updatedAt: serverTime(),
+    }));
+}));
+
 test("valid updates cannot bypass validators or mutate immutable history", async () => {
   const db = environment.authenticatedContext("editor").firestore();
   const campaignRef = db.doc("centralPromotionCampaigns/campaign-a");
@@ -431,6 +554,160 @@ test("regeneration can advance generated schedules but cannot rewrite protected 
     updatedAt: serverTime(),
   }));
 });
+
+test("campaign edit plans can switch an active saved campaign to a current active playbook", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const store = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  await store.publishStarterConfiguration();
+  await assertSucceeds(db.doc("centralPromotionCampaigns/campaign-a").set(campaignPayload()));
+  await assertSucceeds(db.doc("centralPromotionScheduledPlays/play-a").set(scheduledPlayPayload()));
+
+  const before = (await db.doc("centralPromotionCampaigns/campaign-a").get()).data();
+  const workspace = await store.loadWorkspace();
+  const campaign = workspace.campaigns.find((item) => item.id === "campaign-a");
+  const target = workspace.playbookVersions.find((item) =>
+    item.playbookId === "level-3-standard" && Number(item.version) === 1,
+  );
+  const plan = buildCampaignEditPlan({
+    campaign,
+    updates: {name: "Women's Breakfast Stories"},
+    playbook: target,
+    campaigns: workspace.campaigns,
+    plays: workspace.scheduledPlays,
+    capacityRules: workspace.capacityRules,
+    standingLanes: workspace.standingLanes,
+    playbooks: workspace.playbooks,
+    generatedAt: new Date("2026-09-20T12:00:00Z"),
+  });
+  await store.saveSeriesPlan(plan);
+
+  const after = (await db.doc("centralPromotionCampaigns/campaign-a").get()).data();
+  assert.equal(after.playbookId, "level-3-standard");
+  assert.equal(after.playbookVersion, 1);
+  assert.equal(after.level, 3);
+  assert.equal(after.campaignType, "standard");
+  assert.equal(after.durationWeeks, 3);
+  assert.equal(after.submittedAt.isEqual(before.submittedAt), true);
+  assert.equal(after.createdAt.isEqual(before.createdAt), true);
+  assert.equal(after.sourceEventId, before.sourceEventId);
+  const oldPlay = (await db.doc("centralPromotionScheduledPlays/play-a").get()).data();
+  assert.equal(oldPlay.playbookId, "level-4-standard");
+  assert.equal(oldPlay.templatePlayId, "w1-social");
+  assert.equal(oldPlay.status, "skipped");
+  const targetPlays = await db.collection(PLANNER_COLLECTIONS.plays)
+    .where("playbookId", "==", "level-3-standard")
+    .get();
+  assert.ok(targetPlays.size > 0);
+}));
+
+test("campaign playbook switches reject unauthorized, inactive, missing, non-current, and noncanonical targets", async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  const campaignRef = db.doc("centralPromotionCampaigns/campaign-a");
+  await assertSucceeds(campaignRef.set(campaignPayload()));
+  await seedPlaybook(db, "level-3-standard");
+  await seedPlaybook(db, "level-5-interest", {active: false});
+  await seedPlaybook(db, "level-4-featured", {omitVersion: true});
+
+  const viewerRef = environment.authenticatedContext("viewer").firestore()
+    .doc("centralPromotionCampaigns/campaign-a");
+  await assertFails(viewerRef.update(campaignPlaybookSwitch({updatedByUid: "viewer"})));
+  await assertFails(campaignRef.update({level: 3, updatedByUid: "editor", updatedAt: serverTime()}));
+  await assertFails(campaignRef.update({
+    campaignType: "featured",
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(campaignRef.update({durationWeeks: 3, updatedByUid: "editor", updatedAt: serverTime()}));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({
+    playbookId: "missing-playbook",
+    level: 2,
+    campaignType: "event-based",
+    durationWeeks: 6,
+  })));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({
+    playbookId: "level-5-interest",
+    level: 5,
+    campaignType: "interest",
+    durationWeeks: 2,
+  })));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({
+    playbookId: "level-4-featured",
+    level: 4,
+    campaignType: "featured",
+    durationWeeks: 4,
+  })));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({playbookVersion: 2})));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({level: 4})));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({durationWeeks: 2})));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({campaignType: "featured"})));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({sourceEventId: "tampered-source"})));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({submittedAt: date("2026-09-21")})));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({createdByUid: "viewer"})));
+  await assertFails(campaignRef.update(campaignPlaybookSwitch({createdAt: date("2026-09-21")})));
+
+  const archivedRef = db.doc("centralPromotionCampaigns/archived-campaign");
+  await assertSucceeds(archivedRef.set({...campaignPayload(), status: "archived"}));
+  await assertFails(archivedRef.update(campaignPlaybookSwitch({status: "archived"})));
+  const standaloneRef = db.doc("centralPromotionCampaigns/standalone-campaign");
+  await assertSucceeds(standaloneRef.set({
+    ...campaignPayload(),
+    campaignType: "standalone-content",
+    durationWeeks: 1,
+  }));
+  await assertSucceeds(standaloneRef.update({
+    name: "Editable standalone content",
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertFails(standaloneRef.update(campaignPlaybookSwitch()));
+});
+
+test("recurring campaigns switch playbooks only as identity-preserving occurrence exceptions", async () => withPlannerFirebase(async () => {
+  const db = environment.authenticatedContext("editor").firestore();
+  await db.doc("centralPromotionCampaignSeries/series-breakfast").set(recurrenceCloud());
+  await seedPlaybook(db, "level-3-standard");
+  const reference = db.doc("centralPromotionCampaigns/campaign-a");
+  const occurrence = {
+    ...campaignPayload(),
+    seriesId: "series-breakfast",
+    occurrenceKey: date("2026-10-17"),
+    seriesRevision: 1,
+    recurrenceException: false,
+  };
+  await assertSucceeds(reference.set(occurrence));
+  await assertFails(reference.update(campaignPlaybookSwitch({recurrenceException: false})));
+  await assertSucceeds(reference.update(campaignPlaybookSwitch({recurrenceException: true})));
+  const switched = (await reference.get()).data();
+  assert.equal(switched.playbookId, "level-3-standard");
+  assert.equal(switched.recurrenceException, true);
+  assert.equal(switched.seriesId, "series-breakfast");
+  assert.equal(switched.seriesRevision, 1);
+  assert.equal(switched.occurrenceKey.isEqual(date("2026-10-17")), true);
+  await assertSucceeds(db.doc("centralPromotionPlaybooks/level-3-standard").update({
+    active: false,
+    currentVersion: 2,
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  await assertSucceeds(reference.update({
+    name: "Women's Breakfast exception",
+    eventDetails: "The pinned exception remains editable.",
+    updatedByUid: "editor",
+    updatedAt: serverTime(),
+  }));
+  const persistedException = (await reference.get()).data();
+  assert.equal(persistedException.playbookId, "level-3-standard");
+  assert.equal(persistedException.playbookVersion, 1);
+  assert.equal(persistedException.level, 3);
+  assert.equal(persistedException.campaignType, "standard");
+  assert.equal(persistedException.durationWeeks, 3);
+  await assertFails(reference.update({durationWeeks: 4, updatedByUid: "editor", updatedAt: serverTime()}));
+  await assertFails(reference.update({playbookVersion: 2, updatedByUid: "editor", updatedAt: serverTime()}));
+  await assertFails(reference.update({recurrenceException: false, updatedByUid: "editor", updatedAt: serverTime()}));
+  await assertFails(reference.update({seriesId: "another-series", updatedByUid: "editor", updatedAt: serverTime()}));
+  await assertFails(reference.update({occurrenceKey: date("2026-10-24"), updatedByUid: "editor", updatedAt: serverTime()}));
+  await assertFails(reference.update({seriesRevision: 2, updatedByUid: "editor", updatedAt: serverTime()}));
+}));
 
 test("playbook versions remain immutable while editors can atomically delete a campaign and its plays", async () => {
   const db = environment.authenticatedContext("editor").firestore();
@@ -527,7 +804,7 @@ test("Planning Center requests are private and server-created only", async () =>
   );
 });
 
-test("Planner editors can review and convert a PCO request without rewriting its source", async () => {
+test("Planner editors convert a General Promotion request to a window without rewriting source dates", async () => {
   const requestPath = "centralPromotionRequests/pco_1229879_456789";
   await environment.withSecurityRulesDisabled(async (context) => {
     await context.firestore().doc(requestPath).set(promotionRequestPayload());
@@ -536,12 +813,6 @@ test("Planner editors can review and convert a PCO request without rewriting its
     .firestore().doc(requestPath);
   await assertSucceeds(reference.update({
     proposedName: "Edited Community Story",
-    eventDate: date("2026-09-06"),
-    eventDates: [date("2026-09-06")],
-    eventDateEnd: null,
-    dateParseStatus: "manual",
-    dateParseKind: "single",
-    dateSource: "manual-review",
     reviewedByUid: "editor",
     updatedAt: serverTime(),
   }));
@@ -549,7 +820,7 @@ test("Planner editors can review and convert a PCO request without rewriting its
   const wrongLinkBatch = reference.firestore.batch();
   wrongLinkBatch.set(
     reference.firestore.doc(`centralPromotionCampaigns/${campaignId}`),
-    {...campaignPayload(), sourceEventId: "pco-form:1229879:wrong"},
+    {...promotionWindowCampaignPayload(), sourceEventId: "pco-form:1229879:wrong"},
   );
   wrongLinkBatch.update(reference, {
     status: "converted",
@@ -559,11 +830,32 @@ test("Planner editors can review and convert a PCO request without rewriting its
   });
   await assertFails(wrongLinkBatch.commit());
 
+  const rewrittenSourceBatch = reference.firestore.batch();
+  rewrittenSourceBatch.set(
+    reference.firestore.doc(`centralPromotionCampaigns/${campaignId}`),
+    {
+      ...promotionWindowCampaignPayload(),
+      sourceEventId: "pco-form:1229879:456789",
+    },
+  );
+  rewrittenSourceBatch.update(reference, {
+    eventDate: date("2026-09-06"),
+    eventDates: [date("2026-09-06")],
+    dateParseStatus: "manual",
+    dateParseKind: "single",
+    dateSource: "manual-review",
+    status: "converted",
+    campaignId,
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  });
+  await assertFails(rewrittenSourceBatch.commit());
+
   const conversionBatch = reference.firestore.batch();
   conversionBatch.set(
     reference.firestore.doc(`centralPromotionCampaigns/${campaignId}`),
     {
-      ...campaignPayload(),
+      ...promotionWindowCampaignPayload(),
       sourceEventId: "pco-form:1229879:456789",
     },
   );
@@ -574,6 +866,12 @@ test("Planner editors can review and convert a PCO request without rewriting its
     updatedAt: serverTime(),
   });
   await assertSucceeds(conversionBatch.commit());
+  const converted = (await reference.get()).data();
+  assert.equal(converted.eventDate, null);
+  assert.deepEqual(converted.eventDates, []);
+  assert.equal(converted.dateParseStatus, "manual-required");
+  assert.equal(converted.requestedPromotionStart.isEqual(date("2026-08-23")), true);
+  assert.equal(converted.requestedPromotionEnd.isEqual(date("2026-09-06")), true);
   await assertFails(reference.update({
     sourceSubmissionId: "another-submission",
     reviewedByUid: "editor",
@@ -600,6 +898,242 @@ test("Planner editors can review and convert a PCO request without rewriting its
     updatedAt: serverTime(),
   }));
 });
+
+test("event-form conversion can correct a previously parsed range", async () => {
+  const requestPath = "centralPromotionRequests/pco_930568_456789";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc(requestPath).set({
+      ...promotionRequestPayload(),
+      sourceFormId: "930568",
+      sourceFormName: "Event and Promotion Form",
+      requestedPromotionStart: null,
+      requestedPromotionEnd: null,
+      rawEventDateText: "September 6-7, 2026",
+      eventDate: date("2026-09-06"),
+      eventDates: [date("2026-09-06"), date("2026-09-07")],
+      eventDateEnd: date("2026-09-07"),
+      dateParseStatus: "parsed",
+      dateParseKind: "range",
+      dateSource: "form-parser",
+    });
+  });
+  const reference = environment.authenticatedContext("editor")
+    .firestore().doc(requestPath);
+  const campaignId = "event-request-campaign-456789";
+  const conversionBatch = reference.firestore.batch();
+  conversionBatch.set(
+    reference.firestore.doc(`centralPromotionCampaigns/${campaignId}`),
+    {
+      ...campaignPayload(),
+      eventDate: date("2026-09-08"),
+      sourceEventId: "pco-form:930568:456789",
+    },
+  );
+  conversionBatch.update(reference, {
+    eventDate: date("2026-09-08"),
+    eventDates: [date("2026-09-08")],
+    eventDateEnd: null,
+    dateParseStatus: "manual",
+    dateParseKind: "single",
+    dateSource: "manual-review",
+    status: "converted",
+    campaignId,
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  });
+  await assertSucceeds(conversionBatch.commit());
+  const converted = (await reference.get()).data();
+  assert.equal(converted.eventDate.isEqual(date("2026-09-08")), true);
+  assert.equal(converted.dateParseStatus, "manual");
+});
+
+test("event-form conversion can supply a date for a manual-required request", async () => {
+  const requestPath = "centralPromotionRequests/pco_930568_456790";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc(requestPath).set({
+      ...promotionRequestPayload(),
+      sourceFormId: "930568",
+      sourceFormName: "Event and Promotion Form",
+      sourceSubmissionId: "456790",
+      requestedPromotionStart: null,
+      requestedPromotionEnd: null,
+    });
+  });
+  const reference = environment.authenticatedContext("editor")
+    .firestore().doc(requestPath);
+  const campaignId = "event-request-campaign-456790";
+  const conversionBatch = reference.firestore.batch();
+  conversionBatch.set(
+    reference.firestore.doc(`centralPromotionCampaigns/${campaignId}`),
+    {
+      ...campaignPayload(),
+      eventDate: date("2026-09-09"),
+      sourceEventId: "pco-form:930568:456790",
+    },
+  );
+  conversionBatch.update(reference, {
+    eventDate: date("2026-09-09"),
+    eventDates: [date("2026-09-09")],
+    eventDateEnd: null,
+    dateParseStatus: "manual",
+    dateParseKind: "single",
+    dateSource: "manual-review",
+    status: "converted",
+    campaignId,
+    reviewedByUid: "editor",
+    updatedAt: serverTime(),
+  });
+  await assertSucceeds(conversionBatch.commit());
+});
+
+test("real Event/Promo conversion persists corrected request dates", async () => withPlannerFirebase(async () => {
+  const requestId = "pco_930568_456791";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc(`centralPromotionRequests/${requestId}`).set({
+      ...promotionRequestPayload(),
+      sourceFormId: "930568",
+      sourceFormName: "Event and Promotion Form",
+      sourceSubmissionId: "456791",
+      requestedPromotionStart: null,
+      requestedPromotionEnd: null,
+    });
+  });
+  const db = environment.authenticatedContext("editor").firestore();
+  const store = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  const campaignId = "event-request-campaign-456791";
+  await store.convertPromotionRequest(requestId, {
+    id: campaignId,
+    name: "Corrected Event",
+    eventDate: "2026-09-10",
+    registrationDeadline: "",
+    submittedAt: "2026-08-16T12:00:00.000Z",
+    recommendedStartDate: "2026-08-23",
+    isOnTime: true,
+    daysLate: 0,
+    weeksLate: 0,
+    level: 3,
+    campaignType: "standard",
+    playbookId: "level-3-standard",
+    playbookVersion: 1,
+    durationWeeks: 3,
+    sourceEventId: "pco-form:930568:456791",
+    eventDetails: "Corrected during conversion.",
+    sampleAnnouncement: "Join us.",
+    notes: "",
+    status: "active",
+  }, [], {
+    proposedName: "Corrected Event",
+    eventDate: "2026-09-10",
+    eventDates: ["2026-09-10"],
+    eventDateEnd: "",
+    dateParseStatus: "manual",
+    dateParseKind: "single",
+    dateSource: "manual-review",
+  });
+  const workspace = await store.loadWorkspace();
+  const request = workspace.promotionRequests.find((item) => item.id === requestId);
+  const campaign = workspace.campaigns.find((item) => item.id === campaignId);
+  assert.equal(campaign.eventDate, "2026-09-10");
+  assert.equal(request.eventDate, "2026-09-10");
+  assert.deepEqual(request.eventDates, ["2026-09-10"]);
+  assert.equal(request.eventDateEnd, "");
+  assert.equal(request.dateParseStatus, "manual");
+  assert.equal(request.dateParseKind, "single");
+  assert.equal(request.dateSource, "manual-review");
+}));
+
+test("real window conversion survives save, load, brief edit, and regeneration", async () => withPlannerFirebase(async () => {
+  const requestId = "pco_1229879_456789";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc(`centralPromotionRequests/${requestId}`).set({
+      ...promotionRequestPayload(),
+      requestedPromotionStart: date("2026-09-06"),
+      requestedPromotionEnd: date("2026-08-23"),
+    });
+  });
+  const db = environment.authenticatedContext("editor").firestore();
+  const store = createPlannerStore({firestore: db, user: {uid: "editor"}});
+  const campaignId = "window-request-campaign";
+  const campaign = {
+    id: campaignId,
+    name: "Community Story",
+    eventDate: "",
+    registrationDeadline: "",
+    scheduleMode: "promotion-window",
+    campaignEndDate: "2026-09-06",
+    requestedPromotionStart: "2026-09-06",
+    requestedPromotionEnd: "2026-08-23",
+    submittedAt: "2026-08-16T12:00:00.000Z",
+    recommendedStartDate: "2026-08-23",
+    isOnTime: true,
+    daysLate: 0,
+    weeksLate: 0,
+    level: 3,
+    campaignType: "standard",
+    playbookId: "level-3-standard",
+    playbookVersion: 1,
+    durationWeeks: 3,
+    sourceEventId: "pco-form:1229879:456789",
+    eventDetails: "Share a ministry story.",
+    sampleAnnouncement: "Watch for this story.",
+    notes: "",
+    status: "active",
+  };
+  const play = {
+    id: `${campaignId}-social`,
+    campaignId,
+    campaignName: campaign.name,
+    campaignLevel: campaign.level,
+    campaignType: campaign.campaignType,
+    playbookId: campaign.playbookId,
+    playbookVersion: campaign.playbookVersion,
+    templatePlayId: "w1-social",
+    weekNumber: 1,
+    phase: "Awareness",
+    playType: "Social Media Sprinkle",
+    channel: "Social Media",
+    resourceId: "level-3-social",
+    originalScheduledDate: "2026-08-23",
+    scheduledDate: "2026-08-23",
+    eligibleWeekdays: [0],
+    status: "scheduled",
+    requirement: "required",
+    lateBehavior: "SKIP",
+  };
+  await store.convertPromotionRequest(requestId, campaign, [play], {
+    proposedName: "Community Story",
+    eventDate: "2026-09-06",
+    eventDates: ["2026-09-06"],
+    dateParseStatus: "manual",
+    dateParseKind: "single",
+    dateSource: "manual-review",
+  });
+  let workspace = await store.loadWorkspace();
+  let saved = workspace.campaigns.find((item) => item.id === campaignId);
+  assert.equal(saved.scheduleMode, "promotion-window");
+  assert.equal(saved.eventDate, "");
+  assert.equal(saved.campaignEndDate, "2026-09-06");
+  assert.equal(saved.requestedPromotionStart, "2026-09-06");
+  assert.equal(saved.requestedPromotionEnd, "2026-08-23");
+  await store.saveCampaignDetails({...saved, eventDetails: "Updated window brief."});
+  workspace = await store.loadWorkspace();
+  saved = workspace.campaigns.find((item) => item.id === campaignId);
+  assert.equal(saved.eventDetails, "Updated window brief.");
+  await store.regenerateCampaignSchedules({
+    campaigns: [{...saved, campaignEndDate: "2026-09-13"}],
+    plays: workspace.scheduledPlays,
+    writePlayIds: [],
+  });
+  workspace = await store.loadWorkspace();
+  saved = workspace.campaigns.find((item) => item.id === campaignId);
+  assert.equal(saved.campaignEndDate, "2026-09-13");
+  const request = (await db.doc(`centralPromotionRequests/${requestId}`).get()).data();
+  assert.equal(request.eventDate, null);
+  assert.deepEqual(request.eventDates, []);
+  assert.equal(request.dateParseStatus, "manual-required");
+  assert.equal(request.requestedPromotionStart.isEqual(date("2026-09-06")), true);
+  assert.equal(request.requestedPromotionEnd.isEqual(date("2026-08-23")), true);
+}));
 
 test("dismissed PCO requests cannot be converted or assigned a campaign later", async () => {
   const requestPath = "centralPromotionRequests/pco_1229879_456789";

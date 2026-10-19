@@ -70,9 +70,39 @@ and synchronizes changes between open tabs. Dark remains the initial default.
 - explicit-only Smuggle application
 - weekly utilization summaries
 
-Overview opens on the current planning week (Week 1). Its Week 1–4 selector updates capacity cards, the agenda, decisions, and card-to-report date ranges. Calendar weeks and report presets use the same Monday–Sunday boundaries. Campaign schedules remain anchored to their event dates, and playbook/recurrence weekdays retain the Sunday=0 convention.
+Overview opens on the current planning week (Week 1). Its Week 1–4 selector updates capacity cards, the agenda, decisions, and card-to-report date ranges. Calendar weeks and report presets use the same Monday–Sunday boundaries. Campaign schedules use their event dates or inclusive promotion-window ends, and playbook/recurrence weekdays retain the Sunday=0 convention.
 
 No schedule is hardcoded into the engine. It consumes editable Playbook Definition records.
+
+### Revising a saved campaign
+
+Active campaigns expose **Edit campaign**; recurring events use **Edit occurrence**.
+Editors can change the level and select a playbook, then review the revised
+schedule before saving. The playbook supplies the level, campaign type, duration,
+and version. A recurring edit applies only to that occurrence and retains its
+original series identity as an exception.
+
+Campaign edits preserve the original submission and source link. Past, completed,
+locked, manually adjusted, intentionally skipped, and Smuggle-linked promotions
+remain protected. Superseded automatic promotions are marked skipped, and new
+placements are checked against workspace capacity. Any resulting changes to
+other campaigns are included in the preview. Saving uses the existing checked,
+retryable plan persistence path; derived standing-lane inventory is not saved.
+
+General Promotion requests create window-based campaigns. Intake suggests the
+requested end as an inclusive **Promote through** date; the playbook calculates
+the start. Creative can adjust the end and playbook, with advisory warnings for
+differences from either requested bound or reversed source dates. Missing ends
+require a choice; expired ends must be moved forward before conversion.
+
+These campaigns store `scheduleMode: "promotion-window"`, `campaignEndDate`, and
+the original optional `requestedPromotionStart` / `requestedPromotionEnd`.
+`eventDate` and `registrationDeadline` remain empty (null in Firestore). The
+internal planning anchor is the day after the inclusive end, producing exactly
+`durationWeeks * 7` days. Timelines and briefs use promotion-window wording;
+recurrence remains event-only. Saved windows support the same campaign editing
+and history protections. Existing event campaigns, including earlier General
+Promotion conversions, retain their original mode without automatic migration.
 
 ## Firestore model
 
@@ -82,7 +112,7 @@ The target is the existing Standard edition, Firestore Native `(default)` databa
 | --- | --- |
 | `centralPromotionPlaybooks` | Current playbook metadata and current-version pointer |
 | `centralPromotionPlaybookVersions` | Immutable snapshots of editable week/play definitions |
-| `centralPromotionCampaigns` | Event, original submission, timeliness, status, and stored playbook version |
+| `centralPromotionCampaigns` | Event or promotion window, original submission, timeliness, status, and stored playbook version |
 | `centralPromotionCampaignSeries` | Event recurrence, pinned playbook, shared defaults, relative deadline, and save/revision state |
 | `centralPromotionScheduledPlays` | Independent dated records used by Calendar and Campaign detail |
 | `centralPromotionCapacityRules` | Editable promotional inventory and allocation configuration |
@@ -94,10 +124,10 @@ Scheduled Plays always retain both `originalScheduledDate` and `scheduledDate`. 
 Planning Center People form submissions enter through the signed
 `/api/webhooks/planning-center/forms` endpoint. The webhook stores only the
 campaign-planning subset of each qualifying submission. A Planner editor must
-confirm the name, primary event date, level, and playbook before Central creates
-the campaign. General Promotion submissions always require manual date review;
-Event/Promo submissions use conservative free-text parsing and retain the
-original date answer.
+confirm the name, planning date, level, and playbook before Central creates
+the campaign. General Promotion submissions use the requested window and an
+editable promote-through date. Event/Promo submissions use conservative free-text
+parsing and retain the original date answer.
 
 Scheduled Plays are loaded in `scheduledDate` order without the former -70/+400-day cutoff. A saved yearly occurrence and every competing campaign must be available to reports, exceptions, and capacity evaluation. This still uses a Standard edition single-field index. If inventory grows substantially, replace this full-workspace read with coordinated range queries for every consumer; do not reintroduce a calendar-only horizon that silently drops saved promotions.
 

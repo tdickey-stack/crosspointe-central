@@ -90,6 +90,12 @@ function timestampToDateKey(value) {
   return iso ? dateKey(iso) : "";
 }
 
+function isValidDateKey(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T12:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && dateKey(parsed) === value;
+}
+
 function dateTimestamp(value) {
   if (!value) return null;
   return window.firebase.firestore.Timestamp.fromDate(
@@ -129,6 +135,11 @@ function normalizeCampaign(data) {
     eventDate: timestampToDateKey(data.eventDate),
     registrationDeadline: timestampToDateKey(data.registrationDeadline),
     recommendedStartDate: timestampToDateKey(data.recommendedStartDate),
+    ...(data.scheduleMode === "promotion-window" ? {
+      campaignEndDate: timestampToDateKey(data.campaignEndDate),
+      requestedPromotionStart: timestampToDateKey(data.requestedPromotionStart),
+      requestedPromotionEnd: timestampToDateKey(data.requestedPromotionEnd),
+    } : {}),
     submittedAt: timestampToIso(data.submittedAt),
     ...(data.seriesId ? {occurrenceKey: timestampToDateKey(data.occurrenceKey)} : {}),
     createdAt: timestampToIso(data.createdAt),
@@ -276,11 +287,36 @@ function promotionRequestUpdateForCloud(updates, ownerUid, timestamp) {
 }
 
 function campaignForCloud(campaign, ownerUid, timestamp) {
+  const scheduleMode = campaign.scheduleMode || "";
+  if (scheduleMode && scheduleMode !== "promotion-window") {
+    throw new Error("The campaign schedule mode is invalid.");
+  }
+  const promotionWindow = scheduleMode === "promotion-window";
+  if (promotionWindow) {
+    if (campaign.eventDate || campaign.registrationDeadline) {
+      throw new Error("A promotion-window campaign cannot have an event date or registration deadline.");
+    }
+    if (!isValidDateKey(campaign.campaignEndDate)) {
+      throw new Error("A promotion-window campaign needs a valid inclusive end date.");
+    }
+    if (!isValidDateKey(campaign.recommendedStartDate) ||
+      campaign.campaignEndDate < campaign.recommendedStartDate) {
+      throw new Error("The promotion window must end on or after its start date.");
+    }
+    if (campaign.seriesId || campaign.campaignType === "standalone-content") {
+      throw new Error("Promotion-window campaigns cannot recur or use standalone content.");
+    }
+    for (const field of ["requestedPromotionStart", "requestedPromotionEnd"]) {
+      if (campaign[field] && !isValidDateKey(campaign[field])) {
+        throw new Error("Requested promotion bounds must be valid dates.");
+      }
+    }
+  }
   return {
     schemaVersion: 1,
     name: String(campaign.name || "").slice(0, 140),
-    eventDate: dateTimestamp(campaign.eventDate),
-    registrationDeadline: campaign.registrationDeadline
+    eventDate: promotionWindow ? null : dateTimestamp(campaign.eventDate),
+    registrationDeadline: !promotionWindow && campaign.registrationDeadline
       ? dateTimestamp(campaign.registrationDeadline)
       : null,
     submittedAt: instantTimestamp(campaign.submittedAt),
@@ -304,6 +340,16 @@ function campaignForCloud(campaign, ownerUid, timestamp) {
     updatedByUid: ownerUid,
     createdAt: campaign.createdAt ? instantTimestamp(campaign.createdAt) : timestamp,
     updatedAt: timestamp,
+    ...(promotionWindow ? {
+      scheduleMode: "promotion-window",
+      campaignEndDate: dateTimestamp(campaign.campaignEndDate),
+      requestedPromotionStart: campaign.requestedPromotionStart
+        ? dateTimestamp(campaign.requestedPromotionStart)
+        : null,
+      requestedPromotionEnd: campaign.requestedPromotionEnd
+        ? dateTimestamp(campaign.requestedPromotionEnd)
+        : null,
+    } : {}),
     ...(campaign.seriesId ? {
       seriesId: String(campaign.seriesId),
       occurrenceKey: dateTimestamp(campaign.occurrenceKey),
@@ -555,7 +601,7 @@ function createPreviewWorkspace() {
         proposedName: "Christmas Eve Volunteer Push",
         ministry: "Connections",
         description: "Recruit additional volunteers for Christmas Eve services.",
-        notes: "General Promotion requests require a manual campaign date.",
+        notes: "Please help us recruit volunteers during the requested window.",
         requestedPlatforms: ["Newsletter", "Social Media", "Pre-Service Slide"],
         rawEventDateText: "",
         eventDates: [],
@@ -765,7 +811,11 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
       campaignId: nextCampaign.id,
     }));
     const conversionUpdates = requestConversion ? {
-      ...deepClone(requestConversion.updates || {}),
+      ...(nextCampaign.scheduleMode === "promotion-window"
+        ? (Object.hasOwn(requestConversion.updates || {}, "proposedName") ? {
+          proposedName: requestConversion.updates.proposedName,
+        } : {})
+        : deepClone(requestConversion.updates || {})),
       status: "converted",
       campaignId: nextCampaign.id,
     } : null;
@@ -1166,6 +1216,7 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
 
 export const plannerPersistenceInternals = {
   campaignForCloud,
+  normalizeCampaign,
   seriesForCloud,
   normalizeSeries,
   playForCloud,

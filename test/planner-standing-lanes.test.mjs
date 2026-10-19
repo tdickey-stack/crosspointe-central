@@ -11,7 +11,7 @@ import {
   withLevel2StandingLane,
 } from "../src/planner/domain.js";
 import {buildPromotionBrief} from "../src/planner/briefs.js";
-import {buildOccurrencePlan, buildSeriesPlan} from "../src/planner/series.js";
+import {buildCampaignEditPlan, buildOccurrencePlan, buildSeriesPlan} from "../src/planner/series.js";
 
 const NOW = new Date("2026-10-05T12:00:00-05:00");
 
@@ -575,4 +575,42 @@ test("campaign regeneration uses ongoing capacity but returns only persisted cam
   assert.equal(result.plays[0].status, "conflict");
   assert.equal(result.plays.some((play) => play.source === "standing-lane"), false);
   assert.deepEqual(result.writePlayIds, [generated.plays[0].id]);
+});
+
+test("a far-future promotion window extends standing-lane capacity through its inclusive end", () => {
+  const campaignPlaybook = eventPlaybook(3);
+  const ongoing = ongoingPlaybook();
+  const windowCampaign = {
+    id: "far-window",
+    name: "Far Promotion Window",
+    scheduleMode: "promotion-window",
+    eventDate: "",
+    campaignEndDate: "2028-01-09",
+    registrationDeadline: "",
+    submittedAt: "2026-10-01T15:00:00.000Z",
+    level: 3,
+    campaignType: campaignPlaybook.campaignType,
+    playbookId: campaignPlaybook.id,
+    playbookVersion: campaignPlaybook.version,
+    status: "active",
+  };
+  const plan = buildCampaignEditPlan({
+    campaign: windowCampaign,
+    playbook: campaignPlaybook,
+    campaigns: [windowCampaign],
+    plays: [],
+    capacityRules: [newsletterCapacityRule()],
+    standingLanes: workspace().standingLanes,
+    playbooks: [ongoing, campaignPlaybook],
+    generatedAt: NOW,
+  });
+
+  assert.equal(plan.campaigns[0].eventDate, "");
+  assert.equal(plan.campaigns[0].campaignEndDate, "2028-01-09");
+  assert.equal(plan.plays.length, 1);
+  assert.equal(plan.plays[0].status, "conflict");
+  assert.equal(plan.plays[0].conflictState, "capacity-overflow");
+  assert.ok(plan.conflicts.some((conflict) =>
+    conflict.recommendedPlayIds.some((id) => id !== plan.plays[0].id)));
+  assert.equal(plan.plays.some((play) => play.source === "standing-lane"), false);
 });

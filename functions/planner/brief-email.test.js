@@ -30,7 +30,8 @@ function payload(overrides = {}) {
         level: 4,
         eventDate: "2026-09-12",
         registrationDeadline: "2026-09-10",
-        eventDetails: "## At a glance\n- Doors open at **8:30 AM**\n<img src=x>",
+        eventDetails:
+          "## At a glance\n- Doors open at **8:30 AM**\n<img src=x>",
         sampleAnnouncement: "Invite a friend to *Women's Breakfast*.",
         notes: "Invite & welcome everyone.",
         announcements: [{
@@ -70,7 +71,10 @@ test("planner brief email validates recipients and PDF attachment", () => {
   ]);
   assert.equal(result.brief.announcementCount, 1);
   assert.equal(result.brief.attentionCount, 1);
-  assert.equal(result.brief.entries[0].announcements[0].smuggle.beneficiaryName, "Ladies Bunco Night");
+  assert.equal(
+      result.brief.entries[0].announcements[0].smuggle.beneficiaryName,
+      "Ladies Bunco Night",
+  );
   assert.equal(result.brief.entries[0].smuggledInto[0].hostCampaignLevel, 1);
   assert.match(result.brief.entries[0].eventDetails, /Doors open/);
   assert.match(result.brief.entries[0].sampleAnnouncement, /Women's Breakfast/);
@@ -84,14 +88,21 @@ test("planner brief email renders useful text and escaped HTML", () => {
   const plainText = buildPlannerBriefEmailText(normalized);
   const html = buildPlannerBriefEmailHtml(normalized);
   assert.match(plainText, /Stage Announcement \| Aug 23, 2026/);
+  assert.match(plainText, /Event: Sep 12, 2026/);
   assert.match(plainText, /SMUGGLE CONTAINS: Level 4 Ladies Bunco Night/);
   assert.match(plainText, /SMUGGLED INTO: Level 1 Big Small Group Relaunch/);
   assert.match(plainText, /Event details:\nAt a glance/);
   assert.match(plainText, /SUNDAY ANNOUNCEMENT SCRIPT/);
   assert.match(plainText, /Women's <Breakfast>\nInvite a friend/);
-  assert.match(plainText, /One Next Step\nEverything is on CrossPointe Central/);
-  assert.match(plainText, /The complete announcement brief is attached as a PDF/);
+  assert.match(
+      plainText, /One Next Step\nEverything is on CrossPointe Central/,
+  );
+  assert.match(
+      plainText, /The complete announcement brief is attached as a PDF/,
+  );
   assert.match(html, /Women&#39;s &lt;Breakfast&gt;/);
+  assert.match(html, /Event Sep 12, 2026/);
+  assert.match(html, /Registration Sep 10, 2026/);
   assert.match(html, /Invite &amp; welcome everyone/);
   assert.match(html, /Smuggle contains Level 4 Ladies Bunco Night/);
   assert.match(html, /Smuggled into Level 1 Big Small Group Relaunch/);
@@ -105,11 +116,47 @@ test("planner brief email renders useful text and escaped HTML", () => {
   assert.doesNotMatch(html, /<img src=x>/);
 });
 
+test("planner brief email labels promotion windows", () => {
+  const source = payload();
+  source.brief.entries = [{
+    ...source.brief.entries[0],
+    name: "Invite Your One",
+    scheduleMode: "promotion-window",
+    campaignEndDate: "2026-09-12",
+    eventDate: "2026-09-30",
+    registrationDeadline: "2026-09-28",
+  }];
+  const normalized = normalizePlannerBriefEmailPayload(source);
+  const entry = normalized.brief.entries[0];
+  assert.equal(entry.scheduleMode, "promotion-window");
+  assert.equal(entry.campaignEndDate, "2026-09-12");
+  assert.equal(entry.eventDate, "");
+  assert.equal(entry.registrationDeadline, "");
+
+  const plainText = buildPlannerBriefEmailText(normalized);
+  const html = buildPlannerBriefEmailHtml(normalized);
+  assert.match(plainText, /Promote through: Sep 12, 2026/);
+  assert.match(html, /Promote through Sep 12, 2026/);
+  assert.match(plainText, /Campaign details:/);
+  assert.match(html, /Campaign details/);
+  assert.doesNotMatch(plainText, /Event:/);
+  assert.doesNotMatch(plainText, /Registration/);
+  assert.doesNotMatch(html, /Event Sep 30, 2026/);
+  assert.doesNotMatch(html, /Registration Sep 28, 2026/);
+});
+
 test("planner brief email rejects malformed recipients", () => {
   assert.throws(
       () => normalizePlannerBriefEmailPayload(
           payload({recipients: "not-an-email"}),
       ),
       /Check the recipient email address/,
+  );
+  const missingWindowEnd = payload();
+  missingWindowEnd.brief.entries[0].scheduleMode = "promotion-window";
+  missingWindowEnd.brief.entries[0].campaignEndDate = "";
+  assert.throws(
+      () => normalizePlannerBriefEmailPayload(missingWindowEnd),
+      /needs a valid campaign end date/,
   );
 });

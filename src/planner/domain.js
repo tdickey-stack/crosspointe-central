@@ -152,6 +152,55 @@ export function campaignWindow(eventDate, durationWeeks) {
   };
 }
 
+export function isPromotionWindow(campaign) {
+  return campaign?.scheduleMode === "promotion-window";
+}
+
+export function campaignPlanningAnchor(campaign) {
+  if (isPromotionWindow(campaign)) {
+    return addDays(Temporal.PlainDate.from(String(campaign?.campaignEndDate || "")).toString(), 1);
+  }
+  return Temporal.PlainDate.from(String(campaign?.eventDate || "")).toString();
+}
+
+export function campaignDisplayDate(campaign) {
+  if (isPromotionWindow(campaign)) {
+    return Temporal.PlainDate.from(String(campaign?.campaignEndDate || "")).toString();
+  }
+  return Temporal.PlainDate.from(String(campaign?.eventDate || "")).toString();
+}
+
+function planningWindowForCampaign(campaign, durationWeeks = campaign?.durationWeeks) {
+  return campaignWindow(campaignPlanningAnchor(campaign), durationWeeks);
+}
+
+export function promotionWindowComparison(campaign) {
+  if (!isPromotionWindow(campaign)) throw new Error("A promotion-window campaign is required.");
+  const validOptionalDate = (value) => {
+    if (!value) return "";
+    try { return Temporal.PlainDate.from(String(value)).toString(); } catch { return ""; }
+  };
+  const requestedStart = validOptionalDate(campaign.requestedPromotionStart);
+  const requestedEnd = validOptionalDate(campaign.requestedPromotionEnd);
+  const planned = planningWindowForCampaign(campaign);
+  const mismatches = [];
+  if (requestedStart && requestedEnd && requestedStart > requestedEnd) {
+    mismatches.push("invalid-request-order");
+  } else {
+    if (requestedStart && planned.recommendedStartDate < requestedStart) mismatches.push("start-before-request");
+    if (requestedStart && planned.recommendedStartDate > requestedStart) mismatches.push("start-after-request");
+    if (requestedEnd && planned.campaignEndDate < requestedEnd) mismatches.push("end-before-request");
+    if (requestedEnd && planned.campaignEndDate > requestedEnd) mismatches.push("end-after-request");
+  }
+  return {
+    requestedStart,
+    requestedEnd,
+    plannedStart: planned.recommendedStartDate,
+    plannedEnd: planned.campaignEndDate,
+    mismatches,
+  };
+}
+
 export function isCampaignExpired(campaign, now = new Date()) {
   try {
     // Older campaigns derive their end date from the event's promotion window.
@@ -165,8 +214,9 @@ export function isCampaignExpired(campaign, now = new Date()) {
   }
 }
 
-export function calculateTimeliness({eventDate, durationWeeks, submittedAt}) {
-  const {recommendedStartDate} = campaignWindow(eventDate, durationWeeks);
+export function calculateTimeliness({eventDate, campaignEndDate, scheduleMode, campaign, durationWeeks, submittedAt}) {
+  const source = campaign || {eventDate, campaignEndDate, scheduleMode};
+  const {recommendedStartDate} = planningWindowForCampaign(source, durationWeeks);
   const submittedDate = dateKey(submittedAt);
   const daysLate = Math.max(0, differenceInDays(submittedDate, recommendedStartDate));
   return {
@@ -179,18 +229,17 @@ export function calculateTimeliness({eventDate, durationWeeks, submittedAt}) {
   };
 }
 
-export function campaignWeekForDate({eventDate, durationWeeks, value}) {
-  const {recommendedStartDate, campaignEndDate} = campaignWindow(
-    eventDate,
-    durationWeeks,
-  );
+export function campaignWeekForDate({eventDate, campaignEndDate, scheduleMode, campaign, durationWeeks, value}) {
+  const source = campaign || {eventDate, campaignEndDate, scheduleMode};
+  const {recommendedStartDate, campaignEndDate: plannedEndDate} = planningWindowForCampaign(source, durationWeeks);
   const target = dateKey(value);
   if (target < recommendedStartDate) return 0;
-  if (target > campaignEndDate) return Number(durationWeeks) + 1;
+  if (target > plannedEndDate) return Number(durationWeeks) + 1;
   return Math.floor(differenceInDays(target, recommendedStartDate) / 7) + 1;
 }
 
 function deadlineForCampaign(campaign) {
+  if (isPromotionWindow(campaign)) return campaignDisplayDate(campaign);
   const event = dateKey(campaign.eventDate || campaign.scheduledDate);
   if (!campaign.registrationDeadline) return event;
   const registration = dateKey(campaign.registrationDeadline);
@@ -253,7 +302,7 @@ export function generateCampaignSchedule({
   }
   const today = dateKey(generatedAt);
   const timeliness = calculateTimeliness({
-    eventDate: campaign.eventDate,
+    campaign,
     durationWeeks: playbook.durationWeeks,
     submittedAt: campaign.submittedAt,
   });
@@ -270,9 +319,8 @@ export function generateCampaignSchedule({
         primaryDay,
       );
       // Each playbook week is a rolling seven-day phase window before the
-      // event. The requested weekday still controls the exact date inside that
-      // window, so every event receives the same weekly rhythm without any
-      // promotion landing on or after the event.
+      // planning anchor. The requested weekday controls the exact date inside
+      // that window, bounded by the event or promotion-window deadline.
       if (originalScheduledDate > finalDate) return;
       let scheduledDate = originalScheduledDate;
       let status = "scheduled";
@@ -361,7 +409,7 @@ export function generateCampaignSchedule({
       playbookVersion: Number(playbook.version || 1),
       ...timeliness,
       currentWeek: campaignWeekForDate({
-        eventDate: campaign.eventDate,
+        campaign,
         durationWeeks: playbook.durationWeeks,
         value: today,
       }),
@@ -369,6 +417,76 @@ export function generateCampaignSchedule({
     plays,
     summary: scheduleSummary(plays),
   };
+}
+
+const AUTOMATIC_CAMPAIGN_PLAY_REMOVAL_REASONS = new Set([
+  "Removed from the active plan by recurrence update.",
+  "Removed from the active plan by campaign edit.",
+  "Removed from the active plan by campaign regeneration.",
+  "Skipped because this date is no longer in the recurring series.",
+  "Skipped because the recurring series ended.",
+]);
+
+export function campaignPlayIsAutomaticTombstone(play) {
+  return play?.status === "skipped" && AUTOMATIC_CAMPAIGN_PLAY_REMOVAL_REASONS.has(String(play.lateReason || ""));
+}
+
+function campaignPlayTemplateKey(playbookId, templatePlayId, weekNumber) {
+  return `${String(playbookId || "")}|${String(templatePlayId || "")}|${Number(weekNumber)}`;
+}
+
+function campaignPlayScopedId(campaignId, playbook, templatePlay, weekNumber, salt = 0) {
+  const identity = `${campaignId}|${playbook.id}|${Number(playbook.version || 1)}|${templatePlay.id}|${weekNumber}|${salt}`;
+  const hash = (seed) => {
+    let value = seed;
+    for (let index = 0; index < identity.length; index += 1) {
+      value = Math.imul(value ^ identity.charCodeAt(index), 16777619) >>> 0;
+    }
+    return value.toString(36).padStart(7, "0");
+  };
+  const prefix = `${campaignId}_${playbook.id}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 104);
+  return `${prefix}_edit_${hash(2166136261)}${hash(3339675911)}`;
+}
+
+export function campaignPlayIdFactory({campaign, playbook, existingPlays = [], forceScoped = false} = {}) {
+  const occupiedById = new Map(existingPlays.map((play) => [play.id, play]));
+  const selectedByTemplate = new Map();
+  existingPlays.filter((play) => play.playbookId === playbook.id).forEach((play) => {
+    const key = campaignPlayTemplateKey(playbook.id, play.templatePlayId, play.weekNumber);
+    if (!selectedByTemplate.has(key)) selectedByTemplate.set(key, []);
+    selectedByTemplate.get(key).push(play);
+  });
+  selectedByTemplate.forEach((matches) => matches.sort((left, right) =>
+    Number(left.status === "skipped") - Number(right.status === "skipped") ||
+    Number(right.playbookVersion || 1) - Number(left.playbookVersion || 1) ||
+    String(left.id).localeCompare(String(right.id)),
+  ));
+  const selectedUsesScopedIds = existingPlays.some((play) => {
+    if (play.playbookId !== playbook.id) return false;
+    const legacyId = `${campaign.id}_${play.templatePlayId}_${play.weekNumber}`;
+    return play.id !== legacyId;
+  });
+  const hasOtherPlaybookInventory = existingPlays.some((play) => play.playbookId !== playbook.id);
+  const usesScopedIds = forceScoped || selectedUsesScopedIds || hasOtherPlaybookInventory;
+  const idFactory = (templatePlay, weekNumber) => {
+    const key = campaignPlayTemplateKey(playbook.id, templatePlay.id, weekNumber);
+    const existing = selectedByTemplate.get(key)?.[0];
+    if (existing) return existing.id;
+    const legacyId = `${campaign.id}_${templatePlay.id}_${weekNumber}`;
+    const collision = occupiedById.get(legacyId);
+    if (!usesScopedIds && (!collision || campaignPlayTemplateKey(collision.playbookId, collision.templatePlayId, collision.weekNumber) === key)) {
+      return legacyId;
+    }
+    let salt = 0;
+    let id = campaignPlayScopedId(campaign.id, playbook, templatePlay, weekNumber, salt);
+    while (occupiedById.has(id)) {
+      salt += 1;
+      id = campaignPlayScopedId(campaign.id, playbook, templatePlay, weekNumber, salt);
+    }
+    return id;
+  };
+  idFactory.usesScopedIds = usesScopedIds;
+  return idFactory;
 }
 
 function regenerationProtected(play, today) {
@@ -426,8 +544,13 @@ export function buildCampaignRegeneration({
 
   targetCampaigns.forEach((campaign) => {
     const playbook = playbookById.get(campaign.playbookId);
-    const generated = generateCampaignSchedule({campaign, playbook, generatedAt});
     const existing = existingByCampaign.get(campaign.id) || [];
+    const generated = generateCampaignSchedule({
+      campaign,
+      playbook,
+      generatedAt,
+      idFactory: campaignPlayIdFactory({campaign, playbook, existingPlays: existing}),
+    });
     const existingById = new Map(existing.map((play) => [play.id, play]));
     const generatedIds = new Set(generated.plays.map((play) => play.id));
     const item = {
@@ -476,10 +599,12 @@ export function buildCampaignRegeneration({
         return;
       }
       if (clearsSmuggle) item.smugglesCleared += 1;
-      const alreadyRemoved = previous.status === "skipped" &&
-        previous.lateReason === "Removed from the active plan by campaign regeneration." &&
-        previous.smuggle == null;
-      if (!alreadyRemoved) item.removed += 1;
+      const alreadyRemoved = campaignPlayIsAutomaticTombstone(previous) && previous.smuggle == null;
+      if (alreadyRemoved) {
+        candidatePlays.push(previous);
+        return;
+      }
+      item.removed += 1;
       candidatePlays.push({
         ...previous,
         status: "skipped",
@@ -505,7 +630,7 @@ export function buildCampaignRegeneration({
   const effective = withLevel2StandingLane({campaigns: combinedCampaigns,
     scheduledPlays: allocated.plays, playbooks, standingLanes, capacityRules},
   {now: generatedAt, checkCapacity: false, ranges: regeneratedCampaigns.map((campaign) =>
-    ({startDate: campaign.recommendedStartDate, endDate: campaign.eventDate}))});
+    ({startDate: campaign.recommendedStartDate, endDate: campaignDisplayDate(campaign)}))});
   const capacity = evaluateCapacity({
     plays: effective.scheduledPlays,
     now: generatedAt,
@@ -899,7 +1024,7 @@ export function recommendSmuggleOpportunities({
   const candidates = new Map((campaigns || []).filter((campaign) =>
     campaign.campaignType !== "standalone-content" &&
     eligibleLevels.includes(Number(campaign.level)) &&
-    dateKey(campaign.eventDate) >= today &&
+    campaignDisplayDate(campaign) >= today &&
     !legacyPlacedCampaignIds.has(campaign.id) &&
     campaign.status !== "archived",
   ).map((campaign) => [campaign.id, campaign]));

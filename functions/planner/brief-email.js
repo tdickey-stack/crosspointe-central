@@ -162,12 +162,18 @@ function normalizeEntry(value) {
     source.smuggledInto.slice(0, 20).map(normalizeSmuggledInto) :
     [];
   if (!announcements.length && !smuggledInto.length) fail(`${name} does not contain any selected promotions.`);
+  const kind = source.kind === "content" ? "content" : "campaign";
+  const scheduleMode = kind === "campaign" && source.scheduleMode === "promotion-window" ? "promotion-window" : "event";
+  const campaignEndDate = scheduleMode === "promotion-window" ? dateValue(source.campaignEndDate) : "";
+  if (scheduleMode === "promotion-window" && !campaignEndDate) fail(`${name} needs a valid campaign end date.`);
   return {
     name,
-    kind: source.kind === "content" ? "content" : "campaign",
-    level: source.kind === "content" ? null : Math.min(5, Math.max(1, Number(source.level || 5))),
-    eventDate: dateValue(source.eventDate),
-    registrationDeadline: dateValue(source.registrationDeadline),
+    kind,
+    level: kind === "content" ? null : Math.min(5, Math.max(1, Number(source.level || 5))),
+    scheduleMode: kind === "content" ? "" : scheduleMode,
+    campaignEndDate,
+    eventDate: scheduleMode === "promotion-window" ? "" : dateValue(source.eventDate),
+    registrationDeadline: scheduleMode === "promotion-window" ? "" : dateValue(source.registrationDeadline),
     eventDetails: text(source.eventDetails, 3000),
     sampleAnnouncement: text(source.sampleAnnouncement, 3000),
     notes: text(source.notes, 2400),
@@ -241,7 +247,8 @@ export function buildPlannerBriefEmailText(payload) {
   ];
   brief.entries.forEach((entry) => {
     lines.push(`${entry.kind === "content" ? "CONTENT" : `LEVEL ${entry.level}`} - ${entry.name}`);
-    if (entry.eventDate) lines.push(`Event: ${formatDate(entry.eventDate)}`);
+    if (entry.scheduleMode === "promotion-window") lines.push(`Promote through: ${formatDate(entry.campaignEndDate)}`);
+    else if (entry.eventDate) lines.push(`Event: ${formatDate(entry.eventDate)}`);
     entry.smuggledInto.forEach((relationship) => {
       lines.push(`SMUGGLED INTO: Level ${relationship.hostCampaignLevel} ${relationship.hostCampaignName} | ${relationship.hostPlayType} | ${formatDate(relationship.scheduledDate)}`);
     });
@@ -249,7 +256,7 @@ export function buildPlannerBriefEmailText(payload) {
       lines.push(`- ${announcement.playType} | ${formatDate(announcement.scheduledDate)} | ${announcement.channel || "Channel not set"}${announcement.needsAttention ? " | NEEDS ATTENTION" : ""}`);
       if (announcement.smuggle) lines.push(`  SMUGGLE CONTAINS: Level ${announcement.smuggle.beneficiaryLevel} ${announcement.smuggle.beneficiaryName}`);
     });
-    if (entry.eventDetails) lines.push(`Event details:\n${markdownToPlainText(entry.eventDetails)}`);
+    if (entry.eventDetails) lines.push(`${entry.scheduleMode === "promotion-window" ? "Campaign" : "Event"} details:\n${markdownToPlainText(entry.eventDetails)}`);
     if (entry.notes) lines.push(`Notes: ${entry.notes}`);
     lines.push("");
   });
@@ -271,6 +278,12 @@ export function buildPlannerBriefEmailText(payload) {
 export function buildPlannerBriefEmailHtml(payload) {
   const {brief} = payload;
   const cards = brief.entries.map((entry) => {
+    let schedule = "";
+    if (entry.scheduleMode === "promotion-window") {
+      schedule = `<p style="margin:0 0 10px;color:#71717a;font-size:13px;">Promote through ${escapeHtml(formatDate(entry.campaignEndDate))}</p>`;
+    } else if (entry.eventDate) {
+      schedule = `<p style="margin:0 0 10px;color:#71717a;font-size:13px;">Event ${escapeHtml(formatDate(entry.eventDate))}${entry.registrationDeadline ? ` &nbsp;|&nbsp; Registration ${escapeHtml(formatDate(entry.registrationDeadline))}` : ""}</p>`;
+    }
     const announcements = entry.announcements.map((announcement) => `
       <tr>
         <td style="padding:9px 0;border-top:1px solid #e5e7eb;font-weight:700;color:#27272a;">${escapeHtml(announcement.playType)}${announcement.smuggle ? `<br><span style="display:inline-block;margin-top:5px;color:#7e5cc4;font-size:11px;">Smuggle contains Level ${announcement.smuggle.beneficiaryLevel} ${escapeHtml(announcement.smuggle.beneficiaryName)}</span>` : ""}</td>
@@ -285,10 +298,10 @@ export function buildPlannerBriefEmailHtml(payload) {
       <div style="margin:0 0 14px;padding:18px;border:1px solid #e4e4e7;border-left:5px solid ${entry.kind === "content" ? "#f472b6" : ["", "#ef3e2d", "#f59e0b", "#4bb8e9", "#4bc3a7", "#a78bfa"][entry.level]};border-radius:12px;background:#ffffff;">
         <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#71717a;">${entry.kind === "content" ? "Content" : `Level ${entry.level}`}</div>
         <h2 style="margin:5px 0 3px;font-size:19px;line-height:1.25;color:#18181b;">${escapeHtml(entry.name)}</h2>
-        ${entry.eventDate ? `<p style="margin:0 0 10px;color:#71717a;font-size:13px;">Event ${escapeHtml(formatDate(entry.eventDate))}${entry.registrationDeadline ? ` &nbsp;|&nbsp; Registration ${escapeHtml(formatDate(entry.registrationDeadline))}` : ""}</p>` : ""}
+        ${schedule}
         ${smuggledInto}
         <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;">${announcements}</table>
-        ${entry.eventDetails ? `<div style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e5e7eb;color:#52525b;font-size:13px;"><strong style="display:block;margin-bottom:6px;color:#27272a;">Event details</strong>${renderMarkdownHtml(entry.eventDetails)}</div>` : ""}
+        ${entry.eventDetails ? `<div style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e5e7eb;color:#52525b;font-size:13px;"><strong style="display:block;margin-bottom:6px;color:#27272a;">${entry.scheduleMode === "promotion-window" ? "Campaign" : "Event"} details</strong>${renderMarkdownHtml(entry.eventDetails)}</div>` : ""}
         ${entry.notes ? `<p style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e5e7eb;color:#52525b;font-size:13px;line-height:1.55;"><strong style="color:#27272a;">Notes:</strong> ${escapeHtml(entry.notes)}</p>` : ""}
       </div>`;
   }).join("");

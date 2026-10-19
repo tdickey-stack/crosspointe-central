@@ -67,7 +67,7 @@ export function PromotionTimelineView({workspace, today, onRangeChange, onOpenCa
         <div className="planner-timeline-navigation"><button className="planner-button is-secondary" aria-label={`Previous ${view.zoom}`} onClick={() => navigate(-1)}>←</button><h2>{view.zoom === "quarter" ? `Q${view.quarter} · ` : ""}{view.year}</h2><button className="planner-button is-secondary" aria-label={`Next ${view.zoom}`} onClick={() => navigate(1)}>→</button><button className="planner-button is-secondary" onClick={() => setView({...view, year: Number(today.slice(0, 4)), quarter: Math.ceil(Number(today.slice(5, 7)) / 3)})}>Today</button></div>
         <label className="planner-filter-select"><span>Level</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">All campaigns & content</option>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>Level {value}</option>)}</select></label>
       </div>
-      <div className="planner-timeline-legend"><span><b className="phase" />Campaign phase</span><span><b className="event">◆</b>Event date</span><span><b className="promotion">3</b>Promotions on a date</span><span><b className="review">!</b>Needs review</span></div>
+      <div className="planner-timeline-legend"><span><b className="phase" />Campaign phase</span><span><b className="event">◆</b>Event date (event campaigns)</span><span><b className="promotion">3</b>Promotions on a date</span><span><b className="review">!</b>Needs review</span></div>
       <p className="planner-timeline-help">Select a campaign or phase for details; select a numbered date for its promotion brief. Scroll across to see the full range.{view.zoom === "year" && " Switch to Quarter for more detail."}</p>
       <div className="planner-timeline-scroll" tabIndex={0} role="region" aria-label={`${view.year} promotion timeline, scroll horizontally`}>
         <div className="planner-timeline-canvas" style={{minWidth: width}}>
@@ -81,13 +81,16 @@ export function PromotionTimelineView({workspace, today, onRangeChange, onOpenCa
               const dates = arrangeDays(lane.groups.flatMap((group) => group.days).sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate) || left.id.localeCompare(right.id)), range, width);
               const height = dates.height + 82;
               return <div className="planner-timeline-lane" key={index} style={{height, "--timeline-level": COLORS[lane.level]}}><span className="planner-timeline-lane-level">{lane.level === 6 ? "Content" : `L${lane.level}`}</span>{lane.groups.map((group) => {
-                const eventVisible = group.campaign.eventDate >= range.startDate && group.campaign.eventDate <= range.endDate && lane.level !== 6;
+                const eventVisible = !group.isPromotionWindow && group.eventDate >= range.startDate && group.eventDate <= range.endDate && lane.level !== 6;
+                const campaignTitle = group.isPromotionWindow && group.campaignEndDate
+                  ? `${group.campaign.name} · Promote through ${labelDate(group.campaignEndDate)}`
+                  : `${group.campaign.name} · ${labelDate(group.startDate)} – ${labelDate(group.endDate)}`;
                 return <React.Fragment key={group.id}>
                   <div className="planner-timeline-envelope" style={timelinePosition(group.startDate, group.endDate, range)}>
-                    <button className="planner-timeline-campaign" title={`${group.campaign.name} · ${labelDate(group.startDate)} – ${labelDate(group.endDate)}`} onClick={() => onOpenCampaign(group.campaign)}><strong>{group.campaign.name}</strong></button>
+                    <button className="planner-timeline-campaign" title={campaignTitle} aria-label={campaignTitle} onClick={() => onOpenCampaign(group.campaign)}><strong>{group.campaign.name}</strong>{group.isPromotionWindow && group.campaignEndDate ? ` · Through ${labelDate(group.campaignEndDate)}` : ""}</button>
                   </div>
                   {group.phases.map((phase) => <button key={phase.id} className="planner-timeline-phase" aria-label={`${group.campaign.name}, ${phase.name}, ${labelDate(phase.startDate)} to ${labelDate(phase.endDate)}`} style={timelinePosition(phase.startDate, phase.endDate, range)} title={`${group.campaign.name} · ${phase.name} · ${labelDate(phase.startDate)} – ${labelDate(phase.endDate)}`} onClick={() => onOpenCampaign(group.campaign)}>{phase.name}</button>)}
-                  {eventVisible && <button className="planner-timeline-event" style={{left: timelinePosition(group.campaign.eventDate, group.campaign.eventDate, range).left}} title={`${group.campaign.name} · Event: ${labelDate(group.campaign.eventDate)}`} aria-label={`${group.campaign.name}, event date ${labelDate(group.campaign.eventDate)}`} onClick={() => onOpenCampaign(group.campaign)}>◆</button>}
+                  {eventVisible && <button className="planner-timeline-event" style={{left: timelinePosition(group.eventDate, group.eventDate, range).left}} title={`${group.campaign.name} · Event: ${labelDate(group.eventDate)}`} aria-label={`${group.campaign.name}, event date ${labelDate(group.eventDate)}`} onClick={() => onOpenCampaign(group.campaign)}>◆</button>}
                 </React.Fragment>;
               })}<PromotionDates arrangement={dates} onOpenGroup={onOpenGroup} /></div>;
             })}

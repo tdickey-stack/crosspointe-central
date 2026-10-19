@@ -2,8 +2,10 @@ import {Temporal} from "temporal-polyfill";
 import {
   addDays,
   buildSmuggleRelationships,
+  campaignDisplayDate,
   campaignWindow,
   groupCalendarCampaignDays,
+  isPromotionWindow,
 } from "./domain.js";
 
 const HIDDEN_PLAY_STATUSES = new Set(["missed", "skipped"]);
@@ -106,11 +108,19 @@ function campaignPhases(workspace, campaign, recommendedStartDate, campaignEndDa
 }
 
 function savedCampaignWindow(campaign) {
-  const eventDate = plainDate(campaign?.eventDate);
-  let fallback = null;
-  if (eventDate) {
+  const promotionWindow = isPromotionWindow(campaign);
+  const displayDate = (() => {
     try {
-      fallback = campaignWindow(eventDate, campaign?.durationWeeks);
+      return plainDate(campaignDisplayDate(campaign));
+    } catch (_error) {
+      return "";
+    }
+  })();
+  const eventDate = promotionWindow ? "" : displayDate;
+  let fallback = null;
+  if (displayDate) {
+    try {
+      fallback = campaignWindow(promotionWindow ? addDays(displayDate, 1) : displayDate, campaign?.durationWeeks);
     } catch (_error) {
       fallback = null;
     }
@@ -119,6 +129,7 @@ function savedCampaignWindow(campaign) {
     recommendedStartDate: plainDate(campaign?.recommendedStartDate) || plainDate(fallback?.recommendedStartDate),
     campaignEndDate: plainDate(campaign?.campaignEndDate) || plainDate(fallback?.campaignEndDate),
     eventDate,
+    isPromotionWindow: promotionWindow,
   };
 }
 
@@ -204,10 +215,11 @@ export function buildPromotionTimeline(workspace = {}, range, {level = ""} = {})
 
     let groupEnvelope;
     let phases = [];
+    let window = null;
     if (content) {
       groupEnvelope = envelope(campaignPlays.map((play) => play.scheduledDate));
     } else {
-      const window = savedCampaignWindow(campaign);
+      window = savedCampaignWindow(campaign);
       const baseDates = [window.recommendedStartDate, window.campaignEndDate, window.eventDate];
       const movedDates = campaignPlays.filter((play) => play.manuallyAdjusted === true).map((play) => play.scheduledDate);
       groupEnvelope = envelope([...baseDates, ...movedDates]);
@@ -226,6 +238,9 @@ export function buildPromotionTimeline(workspace = {}, range, {level = ""} = {})
       endDate: groupEnvelope.endDate,
       phases,
       days: rangeDays(campaignPlays, visibleRange),
+      isPromotionWindow: window?.isPromotionWindow === true,
+      eventDate: window?.eventDate || "",
+      campaignEndDate: window?.campaignEndDate || "",
     };
     groups.push(group);
   }

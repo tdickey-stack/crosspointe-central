@@ -7,6 +7,8 @@ import {
   applySmuggle,
   buildSmuggleRelationships,
   buildCampaignRegeneration,
+  campaignDisplayDate,
+  campaignPlanningAnchor,
   calculateTimeliness,
   cancelSmuggle,
   ensureLevel2StandingLane,
@@ -14,9 +16,11 @@ import {
   generateCampaignSchedule,
   groupCalendarCampaignDays,
   isCampaignExpired,
+  isPromotionWindow,
   nextPlanningWeekStart,
   nextSunday,
   planningWeekRange,
+  promotionWindowComparison,
   recommendSmuggleOpportunities,
   recurringContentDates,
   reportPresetDateRange,
@@ -128,6 +132,116 @@ test("report date presets follow the current Monday through Sunday planning week
     endDate: "2026-09-30",
   });
   assert.throws(() => reportPresetDateRange("custom", reference), /valid report date preset/);
+});
+
+test("promotion windows use an inclusive end without storing a fake event date", () => {
+  const definition = {
+    id: "two-week-window",
+    level: 3,
+    version: 1,
+    durationWeeks: 2,
+    campaignType: "featured",
+    weeks: [1, 2].map((weekNumber) => ({
+      weekNumber,
+      phase: "Invitation",
+      plays: Array.from({length: 7}, (_value, dayOfWeek) => ({
+        id: `w${weekNumber}-d${dayOfWeek}`,
+        playType: `Week ${weekNumber} day ${dayOfWeek}`,
+        channel: "Test",
+        resourceId: `test-${dayOfWeek}`,
+        dayOfWeek,
+        eligibleWeekdays: [dayOfWeek],
+        lateBehavior: "SKIP",
+      })),
+    })),
+  };
+  const windowCampaign = campaign({
+    scheduleMode: "promotion-window",
+    eventDate: "",
+    campaignEndDate: "2027-01-03",
+    registrationDeadline: "",
+  });
+  const result = generateCampaignSchedule({
+    campaign: windowCampaign,
+    playbook: definition,
+    generatedAt: new Date("2026-12-01T12:00:00-06:00"),
+  });
+  const dates = result.plays.map((play) => play.scheduledDate).sort();
+
+  assert.equal(isPromotionWindow(result.campaign), true);
+  assert.equal(campaignPlanningAnchor(result.campaign), "2027-01-04");
+  assert.equal(campaignDisplayDate(result.campaign), "2027-01-03");
+  assert.equal(result.campaign.eventDate, "");
+  assert.equal(result.campaign.campaignEndDate, "2027-01-03");
+  assert.equal(result.campaign.recommendedStartDate, "2026-12-21");
+  assert.equal(result.plays.length, 14);
+  assert.equal(dates[0], "2026-12-21");
+  assert.equal(dates.at(-1), "2027-01-03");
+  assert.deepEqual(dates, Array.from({length: 14}, (_value, index) => addDays("2026-12-21", index)));
+});
+
+test("promotion-window date math remains calendar exact across DST", () => {
+  const spring = {scheduleMode: "promotion-window", eventDate: "", campaignEndDate: "2026-03-15", durationWeeks: 2};
+  const fall = {scheduleMode: "promotion-window", eventDate: "", campaignEndDate: "2026-11-08", durationWeeks: 2};
+
+  assert.equal(campaignPlanningAnchor(spring), "2026-03-16");
+  assert.equal(promotionWindowComparison(spring).plannedStart, "2026-03-02");
+  assert.equal(campaignPlanningAnchor(fall), "2026-11-09");
+  assert.equal(promotionWindowComparison(fall).plannedStart, "2026-10-26");
+});
+
+test("promotion-window comparison reports advisory boundary differences", () => {
+  const base = {
+    scheduleMode: "promotion-window",
+    eventDate: "",
+    campaignEndDate: "2027-01-03",
+    durationWeeks: 2,
+  };
+  assert.deepEqual(promotionWindowComparison({
+    ...base,
+    requestedPromotionStart: "2026-12-22",
+    requestedPromotionEnd: "2027-01-04",
+  }), {
+    requestedStart: "2026-12-22",
+    requestedEnd: "2027-01-04",
+    plannedStart: "2026-12-21",
+    plannedEnd: "2027-01-03",
+    mismatches: ["start-before-request", "end-before-request"],
+  });
+  assert.deepEqual(promotionWindowComparison({
+    ...base,
+    requestedPromotionStart: "2026-12-20",
+    requestedPromotionEnd: "2027-01-02",
+  }).mismatches, ["start-after-request", "end-after-request"]);
+  assert.deepEqual(promotionWindowComparison({
+    ...base,
+    requestedPromotionStart: "2027-01-04",
+    requestedPromotionEnd: "2027-01-02",
+  }).mismatches, ["invalid-request-order"]);
+});
+
+test("late promotion-window recovery never schedules beyond its inclusive end", () => {
+  const definition = {
+    id: "late-window",
+    level: 3,
+    version: 1,
+    durationWeeks: 1,
+    campaignType: "featured",
+    weeks: [{weekNumber: 1, phase: "Invitation", plays: [
+      {id: "flex", playType: "Flexible", channel: "Test", resourceId: "flex", dayOfWeek: 1, eligibleWeekdays: [1, 5], lateBehavior: "NEXT_AVAILABLE_SLOT"},
+      {id: "next", playType: "Next week", channel: "Test", resourceId: "next", dayOfWeek: 1, eligibleWeekdays: [1], lateBehavior: "NEXT_OCCURRENCE"},
+    ]}],
+  };
+  const result = generateCampaignSchedule({
+    campaign: campaign({scheduleMode: "promotion-window", eventDate: "", campaignEndDate: "2026-10-10", registrationDeadline: ""}),
+    playbook: definition,
+    generatedAt: new Date("2026-10-08T12:00:00-05:00"),
+  });
+
+  assert.equal(result.plays.find((play) => play.templatePlayId === "flex").scheduledDate, "2026-10-09");
+  assert.equal(result.plays.find((play) => play.templatePlayId === "flex").status, "rescheduled");
+  assert.equal(result.plays.find((play) => play.templatePlayId === "next").status, "missed");
+  assert.ok(result.plays.every((play) => play.scheduledDate <= result.campaign.campaignEndDate));
 });
 
 test("normal on-time campaign generates every play", () => {
@@ -300,6 +414,51 @@ test("campaign before Friday cannot receive a Friday slot", () => {
   });
   assert.equal(result.plays.find((play) => play.campaignId === "constrained").scheduledDate, "2026-10-12");
   assert.equal(result.plays.find((play) => play.campaignId === "flexible").scheduledDate, "2026-10-16");
+});
+
+test("Level 4 allocation uses a promotion window's inclusive end beside event campaigns", () => {
+  const windowCampaign = campaign({
+    id: "window-campaign",
+    scheduleMode: "promotion-window",
+    eventDate: "",
+    campaignEndDate: "2026-10-14",
+  });
+  const eventCampaign = campaign({id: "event-campaign", eventDate: "2026-10-18"});
+  const basePlay = {
+    campaignName: "Campaign",
+    campaignLevel: 4,
+    campaignType: "standard",
+    playbookId: "level-4-standard",
+    playbookVersion: 1,
+    templatePlayId: "social",
+    weekNumber: 1,
+    phase: "Invitation",
+    playType: "Social Media Sprinkle",
+    channel: "Social Media",
+    resourceId: "level-4-social",
+    originalScheduledDate: "2026-10-12",
+    scheduledDate: "2026-10-12",
+    eligibleWeekdays: [1, 5],
+    status: "scheduled",
+    source: "campaign-generation",
+    manuallyAdjusted: false,
+    locked: false,
+    conflictState: "none",
+    conflictReason: "",
+    lateReason: "",
+    smuggle: null,
+  };
+  const result = allocateLevel4SocialSlots({
+    campaigns: [windowCampaign, eventCampaign],
+    plays: [
+      {...basePlay, id: "window-social", campaignId: windowCampaign.id},
+      {...basePlay, id: "event-social", campaignId: eventCampaign.id},
+    ],
+  });
+
+  assert.equal(result.plays.find((play) => play.id === "window-social").scheduledDate, "2026-10-12");
+  assert.equal(result.plays.find((play) => play.id === "event-social").scheduledDate, "2026-10-16");
+  assert.equal(result.conflicts.length, 0);
 });
 
 test("on-time campaign wins an otherwise comparable capacity recommendation", () => {
@@ -846,6 +1005,77 @@ test("regeneration clears future Smuggle decisions so new dates can be reviewed"
   assert.equal(result.plays.find((item) => item.id === hostPlay.id).smuggle, null);
   assert.equal(result.plays.find((item) => item.id === hostPlay.id).manuallyAdjusted, false);
   assert.equal(result.plays.find((item) => item.id === guestPlay.id).status, "scheduled");
+});
+
+test("regeneration does not reuse a wrong-playbook legacy tombstone id", () => {
+  const selectedPlaybook = {
+    id: "selected-playbook",
+    level: 3,
+    version: 1,
+    durationWeeks: 1,
+    campaignType: "featured",
+    weeks: [{weekNumber: 1, phase: "Invitation", plays: [{
+      id: "shared-template",
+      playType: "Selected Promotion",
+      channel: "Email",
+      resourceId: "selected-email",
+      dayOfWeek: 1,
+      eligibleWeekdays: [1],
+      lateBehavior: "SKIP",
+    }]}],
+  };
+  const currentCampaign = campaign({
+    playbookId: selectedPlaybook.id,
+    playbookVersion: selectedPlaybook.version,
+    level: selectedPlaybook.level,
+    campaignType: selectedPlaybook.campaignType,
+  });
+  const wrongPlaybookTombstone = {
+    id: `${currentCampaign.id}_shared-template_1`,
+    campaignId: currentCampaign.id,
+    campaignName: currentCampaign.name,
+    campaignLevel: 4,
+    campaignType: "standard",
+    playbookId: "old-playbook",
+    playbookVersion: 1,
+    templatePlayId: "shared-template",
+    weekNumber: 1,
+    phase: "Invitation",
+    playType: "Old Promotion",
+    channel: "Email",
+    resourceId: "old-email",
+    originalScheduledDate: "2026-10-12",
+    scheduledDate: "2026-10-12",
+    eligibleWeekdays: [1],
+    status: "skipped",
+    source: "campaign-generation",
+    manuallyAdjusted: false,
+    locked: false,
+    conflictState: "none",
+    conflictReason: "",
+    lateReason: "Removed from the active plan by campaign edit.",
+    smuggle: null,
+  };
+  const result = buildCampaignRegeneration({
+    campaigns: [currentCampaign],
+    plays: [wrongPlaybookTombstone],
+    playbooks: [selectedPlaybook],
+    generatedAt: new Date("2026-09-02T12:00:00-05:00"),
+  });
+  const selected = result.plays.find((play) => play.playbookId === selectedPlaybook.id);
+
+  assert.ok(selected);
+  assert.notEqual(selected.id, wrongPlaybookTombstone.id);
+  assert.deepEqual(result.plays.find((play) => play.id === wrongPlaybookTombstone.id), wrongPlaybookTombstone);
+  const retry = buildCampaignRegeneration({
+    campaigns: result.campaigns,
+    plays: result.plays,
+    playbooks: [selectedPlaybook],
+    generatedAt: new Date("2026-09-02T12:00:00-05:00"),
+  });
+  assert.equal(retry.plays.find((play) => play.playbookId === selectedPlaybook.id).id, selected.id);
+  assert.equal(retry.summary.added, 0);
+  assert.equal(retry.summary.removed, 0);
 });
 
 test("timeliness stores days and weeks late from the rolling campaign window", () => {

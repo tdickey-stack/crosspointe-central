@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {buildOccurrencePlan, buildSeriesPlan, skipOccurrencePlan} from "../src/planner/series.js";
+import {buildCampaignRegeneration} from "../src/planner/domain.js";
+import {STARTER_PLAYBOOKS} from "../src/planner/seed-data.js";
+import {buildCampaignEditPlan, buildOccurrencePlan, buildSeriesPlan, skipOccurrencePlan} from "../src/planner/series.js";
 
 const generatedAt = new Date("2026-09-01T12:00:00-05:00");
 
@@ -52,6 +54,35 @@ function series(overrides = {}) {
     revision: 1,
     ...overrides,
   };
+}
+
+function starterPlaybook(id) {
+  return structuredClone(STARTER_PLAYBOOKS.find((item) => item.id === id));
+}
+
+function savedCampaign(playbookDefinition, overrides = {}) {
+  return {
+    id: "saved-campaign",
+    name: "Saved Campaign",
+    eventDate: "2027-01-31",
+    registrationDeadline: "2027-01-24",
+    deadlineOffsetDays: 7,
+    submittedAt: "2026-08-01T12:00:00.000Z",
+    sourceEventId: "pco-form:930568:4455",
+    sourceUrl: "https://example.com/source/4455",
+    level: playbookDefinition.level,
+    campaignType: playbookDefinition.campaignType,
+    playbookId: playbookDefinition.id,
+    playbookVersion: playbookDefinition.version,
+    status: "active",
+    ...overrides,
+  };
+}
+
+function applyWrites(records, writes) {
+  const next = new Map(records.map((record) => [record.id, record]));
+  writes.forEach((record) => next.set(record.id, record));
+  return [...next.values()];
 }
 
 test("series creates deterministic occurrence campaigns and schedules each playbook backward from its event", () => {
@@ -603,4 +634,553 @@ test("occurrence edits derive and preserve a persisted registration deadline off
   });
   assert.equal(plan.campaigns[0].registrationDeadline, "2026-10-17");
   assert.equal(plan.campaigns[0].deadlineOffsetDays, 5);
+});
+
+function dateEditPlaybook(id) {
+  return playbook({
+    id,
+    level: 3,
+    campaignType: "featured",
+    durationWeeks: 1,
+    weeks: [{
+      weekNumber: 1,
+      phase: "Invitation",
+      plays: [1, 2, 3, 4].map((day) => ({
+        id: `day-${day}`,
+        playType: `Day ${day} Promotion`,
+        channel: `Channel ${day}`,
+        resourceId: `date-edit-${day}`,
+        dayOfWeek: day,
+        eligibleWeekdays: [day],
+        lateBehavior: "SKIP",
+      })),
+    }],
+  });
+}
+
+function protectedDateEditPlays(initialPlays) {
+  const manual = {...initialPlays[0], scheduledDate: "2027-01-29", manuallyAdjusted: true};
+  const locked = {...initialPlays[1], locked: true};
+  const past = {...initialPlays[2], originalScheduledDate: "2026-08-26", scheduledDate: "2026-08-26"};
+  return {
+    plays: [manual, locked, past, initialPlays[3]],
+    protectedById: new Map([manual, locked, past].map((item) => [item.id, item])),
+    automaticId: initialPlays[3].id,
+  };
+}
+
+function assertProtectedDateEditPlays(plan, appliedPlays, protectedById) {
+  protectedById.forEach((expected, id) => {
+    assert.ok(!plan.plays.some((play) => play.id === id));
+    assert.deepEqual(appliedPlays.find((play) => play.id === id), expected);
+  });
+}
+
+test("successive event-date edits keep generated promotions automatic and reschedulable", () => {
+  const selected = dateEditPlaybook("event-date-edits");
+  const original = savedCampaign(selected, {registrationDeadline: "", deadlineOffsetDays: null});
+  const initial = buildCampaignEditPlan({campaign: original, playbook: selected, campaigns: [original], generatedAt});
+  const currentCampaign = initial.campaigns[0];
+  const {plays: currentPlays, protectedById, automaticId} = protectedDateEditPlays(initial.plays);
+
+  const first = buildCampaignEditPlan({
+    campaign: currentCampaign,
+    updates: {eventDate: "2027-02-07"},
+    playbook: selected,
+    campaigns: [currentCampaign],
+    plays: currentPlays,
+    generatedAt,
+  });
+  const firstCampaigns = applyWrites([currentCampaign], first.campaigns);
+  const firstPlays = applyWrites(currentPlays, first.plays);
+  const firstAutomatic = firstPlays.find((play) => play.id === automaticId);
+  assert.equal(firstAutomatic.scheduledDate, "2027-02-04");
+  assert.equal(firstAutomatic.manuallyAdjusted, false);
+  assertProtectedDateEditPlays(first, firstPlays, protectedById);
+
+  const second = buildCampaignEditPlan({
+    campaign: firstCampaigns[0],
+    updates: {eventDate: "2027-02-14"},
+    playbook: selected,
+    campaigns: firstCampaigns,
+    plays: firstPlays,
+    generatedAt,
+  });
+  const secondPlays = applyWrites(firstPlays, second.plays);
+  const secondAutomatic = secondPlays.find((play) => play.id === automaticId);
+  assert.equal(secondAutomatic.scheduledDate, "2027-02-11");
+  assert.equal(secondAutomatic.manuallyAdjusted, false);
+  assertProtectedDateEditPlays(second, secondPlays, protectedById);
+});
+
+test("successive promotion-window end edits keep generated promotions automatic and reschedulable", () => {
+  const selected = dateEditPlaybook("window-date-edits");
+  const original = savedCampaign(selected, {
+    scheduleMode: "promotion-window",
+    eventDate: "",
+    campaignEndDate: "2027-01-31",
+    registrationDeadline: "",
+    deadlineOffsetDays: null,
+  });
+  const initial = buildCampaignEditPlan({campaign: original, playbook: selected, campaigns: [original], generatedAt});
+  const currentCampaign = initial.campaigns[0];
+  const {plays: currentPlays, protectedById, automaticId} = protectedDateEditPlays(initial.plays);
+
+  const first = buildCampaignEditPlan({
+    campaign: currentCampaign,
+    updates: {campaignEndDate: "2027-02-07"},
+    playbook: selected,
+    campaigns: [currentCampaign],
+    plays: currentPlays,
+    generatedAt,
+  });
+  const firstCampaigns = applyWrites([currentCampaign], first.campaigns);
+  const firstPlays = applyWrites(currentPlays, first.plays);
+  const firstAutomatic = firstPlays.find((play) => play.id === automaticId);
+  assert.equal(firstAutomatic.scheduledDate, "2027-02-04");
+  assert.equal(firstAutomatic.manuallyAdjusted, false);
+  assertProtectedDateEditPlays(first, firstPlays, protectedById);
+
+  const second = buildCampaignEditPlan({
+    campaign: firstCampaigns[0],
+    updates: {campaignEndDate: "2027-02-14"},
+    playbook: selected,
+    campaigns: firstCampaigns,
+    plays: firstPlays,
+    generatedAt,
+  });
+  const secondPlays = applyWrites(firstPlays, second.plays);
+  const secondAutomatic = secondPlays.find((play) => play.id === automaticId);
+  assert.equal(secondAutomatic.scheduledDate, "2027-02-11");
+  assert.equal(secondAutomatic.manuallyAdjusted, false);
+  assertProtectedDateEditPlays(second, secondPlays, protectedById);
+});
+
+test("campaign edit downgrades Level 4 featured to standard without deleting superseded work", () => {
+  const featured = starterPlaybook("level-4-featured");
+  const standard = starterPlaybook("level-4-standard");
+  const original = savedCampaign(featured);
+  const initial = buildCampaignEditPlan({campaign: original, playbook: featured, campaigns: [original], generatedAt});
+  const currentCampaign = initial.campaigns[0];
+  const standardPreviewCampaign = {...currentCampaign, level: standard.level, campaignType: standard.campaignType, playbookId: standard.id, playbookVersion: standard.version};
+  const standardPreview = buildCampaignEditPlan({campaign: standardPreviewCampaign, playbook: standard, campaigns: [standardPreviewCampaign], generatedAt});
+  const equivalentDate = standardPreview.plays.find((play) => play.resourceId === "central-listing").scheduledDate;
+  const completedListing = {
+    ...initial.plays.find((play) => play.resourceId === "central-listing"),
+    originalScheduledDate: equivalentDate,
+    scheduledDate: equivalentDate,
+    status: "completed",
+  };
+  const currentPlays = initial.plays.map((play) => play.id === completedListing.id ? completedListing : play);
+
+  const plan = buildCampaignEditPlan({
+    campaign: currentCampaign,
+    playbook: standard,
+    campaigns: [currentCampaign],
+    plays: currentPlays,
+    generatedAt,
+  });
+
+  assert.equal(plan.campaigns[0].level, 4);
+  assert.equal(plan.campaigns[0].campaignType, "standard");
+  assert.equal(plan.campaigns[0].playbookId, standard.id);
+  assert.equal(plan.campaigns[0].playbookVersion, standard.version);
+  assert.ok(plan.plays.some((play) => play.playbookId === featured.id && play.status === "skipped"));
+  assert.ok(plan.plays.some((play) => play.playbookId === standard.id && play.id.startsWith("saved-campaign_level-4-standard_edit_")));
+  assert.ok(!plan.plays.some((play) => play.playbookId === standard.id && play.resourceId === "central-listing"));
+  assert.ok(!plan.plays.some((play) => play.id === completedListing.id));
+  assert.ok(plan.expectedPlays.some((play) => play.playbookId === featured.id && play.status !== "completed"));
+});
+
+test("campaign edit upgrades a recurring Level 4 occurrence to Level 3 while retaining identity and source metadata", () => {
+  const standard = starterPlaybook("level-4-standard");
+  const level3 = starterPlaybook("level-3-featured");
+  const original = savedCampaign(standard, {
+    seriesId: "monthly-series",
+    occurrenceKey: "2027-01-31",
+    seriesRevision: 7,
+    recurrenceException: false,
+  });
+  const initial = buildCampaignEditPlan({campaign: original, playbook: standard, campaigns: [original], generatedAt});
+  const currentCampaign = initial.campaigns[0];
+  const plan = buildCampaignEditPlan({
+    campaign: currentCampaign,
+    updates: {
+      id: "replacement-id",
+      name: "Upgraded Campaign",
+      submittedAt: "2099-01-01T00:00:00.000Z",
+      sourceEventId: "replacement-source",
+      sourceUrl: "https://example.com/replacement",
+      level: 1,
+      campaignType: "major",
+      playbookId: "level-1-major",
+      eventDetails: "Updated details",
+    },
+    playbook: level3,
+    campaigns: [currentCampaign],
+    plays: initial.plays,
+    generatedAt,
+  });
+  const edited = plan.campaigns[0];
+
+  assert.equal(edited.id, original.id);
+  assert.equal(edited.name, "Upgraded Campaign");
+  assert.equal(edited.submittedAt, original.submittedAt);
+  assert.equal(edited.sourceEventId, original.sourceEventId);
+  assert.equal(edited.sourceUrl, original.sourceUrl);
+  assert.equal(edited.level, 3);
+  assert.equal(edited.campaignType, "featured");
+  assert.equal(edited.playbookId, level3.id);
+  assert.equal(edited.playbookVersion, level3.version);
+  assert.equal(edited.seriesId, original.seriesId);
+  assert.equal(edited.occurrenceKey, original.occurrenceKey);
+  assert.equal(edited.seriesRevision, 7);
+  assert.equal(edited.recurrenceException, true);
+  assert.equal(plan.series, null);
+  assert.ok(plan.plays.some((play) => play.playbookId === level3.id));
+});
+
+test("campaign playbook changes preserve protected history and both sides of Smuggle", () => {
+  const priorPlaybook = playbook({id: "prior-playbook", campaignType: "featured"});
+  const selectedPlaybook = playbook({
+    id: "selected-playbook",
+    level: 3,
+    campaignType: "standard",
+    weeks: [{
+      weekNumber: 1,
+      phase: "Invitation",
+      plays: [
+        {id: "new-completed", playType: "Completed Work", channel: "One", resourceId: "completed", dayOfWeek: 1},
+        {id: "new-past", playType: "Past Work", channel: "Two", resourceId: "past", dayOfWeek: 1},
+        {id: "new-manual", playType: "Manual Work", channel: "Three", resourceId: "manual", dayOfWeek: 1},
+        {id: "new-locked", playType: "Locked Work", channel: "Four", resourceId: "locked", dayOfWeek: 1},
+        {id: "new-skipped", playType: "Skipped Work", channel: "Five", resourceId: "intentional", dayOfWeek: 1},
+        {id: "new-stage", playType: "Stage Announcement", channel: "Stage", resourceId: "stage-announcement", dayOfWeek: 1},
+      ],
+    }],
+  });
+  const campaign = savedCampaign(priorPlaybook, {registrationDeadline: "", deadlineOffsetDays: null});
+  const basePlay = {
+    campaignId: campaign.id,
+    campaignName: campaign.name,
+    campaignLevel: 4,
+    campaignType: "featured",
+    playbookId: priorPlaybook.id,
+    playbookVersion: priorPlaybook.version,
+    weekNumber: 1,
+    phase: "Invitation",
+    originalScheduledDate: "2027-01-25",
+    scheduledDate: "2027-01-25",
+    eligibleWeekdays: [1],
+    status: "scheduled",
+    source: "campaign-generation",
+    manuallyAdjusted: false,
+    locked: false,
+    conflictState: "none",
+    conflictReason: "",
+    lateReason: "",
+    smuggle: null,
+  };
+  const protectedPlays = [
+    {...basePlay, id: "completed-old", templatePlayId: "old-completed", playType: "Completed Work", channel: "One", resourceId: "completed", status: "completed"},
+    {...basePlay, id: "past-old", templatePlayId: "old-past", playType: "Past Work", channel: "Two", resourceId: "past", originalScheduledDate: "2026-08-01", scheduledDate: "2026-08-01"},
+    {...basePlay, id: "manual-old", templatePlayId: "old-manual", playType: "Manual Work", channel: "Three", resourceId: "manual", manuallyAdjusted: true},
+    {...basePlay, id: "locked-old", templatePlayId: "old-locked", playType: "Locked Work", channel: "Four", resourceId: "locked", locked: true},
+    {...basePlay, id: "skipped-old", templatePlayId: "old-skipped", playType: "Skipped Work", channel: "Five", resourceId: "intentional", status: "skipped", lateReason: "Intentionally not running."},
+    {...basePlay, id: "beneficiary-old", templatePlayId: "old-stage", playType: "Stage Announcement", channel: "Stage", resourceId: "stage-announcement"},
+  ];
+  const hostCampaign = {...campaign, id: "host-campaign", name: "Host", level: 2};
+  const host = {
+    ...basePlay,
+    id: "host-stage",
+    campaignId: hostCampaign.id,
+    campaignName: hostCampaign.name,
+    campaignLevel: 2,
+    templatePlayId: "host-stage",
+    playType: "Stage Announcement",
+    channel: "Stage",
+    resourceId: "stage-announcement",
+    smuggle: {
+      hostCampaignId: hostCampaign.id,
+      hostScheduledPlayId: "host-stage",
+      beneficiaryCampaignId: campaign.id,
+      beneficiaryName: campaign.name,
+      strategy: "SMUGGLE",
+    },
+  };
+  const plan = buildCampaignEditPlan({
+    campaign,
+    playbook: selectedPlaybook,
+    campaigns: [campaign, hostCampaign],
+    plays: [...protectedPlays, host],
+    generatedAt,
+  });
+
+  assert.equal(plan.plays.length, 1);
+  assert.equal(plan.plays[0].resourceId, "past");
+  assert.equal(plan.plays[0].playbookId, selectedPlaybook.id);
+  assert.deepEqual(plan.expectedPlays, []);
+  assert.equal(plan.summary.preserved, protectedPlays.length);
+  assert.equal(plan.campaigns[0].playbookId, selectedPlaybook.id);
+});
+
+test("campaign edits include capacity changes and optimistic baselines for outside campaigns", () => {
+  const oldPlaybook = playbook({id: "old-capacity", level: 4, campaignType: "standard"});
+  const selectedPlaybook = playbook({
+    id: "selected-capacity",
+    level: 3,
+    campaignType: "featured",
+    weeks: [{weekNumber: 1, phase: "Invitation", plays: [
+      {id: "shared-new", playType: "Shared Work", channel: "Shared", resourceId: "shared-resource", dayOfWeek: 1, eligibleWeekdays: [1], lateBehavior: "SKIP"},
+    ]}],
+  });
+  const campaign = savedCampaign(oldPlaybook, {registrationDeadline: "", deadlineOffsetDays: null});
+  const oldPlay = {
+    id: "saved-campaign_old_1",
+    campaignId: campaign.id,
+    campaignName: campaign.name,
+    campaignLevel: 4,
+    campaignType: "standard",
+    playbookId: oldPlaybook.id,
+    playbookVersion: oldPlaybook.version,
+    templatePlayId: "old",
+    weekNumber: 1,
+    phase: "Invitation",
+    playType: "Old Work",
+    channel: "Other",
+    resourceId: "other-resource",
+    originalScheduledDate: "2027-01-25",
+    scheduledDate: "2027-01-25",
+    eligibleWeekdays: [1],
+    status: "scheduled",
+    source: "campaign-generation",
+    manuallyAdjusted: false,
+    locked: false,
+    conflictState: "none",
+    conflictReason: "",
+    lateReason: "",
+    smuggle: null,
+  };
+  const outsideCampaign = {...campaign, id: "outside-campaign", name: "Outside Campaign", submittedAt: "2026-07-01T12:00:00.000Z"};
+  const outsidePlay = {...oldPlay, id: "outside-shared", campaignId: outsideCampaign.id, campaignName: outsideCampaign.name, resourceId: "shared-resource", playType: "Shared Work", channel: "Shared"};
+  const capacityRule = {id: "shared-resource", name: "Shared Resource", capacity: 1, typicalCapacity: 1, capacityPeriod: "week", allowedWeekdays: [1], active: true};
+  const plan = buildCampaignEditPlan({
+    campaign,
+    playbook: selectedPlaybook,
+    campaigns: [campaign, outsideCampaign],
+    plays: [oldPlay, outsidePlay],
+    capacityRules: [capacityRule],
+    generatedAt,
+  });
+
+  const outsideWrite = plan.plays.find((play) => play.id === outsidePlay.id);
+  assert.equal(outsideWrite.status, "conflict");
+  assert.equal(outsideWrite.conflictState, "capacity-overflow");
+  assert.deepEqual(plan.expectedPlays.find((play) => play.id === outsidePlay.id), outsidePlay);
+  assert.deepEqual(plan.expectedWorkspace.campaigns, [campaign, outsideCampaign]);
+  assert.deepEqual(plan.expectedWorkspace.plays, [oldPlay, outsidePlay]);
+  assert.deepEqual(plan.expectedWorkspace.capacityRules, [capacityRule]);
+});
+
+test("campaign playbook edits are deterministic on repeat", () => {
+  const standard = starterPlaybook("level-4-standard");
+  const featured = starterPlaybook("level-4-featured");
+  const original = savedCampaign(standard);
+  const initial = buildCampaignEditPlan({campaign: original, playbook: standard, campaigns: [original], generatedAt});
+  const currentCampaign = initial.campaigns[0];
+  const edit = buildCampaignEditPlan({campaign: currentCampaign, playbook: featured, campaigns: [currentCampaign], plays: initial.plays, generatedAt});
+  assert.ok(edit.summary.skipped > 0);
+  const appliedCampaigns = applyWrites([currentCampaign], edit.campaigns);
+  const appliedPlays = applyWrites(initial.plays, edit.plays);
+  const retry = buildCampaignEditPlan({
+    campaign: appliedCampaigns[0],
+    playbook: featured,
+    campaigns: appliedCampaigns,
+    plays: appliedPlays,
+    generatedAt,
+  });
+
+  assert.deepEqual(retry.campaigns, []);
+  assert.deepEqual(retry.plays, []);
+  assert.deepEqual(retry.expectedCampaigns, []);
+  assert.deepEqual(retry.expectedPlays, []);
+  assert.equal(retry.summary.skipped, 0);
+});
+
+test("global regeneration reuses switched play ids and leaves wrong-playbook tombstones intact", () => {
+  const standard = starterPlaybook("level-4-standard");
+  const featured = starterPlaybook("level-4-featured");
+  const original = savedCampaign(standard);
+  const initial = buildCampaignEditPlan({campaign: original, playbook: standard, campaigns: [original], generatedAt});
+  const currentCampaign = initial.campaigns[0];
+  const edit = buildCampaignEditPlan({campaign: currentCampaign, playbook: featured, campaigns: [currentCampaign], plays: initial.plays, generatedAt});
+  const appliedCampaign = applyWrites([currentCampaign], edit.campaigns)[0];
+  const appliedPlays = applyWrites(initial.plays, edit.plays);
+  const selectedBefore = new Map(appliedPlays
+    .filter((play) => play.playbookId === featured.id && play.status !== "skipped")
+    .map((play) => [`${play.templatePlayId}:${play.weekNumber}`, play.id]));
+  const latest = structuredClone(featured);
+  latest.version = 2;
+  const regeneration = buildCampaignRegeneration({
+    campaigns: [appliedCampaign],
+    plays: appliedPlays,
+    playbooks: [latest],
+    generatedAt,
+  });
+
+  selectedBefore.forEach((id, key) => {
+    const [templatePlayId, weekNumber] = key.split(":");
+    const regenerated = regeneration.plays.find((play) =>
+      play.playbookId === featured.id && play.templatePlayId === templatePlayId && play.weekNumber === Number(weekNumber),
+    );
+    assert.equal(regenerated.id, id);
+    assert.equal(regenerated.playbookVersion, 2);
+  });
+  const wrongPlaybookTombstones = appliedPlays.filter((play) => play.playbookId === standard.id && play.status === "skipped");
+  wrongPlaybookTombstones.forEach((tombstone) => {
+    assert.deepEqual(regeneration.plays.find((play) => play.id === tombstone.id), tombstone);
+  });
+  regeneration.writePlayIds.forEach((id) => {
+    const before = appliedPlays.find((play) => play.id === id);
+    const after = regeneration.plays.find((play) => play.id === id);
+    if (before) assert.equal(after.playbookId, before.playbookId);
+  });
+});
+
+test("series saves and later occurrence edits preserve a switched occurrence exception", () => {
+  const initial = buildSeriesPlan({series: series(), playbook: playbook(), generatedAt});
+  const occurrence = initial.campaigns[0];
+  const selectedPlaybook = playbook({
+    id: "selected-occurrence-playbook",
+    level: 3,
+    campaignType: "featured",
+    weeks: [{weekNumber: 1, phase: "Invitation", plays: [
+      {id: "selected-email", playType: "Selected Email", channel: "Email", resourceId: "selected-email", dayOfWeek: 1, eligibleWeekdays: [1], lateBehavior: "SKIP"},
+    ]}],
+  });
+  const switched = buildCampaignEditPlan({
+    campaign: occurrence,
+    playbook: selectedPlaybook,
+    campaigns: initial.campaigns,
+    plays: initial.plays,
+    generatedAt,
+  });
+  const appliedCampaigns = applyWrites(initial.campaigns, switched.campaigns);
+  const appliedPlays = applyWrites(initial.plays, switched.plays);
+  const switchedCampaign = appliedCampaigns.find((campaign) => campaign.id === occurrence.id);
+  const selectedPlay = appliedPlays.find((play) => play.campaignId === occurrence.id && play.playbookId === selectedPlaybook.id && play.status !== "skipped");
+
+  const futureSeriesSave = buildSeriesPlan({
+    series: series({revision: 2, name: "Updated Series Default"}),
+    playbook: playbook(),
+    campaigns: appliedCampaigns,
+    plays: appliedPlays,
+    generatedAt,
+  });
+  assert.ok(!futureSeriesSave.campaigns.some((campaign) => campaign.id === occurrence.id));
+  assert.ok(!futureSeriesSave.plays.some((play) => play.campaignId === occurrence.id));
+
+  const occurrenceEdit = buildOccurrencePlan({
+    campaign: switchedCampaign,
+    updates: {eventDate: "2026-10-22"},
+    playbook: selectedPlaybook,
+    campaigns: appliedCampaigns,
+    plays: appliedPlays,
+    generatedAt,
+  });
+  const movedSelected = occurrenceEdit.plays.find((play) => play.id === selectedPlay.id);
+  assert.ok(movedSelected);
+  assert.equal(movedSelected.playbookId, selectedPlaybook.id);
+  assert.ok(!occurrenceEdit.plays.some((play) =>
+    play.campaignId === occurrence.id && play.playbookId === selectedPlaybook.id && play.id !== selectedPlay.id,
+  ));
+  assert.equal(occurrenceEdit.campaigns[0].recurrenceException, true);
+});
+
+test("promotion-window edits move the inclusive end while preserving source bounds and history", () => {
+  const standard = starterPlaybook("level-4-standard");
+  const original = savedCampaign(standard, {
+    scheduleMode: "promotion-window",
+    eventDate: "",
+    campaignEndDate: "2027-01-31",
+    registrationDeadline: "",
+    deadlineOffsetDays: null,
+    requestedPromotionStart: "2027-01-20",
+    requestedPromotionEnd: "2027-02-02",
+  });
+  const initial = buildCampaignEditPlan({campaign: original, playbook: standard, campaigns: [original], generatedAt});
+  const currentCampaign = initial.campaigns[0];
+  const completed = {...initial.plays[0], status: "completed"};
+  const currentPlays = initial.plays.map((play) => play.id === completed.id ? completed : play);
+  const edit = buildCampaignEditPlan({
+    campaign: currentCampaign,
+    updates: {
+      campaignEndDate: "2027-02-07",
+      eventDate: "2099-01-01",
+      deadlineOffsetDays: 30,
+      requestedPromotionStart: "2099-01-01",
+      requestedPromotionEnd: "2099-02-01",
+    },
+    playbook: standard,
+    campaigns: [currentCampaign],
+    plays: currentPlays,
+    generatedAt,
+  });
+  const edited = edit.campaigns[0];
+
+  assert.equal(edited.scheduleMode, "promotion-window");
+  assert.equal(edited.eventDate, "");
+  assert.equal(edited.campaignEndDate, "2027-02-07");
+  assert.equal(edited.registrationDeadline, "");
+  assert.equal(edited.deadlineOffsetDays, null);
+  assert.equal(edited.requestedPromotionStart, original.requestedPromotionStart);
+  assert.equal(edited.requestedPromotionEnd, original.requestedPromotionEnd);
+  assert.equal(edited.recommendedStartDate, "2027-01-25");
+  assert.ok(!edit.plays.some((play) => play.id === completed.id));
+  assert.ok(edit.plays.every((play) => play.campaignId !== original.id || play.manuallyAdjusted === false));
+
+  const appliedCampaigns = applyWrites([currentCampaign], edit.campaigns);
+  const appliedPlays = applyWrites(currentPlays, edit.plays);
+  const latest = {...standard, version: 2};
+  const regeneration = buildCampaignRegeneration({
+    campaigns: appliedCampaigns,
+    plays: appliedPlays,
+    playbooks: [latest],
+    generatedAt,
+  });
+  assert.equal(regeneration.campaigns[0].eventDate, "");
+  assert.equal(regeneration.campaigns[0].campaignEndDate, "2027-02-07");
+  assert.deepEqual(regeneration.plays.find((play) => play.id === completed.id), completed);
+
+  assert.throws(() => buildSeriesPlan({
+    series: series({recurrence: {...series().recurrence, startDate: "2027-02-07", monthDay: 7, count: 1}}),
+    playbook: playbook(),
+    campaigns: [edited],
+    plays: appliedPlays,
+    generatedAt,
+    seedCampaignId: edited.id,
+  }), /cannot become recurring series/);
+});
+
+test("campaign edit play ids stay deterministic and valid at maximum source id lengths", () => {
+  const oldPlaybook = playbook({id: "old-playbook"});
+  const selectedPlaybook = playbook({
+    id: "p".repeat(128),
+    level: 3,
+    campaignType: "featured",
+    weeks: [{weekNumber: 1, phase: "Invitation", plays: [
+      {id: "t".repeat(128), playType: "Long ID Work", channel: "Test", resourceId: "long-id", dayOfWeek: 1},
+    ]}],
+  });
+  const campaign = savedCampaign(oldPlaybook, {
+    id: "c".repeat(128),
+    registrationDeadline: "",
+    deadlineOffsetDays: null,
+  });
+  const first = buildCampaignEditPlan({campaign, playbook: selectedPlaybook, campaigns: [campaign], generatedAt});
+  const second = buildCampaignEditPlan({campaign, playbook: selectedPlaybook, campaigns: [campaign], generatedAt});
+
+  assert.equal(first.plays.length, 1);
+  assert.match(first.plays[0].id, /^[A-Za-z0-9_-]{1,128}$/);
+  assert.equal(first.plays[0].id, second.plays[0].id);
 });

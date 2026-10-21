@@ -626,6 +626,8 @@ export function buildCampaignRegeneration({
   const allocated = allocateLevel4SocialSlots({
     plays: [...untouchedPlays, ...candidatePlays],
     campaigns: combinedCampaigns,
+    now: generatedAt,
+    protectedIds: new Set(plays.filter((play) => !targetIds.has(play.campaignId) || regenerationProtected(play, today)).map((play) => play.id)),
   });
   const effective = withLevel2StandingLane({campaigns: combinedCampaigns,
     scheduledPlays: allocated.plays, playbooks, standingLanes, capacityRules},
@@ -821,62 +823,96 @@ export function evaluateCapacity({plays, capacityRules, campaigns = [], now = ne
   return {plays: next, conflicts};
 }
 
-export function allocateLevel4SocialSlots({plays, campaigns = []}) {
+const LEVEL_4_SOCIAL_CONFLICT_STATES = new Set([
+  "level-4-social-overflow",
+  "invalid-weekday",
+]);
+
+export function allocateLevel4SocialSlots({plays, campaigns = [], protectedIds = new Set(), now = null, annotateProtectedConflicts = false}) {
+  const today = now == null ? "" : dateKey(now);
   const campaignMap = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
   const next = plays.map((play) => ({...play}));
+  const isFixed = (play) => protectedIds.has(play.id) || play.locked || play.manuallyAdjusted ||
+    play.status === "completed" || Boolean(play.smuggle) || (today && play.scheduledDate < today);
   const groups = new Map();
   next.forEach((play) => {
-    if (
-      Number(play.campaignLevel) !== 4 ||
-      play.resourceId !== "level-4-social" ||
-      !["scheduled", "rescheduled"].includes(play.status)
-    ) return;
-    const key = startOfPlanningWeek(play.originalScheduledDate || play.scheduledDate);
+    if (Number(play.campaignLevel) !== 4 || play.resourceId !== "level-4-social" ||
+      !(["scheduled", "rescheduled", "completed"].includes(play.status) ||
+        (play.status === "conflict" && LEVEL_4_SOCIAL_CONFLICT_STATES.has(play.conflictState)))) return;
+    const key = startOfPlanningWeek(play.scheduledDate);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(play);
   });
-
   const conflicts = [];
   groups.forEach((candidates, weekStart) => {
     const slots = [weekStart, addDays(weekStart, 4)];
-    const ordered = [...candidates].sort((left, right) => {
-      const leftCampaign = campaignMap.get(left.campaignId) || left;
-      const rightCampaign = campaignMap.get(right.campaignId) || right;
-      const leftValid = slots.filter((slot) => slot <= deadlineForCampaign(leftCampaign)).length;
-      const rightValid = slots.filter((slot) => slot <= deadlineForCampaign(rightCampaign)).length;
-      if (leftValid !== rightValid) return leftValid - rightValid;
-      return compareCampaignPriority(leftCampaign, rightCampaign);
-    });
     const used = new Set();
-    ordered.forEach((play) => {
-      const campaign = campaignMap.get(play.campaignId) || play;
-      const deadline = deadlineForCampaign(campaign);
-      const valid = slots.filter((slot) => slot <= deadline && !used.has(slot));
-      if (!valid.length) {
+    const overflow = [];
+    const fixed = candidates.filter(isFixed).sort((left, right) =>
+      Number(right.status === "completed") - Number(left.status === "completed") ||
+      Number(Boolean(today && right.scheduledDate < today)) - Number(Boolean(today && left.scheduledDate < today)) ||
+      Number(Boolean(right.locked || right.smuggle)) - Number(Boolean(left.locked || left.smuggle)) ||
+      String(left.id).localeCompare(String(right.id)));
+    const markConflict = (play, reason, state = "level-4-social-overflow") => {
+      overflow.push(play);
+      if (!isFixed(play) || (annotateProtectedConflicts && play.status !== "completed")) {
         play.status = "conflict";
-        play.conflictState = "level-4-social-overflow";
-        play.conflictReason = "Both shared Level 4 Social slots are already allocated or fall after the campaign deadline.";
+        play.conflictState = state;
+        play.conflictReason = reason;
+      }
+    };
+    const schedule = (play, date) => {
+      play.scheduledDate = date;
+      play.status = play.originalScheduledDate && date !== play.originalScheduledDate ? "rescheduled" : "scheduled";
+      play.conflictState = "none";
+      play.conflictReason = "";
+    };
+    fixed.forEach((play, index) => {
+      if (!slots.includes(play.scheduledDate)) {
+        markConflict(play, "Level 4 Social has one Monday slot and one Friday slot. This date needs a manual decision.", "invalid-weekday");
+      } else if (index >= 2) {
+        markConflict(play, "Neither the Monday nor Friday Level 4 Social slot is available: protected promotions already use both weekly slots.");
+      } else if (used.has(play.scheduledDate)) {
+        markConflict(play, "More than one protected Level 4 Social promotion is scheduled on this date. Choose one to move or skip.");
+      } else {
+        used.add(play.scheduledDate);
+        if (annotateProtectedConflicts && play.status === "conflict" &&
+          LEVEL_4_SOCIAL_CONFLICT_STATES.has(play.conflictState) && !play.locked && !play.smuggle &&
+          (!today || play.scheduledDate >= today)) schedule(play, play.scheduledDate);
+      }
+    });
+    let occupied = fixed.length;
+    const deadline = (play) => deadlineForCampaign(campaignMap.get(play.campaignId) || play);
+    const eligible = (play) => slots.filter((slot) => (!today || slot >= today) && slot <= deadline(play));
+    const ordered = candidates.filter((play) => !isFixed(play)).sort((left, right) =>
+      eligible(left).length - eligible(right).length ||
+      compareCampaignPriority(campaignMap.get(left.campaignId) || {...left, level: left.campaignLevel},
+        campaignMap.get(right.campaignId) || {...right, level: right.campaignLevel}) ||
+      String(left.id).localeCompare(String(right.id)));
+    // Allocate scarce deadline windows first, retaining a current date when it
+    // remains available. A Friday post stays Friday when Monday is skipped.
+    ordered.forEach((play) => {
+      const available = occupied < 2 ? eligible(play).filter((slot) => !used.has(slot)) : [];
+      const chosen = available.includes(play.scheduledDate) ? play.scheduledDate : available[0];
+      if (!chosen) {
+        markConflict(play, "Neither the Monday nor Friday Level 4 Social slot is available before this campaign’s deadline. Choose a promotion to move or skip.");
         return;
       }
-      const chosen = valid[0];
+      occupied += 1;
       used.add(chosen);
-      if (play.scheduledDate !== chosen) {
-        play.scheduledDate = chosen;
-        play.status = play.originalScheduledDate === chosen ? "scheduled" : "rescheduled";
-      }
+      schedule(play, chosen);
     });
-    const overflow = ordered.filter((play) => play.conflictState === "level-4-social-overflow");
     if (overflow.length) {
+      const protectedOverflow = overflow.filter(isFixed);
       conflicts.push({
-        id: `level-4-social:${weekStart}`,
-        resourceId: "level-4-social",
-        resourceName: "Level 4 Social",
-        period: weekStart,
-        capacity: 2,
-        campaignCount: candidates.length,
-        recommendedPlayIds: ordered.filter((play) => !overflow.includes(play)).map((play) => play.id),
+        id: `level-4-social:${weekStart}`, resourceId: "level-4-social", resourceName: "Level 4 Social",
+        period: weekStart, capacity: 2, campaignCount: candidates.length,
+        recommendedPlayIds: candidates.filter((play) => !overflow.includes(play)).map((play) => play.id),
         overflowPlayIds: overflow.map((play) => play.id),
-        reason: "Constrained deadlines are protected first, followed by campaign priority and timeliness.",
+        protectedPlayIds: fixed.map((play) => play.id),
+        protectedOverflowPlayIds: protectedOverflow.map((play) => play.id),
+        involvesProtected: fixed.length > 0,
+        reason: "One Monday slot and one Friday slot. Existing protected dates are reserved before automatic promotions.",
         requiresDecision: true,
       });
     }
@@ -1001,9 +1037,13 @@ export function withLevel2StandingLane(workspace, {
     play.scheduledDate >= today && !play.locked && !play.manuallyAdjusted && play.status === "conflict" && ["capacity-overflow", "invalid-weekday"].includes(play.conflictState)
       ? {...play, status: play.scheduledDate === play.originalScheduledDate ? "scheduled" : "rescheduled", conflictState: "none", conflictReason: ""}
       : play);
-  const capacity = checkCapacity ? evaluateCapacity({plays: candidates, campaigns: workspace.campaigns, now,
-    protectedIds: new Set(saved.filter((play) => play.manuallyAdjusted || play.locked ||
-      play.status === "completed" || play.scheduledDate < today || play.smuggle).map((play) => play.id)),
+  const protectedIds = new Set(saved.filter((play) => play.manuallyAdjusted || play.locked ||
+    play.status === "completed" || play.scheduledDate < today || play.smuggle).map((play) => play.id));
+  const socialRule = (workspace.capacityRules || []).find((rule) => rule.id === "level-4-social");
+  const social = checkCapacity && socialRule?.active !== false ? allocateLevel4SocialSlots({plays: candidates,
+    campaigns: workspace.campaigns, now, protectedIds, annotateProtectedConflicts: true}) : {plays: candidates};
+  const capacity = checkCapacity ? evaluateCapacity({plays: social.plays, campaigns: workspace.campaigns, now,
+    protectedIds,
     capacityRules: (workspace.capacityRules || []).filter((rule) => rule.id !== "level-4-social")}) : {plays};
   return {...workspace, storedScheduledPlays: saved, scheduledPlays: capacity.plays};
 }
@@ -1185,6 +1225,23 @@ export function skipPromotion(play) {
     smuggle: null,
     manuallyAdjusted: true,
   };
+}
+
+export function canChoosePromotion(play, now = new Date()) {
+  return Boolean(play?.id && play.campaignType !== "standalone-content" &&
+    play.resourceId !== "standalone-content" && play.scheduledDate >= dateKey(now) &&
+    !play.locked && !play.smuggle &&
+    (["scheduled", "rescheduled", "conflict", "needs-decision"].includes(play.status) ||
+      (play.status === "skipped" && play.manuallyAdjusted === true)));
+}
+
+export function choosePromotion(play, run, now = new Date()) {
+  if (!canChoosePromotion(play, now)) {
+    throw new Error("Only an upcoming, unlocked campaign promotion without a Smuggle can be changed here.");
+  }
+  if (!run) return skipPromotion(play);
+  return {...play, status: play.originalScheduledDate && play.scheduledDate !== play.originalScheduledDate ? "rescheduled" : "scheduled",
+    conflictState: "none", conflictReason: "", manuallyAdjusted: true};
 }
 
 export function utilizationForWeek({weekStart, plays, capacityRules}) {

@@ -1,5 +1,6 @@
 import {
   addDays,
+  allocateLevel4SocialSlots,
   buildSmuggleRelationships,
   campaignDisplayDate,
   campaignPlayIdFactory,
@@ -174,77 +175,6 @@ function campaignDeadline(campaign) {
   return deadline < eventDate ? deadline : eventDate;
 }
 
-function allocateLevel4WithProtected({plays, campaigns, protectedIds}) {
-  const campaignMap = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
-  const next = plays.map((play) => resetCapacityResult(play, protectedIds.has(play.id)));
-  const groups = new Map();
-  next.forEach((play) => {
-    if (Number(play.campaignLevel) !== 4 || play.resourceId !== "level-4-social" ||
-      !["scheduled", "rescheduled"].includes(play.status)) return;
-    const allocationAnchor = protectedIds.has(play.id)
-      ? play.scheduledDate
-      : (play.originalScheduledDate || play.scheduledDate);
-    const key = startOfPlanningWeek(allocationAnchor);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(play);
-  });
-  const conflicts = [];
-  groups.forEach((candidates, weekStart) => {
-    const protectedCandidates = candidates.filter((play) => protectedIds.has(play.id));
-    const mutable = candidates.filter((play) => !protectedIds.has(play.id));
-    const standardSlots = [weekStart, addDays(weekStart, 4)];
-    const occupiedStandard = new Set(protectedCandidates.map((play) => play.scheduledDate).filter((date) => standardSlots.includes(date)));
-    const capacityRemaining = Math.max(0, 2 - protectedCandidates.length);
-    const available = standardSlots.filter((slot) => !occupiedStandard.has(slot)).slice(0, capacityRemaining);
-    const ordered = [...mutable].sort((left, right) => {
-      const leftCampaign = campaignMap.get(left.campaignId) || left;
-      const rightCampaign = campaignMap.get(right.campaignId) || right;
-      const leftValid = available.filter((slot) => slot <= campaignDeadline(leftCampaign)).length;
-      const rightValid = available.filter((slot) => slot <= campaignDeadline(rightCampaign)).length;
-      if (leftValid !== rightValid) return leftValid - rightValid;
-      return compareCampaignPriority(leftCampaign, rightCampaign);
-    });
-    const used = new Set();
-    ordered.forEach((play) => {
-      const deadline = campaignDeadline(campaignMap.get(play.campaignId) || play);
-      const chosen = available.find((slot) => slot <= deadline && !used.has(slot));
-      if (!chosen) {
-        play.status = "conflict";
-        play.conflictState = "level-4-social-overflow";
-        play.conflictReason = protectedCandidates.length
-          ? "Protected Level 4 Social promotions already use the available weekly capacity."
-          : "Both shared Level 4 Social slots are already allocated or fall after the campaign deadline.";
-        return;
-      }
-      used.add(chosen);
-      play.scheduledDate = chosen;
-      play.status = baseStatus(play);
-      play.conflictState = "none";
-      play.conflictReason = "";
-    });
-    const overflow = ordered.filter((play) => play.conflictState === "level-4-social-overflow");
-    const protectedOverflow = protectedCandidates.length > 2 ? protectedCandidates.slice(2) : [];
-    if (overflow.length || protectedOverflow.length) {
-      conflicts.push({
-        id: `level-4-social:${weekStart}`,
-        resourceId: "level-4-social",
-        resourceName: "Level 4 Social",
-        period: weekStart,
-        capacity: 2,
-        campaignCount: candidates.length,
-        recommendedPlayIds: [...protectedCandidates.slice(0, 2).map((play) => play.id), ...ordered.filter((play) => !overflow.includes(play)).map((play) => play.id)],
-        overflowPlayIds: [...protectedOverflow.map((play) => play.id), ...overflow.map((play) => play.id)],
-        protectedPlayIds: protectedCandidates.map((play) => play.id),
-        protectedOverflowPlayIds: protectedOverflow.map((play) => play.id),
-        involvesProtected: protectedCandidates.length > 0,
-        reason: protectedCandidates.length ? "Existing protected promotions retain their dates before new series promotions are allocated." : "Constrained deadlines are protected first, followed by campaign priority and timeliness.",
-        requiresDecision: true,
-      });
-    }
-  });
-  return {plays: next, conflicts};
-}
-
 function periodKey(play, rule) {
   return rule.capacityPeriod === "week" || rule.capacityPeriod === "sunday"
     ? startOfPlanningWeek(play.scheduledDate)
@@ -317,7 +247,7 @@ function applyWorkspaceCapacity({campaigns, plays, capacityRules, protectedIds, 
     now: generatedAt, checkCapacity: false,
     ranges: campaigns.map((campaign) => ({startDate: campaign.recommendedStartDate, endDate: campaignDisplayDate(campaign)})),
   });
-  const social = allocateLevel4WithProtected({campaigns, plays: effective.scheduledPlays, protectedIds});
+  const social = allocateLevel4SocialSlots({campaigns, plays: effective.scheduledPlays, protectedIds, now: generatedAt});
   const capacity = evaluateCapacityWithProtected({campaigns, plays: social.plays, capacityRules, protectedIds});
   // Derived fallback is inventory for capacity, never a write or optimistic-lock baseline.
   return {plays: capacity.plays.filter((play) => persistedIds.has(play.id)), conflicts: [...social.conflicts, ...capacity.conflicts]};

@@ -648,6 +648,11 @@ a { text-decoration: none; }
 .planner-inventory-summary > span { display: grid; gap: 4px; padding: 13px; border: 1px solid var(--planner-line); border-radius: 12px; background: rgba(17,17,19,.42); color: var(--planner-muted); font-size: .54rem; }
 .planner-inventory-summary strong { color: #fff; font-size: 1rem; }
 .planner-inventory-list { display: grid; gap: 8px; margin-top: 15px; }
+.planner-promotion-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0; }
+.planner-promotion-choice small { color: var(--planner-muted); font-size: .6rem; }
+.planner-promotion-choice > p { flex-basis: 100%; margin: 0; }
+.planner-inventory-row > .planner-promotion-choice { margin: 0; padding: 0 14px 12px; }
+.planner-inventory-list > h3 { margin: 12px 0 4px; font-size: .8rem; }
 .planner-inventory-row { overflow: hidden; border: 1px solid var(--planner-line); border-radius: 14px; background: rgba(17,17,19,.38); }
 .planner-inventory-row.has-alert { border-color: rgba(239,62,45,.26); }
 .planner-inventory-row-header { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 11px; padding: 12px 14px; }

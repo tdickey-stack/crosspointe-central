@@ -9,8 +9,10 @@ import {
   buildCampaignRegeneration,
   campaignDisplayDate,
   campaignPlanningAnchor,
+  canChoosePromotion,
   calculateTimeliness,
   cancelSmuggle,
+  choosePromotion,
   ensureLevel2StandingLane,
   evaluateCapacity,
   generateCampaignSchedule,
@@ -29,6 +31,7 @@ import {
   startOfPlanningWeek,
   utilizationForWeek,
   weeklyInventoryPlays,
+  withLevel2StandingLane,
 } from "../src/planner/domain.js";
 import {
   STARTER_CAPACITY_RULES,
@@ -843,6 +846,296 @@ test("declining a Smuggle skips only that announcement and clears its conflict",
   assert.equal(scheduleSummary([skipped]).conflicts, 0);
 });
 
+test("promotion choices support campaign resources and reject protected or standalone work", () => {
+  const now = new Date("2026-10-01T12:00:00-05:00");
+  const promotion = {
+    id: "promotion-choice",
+    campaignId: "campaign-choice",
+    campaignType: "standard",
+    resourceId: "newsletter-feature",
+    originalScheduledDate: "2026-10-11",
+    scheduledDate: "2026-10-11",
+    status: "scheduled",
+    locked: false,
+    manuallyAdjusted: false,
+    smuggle: null,
+  };
+  const protectedPlays = [
+    {...promotion, id: "past", scheduledDate: "2026-09-27"},
+    {...promotion, id: "completed", status: "completed"},
+    {...promotion, id: "locked", locked: true},
+    {...promotion, id: "automatic-skip", status: "skipped", manuallyAdjusted: false},
+    {...promotion, id: "standalone-campaign", campaignType: "standalone-content"},
+    {...promotion, id: "standalone-resource", resourceId: "standalone-content"},
+    {...promotion, id: "smuggle", smuggle: {
+      hostCampaignId: "host",
+      hostScheduledPlayId: "smuggle",
+      beneficiaryCampaignId: "guest",
+      beneficiaryName: "Guest",
+      strategy: "SMUGGLE",
+    }},
+  ];
+
+  ["stage-announcement", "newsletter-feature", "newsletter-event-card", "level-4-social", "social-sprinkle"]
+    .forEach((resourceId) => {
+      const play = {...promotion, id: `choice-${resourceId}`, resourceId};
+      assert.equal(canChoosePromotion(play, now), true);
+      const skipped = choosePromotion(play, false, now);
+      assert.equal(skipped.status, "skipped");
+      assert.equal(skipped.manuallyAdjusted, true);
+      assert.equal(canChoosePromotion(skipped, now), true);
+      const restored = choosePromotion(skipped, true, now);
+      assert.equal(restored.status, "scheduled");
+      assert.equal(restored.manuallyAdjusted, true);
+    });
+  protectedPlays.forEach((play) => {
+    assert.equal(canChoosePromotion(play, now), false);
+    assert.throws(
+      () => choosePromotion(play, false, now),
+      /Only an upcoming, unlocked campaign promotion without a Smuggle/,
+    );
+  });
+});
+
+test("skipping one campaign promotion preserves its other promotions and frees capacity", () => {
+  const now = new Date("2026-10-01T12:00:00-05:00");
+  const stageRule = STARTER_CAPACITY_RULES.find((item) => item.id === "stage-announcement");
+  const chosen = {
+    id: "chosen-stage",
+    campaignId: "chosen-campaign",
+    campaignName: "Chosen Campaign",
+    campaignLevel: 4,
+    resourceId: stageRule.id,
+    playType: "Stage Announcement",
+    originalScheduledDate: "2026-10-04",
+    scheduledDate: "2026-10-04",
+    status: "scheduled",
+    conflictState: "none",
+    conflictReason: "",
+    manuallyAdjusted: false,
+    locked: false,
+    smuggle: null,
+  };
+  const otherPromotion = {
+    ...chosen,
+    id: "chosen-newsletter",
+    resourceId: "newsletter-event-card",
+    playType: "Newsletter Event Card",
+    originalScheduledDate: "2026-10-01",
+    scheduledDate: "2026-10-01",
+  };
+  const otherStages = [1, 2].map((level) => ({
+    ...chosen,
+    id: `other-stage-${level}`,
+    campaignId: `other-campaign-${level}`,
+    campaignName: `Other Campaign ${level}`,
+    campaignLevel: level,
+  }));
+  const skipped = choosePromotion(chosen, false, now);
+  const workspace = withLevel2StandingLane({
+    campaigns: [],
+    scheduledPlays: [skipped, otherPromotion, ...otherStages],
+    capacityRules: [stageRule],
+    standingLanes: [],
+    playbooks: [],
+  }, {now});
+
+  assert.equal(workspace.scheduledPlays.find((play) => play.id === chosen.id).status, "skipped");
+  assert.deepEqual(workspace.scheduledPlays.find((play) => play.id === otherPromotion.id), otherPromotion);
+  assert.deepEqual(
+    workspace.scheduledPlays.filter((play) => play.resourceId === stageRule.id && play.status !== "skipped").map((play) => play.id).sort(),
+    otherStages.map((play) => play.id).sort(),
+  );
+  assert.equal(utilizationForWeek({
+    weekStart: "2026-09-28",
+    plays: workspace.scheduledPlays,
+    capacityRules: [stageRule],
+  })[0].used, 2);
+});
+
+test("restoring a skipped promotion re-enters weekly capacity evaluation", () => {
+  const now = new Date("2026-10-01T12:00:00-05:00");
+  const stageRule = STARTER_CAPACITY_RULES.find((item) => item.id === "stage-announcement");
+  const skipped = {
+    id: "restored-stage",
+    campaignId: "restored-campaign",
+    campaignName: "Restored Campaign",
+    campaignLevel: 4,
+    resourceId: stageRule.id,
+    playType: "Stage Announcement",
+    originalScheduledDate: "2026-10-04",
+    scheduledDate: "2026-10-04",
+    status: "skipped",
+    conflictState: "none",
+    conflictReason: "",
+    manuallyAdjusted: true,
+    locked: false,
+    smuggle: null,
+  };
+  const guaranteed = [1, 2, 3].map((level) => ({
+    ...skipped,
+    id: `level-${level}-stage`,
+    campaignId: `level-${level}`,
+    campaignName: `Level ${level}`,
+    campaignLevel: level,
+    status: "scheduled",
+    manuallyAdjusted: false,
+  }));
+  const restored = choosePromotion(skipped, true, now);
+  const workspace = withLevel2StandingLane({
+    campaigns: guaranteed.map((play) => campaign({id: play.campaignId, name: play.campaignName, level: play.campaignLevel})),
+    scheduledPlays: [...guaranteed, restored],
+    capacityRules: [stageRule],
+    standingLanes: [],
+    playbooks: [],
+  }, {now});
+
+  assert.equal(workspace.scheduledPlays.find((play) => play.id === restored.id).status, "scheduled");
+  assert.equal(workspace.scheduledPlays.filter((play) => play.conflictState === "capacity-overflow").length, 1);
+  assert.equal(utilizationForWeek({
+    weekStart: "2026-09-28",
+    plays: workspace.scheduledPlays,
+    capacityRules: [stageRule],
+  })[0].used, 4);
+});
+
+function effectiveLevel4SocialWorkspace(plays, {
+  now = new Date("2026-10-11T12:00:00-05:00"),
+  rule = STARTER_CAPACITY_RULES.find((item) => item.id === "level-4-social"),
+} = {}) {
+  return withLevel2StandingLane({
+    campaigns: plays.map((play) => campaign({
+      id: play.campaignId,
+      name: play.campaignName,
+      level: 4,
+      eventDate: "2026-10-31",
+    })),
+    scheduledPlays: plays,
+    capacityRules: [rule],
+    standingLanes: [],
+    playbooks: [],
+  }, {now});
+}
+
+function level4SocialPlay(id, scheduledDate, updates = {}) {
+  return {
+    id,
+    campaignId: `campaign-${id}`,
+    campaignName: `Campaign ${id}`,
+    campaignLevel: 4,
+    campaignType: "standard",
+    resourceId: "level-4-social",
+    playType: "Level 4 Social",
+    originalScheduledDate: scheduledDate,
+    scheduledDate,
+    status: "scheduled",
+    conflictState: "none",
+    conflictReason: "",
+    manuallyAdjusted: false,
+    locked: false,
+    smuggle: null,
+    ...updates,
+  };
+}
+
+test("skipping Level 4 Social frees its date and clears stale overflow without moving plays", () => {
+  const skipped = choosePromotion(level4SocialPlay("skipped", "2026-10-12"), false,
+    new Date("2026-10-11T12:00:00-05:00"));
+  const stale = level4SocialPlay("stale", "2026-10-12", {
+    status: "conflict",
+    conflictState: "level-4-social-overflow",
+    conflictReason: "Both shared slots were allocated.",
+  });
+  const friday = level4SocialPlay("friday", "2026-10-16");
+  const unrelated = level4SocialPlay("manual-review", "2026-10-12", {
+    status: "conflict",
+    conflictState: "manual-review",
+    conflictReason: "Creative review is still required.",
+  });
+  const inputs = [skipped, stale, friday, unrelated];
+  const before = structuredClone(inputs);
+
+  const workspace = effectiveLevel4SocialWorkspace(inputs);
+  const refreshed = workspace.scheduledPlays.find((play) => play.id === stale.id);
+
+  assert.equal(refreshed.status, "scheduled");
+  assert.equal(refreshed.conflictState, "none");
+  assert.equal(refreshed.scheduledDate, "2026-10-12");
+  assert.deepEqual(workspace.scheduledPlays.find((play) => play.id === unrelated.id), unrelated);
+  assert.deepEqual(inputs, before);
+});
+
+test("restored Level 4 Social detects a same-date collision with a locked promotion", () => {
+  const now = new Date("2026-10-11T12:00:00-05:00");
+  const locked = level4SocialPlay("locked", "2026-10-12", {locked: true});
+  const restored = choosePromotion(level4SocialPlay("restore", "2026-10-12", {
+    status: "skipped",
+    manuallyAdjusted: true,
+  }), true, now);
+
+  const workspace = effectiveLevel4SocialWorkspace([locked, restored], {now});
+  const result = workspace.scheduledPlays.find((play) => play.id === restored.id);
+
+  assert.equal(result.status, "conflict");
+  assert.equal(result.conflictState, "level-4-social-overflow");
+  assert.match(result.conflictReason, /More than one protected Level 4 Social promotion/);
+  assert.equal(result.scheduledDate, "2026-10-12");
+  assert.deepEqual(workspace.scheduledPlays.find((play) => play.id === locked.id), locked);
+});
+
+test("a manual Level 4 Social restore sends the automatic same-date play to Friday", () => {
+  const now = new Date("2026-10-11T12:00:00-05:00");
+  const restored = choosePromotion(level4SocialPlay("restore-priority", "2026-10-12", {
+    status: "skipped",
+    manuallyAdjusted: true,
+  }), true, now);
+  const automatic = level4SocialPlay("automatic", "2026-10-12");
+
+  const workspace = effectiveLevel4SocialWorkspace([automatic, restored], {now});
+
+  assert.equal(workspace.scheduledPlays.find((play) => play.id === restored.id).status, "scheduled");
+  assert.equal(workspace.scheduledPlays.find((play) => play.id === automatic.id).conflictState, "none");
+  assert.equal(workspace.scheduledPlays.find((play) => play.id === automatic.id).scheduledDate, "2026-10-16");
+});
+
+test("Level 4 Social restore detects invalid weekdays without changing its date", () => {
+  const now = new Date("2026-10-11T12:00:00-05:00");
+  const restored = choosePromotion(level4SocialPlay("wednesday", "2026-10-14", {
+    status: "skipped",
+    manuallyAdjusted: true,
+  }), true, now);
+
+  const workspace = effectiveLevel4SocialWorkspace([restored], {now});
+  const result = workspace.scheduledPlays.find((play) => play.id === restored.id);
+
+  assert.equal(result.status, "conflict");
+  assert.equal(result.conflictState, "invalid-weekday");
+  assert.equal(result.scheduledDate, "2026-10-14");
+});
+
+test("past and completed Level 4 Social records remain fixed and consume weekly capacity", () => {
+  const now = new Date("2026-10-14T12:00:00-05:00");
+  const rule = {
+    ...STARTER_CAPACITY_RULES.find((item) => item.id === "level-4-social"),
+    allowedWeekdays: [1, 3, 5],
+  };
+  const past = level4SocialPlay("past", "2026-10-12");
+  const completed = level4SocialPlay("completed", "2026-10-14", {status: "completed"});
+  const restored = choosePromotion(level4SocialPlay("capacity", "2026-10-16", {
+    status: "skipped",
+    manuallyAdjusted: true,
+  }), true, now);
+
+  const workspace = effectiveLevel4SocialWorkspace([past, completed, restored], {now, rule});
+  const result = workspace.scheduledPlays.find((play) => play.id === restored.id);
+
+  assert.deepEqual(workspace.scheduledPlays.find((play) => play.id === past.id), past);
+  assert.deepEqual(workspace.scheduledPlays.find((play) => play.id === completed.id), completed);
+  assert.equal(result.conflictState, "level-4-social-overflow");
+  assert.match(result.conflictReason, /Neither the Monday nor Friday|More than one protected/);
+  assert.equal(result.scheduledDate, "2026-10-16");
+});
+
 test("saved Smuggle maps resolve into host and guest display relationships", () => {
   const relationships = buildSmuggleRelationships({
     campaigns: [
@@ -1087,4 +1380,72 @@ test("timeliness stores days and weeks late from the rolling campaign window", (
   assert.equal(result.recommendedStartDate, "2026-10-03");
   assert.equal(result.daysLate, 11);
   assert.equal(result.weeksLate, 1);
+});
+
+test("sequential campaign creation reserves saved social slots even when the next campaign has higher priority", () => {
+  const now = new Date("2026-10-11T12:00:00-05:00");
+  const first = socialCandidate("standard", "2026-10-17");
+  const second = socialCandidate("featured", "2026-10-17");
+  second.campaign.campaignType = "featured";
+  const third = socialCandidate("third", "2026-10-17");
+  let saved = [first.play];
+  const secondResult = allocateLevel4SocialSlots({plays: [...saved, second.play],
+    campaigns: [first.campaign, second.campaign], protectedIds: new Set(saved.map((play) => play.id)), now});
+  assert.deepEqual(secondResult.plays.find((play) => play.id === first.play.id), first.play);
+  // A one-off save persists only its own campaign, exactly as the creation UI does.
+  saved = [...saved, secondResult.plays.find((play) => play.id === second.play.id)];
+  assert.deepEqual(saved.map((play) => play.scheduledDate), ["2026-10-12", "2026-10-16"]);
+  const thirdResult = allocateLevel4SocialSlots({plays: [...saved, third.play],
+    campaigns: [first.campaign, second.campaign, third.campaign], protectedIds: new Set(saved.map((play) => play.id)), now});
+  assert.equal(thirdResult.plays.find((play) => play.id === third.play.id).status, "conflict");
+  assert.deepEqual(thirdResult.plays.slice(0, 2), saved);
+});
+
+test("effective social inventory repairs automatic duplicate Mondays and flags only the third placement", () => {
+  const plays = ["a", "b", "c"].map((id) => level4SocialPlay(id, "2026-10-12"));
+  const before = structuredClone(plays);
+  const effective = effectiveLevel4SocialWorkspace(plays);
+  const scheduled = effective.scheduledPlays.filter((play) => play.status !== "conflict");
+  assert.deepEqual(scheduled.map((play) => play.scheduledDate).sort(), ["2026-10-12", "2026-10-16"]);
+  assert.equal(effective.scheduledPlays.filter((play) => play.status === "conflict").length, 1);
+  assert.deepEqual(plays, before);
+});
+
+test("skipping Monday keeps Friday in place and a new automatic promotion uses the free Monday slot", () => {
+  const now = new Date("2026-10-11T12:00:00-05:00");
+  const monday = choosePromotion(level4SocialPlay("monday", "2026-10-12"), false, now);
+  const friday = level4SocialPlay("friday", "2026-10-16", {originalScheduledDate: "2026-10-12", status: "rescheduled"});
+  const candidate = level4SocialPlay("new", "2026-10-12");
+  const effective = effectiveLevel4SocialWorkspace([monday, friday, candidate], {now});
+  assert.equal(effective.scheduledPlays.find((play) => play.id === friday.id).scheduledDate, "2026-10-16");
+  assert.equal(effective.scheduledPlays.find((play) => play.id === candidate.id).scheduledDate, "2026-10-12");
+  assert.equal(effective.scheduledPlays.find((play) => play.id === monday.id).status, "skipped");
+});
+
+test("current-week allocation never backdates a new social placement to a passed Monday", () => {
+  const candidate = level4SocialPlay("new", "2026-10-16");
+  const effective = effectiveLevel4SocialWorkspace([candidate], {now: new Date("2026-10-14T12:00:00-05:00")});
+  assert.equal(effective.scheduledPlays[0].scheduledDate, "2026-10-16");
+  assert.equal(effective.scheduledPlays[0].status, "scheduled");
+});
+
+test("past duplicate Mondays are flagged for review without changing their dates or saved records", () => {
+  const plays = [level4SocialPlay("a", "2026-10-12"), level4SocialPlay("b", "2026-10-12")];
+  const before = structuredClone(plays);
+  const effective = effectiveLevel4SocialWorkspace(plays, {now: new Date("2026-10-14T12:00:00-05:00")});
+  assert.ok(effective.scheduledPlays.every((play) => play.scheduledDate === "2026-10-12"));
+  assert.equal(effective.scheduledPlays.filter((play) => play.conflictState === "level-4-social-overflow").length, 1);
+  assert.deepEqual(plays, before);
+});
+
+test("a tightened deadline receives Monday before a flexible campaign keeps its current Monday", () => {
+  const tight = socialCandidate("tight", "2026-10-14");
+  tight.play.scheduledDate = "2026-10-16";
+  tight.play.status = "rescheduled";
+  const flexible = socialCandidate("flexible", "2026-10-17");
+  const result = allocateLevel4SocialSlots({plays: [flexible.play, tight.play],
+    campaigns: [flexible.campaign, tight.campaign], now: new Date("2026-10-11T12:00:00-05:00")});
+  assert.equal(result.plays.find((play) => play.id === tight.play.id).scheduledDate, "2026-10-12");
+  assert.equal(result.plays.find((play) => play.id === flexible.play.id).scheduledDate, "2026-10-16");
+  assert.equal(result.conflicts.length, 0);
 });

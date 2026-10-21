@@ -22,6 +22,8 @@ import {
   isPromotionWindow,
   promotionWindowComparison,
   cancelSmuggle,
+  canChoosePromotion,
+  choosePromotion,
   dateKey,
   evaluateCapacity,
   generateCampaignSchedule,
@@ -737,6 +739,33 @@ function PlayRow({play, onClick, showDate = false, smuggleRelationship = null}) 
   );
 }
 
+function promotionSkipLabel(resourceId) {
+  if (resourceId === "stage-announcement") return "Do not announce";
+  if (["newsletter-feature", "newsletter-event-card"].includes(resourceId)) return "Do not include";
+  if (resourceId === "level-4-social") return "Do not post";
+  return "Do not promote";
+}
+
+function PromotionChoice({play, onSave, disabled = false, onSavingChange}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  if (!canChoosePromotion(play)) return null;
+  const restore = play.status === "skipped";
+  const stage = play.resourceId === "stage-announcement";
+  return <div className="planner-promotion-choice">
+    <button className="planner-button is-secondary" disabled={saving || disabled} onClick={async () => {
+      setSaving(true); onSavingChange?.(true); setError("");
+      try {
+        await onSave(choosePromotion(play, restore), `${play.campaignName}: ${play.playType} ${restore ? "is back on the schedule" : "will not run"} for ${formatDate(play.scheduledDate)}.`);
+      } catch (saveError) {
+        setError(saveError.message || "The promotion decision could not be saved.");
+      } finally { setSaving(false); onSavingChange?.(false); }
+    }}>{saving ? "Saving…" : restore ? (stage ? "Restore announcement" : "Restore promotion") : promotionSkipLabel(play.resourceId)}</button>
+    <small>{restore ? "Restores this date and checks capacity again." : "Only this date. Other promotions stay scheduled."}</small>
+    {error && <p className="planner-inline-error" role="alert">{error}</p>}
+  </div>;
+}
+
 function WeeklyInventoryPlay({play, deadline, canEdit, onSave}) {
   const needsAttention = needsPromotionReview(play);
   const [expanded, setExpanded] = useState(needsAttention);
@@ -765,11 +794,13 @@ function WeeklyInventoryPlay({play, deadline, canEdit, onSave}) {
         <PromotionKindBadge item={play} />
         <div><strong>{play.campaignName}</strong><small>{play.playType} · {play.channel} · {formatDate(play.scheduledDate, {year: false})}</small></div>
         {needsAttention && <StatusBadge status="conflict">{play.status === "conflict" ? "Conflict" : "Review"}</StatusBadge>}
-        {canEdit && <button className="planner-text-button" onClick={() => setExpanded((current) => !current)}>{expanded ? "Hide" : needsAttention ? "Resolve" : "Adjust"}</button>}
+        {canEdit && play.status !== "skipped" && <button className="planner-text-button" onClick={() => setExpanded((current) => !current)}>{expanded ? "Hide" : needsAttention ? "Resolve" : "Adjust"}</button>}
       </div>
-      {expanded && canEdit && (
+      {canEdit && <PromotionChoice play={play} onSave={onSave} disabled={saving} onSavingChange={setSaving} />}
+      {canEdit && play.smuggle && <p className="planner-quiet-copy">Cancel this promotion’s Smuggle from its promotion details before choosing not to run it.</p>}
+      {expanded && canEdit && play.status !== "skipped" && (
         <div className="planner-inventory-row-controls">
-          <Field label="Planned date"><input type="date" value={draft.scheduledDate} max={deadline || undefined} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled", conflictState: "none", conflictReason: ""})} /></Field>
+          <Field label="Planned date"><input type="date" disabled={saving} value={draft.scheduledDate} max={deadline || undefined} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled", conflictState: "none", conflictReason: ""})} /></Field>
           <button className="planner-button is-primary" disabled={!changed || saving} onClick={save}>{saving ? "Saving…" : "Save change"}</button>
           {saveError && <p role="alert">{saveError}</p>}
         </div>
@@ -788,6 +819,8 @@ function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, can
   });
   const attention = matching.filter(needsPromotionReview);
   const active = visiblePromotions(matching);
+  const skipped = matching.filter((play) => play.status === "skipped" && play.manuallyAdjusted);
+  const skippedHeading = metric.resourceId === "stage-announcement" ? "Not being announced" : "Not running";
   const reportPlayTypes = [...new Set(active.map((play) => play.playType).filter(Boolean))];
   return (
     <Modal title={metric.name} eyebrow={`${formatDate(weekStart, {year: false})}–${formatDate(weekEnd)}`} onClose={onClose} size="wide">
@@ -799,14 +832,15 @@ function WeeklyInventoryModal({metric, weekStart, weekEnd, plays, campaigns, can
       {attention.length > 0 && (
         <div className="planner-detail-note is-alert">
           <strong>{attention.length} promotion{attention.length === 1 ? " needs" : "s need"} a decision</strong>
-          <p>Resolve a conflict by moving the promotion to another valid date. Moving it outside this week removes it from this list.</p>
+          <p>{metric.resourceId === "stage-announcement" ? "Choose which events to announce this Sunday. Use Do not announce to free a slot without moving the event or its other promotions." : `Choose which promotions to run this week. Use ${promotionSkipLabel(metric.resourceId)} to free a slot without moving the event or its other promotions.`}</p>
         </div>
       )}
       {active.length ? (
         <div className="planner-inventory-list">
-          {active.map((play) => <WeeklyInventoryPlay key={play.id} play={play} deadline={campaignDeadline(campaigns.find((campaign) => campaign.id === play.campaignId))} canEdit={canEdit} onSave={onSavePlay} />)}
+          {active.map((play) => <WeeklyInventoryPlay key={play.id} play={play} deadline={campaignDeadline(campaigns.find((campaign) => campaign.id === play.campaignId))} canEdit={canEdit && campaigns.find((campaign) => campaign.id === play.campaignId)?.status !== "archived"} onSave={onSavePlay} />)}
         </div>
-      ) : <EmptyState title="Nothing scheduled" copy={`No ${metric.name.toLowerCase()} promotions are scheduled for this week.`} />}
+      ) : skipped.length ? <p className="planner-quiet-copy">No {metric.name.toLowerCase()} promotions are scheduled for this week.</p> : <EmptyState title="Nothing scheduled" copy={`No ${metric.name.toLowerCase()} promotions are scheduled for this week.`} />}
+      {skipped.length > 0 && <section className="planner-inventory-list" aria-label={skippedHeading}><h3>{skippedHeading} · {skipped.length}</h3>{skipped.map((play) => <WeeklyInventoryPlay key={play.id} play={play} canEdit={canEdit && campaigns.find((campaign) => campaign.id === play.campaignId)?.status !== "archived"} onSave={onSavePlay} />)}</section>}
       <div className="planner-modal-actions">
         <button className="planner-button is-secondary" onClick={onClose}>Close</button>
         {onBuildReport && <button className="planner-button is-primary" disabled={!reportPlayTypes.length} onClick={() => onBuildReport(reportPlayTypes)}>Generate report</button>}
@@ -1491,7 +1525,12 @@ function RequestReviewDialog({request, workspace, canEdit, onClose, onConvert, o
       campaigns: combinedCampaigns, storedScheduledPlays: undefined,
       scheduledPlays: [...workspace.storedScheduledPlays, ...generated.plays],
     }, {checkCapacity: false, ranges: [{startDate: generated.campaign.recommendedStartDate, endDate: campaignDisplayDate(generated.campaign)}]}).scheduledPlays;
-    const level4 = allocateLevel4SocialSlots({plays: combinedPlays, campaigns: combinedCampaigns});
+    const level4 = allocateLevel4SocialSlots({
+      plays: combinedPlays,
+      campaigns: combinedCampaigns,
+      protectedIds: new Set(combinedPlays.filter((play) => play.campaignId !== id).map((play) => play.id)),
+      now: new Date(),
+    });
     const capacity = evaluateCapacity({
       plays: level4.plays,
       protectedIds: new Set(workspace.storedScheduledPlays.filter((play) => play.manuallyAdjusted || play.locked || play.status === "completed" || play.scheduledDate < dateKey(new Date()) || play.smuggle).map((play) => play.id)),
@@ -2259,7 +2298,12 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
       campaigns: combinedCampaigns, storedScheduledPlays: undefined,
       scheduledPlays: [...workspace.storedScheduledPlays, ...generated.plays],
     }, {checkCapacity: false, ranges: [{startDate: generated.campaign.recommendedStartDate, endDate: generated.campaign.eventDate}]}).scheduledPlays;
-    const level4 = allocateLevel4SocialSlots({plays: combinedPlays, campaigns: combinedCampaigns});
+    const level4 = allocateLevel4SocialSlots({
+      plays: combinedPlays,
+      campaigns: combinedCampaigns,
+      protectedIds: new Set(combinedPlays.filter((play) => play.campaignId !== previewCampaignId).map((play) => play.id)),
+      now: new Date(),
+    });
     const capacity = evaluateCapacity({
       plays: level4.plays,
       protectedIds: new Set(workspace.storedScheduledPlays.filter((play) => play.manuallyAdjusted || play.locked || play.status === "completed" || play.scheduledDate < dateKey(new Date()) || play.smuggle).map((play) => play.id)),
@@ -2332,7 +2376,10 @@ function NewCampaignDialog({workspace, onClose, onGenerate}) {
 }
 
 function PlayDialog({play, campaign, smuggleRelationship, canEdit, onClose, onSave, onCancelSmuggle}) {
+  const canEditPromotion = canEdit && campaign?.status !== "archived";
   const [draft, setDraft] = useState({...play});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [cancellingSmuggle, setCancellingSmuggle] = useState(false);
   const [smuggleError, setSmuggleError] = useState("");
   return (
@@ -2341,8 +2388,9 @@ function PlayDialog({play, campaign, smuggleRelationship, canEdit, onClose, onSa
       <dl className="planner-detail-list"><div><dt>Planned date</dt><dd>{formatDate(draft.scheduledDate)}</dd></div>{!isStandaloneContent(play) && <div><dt>Playbook</dt><dd>{play.playbookId} · v{play.playbookVersion}</dd></div>}</dl>
       {play.lateReason && <div className="planner-detail-note"><strong>Late handling</strong><p>{play.lateReason}</p></div>}
       {play.conflictReason && <div className="planner-detail-note is-alert"><strong>Conflict</strong><p>{play.conflictReason}</p></div>}
+      {canEditPromotion && <PromotionChoice play={play} onSave={onSave} disabled={saving || cancellingSmuggle} onSavingChange={setSaving} />}
       {smuggleRelationship && <div className="planner-detail-note is-smuggle">
-        <div className="planner-smuggle-note-heading"><strong>Smuggle host</strong>{canEdit && <button className="planner-text-button" disabled={cancellingSmuggle} onClick={async () => {
+        <div className="planner-smuggle-note-heading"><strong>Smuggle host</strong>{canEditPromotion && <button className="planner-text-button" disabled={saving || cancellingSmuggle} onClick={async () => {
           setCancellingSmuggle(true); setSmuggleError("");
           try { await onCancelSmuggle(smuggleRelationship); }
           catch (cancelError) { setSmuggleError(cancelError.message || "The Smuggle could not be cancelled."); setCancellingSmuggle(false); }
@@ -2351,12 +2399,18 @@ function PlayDialog({play, campaign, smuggleRelationship, canEdit, onClose, onSa
         <small>Cancelling returns the lower-level announcement to the normal plan so it can run separately, be placed in another host, or be skipped.</small>
         {smuggleError && <p className="planner-inline-error">{smuggleError}</p>}
       </div>}
-      {canEdit && (
+      {canEditPromotion && play.status !== "skipped" && (
         <div className="planner-form-grid planner-play-adjustment">
-          <Field label="Move promotion"><input type="date" value={draft.scheduledDate} max={campaignDeadline(campaign) || undefined} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true})} /></Field>
+          <Field label="Move promotion"><input type="date" disabled={saving || cancellingSmuggle} value={draft.scheduledDate} max={campaignDeadline(campaign) || undefined} onChange={(event) => setDraft({...draft, scheduledDate: event.target.value, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true})} /></Field>
         </div>
       )}
-      <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button>{canEdit && <button className="planner-button is-primary" onClick={() => onSave(draft)}>Save promotion</button>}</div>
+      {saveError && <p className="planner-inline-error" role="alert">{saveError}</p>}
+      <div className="planner-modal-actions"><button className="planner-button is-secondary" onClick={onClose}>Close</button>{canEditPromotion && play.status !== "skipped" && <button className="planner-button is-primary" disabled={saving || cancellingSmuggle} onClick={async () => {
+        setSaving(true); setSaveError("");
+        try { await onSave(draft); }
+        catch (error) { setSaveError(error.message || "This promotion could not be updated."); }
+        finally { setSaving(false); }
+      }}>{saving ? "Saving…" : "Save promotion"}</button>}</div>
     </Modal>
   );
 }
@@ -2584,7 +2638,7 @@ function CampaignDialog({campaign, workspace, canEdit, onClose, onOpenPlay, onEd
         <p>{formatDate(relationship.scheduledDate)} · The announcement appears inside that higher-level {relationship.hostPlayType} instead of separately.</p>
         <small>Cancelling restores this announcement to the normal plan and makes other Smuggle hosts available again.</small>
       </div>)}
-      {intentionallySkipped.map((play) => <div className="planner-detail-note is-skipped" key={play.id}><strong>{play.playType} will not run</strong><p>{formatDate(play.scheduledDate)} · This decision removes the announcement from the calendar, capacity totals, and reports.</p></div>)}
+      {intentionallySkipped.map((play) => <div className="planner-detail-note is-skipped" key={play.id}><strong>{play.playType} will not run</strong><p>{formatDate(play.scheduledDate)} · This decision removes the promotion from the calendar, capacity totals, and reports.</p>{canEdit && campaign.status !== "archived" && canChoosePromotion(play) && <button className="planner-text-button" onClick={() => onOpenPlay(play)}>Review decision</button>}</div>)}
       <div className="planner-campaign-play-list">{plays.map((play) => <PlayRow key={play.id} play={play} showDate={standalone && plays.length > 1} smuggleRelationship={hostedByPlay.get(play.id)} onClick={() => onOpenPlay(play)} />)}</div>
       {confirmDelete && !eventSeries && (
         <div className="planner-delete-confirmation" role="alert">
@@ -2714,7 +2768,7 @@ function PlannerApp({authState, theme, toggleTheme}) {
   const updatePlay = async (play, success = "Promotion updated.") => {
     const campaign = workspace.campaigns.find((item) => item.id === play.campaignId);
     const deadline = campaignDeadline(campaign);
-    if (deadline && play.scheduledDate > deadline) {
+    if (play.status !== "skipped" && deadline && play.scheduledDate > deadline) {
       setError(`This promotion cannot be planned after ${formatDate(deadline)}.`);
       throw new Error("A promotion cannot be planned after its campaign deadline.");
     }

@@ -12,7 +12,7 @@ Usage: node scripts/event-support-harness/adapter-cli.mjs [--preview | --read-on
   --config PATH       Reviewed scope JSON (default: selected-test-plan.json)
   --journal-dir PATH  Explicit private local directory; required for --read-only
   --preview           Offline review only; default. No credentials or journal used.
-  --read-only         GET preflight, then snapshots/proposal when all IDs are linked.
+  --read-only         GET preflight, then current snapshots when all IDs are linked.
   --help              Show this help.
 No execute, send, live-write, cleanup, or mutation-enabling option exists.
 Credentials for read-only mode: PCO_APP_ID and PCO_SECRET environment variables.
@@ -35,6 +35,13 @@ export function parseArgs(args) {
   check(options.help || options.mode !== 'read-only' || options.journalDir, 'Read-only mode requires an explicit private journal directory.', 'INVALID_ARGUMENT');
   return options;
 }
+/** Observation stays independent of the initial reschedule proposal: it must
+ * remain usable after a move, a partial update, and renewed native responses. */
+export async function collectReadOnlyReport(adapter) {
+  const report = { preflight: await adapter.preflight() };
+  if (!report.preflight.blockers.length) report.snapshots = [await adapter.capture('A'), await adapter.capture('B')];
+  return report;
+}
 export async function main(args = process.argv.slice(2)) {
   const options = parseArgs(args); // Reject all write flags before any file or secret access.
   if (options.help) { process.stdout.write(help); return; }
@@ -43,11 +50,7 @@ export async function main(args = process.argv.slice(2)) {
   const client = createReadOnlyPcoClient({ appId: process.env.PCO_APP_ID, secret: process.env.PCO_SECRET });
   const journal = await openJournal({ directory: options.journalDir, runId: scope.runId });
   const adapter = createAdapter({ scope, client, journal });
-  const report = { preflight: await adapter.preflight() };
-  if (!report.preflight.blockers.length) {
-    report.snapshots = [await adapter.capture('A'), await adapter.capture('B')];
-    report.rescheduleProposal = await adapter.previewReschedule();
-  }
+  const report = await collectReadOnlyReport(adapter);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

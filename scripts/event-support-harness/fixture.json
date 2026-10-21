@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "simulated": true,
+  "runId": "fixture-phase-one",
+  "serviceTypeId": "fixture-event-support",
+  "timezone": "America/Chicago",
+  "description": "Fictional rehearsal data. These dates and participants are not proposed live test selections.",
+  "evidenceTime": "2030-01-10T18:00:00Z",
+  "renewedEvidenceTime": "2030-01-11T18:00:00Z",
+  "occurrences": [
+    { "id": "fixture-occurrence-a", "parentEventId": "fixture-event-a", "startsAt": "2030-01-20T16:00:00Z", "endsAt": "2030-01-20T17:00:00Z" },
+    { "id": "fixture-occurrence-b", "parentEventId": "fixture-event-b", "startsAt": "2030-01-20T16:00:00Z", "endsAt": "2030-01-20T17:00:00Z" }
+  ],
+  "reschedule": { "startsAt": "2030-01-21T17:00:00Z", "endsAt": "2030-01-21T18:00:00Z" },
+  "snapshot": {
+    "revision": 1,
+    "occurrence": { "id": "fixture-occurrence-a", "startsAt": "2030-01-20T16:00:00Z", "endsAt": "2030-01-20T17:00:00Z" },
+    "plan": { "id": "fixture-plan-a" },
+    "times": [
+      { "id": "fixture-time-arrival", "name": "Arrival and setup", "startsAt": "2030-01-20T15:30:00Z", "endsAt": "2030-01-20T16:00:00Z" },
+      { "id": "fixture-time-event", "name": "Event", "startsAt": "2030-01-20T16:00:00Z", "endsAt": "2030-01-20T17:00:00Z" }
+    ],
+    "requirements": [
+      { "id": "fixture-need-sound", "teamId": "fixture-tech", "role": "Sound", "quantity": 1, "startsAt": "2030-01-20T15:30:00Z", "endsAt": "2030-01-20T17:00:00Z" },
+      { "id": "fixture-need-graphics", "teamId": "fixture-tech", "role": "Graphics", "quantity": 1, "startsAt": "2030-01-20T15:30:00Z", "endsAt": "2030-01-20T17:00:00Z" }
+    ],
+    "assignments": [
+      { "id": "fixture-assignment-a", "personId": "fixture-person-a", "teamId": "fixture-tech", "role": "Sound", "status": "C", "confirmedRevision": 1, "timeIds": ["fixture-time-arrival", "fixture-time-event"], "startsAt": "2030-01-20T15:30:00Z", "endsAt": "2030-01-20T17:00:00Z", "prepareNotification": false, "notificationSentAt": "2030-01-10T18:00:00Z" },
+      { "id": "fixture-assignment-b", "personId": "fixture-person-b", "teamId": "fixture-tech", "role": "Graphics", "status": "D", "confirmedRevision": null, "timeIds": ["fixture-time-arrival", "fixture-time-event"], "startsAt": "2030-01-20T15:30:00Z", "endsAt": "2030-01-20T17:00:00Z", "prepareNotification": false, "notificationSentAt": "2030-01-10T18:00:00Z", "declineReason": "Fictional decline for validation" }
+    ]
+  }
+}

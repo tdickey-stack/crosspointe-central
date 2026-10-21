@@ -4,7 +4,9 @@ This isolated harness prepares the controlled test described in
 [issue #16](https://github.com/tdickey-stack/crosspointe-central/issues/16).
 It is **offline and dry-run only**. It does not load credentials, call PCO,
 read/write Firestore, send invitations, or attach to deployed Central.
-There is no live execution flag or network transport to enable.
+There is no live execution flag or network transport in the original simulation.
+The separate [gated adapter](event-support-live-adapter.md) now adds real read-only
+PCO checks, durable journals and mocked mutation tests. Live writes remain disabled.
 
 ## Run
 
@@ -90,11 +92,14 @@ This harness contains no automated Central reminders or notifications. The
 later implementation must supersede old-revision reminders and reconcile stale
 reads without turning them into cancellations or zero coverage.
 
-## Selecting and preparing the live test later
+## Controlled test selection and original checklist
 
 `scripts/event-support-harness/live-test.template.json` is an intentionally
-incomplete planning worksheet. The CLI rejects it. Leave it unfilled until the
-test date and participants are chosen.
+incomplete planning worksheet. The original CLI rejects it. The selected October
+28/29, 2026 test with Tyler and Riley is recorded separately in
+`scripts/event-support-harness/selected-test-plan.json`; see the adapter runbook
+for current setup, verification results and remaining live gates. The checklist
+below describes the full Phase 1 acceptance scope, not completed live work.
 
 1. Select the date, two willing participants, scheduling leader, response
    recipient, cleanup owner, and explicit allowed messages/mutations.

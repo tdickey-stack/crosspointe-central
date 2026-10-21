@@ -20,6 +20,7 @@ firepit-log.txt
 # .firebaserc
 
 # Runtime data
+output/event-support-private/
 pids
 *.pid
 *.seed

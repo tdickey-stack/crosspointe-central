@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "runId": "central-notifications-2026-10-28",
+  "timezone": "America/Chicago",
+  "serviceTypeName": "Event Support",
+  "serviceTypeId": null,
+  "team": {
+    "id": null,
+    "name": "Tech",
+    "arrivalOffsetMinutes": 60,
+    "requirements": [{ "role": "Sound", "quantity": 1 }, { "role": "Graphics", "quantity": 1 }]
+  },
+  "people": {
+    "leaderId": "15109003",
+    "responseRecipientId": "15109003",
+    "participants": [
+      { "id": "146335432", "name": "Riley Baker", "role": "Sound" },
+      { "id": "15109003", "name": "Tyler Dickey", "role": "Graphics" }
+    ]
+  },
+  "occurrences": [
+    {
+      "key": "A", "title": "TEST — Central Notifications A",
+      "eventId": null, "instanceId": null, "planId": null,
+      "timeIds": { "arrival": null, "event": null },
+      "startsAt": "2026-10-28T23:00:00Z", "endsAt": "2026-10-29T00:00:00Z", "arrivalOffsetMinutes": null
+    },
+    {
+      "key": "B", "title": "TEST — Central Notifications B — Control",
+      "eventId": null, "instanceId": null, "planId": null,
+      "timeIds": { "arrival": null, "event": null },
+      "startsAt": "2026-10-28T23:00:00Z", "endsAt": "2026-10-29T00:00:00Z", "arrivalOffsetMinutes": null
+    }
+  ],
+  "reschedule": { "key": "A", "startsAt": "2026-10-30T00:00:00Z", "endsAt": "2026-10-30T01:00:00Z" }
+}

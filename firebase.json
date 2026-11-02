@@ -41,6 +41,10 @@
     ],
     "headers": [
       {
+        "source": "/@(central-seasonal.js|central-loader.js|central-loader.css|central-christmas-loader.css|catm-*.js|catm-*.css|catm-*.svg|CATM_LOGO.svg|LoaderPopcornBucket.svg)",
+        "headers": [{"key": "Cache-Control", "value": "no-store"}]
+      },
+      {
         "source": "/",
         "headers": [{"key": "Cache-Control", "value": "no-store"}]
       },

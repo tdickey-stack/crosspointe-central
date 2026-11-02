@@ -18,7 +18,7 @@ function preview(url = "http://localhost/navlab.html", {stored = "", production 
     location: new URL(url),
     CENTRAL_SEASONAL_EXPERIENCE_CONFIG: {id: "christmas-at-the-movies", previewEnabled: true,
       previewDefaultOn: false, productionEnabled: production,
-      productionStartsAt: "2020-01-01", productionEndsAt: "2099-01-01"},
+      productionStartsAt: "2020-01-01T00:00:00Z", productionEndsAt: "2099-01-01T00:00:00Z"},
     localStorage: {getItem() {return stored;}, setItem() {writes++;}, removeItem() {writes++;}},
     history: {replaceState(_state, _title, next) {window.location = new URL(next, window.location);}},
     document: {
@@ -96,7 +96,7 @@ test("Navlab boots the seasonal adapter before its own CSS without importing the
   assert.doesNotMatch(html, /(?:src|href)="\/(?:app\.js|styles\.css|christmas-movies\.css)/);
 });
 
-test("seasonal hero decorations stay out of production Home and Sunday but remain ready in Navlab", () => {
+test("seasonal hero decorations require public campaign availability and retain isolated Navlab behavior", () => {
   const originalDocument = globalThis.document;
   const originalWindow = globalThis.window;
   const originalResizeObserver = globalThis.ResizeObserver;
@@ -128,6 +128,17 @@ test("seasonal hero decorations stay out of production Home and Sunday but remai
       assert.equal(appendSeasonalPreviewDecorations(hero, copy), false);
       assert.deepEqual(hero.children, []);
       assert.deepEqual(copy.children, []);
+    }
+
+    for (const available of [false, true]) {
+      globalThis.window.CentralSeasonal = {isAvailable: () => available};
+      for (const surface of ["Home", "Sunday"]) {
+        const hero = node(`${surface} hero`);
+        const copy = node(`${surface} copy`);
+        assert.equal(appendSeasonalPreviewDecorations(hero, copy), available);
+        assert.equal(hero.children.length, available ? 1 : 0);
+        assert.equal(copy.children.length, available ? 1 : 0);
+      }
     }
 
     delete documentElement.dataset.productionShell;

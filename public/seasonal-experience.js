@@ -35,17 +35,21 @@
 
   function normalizeConfig_(value) {
     var source = value && typeof value === "object" ? value : {};
+    var supported = source.id === EXPERIENCE_ID;
     return {
-      id: source.id === EXPERIENCE_ID ? source.id : EXPERIENCE_ID,
-      previewEnabled: source.previewEnabled === true,
+      id: supported ? EXPERIENCE_ID : "",
+      previewEnabled: supported && source.previewEnabled === true,
       previewDefaultOn: source.previewDefaultOn === true,
-      productionEnabled: source.productionEnabled === true,
+      productionEnabled: supported && source.productionEnabled === true,
       productionStartsAt: String(source.productionStartsAt || "").trim(),
       productionEndsAt: String(source.productionEndsAt || "").trim(),
     };
   }
 
   function isInsideProductionWindow_(config, nowMs) {
+    // A production schedule must identify an instant, independent of browser timezone.
+    var timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+    if (!timestamp.test(config.productionStartsAt) || !timestamp.test(config.productionEndsAt)) return false;
     var startsAt = config.productionStartsAt ?
       Date.parse(config.productionStartsAt) : Number.NaN;
     var endsAt = config.productionEndsAt ?

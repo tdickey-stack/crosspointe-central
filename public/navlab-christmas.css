@@ -1,5 +1,25 @@
-/* Christmas At The Movies styling for the Navigation Lab.
- * Every rule is gated so normal Navlab remains unchanged. */
+/* Christmas At The Movies styling shared by Central and the Navigation Lab. */
+
+.central-seasonal-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 20px;
+  padding: 10px 17px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+:root[data-seasonal-experience="christmas-at-the-movies"] .central-seasonal-toggle {
+  border-color: var(--catm-gold);
+  background: var(--catm-evergreen-deep);
+  color: var(--catm-cream);
+}
 
 :root[data-seasonal-experience="christmas-at-the-movies"] {
   --catm-velvet: #7b1020;

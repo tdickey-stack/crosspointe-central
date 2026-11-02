@@ -323,7 +323,7 @@ function seasonalBrand() {
 
 export function appendSeasonalPreviewDecorations(hero, copy) {
   const production = document.documentElement?.dataset?.productionShell === "true";
-  if (production || !window.NavlabSeasonal) return false;
+  if (production ? !window.CentralSeasonal?.isAvailable() : !window.NavlabSeasonal) return false;
   hero.append(createMarquee());
   copy.append(seasonalBrand());
   return true;
@@ -349,6 +349,7 @@ function renderHome(root, data, showDetails, onNavigate, interests) {
   appendLink(actions, text(settings.primary_button_text) || "Learn more", safeHttpUrl(settings.primary_button_url));
   appendLink(actions, text(settings.secondary_button_text) || "More ways to connect", safeHttpUrl(settings.secondary_button_url), true);
   if (actions.childElementCount) copy.append(actions);
+  window.CentralSeasonal?.appendControl(copy);
   hero.append(copy);
 
   const featured = createFeaturedCard(data, showDetails);
@@ -430,7 +431,9 @@ function renderSundayHome(root, data, showDetails, onNavigate, onWatch, interest
     const watch = element("button", "button secondary", "Watch Live"); watch.type = "button";
     watch.addEventListener("click", onWatch); actions.append(watch);
   }
-  copy.append(actions); hero.append(copy);
+  copy.append(actions);
+  window.CentralSeasonal?.appendControl(copy);
+  hero.append(copy);
   const welcome = element("div", "sunday-home-welcome");
   welcome.append(stepArtwork("book"), element("h2", "", "Let’s follow along."),
       element("p", "", "Keep Scripture close, capture what stands out, and take your next step."));

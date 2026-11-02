@@ -4,10 +4,14 @@ import test from 'node:test';
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
 const shell = read('public/index.html');
 const config = JSON.parse(read('firebase.json')).hosting;
-test('public root uses the new navigation without lab or seasonal controls', () => {
+test('public root uses the new navigation without lab controls and with gated seasonal assets', () => {
   assert.match(shell, /data-production-shell="true"/);
   assert.match(shell, /navlab\.js/);
-  assert.doesNotMatch(shell, /Navigation Lab|class="lab-note"|noindex|navlab-seasonal|navlab-christmas|seasonal-experience/);
+  assert.doesNotMatch(shell, /Navigation Lab|class="lab-note"|noindex|navlab-seasonal/);
+  assert.ok(shell.indexOf('/seasonal-config.js') < shell.indexOf('/seasonal-experience.js'));
+  assert.ok(shell.indexOf('/seasonal-experience.js') < shell.indexOf('/central-seasonal.js'));
+  assert.ok(shell.indexOf('/central-seasonal.js') < shell.indexOf('/navlab.css'));
+  assert.match(shell, /navlab-christmas/);
   assert.match(shell, /manifest\.webmanifest/);
   assert.match(shell, /central-public-boot\.js/);
   for (const asset of ['central-analytics.js', 'push-notifications.js', 'wayfinder-chat.js']) assert.ok(shell.includes(asset));

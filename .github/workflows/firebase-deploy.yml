@@ -89,6 +89,9 @@ jobs:
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
 
+      - name: Test seasonal experience and loader
+        run: pnpm run test:seasonal
+
       - name: Test public navigation
         run: pnpm run test:public-navigation
 
@@ -205,6 +208,9 @@ jobs:
 
       - name: Verify JavaScript syntax
         run: pnpm run check:syntax
+
+      - name: Test seasonal experience and loader
+        run: pnpm run test:seasonal
 
       - name: Test public navigation
         run: pnpm run test:public-navigation

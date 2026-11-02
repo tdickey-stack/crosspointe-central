@@ -316,11 +316,13 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
     sizePager();
   });
   window.addEventListener("resize", sizePager);
-  window.addEventListener("navlabseasonchange", () => {
+  function resizeForSeasonalChange() {
     cancelPageMotion();
     lastPagerWidth = 0;
     sizePager();
-  });
+  }
+  window.addEventListener("navlabseasonchange", resizeForSeasonalChange);
+  window.addEventListener("central:seasonalchange", resizeForSeasonalChange);
   reduceMotion.addEventListener("change", () => {
     if (!reduceMotion.matches || !stopPageMotion) return;
     cancelPageMotion();
@@ -345,6 +347,7 @@ import {createSundayPlayer} from "./navlab-player.js?v=2";
     byId("theme-toggle").setAttribute("aria-pressed", String(dark));
     document.querySelector('meta[name="theme-color"]').content = dark ? "#18181b" : "#f4f4f5";
     window.NavlabSeasonal?.syncThemeColor();
+    window.CentralSeasonal?.syncThemeColor();
     study?.setTheme(dark ? "dark" : "light");
   }
   let preferredTheme;

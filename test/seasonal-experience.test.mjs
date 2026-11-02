@@ -183,3 +183,36 @@ test("production window supports normal opt-out and seasonal opt-back-in", () =>
   );
   assert.equal(experience.getReloadCount(), 0);
 });
+
+test("missing or unknown campaign ids fail closed even with enabled flags and overrides", () => {
+  for (const id of [undefined, "different-campaign", "", null]) {
+    for (const hostname of ["localhost", "central.crosspointe.tv"]) {
+      const experience = loadExperience({hostname, search: "?seasonalPreview=christmas", storedMode: "seasonal",
+        config: {...baseConfig, id, previewDefaultOn: true, productionEnabled: true,
+          productionStartsAt: "2020-01-01T00:00:00Z", productionEndsAt: "2099-01-01T00:00:00Z"}});
+      assert.equal(experience.api.isAvailable(), false);
+      assert.equal(experience.api.isActive(), false);
+      assert.equal(experience.api.setMode("seasonal", false), false);
+      assert.equal(experience.attributes.has("data-seasonal-experience"), false);
+    }
+  }
+});
+
+test("production activation includes the start, excludes the end, and rejects invalid windows", () => {
+  const experience = loadExperience();
+  const startsAt = "2026-12-01T00:00:00Z";
+  const endsAt = "2026-12-26T00:00:00Z";
+  const options = {hostname: "central.crosspointe.tv", pathname: "/", config: {...baseConfig,
+    productionEnabled: true, productionStartsAt: startsAt, productionEndsAt: endsAt}};
+  for (const [nowMs, active] of [[Date.parse(startsAt) - 1, false], [Date.parse(startsAt), true],
+    [Date.parse(endsAt) - 1, true], [Date.parse(endsAt), false]]) {
+    assert.equal(experience.api.resolveState({...options, nowMs}).active, active);
+  }
+  for (const [start, end] of [["", endsAt], [startsAt, ""], ["invalid", endsAt], [endsAt, startsAt], [startsAt, startsAt],
+    ["2026-12-01", endsAt], [startsAt, "2026-12-26"], ["2026-12-01T00:00:00", endsAt]]) {
+    assert.equal(experience.api.resolveState({...options, config: {...options.config,
+      productionStartsAt: start, productionEndsAt: end}}).available, false);
+  }
+  assert.equal(experience.api.resolveState({...options, nowMs: Date.parse("2026-12-01T06:00:00Z"),
+    config: {...options.config, productionStartsAt: "2026-12-01T00:00:00-06:00"}}).active, true);
+});

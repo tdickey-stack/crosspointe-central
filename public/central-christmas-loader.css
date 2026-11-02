@@ -297,6 +297,16 @@
 #central-loader .catm-lab-popcorn > img {
   display: block; width: 100%; height: 100%; object-fit: contain; overflow: visible;
 }
+/* This is an illustration, not a navigation icon. Restore SVG paint defaults
+ * at its root so navlab.css cannot add inherited outlines to the artwork.
+ * Authored fills/strokes on individual paths remain intact. */
+#central-loader .catm-lab-popcorn > svg {
+  fill: initial;
+  stroke: initial;
+  stroke-width: initial;
+  stroke-linecap: initial;
+  stroke-linejoin: initial;
+}
 :root[data-seasonal-experience="christmas-at-the-movies"] #central-loader .central-loader-content {
   min-height: 100svh;
   padding: 82px 20px 32px;

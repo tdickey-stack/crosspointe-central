@@ -35,16 +35,25 @@ content, and failed artwork. Local checks use read-only public data snapshots;
 they do not change published Sunday settings. Firebase auth and notification
 behavior must be judged on Hosting, not the plain local static server.
 
-## Release boundary
+## Production activation — November 2, 2026
 
-Production remains disabled with blank launch dates. This integration is for dev
-review. A production release needs an explicit start/end window with timezone
-offsets and `productionEnabled: true`, followed by the normal main release and
-served-config verification. Setting `productionEnabled: false` and redeploying
-Hosting is the configuration-only rollback; refreshed pages use normal Central.
-Already-open sessions retain their resolved mode until reload.
+The user authorized promotion to main and production activation after final checks.
+Christmas is the default on approved production hosts from November 2, 2026 at
+midnight Central through January 1, 2027 at midnight Central (exclusive), using
+explicit `-06:00` offsets. Dev still defaults to normal unless explicitly selected.
+Visitor normal-mode opt-outs remain available and persist across reloads.
+
+The current upward reveal and the correction isolating the artwork from global
+SVG icon strokes are included. Final verification covers production-host default
+activation without a query, saved opt-out/opt-in, light/dark, mobile layout,
+reduced motion, loader recovery, and the hosted files after deployment.
+
+For configuration-only rollback, set `productionEnabled: false`, commit to main,
+and let the normal deployment complete. Verify the served config and a fresh
+production visit are normal; do not revert the whole public shell. Refreshed
+pages pick up this change; already-open sessions retain their mode until reload.
 
 The existing dev workflow also redeploys shared backend endpoints/schema. This
 change adds no backend or schema modifications and starts from current main;
-workflow concurrency serializes deployments. Do not mistake a dev push for a
-verified release or turn on production as part of preview validation.
+workflow concurrency serializes deployments. Confirm workflow completion and
+served asset/config matches before reporting a production release.

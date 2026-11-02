@@ -5,8 +5,8 @@
     id: "christmas-at-the-movies",
     previewEnabled: true,
     previewDefaultOn: false,
-    productionEnabled: false,
-    productionStartsAt: "",
-    productionEndsAt: "",
+    productionEnabled: true,
+    productionStartsAt: "2026-11-02T00:00:00-06:00",
+    productionEndsAt: "2027-01-01T00:00:00-06:00",
   });
 }());

@@ -251,3 +251,27 @@ test("notification responses are ignored after an auth account change", () => {
   assert.match(preferencesBlock, /var requestUid = getCurrentAdminUserUid_\(\)/);
   assert.match(preferencesBlock, /isCurrentAdminUserUid_\(requestUid\)/);
 });
+
+
+test("Planner controls are eligibility gated and preserve separate preferences", () => {
+  const renderBlock = adminSource.slice(
+      adminSource.indexOf("function renderNotificationsPagePanel_"),
+      adminSource.indexOf("function renderNotificationPreferenceOption_"),
+  );
+  assert.match(renderBlock, /plannerEligible \? \[/);
+  assert.match(renderBlock, /planner-notifications\.email/);
+  assert.match(renderBlock, /planner-notifications\.pumble/);
+  assert.match(renderBlock, /planner-notifications\.reminders/);
+  assert.match(renderBlock, /8:00 a\.m\. Central/);
+  assert.match(renderBlock, /responses addressed to your Central sign-in email/);
+  assert.match(adminSource, /selected\.plannerRequests = Object\.assign/);
+  assert.match(adminSource, /plannerNotificationEligible = normalized\.plannerEligible/);
+});
+
+
+test("disconnect reloads all server-normalized notification preferences", () => {
+  const start = adminSource.indexOf("function disconnectChangeRequestPumble_");
+  const end = adminSource.indexOf("function callChangeRequestPumbleEndpoint_", start);
+  assert.match(adminSource.slice(start, end),
+      /loadChangeRequestNotificationPreferencesIfNeeded_\(true\)/);
+});

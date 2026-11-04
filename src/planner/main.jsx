@@ -491,7 +491,7 @@ function AppHeader({authState, activeView, onMenu, theme, toggleTheme}) {
   );
 }
 
-function Sidebar({activeView, setActiveView, open, close}) {
+function Sidebar({activeView, setActiveView, open, close, pendingRequestCount}) {
   return (
     <>
       {open && <button className="planner-sidebar-scrim" onClick={close} aria-label="Close navigation" />}
@@ -503,9 +503,11 @@ function Sidebar({activeView, setActiveView, open, close}) {
               <button
                 key={item.id}
                 className={activeView === item.id ? "is-active" : ""}
+                aria-label={item.id === "requests" && pendingRequestCount > 0 ? `Requests, ${pendingRequestCount} pending` : undefined}
                 onClick={() => { setActiveView(item.id); close(); }}
               >
                 <span aria-hidden="true">{item.icon}</span>{item.label}
+                {item.id === "requests" && pendingRequestCount > 0 && <span className="planner-sidebar-count" aria-hidden="true">{pendingRequestCount}</span>}
               </button>
             ))}
           </nav>
@@ -1850,7 +1852,7 @@ function RegenerationDialog({regeneration, onClose, onRegenerate}) {
     <Modal title="Regenerate campaign announcements" eyebrow="Apply current playbooks" onClose={onClose} size="wide">
       <div className="planner-detail-note">
         <strong>Rolling phase windows</strong>
-        <p>Each playbook week becomes a full seven-day window before the event. Fixed weekdays stay fixed, and no generated announcement lands on or after the event date.</p>
+        <p>Each playbook week keeps its seven-day window before the event. Sunday events also receive an event-day bulletin mention when their final week includes a Sunday bulletin and registration has not already closed. Earlier promotions keep their dates.</p>
       </div>
       <div className="planner-regeneration-metrics">
         <span><strong>{summary.campaigns}</strong> active campaigns</span>
@@ -2702,14 +2704,17 @@ function LaneDialog({lane, playbooks, onClose, onSave}) {
 
 function PlannerApp({authState, theme, toggleTheme}) {
   const [storedWorkspace, setWorkspace] = useState(null);
+  const [liveRequests, setLiveRequests] = useState(null);
+  const [requestSyncError, setRequestSyncError] = useState("");
+  const [requestSyncAttempt, setRequestSyncAttempt] = useState(0);
   const today = useBusinessDate();
   const [calendarRange, setCalendarRange] = useState(null);
   const [reportRange, setReportRange] = useState(null);
   const [timelineRange, setTimelineRange] = useState(null);
-  const workspace = useMemo(() => withLevel2StandingLane(storedWorkspace, {
+  const workspace = useMemo(() => withLevel2StandingLane(storedWorkspace && liveRequests !== null ? {...storedWorkspace, promotionRequests: liveRequests} : storedWorkspace, {
     now: today, ranges: [calendarRange, reportRange, timelineRange].filter(Boolean),
-  }), [storedWorkspace, today, calendarRange, reportRange, timelineRange]);
-  const [activeView, setActiveView] = useState("overview");
+  }), [storedWorkspace, liveRequests, today, calendarRange, reportRange, timelineRange]);
+  const [activeView, setActiveView] = useState(() => new URLSearchParams(window.location.search).get("view") === "requests" ? "requests" : "overview");
   const [overviewWeekOffset, setOverviewWeekOffset] = useState(0);
   const [mobileNav, setMobileNav] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -2747,6 +2752,23 @@ function PlannerApp({authState, theme, toggleTheme}) {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [store]);
+  useEffect(() => { setLiveRequests(null); setRequestSyncError(""); }, [store]);
+  useEffect(() => {
+    let active = true;
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = store.subscribePromotionRequests((requests) => {
+        if (!active) return;
+        setLiveRequests(requests);
+        setRequestSyncError("");
+      }, (syncError) => {
+        if (active) setRequestSyncError(syncError.message || "The request listener stopped.");
+      });
+    } catch (syncError) {
+      setRequestSyncError(syncError.message || "The request listener could not start.");
+    }
+    return () => { active = false; unsubscribe(); };
+  }, [store, requestSyncAttempt]);
 
   const perform = async (action, success) => {
     setError(""); setMessage("");
@@ -2889,7 +2911,7 @@ function PlannerApp({authState, theme, toggleTheme}) {
   return (
     <div className="planner-app">
       <AppHeader authState={authState} activeView={activeView} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMobileNav(true)} />
-      <Sidebar activeView={activeView} setActiveView={setActiveView} open={mobileNav} close={() => setMobileNav(false)} />
+      <Sidebar activeView={activeView} setActiveView={setActiveView} open={mobileNav} close={() => setMobileNav(false)} pendingRequestCount={(workspace.promotionRequests || []).filter((request) => request.status === "pending-review").length} />
       <main className="planner-main">
         {!workspace.isSeeded && (
           <div className="planner-seed-banner">
@@ -2901,6 +2923,7 @@ function PlannerApp({authState, theme, toggleTheme}) {
           </div>
         )}
         {authState.preview && <div className="planner-preview-banner">Local preview · changes stay in this browser session</div>}
+        {requestSyncError && <div className="planner-request-sync-error" role="alert">Requests may be out of date: {requestSyncError} <button className="planner-text-button" onClick={() => setRequestSyncAttempt((attempt) => attempt + 1)}>Retry</button></div>}
         {error && <div className="planner-toast is-error" role="alert"><span>{error}</span><button onClick={() => setError("")}>×</button></div>}
         {message && <div className="planner-toast is-success" role="status"><span>{message}</span><button onClick={() => setMessage("")}>×</button></div>}
         {content}
@@ -2935,7 +2958,7 @@ function PlannerApp({authState, theme, toggleTheme}) {
       {occurrenceEditor && <CampaignEditorDialog {...occurrenceEditor} workspace={workspace} onClose={() => setOccurrenceEditor(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${occurrenceEditor.campaign.name} promotion plan was updated.`); setOccurrenceEditor(null); }} />}
       {endingSeries && <EndSeriesDialog {...endingSeries} workspace={workspace} onClose={() => setEndingSeries(null)} onSave={async (plan) => { await saveSeriesPlan(plan, `${endingSeries.series.name} was ended from ${formatDate(occurrenceDate(endingSeries.campaign))}.`); setEndingSeries(null); setActiveView("campaigns"); }} />}
       {editingBriefContent && <CampaignBriefContentDialog campaign={editingBriefContent} onClose={() => setEditingBriefContent(null)} onSave={saveCampaignBriefContent} />}
-      {selectedRequest && <RequestReviewDialog request={selectedRequest} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedRequest(null)} onConvert={async (request, campaign, plays) => {
+      {selectedRequest && <RequestReviewDialog request={workspace.promotionRequests.find((request) => request.id === selectedRequest.id) || selectedRequest} workspace={workspace} canEdit={canEdit} onClose={() => setSelectedRequest(null)} onConvert={async (request, campaign, plays) => {
         const {result, savedRequest, updates} = await perform(async () => {
           const updates = promotionRequestConversionUpdates(request, campaign);
           const result = await store.convertPromotionRequest(

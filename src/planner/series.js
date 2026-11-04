@@ -269,6 +269,7 @@ function mergeGeneratedPlays({campaign, playbook, existing, generatedAt, today, 
     campaign,
     playbook,
     generatedAt,
+    existingPlays: existing,
     idFactory: campaignPlayIdFactory({campaign, playbook, existingPlays: existing}),
   });
   const priorById = new Map(existing.map((play) => [play.id, play]));
@@ -330,6 +331,7 @@ function mergeCampaignEditPlays({campaign, originalCampaign, playbook, existing,
     campaign,
     playbook,
     generatedAt,
+    existingPlays: existing,
     idFactory,
   });
   const priorById = new Map(existing.map((play) => [play.id, play]));

@@ -230,6 +230,64 @@ test(
     },
 );
 
+test("Planner preferences enforce eligibility", async () => {
+  const uid = "tZkRZgzHwAczbw8USKVhFtExxqK2";
+  const userData = {active: true, pageAccess: {planner: "edit"}};
+  const writes = [];
+  let currentId = uid;
+  let linked = false;
+  const handler = createAdminNotificationPreferencesHandler({
+    firestore: {
+      doc: (path) => ({path, id: currentId, get: async () => snapshot()}),
+      runTransaction: async (callback) => callback({
+        get: async () => snapshot(),
+        update: (reference, value) => writes.push(value),
+      }),
+    },
+    fieldValue: {serverTimestamp: () => "now"},
+    verifyAdmin: async () => ({uid: currentId}),
+    getUserDocPath: (id) => `adminUsers/${id}`,
+    serializePumbleConnection: () => ({linked}),
+  });
+  /** @return {Object} User snapshot. */
+  function snapshot() {
+    return {id: currentId, exists: true, data: () => userData,
+      get: (field) => userData[field]};
+  }
+  /**
+   * @param {string} method HTTP method.
+   * @param {Object} selection Planner settings.
+   * @return {Promise<Object>} Response recorder.
+   */
+  async function request(method, selection) {
+    const response = createResponse_();
+    await handler({
+      method, body: {notificationPreferences: {plannerRequests: selection}},
+    }, response);
+    return response;
+  }
+  const initial = await request("GET");
+  assert.deepEqual(initial.body.plannerRequests,
+      {eligible: true, email: true, pumble: true, reminders: true});
+  const off = {email: false, pumble: false, reminders: false};
+  const saved = await request("POST", off);
+  assert.equal(saved.statusCode, 200);
+  assert.deepEqual(writes[0]["notificationPreferences.plannerRequests"], off);
+  assert.deepEqual(saved.body.plannerRequests, {eligible: true, ...off});
+  const conflict = await request("POST", {...off, pumble: true});
+  assert.equal(conflict.statusCode, 409);
+  assert.equal(writes.length, 1);
+  linked = true;
+  const enabled = await request("POST", {...off, pumble: true});
+  assert.equal(enabled.statusCode, 200);
+  currentId = "other-user";
+  const forbidden = await request("POST", off);
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(writes.length, 2);
+  const malformed = await request("POST", {email: false, pumble: false});
+  assert.equal(malformed.statusCode, 400);
+});
+
 /**
  * Creates a minimal Express response recorder.
  *

@@ -123,6 +123,7 @@ a { text-decoration: none; }
 .planner-sidebar nav button:hover { background: rgba(255,255,255,.045); color: #fff; }
 .planner-sidebar nav button.is-active { border-color: rgba(239,62,45,.28); background: linear-gradient(135deg, rgba(239,62,45,.18), rgba(239,62,45,.07)); box-shadow: inset 3px 0 var(--planner-red); color: #fff; }
 .planner-sidebar nav button.is-active > span { color: var(--planner-red); }
+.planner-sidebar nav button > .planner-sidebar-count, .planner-sidebar nav button.is-active > .planner-sidebar-count { display: inline-flex; width: auto; min-width: 23px; min-height: 23px; justify-content: center; margin-left: auto; padding: 0 7px; border-radius: 999px; background: var(--planner-red); color: #fff; font-size: .61rem; font-weight: 900; }
 .planner-gear-icon { display: block; width: 15px; height: 15px; }
 .planner-sidebar-footer { display: grid; gap: 7px; }
 .planner-sidebar-footer .planner-sidebar-label { margin-bottom: 2px; }
@@ -696,6 +697,7 @@ a { text-decoration: none; }
 .planner-seed-banner p { margin: 4px 0 0; color: #d4c4a4; font-size: .59rem; line-height: 1.45; }
 .planner-preview-banner { max-width: 1500px; margin: -22px auto 28px; color: var(--planner-amber); font-size: .56rem; font-weight: 800; letter-spacing: .06em; text-align: right; text-transform: uppercase; }
 .planner-toast { position: fixed; z-index: 90; right: 22px; bottom: 22px; display: flex; max-width: min(420px,calc(100vw - 44px)); align-items: center; gap: 15px; padding: 13px 15px; border: 1px solid rgba(75,195,167,.3); border-radius: 14px; background: #21312d; box-shadow: var(--planner-shadow); color: #c5fff1; font-size: .63rem; }
+.planner-request-sync-error { max-width: 1500px; margin: 0 auto 16px; padding: 12px 15px; border: 1px solid rgba(239,62,45,.5); border-radius: 12px; color: var(--planner-red); font-size: .7rem; line-height: 1.5; }
 .planner-toast.is-error { border-color: rgba(239,62,45,.34); background: #3b2323; color: #ffd3ce; }
 .planner-toast button { background: transparent; color: inherit; cursor: pointer; font-size: 1rem; }
 

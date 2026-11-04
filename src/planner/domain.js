@@ -203,10 +203,13 @@ export function promotionWindowComparison(campaign) {
 
 export function isCampaignExpired(campaign, now = new Date()) {
   try {
-    // Older campaigns derive their end date from the event's promotion window.
+    // Sunday events remain visible for their event-day bulletin; explicit
+    // promotion-window end dates continue to take precedence.
     const endDate = campaign?.campaignEndDate
       ? Temporal.PlainDate.from(campaign.campaignEndDate).toString()
-      : campaignWindow(Temporal.PlainDate.from(campaign?.eventDate).toString(), campaign?.durationWeeks).campaignEndDate;
+      : utcDateFromKey(Temporal.PlainDate.from(campaign?.eventDate).toString()).getUTCDay() === 0
+        ? Temporal.PlainDate.from(campaign.eventDate).toString()
+        : campaignWindow(Temporal.PlainDate.from(campaign?.eventDate).toString(), campaign?.durationWeeks).campaignEndDate;
     return endDate < dateKey(now);
   } catch (_error) {
     // Keep incomplete records visible so they can still be repaired.
@@ -234,6 +237,8 @@ export function campaignWeekForDate({eventDate, campaignEndDate, scheduleMode, c
   const {recommendedStartDate, campaignEndDate: plannedEndDate} = planningWindowForCampaign(source, durationWeeks);
   const target = dateKey(value);
   if (target < recommendedStartDate) return 0;
+  if (!isPromotionWindow(source) && target === source.eventDate &&
+    utcDateFromKey(target).getUTCDay() === 0) return Number(durationWeeks);
   if (target > plannedEndDate) return Number(durationWeeks) + 1;
   return Math.floor(differenceInDays(target, recommendedStartDate) / 7) + 1;
 }
@@ -289,10 +294,57 @@ export function compareCampaignPriority(left, right) {
   return String(left.id || "").localeCompare(String(right.id || ""));
 }
 
+// Sunday morning bulletins may still promote an event happening that day.
+// Add a separate placement so earlier bulletin dates and other channels keep
+// their existing phase schedule. A fixed identity preserves operator choices
+// when the event date or pinned playbook version changes.
+export function generateEventDayBulletin({campaign, playbook, generatedAt = new Date()}) {
+  if (!campaign?.id || !playbook?.id || isPromotionWindow(campaign) ||
+    campaign.campaignType === "standalone-content" ||
+    ["archived", "completed"].includes(campaign.status)) return null;
+  const eventDate = dateKey(campaign.eventDate);
+  if (utcDateFromKey(eventDate).getUTCDay() !== 0 ||
+    eventDate < dateKey(generatedAt) || deadlineForCampaign(campaign) < eventDate) return null;
+  const finalWeek = (playbook.weeks || []).find((week) => Number(week.weekNumber) === Number(playbook.durationWeeks));
+  const template = finalWeek?.plays?.find((play) =>
+    play.resourceId === "weekly-bulletin" && normalizedEligibleDays(play).includes(0));
+  if (!template) return null;
+  return {
+    id: campaignPlayScopedId(campaign.id, {id: playbook.id, version: 1}, {id: "event-day-bulletin"}, 1),
+    campaignId: campaign.id,
+    campaignName: campaign.name,
+    campaignLevel: Number(campaign.level || playbook.level),
+    campaignType: campaign.campaignType || playbook.campaignType,
+    playbookId: playbook.id,
+    playbookVersion: Number(playbook.version || 1),
+    templatePlayId: "event-day-bulletin",
+    weekNumber: Number(playbook.durationWeeks),
+    phase: "Event day",
+    playType: template.playType,
+    channel: template.channel,
+    resourceId: "weekly-bulletin",
+    originalScheduledDate: eventDate,
+    scheduledDate: eventDate,
+    eligibleWeekdays: [0],
+    requirement: template.requirement || "required",
+    lateBehavior: "SKIP",
+    supportsSmuggle: false,
+    status: "scheduled",
+    source: "campaign-generation",
+    manuallyAdjusted: false,
+    locked: false,
+    conflictState: "none",
+    conflictReason: "",
+    lateReason: "",
+    smuggle: null,
+  };
+}
+
 export function generateCampaignSchedule({
   campaign,
   playbook,
   generatedAt = new Date(),
+  existingPlays = [],
   idFactory = (templatePlay, weekNumber) =>
     `${campaign.id}_${templatePlay.id}_${weekNumber}`,
 }) {
@@ -400,6 +452,17 @@ export function generateCampaignSchedule({
       });
     });
   });
+
+  const eventDayBulletin = generateEventDayBulletin({campaign, playbook, generatedAt});
+  const existingEventDayDecision = eventDayBulletin && existingPlays.some((play) =>
+    play.campaignId === campaign.id && play.id !== eventDayBulletin.id &&
+    !campaignPlayIsAutomaticTombstone(play) && regenerationProtected(play, today) &&
+    (play.templatePlayId === "event-day-bulletin" ||
+      (play.resourceId === "weekly-bulletin" && play.scheduledDate === eventDayBulletin.scheduledDate)));
+  if (eventDayBulletin && !existingEventDayDecision && !plays.some((play) =>
+    play.resourceId === "weekly-bulletin" && play.scheduledDate === eventDayBulletin.scheduledDate)) {
+    plays.push(eventDayBulletin);
+  }
 
   return {
     campaign: {
@@ -549,6 +612,7 @@ export function buildCampaignRegeneration({
       campaign,
       playbook,
       generatedAt,
+      existingPlays: existing,
       idFactory: campaignPlayIdFactory({campaign, playbook, existingPlays: existing}),
     });
     const existingById = new Map(existing.map((play) => [play.id, play]));
@@ -575,7 +639,9 @@ export function buildCampaignRegeneration({
         return;
       }
       const clearsSmuggle = smugglePlayIds.has(previous.id);
-      if (regenerationProtected(previous, today) && !clearsSmuggle) {
+      const reviveEventDayBulletin = nextPlay.templatePlayId === "event-day-bulletin" &&
+        campaignPlayIsAutomaticTombstone(previous);
+      if (regenerationProtected(previous, today) && !clearsSmuggle && !reviveEventDayBulletin) {
         item.preserved += 1;
         protectedPlayIds.add(previous.id);
         candidatePlays.push(previous);

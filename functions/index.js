@@ -161,6 +161,10 @@ import {
 } from "./change-requests/pumble-oauth.js";
 import {createAdminNotificationPreferencesHandler} from
   "./notifications/admin-handler.js";
+import {disconnectPlannerNotificationPreferences} from
+  "./planner/notification-preferences.js";
+import {createPlannerRequestNotificationRuntime} from
+  "./planner/request-notifications.js";
 import {createServeNeedPumbleNotificationRuntime} from
   "./notifications/serve-needs-runtime.js";
 import {
@@ -610,6 +614,13 @@ const changeRequestNotificationRuntime =
     sendEmail: sendChangeRequestEmailNotification_,
     sendPumble: sendChangeRequestPumbleNotification_,
   });
+const plannerRequestNotificationRuntime = createPlannerRequestNotificationRuntime({
+  firestore,
+  fieldValue: {delete: () => admin.firestore.FieldValue.delete()},
+  sendEmail: (message) => sendCentralEmail_(message),
+  sendPumble: (message) => changeRequestPumbleTransport.send(message),
+  degradeConnection: degradePumbleConnection_,
+});
 const PLANNING_CENTER_SECRETS = [PCO_APP_ID, PCO_SECRET];
 const PLANNER_PCO_WEBHOOK_SECRETS = [
   PCO_APP_ID,
@@ -2039,6 +2050,45 @@ function isAlreadyExistsError_(error) {
     code === "already_exists";
 }
 
+// Planner requests have their own recipient policy and outbox; Admin Change
+// Request approval permissions never enroll a user in these alerts.
+export const plannerRequestCreated = onDocumentCreated({
+  region: "us-central1",
+  document: "centralPromotionRequests/{requestId}",
+  secrets: CHANGE_REQUEST_NOTIFICATION_SECRETS,
+  retry: true,
+}, async (event) => {
+  if (event.data?.data()?.status !== "pending-review") return;
+  const eventId = await plannerRequestNotificationRuntime.enqueue(
+      "submitted", event.params.requestId,
+  );
+  await plannerRequestNotificationRuntime.dispatch(eventId);
+});
+
+export const plannerRequestReminderScheduled = onSchedule({
+  region: "us-central1",
+  schedule: "0 8 * * *",
+  timeZone: "America/Chicago",
+  maxInstances: 1,
+  retryCount: 3,
+  secrets: CHANGE_REQUEST_NOTIFICATION_SECRETS,
+}, async (event) => {
+  const eventId = await plannerRequestNotificationRuntime.enqueue(
+      "reminder", "", event.scheduleTime || Date.now(),
+  );
+  await plannerRequestNotificationRuntime.dispatch(eventId);
+});
+
+export const plannerRequestNotificationDispatchScheduled = onSchedule({
+  region: "us-central1",
+  schedule: "every 1 minutes",
+  timeZone: "America/Chicago",
+  maxInstances: 1,
+  secrets: CHANGE_REQUEST_NOTIFICATION_SECRETS,
+}, async () => {
+  await plannerRequestNotificationRuntime.drain();
+});
+
 export const planningCenterPlannerWebhook = onRequest(
     {
       region: "us-central1",
@@ -2645,6 +2695,8 @@ export const changeRequestPumbleDisconnect = onRequest(
                 "notificationPreferences.changeRequests":
                   disconnectedPreferences,
                 "notificationPreferences.serveNeeds.pumble": false,
+                "notificationPreferences.plannerRequests":
+                  disconnectPlannerNotificationPreferences(userSnapshot.data()),
                 "notificationPreferences.updatedAt":
                   admin.firestore.FieldValue.serverTimestamp(),
                 "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
@@ -3563,7 +3615,7 @@ async function queueServeNeedInterestNotification_(interestId, interestData) {
 }
 
 /**
- * Sends a new Serve Needs response to each eligible, opted-in Pumble Admin.
+ * Sends a Serve Needs response only to its eligible, opted-in contact.
  * Pumble is an additional Admin alert; its outcome never changes the existing
  * contact-email delivery result returned to the public form.
  *
@@ -4038,6 +4090,8 @@ async function degradePumbleConnection_(uid, error) {
       };
     }
     update["notificationPreferences.serveNeeds.pumble"] = false;
+    update["notificationPreferences.plannerRequests"] =
+      disconnectPlannerNotificationPreferences(snapshot.data());
     update["notificationPreferences.updatedAt"] =
       admin.firestore.FieldValue.serverTimestamp();
     transaction.update(userRef, update);

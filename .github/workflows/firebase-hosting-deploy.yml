@@ -55,6 +55,9 @@ jobs:
       - name: Build Central Studio
         run: pnpm run build:studio
 
+      - name: Build Promotion Planner
+        run: pnpm run build:planner
+
       - name: Build Annual Planner
         run: pnpm run build:annual-planner
 

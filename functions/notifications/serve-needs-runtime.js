@@ -39,12 +39,20 @@ export function createServeNeedPumbleNotificationRuntime(options = {}) {
         .collection(usersCollectionPath)
         .where("active", "==", true)
         .get();
-    const recipients = usersSnapshot.docs.map((snapshot) => {
-      return getEligibleServeNeedPumbleRecipient(
-          snapshot.id,
-          snapshot.data(),
-      );
-    }).filter(Boolean);
+    const contactEmail = normalizeEmail_(
+        interestData && interestData.contactEmail,
+    );
+    const matches = contactEmail ? usersSnapshot.docs.filter((snapshot) => {
+      const user = snapshot.data();
+      return user && user.active === true &&
+        normalizeEmail_(user.email) === contactEmail;
+    }) : [];
+    // Duplicate active accounts make the intended recipient ambiguous, even if
+    // only one currently has notifications enabled.
+    const recipient = matches.length === 1 ?
+      getEligibleServeNeedPumbleRecipient(matches[0].id, matches[0].data()) :
+      null;
+    const recipients = recipient ? [recipient] : [];
     const interestRef = firestore
         .collection(interestsCollectionPath)
         .doc(String(interestId || "").trim());
@@ -126,6 +134,18 @@ export function createServeNeedPumbleNotificationRuntime(options = {}) {
   }
 
   return {notify};
+}
+
+/**
+ * Normalizes a stored email without coercing malformed values into addresses.
+ *
+ * @param {*} value Candidate email.
+ * @return {string} Normalized email, or empty string.
+ */
+function normalizeEmail_(value) {
+  if (typeof value !== "string") return "";
+  const email = value.trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
 
 /**

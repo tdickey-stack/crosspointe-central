@@ -672,6 +672,17 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
     };
   }
 
+  function subscribePromotionRequests(onRequests, onError) {
+    if (preview) return () => {};
+    if (!firestore || !user) throw new Error("Planner is not connected to Firebase.");
+    return firestore.collection(PLANNER_COLLECTIONS.requests).onSnapshot(
+      (snapshot) => onRequests(snapshot.docs
+        .map((doc) => normalizePromotionRequest(documentData(doc)))
+        .sort((left, right) => String(right.submittedAt).localeCompare(String(left.submittedAt)))),
+      onError,
+    );
+  }
+
   async function publishStarterConfiguration() {
     if (preview) {
       previewWorkspace.isSeeded = true;
@@ -1198,6 +1209,7 @@ export function createPlannerStore({firestore = null, user = null, preview = fal
 
   return {
     loadWorkspace,
+    subscribePromotionRequests,
     publishStarterConfiguration,
     savePlaybook,
     deletePlaybook,

@@ -890,6 +890,8 @@
     changeRequestNotificationsSaving: false,
     changeRequestNotificationsLoadFailed: false,
     changeRequestNotificationChannels: ["email"],
+    plannerNotificationEligible: false,
+    plannerNotificationPreferences: {email: true, pumble: true, reminders: true},
     pumbleNotificationPreferences: {
       changeRequests: false,
       serveNeeds: false,
@@ -4814,6 +4816,17 @@
       adminState.changeRequestNotificationsError = "";
       adminState.changeRequestNotificationsMessage = "";
       renderAdmin_();
+      return;
+    }
+
+    if (field.indexOf("planner-notifications.") === 0) {
+      var plannerField = field.replace("planner-notifications.", "");
+      if (["email", "pumble", "reminders"].indexOf(plannerField) !== -1) {
+        adminState.plannerNotificationPreferences[plannerField] = !!nextValue;
+        adminState.pumbleNotificationPreferencesError = "";
+        adminState.pumbleNotificationPreferencesMessage = "";
+        renderAdmin_();
+      }
       return;
     }
 
@@ -13327,14 +13340,17 @@
       adminState.changeRequestNotificationsSaving;
     var preferences = adminState.pumbleNotificationPreferences || {};
     var eligibility = adminState.pumbleNotificationEligibility || {};
+    var planner = adminState.plannerNotificationPreferences || {};
+    var plannerEligible = adminState.plannerNotificationEligible === true;
     var channels = normalizeChangeRequestNotificationChannels_(
         adminState.changeRequestNotificationChannels,
     );
     var emailEnabled = channels.indexOf("email") !== -1;
     var anyEligible = eligibility.changeRequests === true ||
-      eligibility.serveNeeds === true;
+      eligibility.serveNeeds === true || plannerEligible;
     var needsPumble = preferences.changeRequests === true ||
-      preferences.serveNeeds === true;
+      preferences.serveNeeds === true ||
+      (plannerEligible && planner.pumble === true);
     var email = String(adminState.user && adminState.user.email || "").trim();
     var connectionClass = connectionError ? " is-error" :
       pumbleLoading || pumbleAction ? " is-loading" :
@@ -13434,13 +13450,33 @@
       renderNotificationPreferenceOption_(
           "pumble-notifications.serveNeeds",
           "Pumble",
-          "Every new response submitted through the Serve Needs form.",
+          "New Serve Needs responses addressed to your Central sign-in email.",
           preferences.serveNeeds === true,
           !linked || eligibility.serveNeeds !== true,
           eligibility.serveNeeds ? "" : "Requires Serve Needs access.",
       ),
       "</fieldset>",
       "<p class=\"central-admin-footer-note\">Serve Needs response emails go to each opportunity's Response destination. <a class=\"central-admin-inline-link\" href=\"/admin/serve-needs\">Manage Serve Needs</a></p>",
+      plannerEligible ? [
+        "<fieldset class=\"central-admin-notification-options is-two-column\" aria-describedby=\"admin-pumble-status\"",
+        busy || adminState.changeRequestNotificationsLoadFailed ? " disabled" : "",
+        "><legend>Planner Requests</legend>",
+        renderNotificationPreferenceOption_(
+            "planner-notifications.email", "Email", "Planner request updates.",
+            planner.email === true, false, "",
+        ),
+        renderNotificationPreferenceOption_(
+            "planner-notifications.pumble", "Pumble", "Planner request updates.",
+            planner.pumble === true, !linked && planner.pumble !== true,
+            linked ? "" : "Link Pumble to enable this delivery method.",
+        ),
+        renderNotificationPreferenceOption_(
+            "planner-notifications.reminders", "Daily reminders",
+            "Remind me at 8:00 a.m. Central time each day.",
+            planner.reminders === true, false, "",
+        ),
+        "</fieldset>",
+      ].join("") : "",
       !anyEligible ?
         renderAdminNote_(
             "Your current Admin permissions do not include notification-enabled workflows.",
@@ -28123,6 +28159,7 @@
           adminState.changeRequestPumbleConnectionMessage =
             result && result.message ? String(result.message) :
               "Pumble was disconnected from your Central account.";
+          loadChangeRequestNotificationPreferencesIfNeeded_(true);
           renderAdmin_();
         })
         .catch(function(error) {
@@ -28328,11 +28365,19 @@
     var pumbleSource = result && result.pumbleNotifications &&
       typeof result.pumbleNotifications === "object" ?
       result.pumbleNotifications : {};
+    var plannerSource = result && result.plannerRequests &&
+      typeof result.plannerRequests === "object" ? result.plannerRequests : {};
     var eligibilitySource = result && result.eligibility &&
       typeof result.eligibility === "object" ? result.eligibility : {};
 
     return {
       channels: channels,
+      plannerEligible: plannerSource.eligible === true,
+      plannerPreferences: {
+        email: plannerSource.email !== false,
+        pumble: plannerSource.pumble !== false,
+        reminders: plannerSource.reminders !== false,
+      },
       pumbleNotifications: {
         changeRequests: eligibilitySource.changeRequests === true &&
           (typeof pumbleSource.changeRequests === "boolean" ?
@@ -28391,6 +28436,8 @@
           adminState.pumbleNotificationPreferences =
             normalized.pumbleNotifications;
           adminState.pumbleNotificationEligibility = normalized.eligibility;
+          adminState.plannerNotificationEligible = normalized.plannerEligible;
+          adminState.plannerNotificationPreferences = normalized.plannerPreferences;
           adminState.pumbleNotificationPreferencesError = "";
           renderAdmin_();
         })
@@ -28430,7 +28477,11 @@
     if (eligibility.serveNeeds === true) {
       selected.serveNeeds = {pumble: pumble.serveNeeds === true};
     }
-    var pumbleSelected = selected.changeRequests &&
+    if (adminState.plannerNotificationEligible === true) {
+      selected.plannerRequests = Object.assign({}, adminState.plannerNotificationPreferences);
+    }
+    var pumbleSelected = selected.plannerRequests && selected.plannerRequests.pumble ||
+      selected.changeRequests &&
       selected.changeRequests.pumble || selected.serveNeeds &&
       selected.serveNeeds.pumble;
     if (pumbleSelected &&
@@ -28463,6 +28514,8 @@
           adminState.pumbleNotificationPreferences =
             normalized.pumbleNotifications;
           adminState.pumbleNotificationEligibility = normalized.eligibility;
+          adminState.plannerNotificationEligible = normalized.plannerEligible;
+          adminState.plannerNotificationPreferences = normalized.plannerPreferences;
           adminState.pumbleNotificationPreferencesMessage =
             result && result.message ? String(result.message) :
               "Your notification preferences were saved.";
@@ -29934,6 +29987,8 @@
     adminState.changeRequestNotificationsSaving = false;
     adminState.changeRequestNotificationsLoadFailed = false;
     adminState.changeRequestNotificationChannels = ["email"];
+    adminState.plannerNotificationEligible = false;
+    adminState.plannerNotificationPreferences = {email: true, pumble: true, reminders: true};
     adminState.pumbleNotificationPreferences = {
       changeRequests: false,
       serveNeeds: false,

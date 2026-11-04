@@ -9,6 +9,40 @@ import {
 import {buildCampaignRegeneration} from "../src/planner/domain.js";
 import {cloneStarterData} from "../src/planner/seed-data.js";
 
+test("request subscription emits normalized updates, forwards errors, and unsubscribes", () => {
+  let nextSnapshot;
+  let onError;
+  let unsubscribed = false;
+  const firestore = {collection(name) {
+    assert.equal(name, PLANNER_COLLECTIONS.requests);
+    return {onSnapshot(next, error) {
+      nextSnapshot = next;
+      onError = error;
+      return () => { unsubscribed = true; };
+    }};
+  }};
+  const store = createPlannerStore({firestore, user: {uid: "reviewer"}});
+  const received = [];
+  const errors = [];
+  const unsubscribe = store.subscribePromotionRequests((requests) => received.push(requests), (error) => errors.push(error));
+  const doc = (id, status, submittedAt) => ({id, data: () => ({status, submittedAt})});
+  nextSnapshot({docs: [doc("old", "pending-review", "2026-01-01"), doc("new", "pending-review", "2026-02-01")]});
+  assert.deepEqual(received[0].map((request) => request.id), ["new", "old"]);
+  nextSnapshot({docs: [doc("old", "converted", "2026-01-01"), doc("new", "dismissed", "2026-02-01")]});
+  assert.equal(received[1].filter((request) => request.status === "pending-review").length, 0);
+  const failure = new Error("permission denied");
+  onError(failure);
+  assert.deepEqual(errors, [failure]);
+  unsubscribe();
+  assert.equal(unsubscribed, true);
+});
+
+test("preview request subscription requires no Firebase connection", () => {
+  const store = createPlannerStore({preview: true, user: {uid: "preview"}});
+  const unsubscribe = store.subscribePromotionRequests(() => assert.fail("preview is locally managed"), () => assert.fail("preview should not error"));
+  assert.doesNotThrow(unsubscribe);
+});
+
 test("playbook persistence validates every week and promotion play", () => {
   const playbook = cloneStarterData().playbooks.find(
     (item) => item.id === "level-1-major",

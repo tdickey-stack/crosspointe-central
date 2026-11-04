@@ -65,6 +65,15 @@ jobs:
       - name: Build Central Studio
         run: pnpm run build:studio
 
+      - name: Build Promotion Planner
+        run: pnpm run build:planner
+
+      - name: Test Promotion Planner and notifications
+        run: pnpm run test:planner
+
+      - name: Test Promotion Planner security rules
+        run: pnpm run test:planner-rules
+
       - name: Build Annual Planner
         run: pnpm run build:annual-planner
 
@@ -185,6 +194,15 @@ jobs:
       - name: Build Central Studio
         run: pnpm run build:studio
 
+      - name: Build Promotion Planner
+        run: pnpm run build:planner
+
+      - name: Test Promotion Planner and notifications
+        run: pnpm run test:planner
+
+      - name: Test Promotion Planner security rules
+        run: pnpm run test:planner-rules
+
       - name: Build Annual Planner
         run: pnpm run build:annual-planner
 
@@ -265,7 +283,7 @@ jobs:
         run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only firestore:rules,firestore:indexes --non-interactive
 
       - name: Deploy unpinned Dev endpoints
-        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:centralData,functions:homePromotionsAdmin,functions:centralLivestreamPresence,functions:centralLivestreamPresenceCleanup,functions:centralEmbedsAdmin,functions:centralEmbedPublic,functions:centralGroupsPublic,functions:bulletinMode,functions:studioPlanningCenterEvents,functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief,functions:planningCenterPlannerWebhook,functions:shareServeNeedInterest,functions:submitChangeRequest,functions:changeRequestPumbleStatus,functions:changeRequestPumbleOAuthStart,functions:changeRequestPumbleOAuthCallback,functions:changeRequestPumbleOAuthComplete,functions:changeRequestPumbleDisconnect,functions:changeRequestNotificationPreferences,functions:changeRequestNotificationEventCreated,functions:changeRequestNotificationDispatchScheduled,functions:changeRequestReminderScheduled,functions:changeRequestNotificationCleanupScheduled --non-interactive
+        run: ./node_modules/.bin/firebase deploy --project crosspointe-central --only functions:centralData,functions:homePromotionsAdmin,functions:centralLivestreamPresence,functions:centralLivestreamPresenceCleanup,functions:centralEmbedsAdmin,functions:centralEmbedPublic,functions:centralGroupsPublic,functions:bulletinMode,functions:studioPlanningCenterEvents,functions:wayfinderAlphaAccess,functions:wayfinderAlphaSettings,functions:centralPushSubscription,functions:centralPushSend,functions:centralPushSchedule,functions:centralPushDispatchScheduled,functions:sendPlannerBrief,functions:planningCenterPlannerWebhook,functions:plannerRequestCreated,functions:plannerRequestReminderScheduled,functions:plannerRequestNotificationDispatchScheduled,functions:shareServeNeedInterest,functions:submitChangeRequest,functions:changeRequestPumbleStatus,functions:changeRequestPumbleOAuthStart,functions:changeRequestPumbleOAuthCallback,functions:changeRequestPumbleOAuthComplete,functions:changeRequestPumbleDisconnect,functions:changeRequestNotificationPreferences,functions:changeRequestNotificationEventCreated,functions:changeRequestNotificationDispatchScheduled,functions:changeRequestReminderScheduled,functions:changeRequestNotificationCleanupScheduled --non-interactive
 
       - name: Deploy Firebase preview channel
         run: ./node_modules/.bin/firebase hosting:channel:deploy dev --project crosspointe-central --expires 30d --non-interactive

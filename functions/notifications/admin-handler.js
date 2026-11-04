@@ -1,4 +1,8 @@
 import {
+  canReceivePlannerNotifications,
+  getPlannerNotificationPreferences,
+} from "../planner/notification-preferences.js";
+import {
   normalizeChangeRequestNotificationChannelSelection,
   normalizeChangeRequestNotificationPreferences,
   serializeChangeRequestNotificationPreferences,
@@ -46,6 +50,7 @@ export function createAdminNotificationPreferencesHandler(options = {}) {
         result = serializeResponse_(
             snapshot.data() || {},
             serializePumbleConnection,
+            snapshot.id,
         );
       } else if (request.body &&
         Object.prototype.hasOwnProperty.call(
@@ -124,6 +129,11 @@ async function updateNotificationPreferences_(options) {
         const userData = snapshot.data() || {};
         const eligibility = getAdminPumbleNotificationEligibility(userData);
         const pumbleConnection = options.serializePumbleConnection(userData);
+        const plannerEligible = canReceivePlannerNotifications(
+            options.userRef.id, userData,
+        );
+        const nextPlanner = selection.plannerRequests ||
+          getPlannerNotificationPreferences(userData);
         const currentChangeRequests =
           normalizeChangeRequestNotificationPreferences(
               userData.notificationPreferences &&
@@ -135,6 +145,9 @@ async function updateNotificationPreferences_(options) {
         const nextServeNeedsPumble = selection.serveNeeds ?
           selection.serveNeeds.pumble : currentPumble.serveNeeds;
 
+        if (selection.plannerRequests && !plannerEligible) {
+          return {forbidden: "plannerRequests", eligibility};
+        }
         if (selection.changeRequests && !eligibility.changeRequests) {
           return {forbidden: "changeRequests", eligibility};
         }
@@ -146,7 +159,8 @@ async function updateNotificationPreferences_(options) {
           return {missingChannel: true, eligibility};
         }
         if ((selection.changeRequests && nextChangeRequests.pumble) ||
-          (selection.serveNeeds && nextServeNeedsPumble)) {
+          (selection.serveNeeds && nextServeNeedsPumble) ||
+          (selection.plannerRequests && nextPlanner.pumble)) {
           if (!pumbleConnection.linked) {
             return {conflict: true, eligibility, pumbleConnection};
           }
@@ -165,10 +179,14 @@ async function updateNotificationPreferences_(options) {
           update["notificationPreferences.serveNeeds.pumble"] =
             nextServeNeedsPumble;
         }
+        if (selection.plannerRequests) {
+          update["notificationPreferences.plannerRequests"] = nextPlanner;
+        }
         transaction.update(options.userRef, update);
 
         return {
           eligibility,
+          plannerRequests: {eligible: plannerEligible, ...nextPlanner},
           pumbleConnection,
           preferences: serializeChangeRequestNotificationPreferences(
               nextChangeRequests,
@@ -237,7 +255,10 @@ function normalizeUnifiedNotificationSelection_(value) {
       source,
       "serveNeeds",
   );
-  if (!hasChangeRequests && !hasServeNeeds) {
+  const hasPlannerRequests = Object.prototype.hasOwnProperty.call(
+      source, "plannerRequests",
+  );
+  if (!hasChangeRequests && !hasServeNeeds && !hasPlannerRequests) {
     throw new Error("Choose at least one notification type to update.");
   }
 
@@ -265,6 +286,24 @@ function normalizeUnifiedNotificationSelection_(value) {
       throw new Error("Serve Needs preferences must include Pumble.");
     }
     normalized.serveNeeds = {pumble: serveNeeds.pumble};
+  }
+  if (hasPlannerRequests) {
+    const plannerRequests = source.plannerRequests;
+    if (!plannerRequests || typeof plannerRequests !== "object" ||
+      Array.isArray(plannerRequests) ||
+      typeof plannerRequests.email !== "boolean" ||
+      typeof plannerRequests.pumble !== "boolean" ||
+      typeof plannerRequests.reminders !== "boolean") {
+      throw new Error(
+          "Planner Request preferences must include Email, Pumble, " +
+          "and reminders.",
+      );
+    }
+    normalized.plannerRequests = {
+      email: plannerRequests.email,
+      pumble: plannerRequests.pumble,
+      reminders: plannerRequests.reminders,
+    };
   }
   return normalized;
 }
@@ -451,9 +490,10 @@ async function updateChangeRequestChannels_(options) {
  *
  * @param {Object} userData Admin user document data.
  * @param {Function} serializePumbleConnection Connection serializer.
+ * @param {string} uid Firestore user document ID.
  * @return {Object} Safe client response fields.
  */
-function serializeResponse_(userData, serializePumbleConnection) {
+function serializeResponse_(userData, serializePumbleConnection, uid) {
   return {
     preferences: serializeChangeRequestNotificationPreferences(
         userData.notificationPreferences &&
@@ -462,6 +502,10 @@ function serializeResponse_(userData, serializePumbleConnection) {
     pumbleNotifications: getAdminPumbleNotificationPreferences(userData),
     eligibility: getAdminPumbleNotificationEligibility(userData),
     pumbleConnection: serializePumbleConnection(userData),
+    plannerRequests: {
+      eligible: canReceivePlannerNotifications(uid, userData),
+      ...getPlannerNotificationPreferences(userData),
+    },
   };
 }
 

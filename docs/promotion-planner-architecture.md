@@ -191,6 +191,38 @@ The PDFs remain reference material. The authenticated UI shows starter configura
 - Creates and updates use strict top-level schemas, type/range/length checks, trusted admin authorization, and server timestamps.
 - Smuggle records require an explicit relationship schema with strategy `SMUGGLE`.
 
+## Sunday event-day bulletin
+
+Event-based Sunday campaigns receive one additional event-day bulletin mention
+when the final playbook week includes a Sunday `weekly-bulletin` play. Earlier
+weekly placements and other channels keep their dates. The event day is inclusive
+in America/Chicago, with no time-of-day cutoff. An earlier registration deadline
+still prevents promotion beyond that deadline; general promotion windows retain
+their existing inclusive end-date behavior.
+
+The added play uses `templatePlayId: event-day-bulletin`, the final week's number,
+and an `Event day` phase. Its ID remains stable for event-date and version edits,
+but changes with the playbook identity to preserve immutable source history.
+Existing manually moved, skipped, locked, or completed bulletin decisions are
+preserved during campaign edits and regeneration.
+
+Existing stored campaigns are not rewritten by a Hosting release. Use the
+additive backfill with a dry run before rollout:
+
+```bash
+node scripts/backfill-sunday-bulletins.mjs
+node scripts/backfill-sunday-bulletins.mjs --campaign=pco-form-930568-47052096
+# Apply the reviewed candidates only when rolling out the scheduling change:
+node scripts/backfill-sunday-bulletins.mjs --apply
+```
+
+The script uses each active campaign's pinned playbook version. Each create
+rechecks the campaign, version, existing plays, and target ID in a transaction.
+It never rewrites existing promotions, including moved/skipped event-day entries;
+existing event-day records that need rescheduling should use campaign editing.
+It does not backfill past dates or archived/completed campaigns. A targeted
+`--campaign` can also be combined with `--apply`.
+
 ## Local verification
 
 ```bash

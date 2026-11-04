@@ -54,7 +54,7 @@ test("Sunday event-day bulletin retains prior weeks and uses final-week template
 
 test("only Sunday events gain an event-day bulletin", () => {
   for (let day = 8; day <= 14; day++) {
-    const value = campaign({eventDate: `2026-03-${day}`});
+    const value = campaign({eventDate: `2026-03-${String(day).padStart(2, "0")}`});
     assert.equal(Boolean(extra(value)), day === 8);
   }
 });

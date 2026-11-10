@@ -203,13 +203,11 @@ export function promotionWindowComparison(campaign) {
 
 export function isCampaignExpired(campaign, now = new Date()) {
   try {
-    // Sunday events remain visible for their event-day bulletin; explicit
-    // promotion-window end dates continue to take precedence.
-    const endDate = campaign?.campaignEndDate
-      ? Temporal.PlainDate.from(campaign.campaignEndDate).toString()
-      : utcDateFromKey(Temporal.PlainDate.from(campaign?.eventDate).toString()).getUTCDay() === 0
-        ? Temporal.PlainDate.from(campaign.eventDate).toString()
-        : campaignWindow(Temporal.PlainDate.from(campaign?.eventDate).toString(), campaign?.durationWeeks).campaignEndDate;
+    // Event campaigns remain visible through the event itself; general
+    // promotion windows remain visible through their explicit end date.
+    const endDate = Temporal.PlainDate.from(String(isPromotionWindow(campaign)
+      ? campaign?.campaignEndDate || ""
+      : campaign?.eventDate || "")).toString();
     return endDate < dateKey(now);
   } catch (_error) {
     // Keep incomplete records visible so they can still be repaired.

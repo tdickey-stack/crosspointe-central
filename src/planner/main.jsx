@@ -28,7 +28,6 @@ import {
   evaluateCapacity,
   generateCampaignSchedule,
   groupCalendarCampaignDays,
-  isCampaignExpired,
   planningWeekRange,
   recommendSmuggleOpportunities,
   recurringContentDates,
@@ -54,6 +53,7 @@ import {buildCampaignEditPlan, buildSeriesPlan, skipOccurrencePlan} from "./seri
 import {RecurrenceFields, recurrenceForFrequency} from "./recurrence-controls.jsx";
 import {isStarterPlaybookId} from "./seed-data.js";
 import {PromotionTimelineView} from "./timeline-view.jsx";
+import CampaignsView from "./campaigns-view.jsx";
 import "./planner.css";
 import "./timeline.css";
 
@@ -1167,71 +1167,6 @@ function useBusinessDate() {
     };
   }, []);
   return today;
-}
-
-function CampaignsView({workspace, onNewCampaign, onOpenCampaign, onEditSeries, canEdit}) {
-  const [expandedSeries, setExpandedSeries] = useState(() => new Set());
-  const today = useBusinessDate();
-  const campaigns = workspace.campaigns.filter((campaign) => !isCampaignExpired(campaign, today));
-  const series = (workspace.campaignSeries || []).filter((item) => item && item.id);
-  const seriesIds = new Set(series.map((item) => item.id));
-  const oneOffs = campaigns
-    .filter((campaign) => !isStandaloneContent(campaign) && (!campaign.seriesId || !seriesIds.has(campaign.seriesId)))
-    .sort((left, right) => String(campaignDisplayDate(left)).localeCompare(String(campaignDisplayDate(right))));
-  const seriesRows = series.map((item) => {
-    const occurrences = campaigns.filter((campaign) => campaign.seriesId === item.id)
-      .sort((left, right) => occurrenceDate(left).localeCompare(occurrenceDate(right)));
-    const upcoming = occurrences.find((campaign) => occurrenceDate(campaign) >= today && campaign.status !== "archived") || occurrences.at(-1);
-    return {series: item, occurrences, upcoming};
-  }).filter((row) => row.occurrences.length || row.series.saveState === "saving")
-    .sort((left, right) => occurrenceDate(left.upcoming).localeCompare(occurrenceDate(right.upcoming)));
-  const hasCampaigns = seriesRows.length || oneOffs.length;
-  return (
-    <>
-      <PageHeading
-        eyebrow="Campaigns"
-        title="Every promotion in motion"
-        copy="Campaigns turn playbooks into clear promotion plans for events and general promotion windows."
-        actions={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>＋ New campaign</button>}
-      />
-      <section className="planner-panel planner-table-panel">
-        {hasCampaigns ? (
-          <div className="planner-campaign-table">
-            <div className="planner-table-header"><span>Campaign</span><span>Event / Promote through</span><span>Playbook</span><span /></div>
-            {seriesRows.map(({series: item, occurrences, upcoming}) => {
-              const expanded = expandedSeries.has(item.id);
-              const activeOccurrences = occurrences.filter((campaign) => campaign.status !== "archived").length;
-              const conflicts = workspace.scheduledPlays.filter((play) => occurrences.some((campaign) => campaign.id === play.campaignId) && play.status === "conflict").length;
-              let rule = "Recurring campaign";
-              try { rule = describeRecurrence(item.recurrence); } catch (_error) { /* Keep the row available for repair. */ }
-              return <div className={`planner-series-row ${item.saveState === "saving" ? "has-alert" : ""}`} key={item.id}>
-                <button className="planner-campaign-row" onClick={() => upcoming && onOpenCampaign(upcoming)} disabled={!upcoming}>
-                  <span className="planner-campaign-title"><LevelBadge level={item.level} /><span><strong>{item.name}</strong><small>{rule}</small></span>{conflicts > 0 && <StatusBadge status="conflict">{conflicts} conflict{conflicts === 1 ? "" : "s"}</StatusBadge>}</span>
-                  <span><strong>{upcoming ? formatDate(upcoming.eventDate) : "No upcoming date"}</strong><small>{activeOccurrences} event{activeOccurrences === 1 ? "" : "s"} · {item.status === "ended" ? "Ended" : "Series"}</small></span>
-                  <span><strong>{workspace.playbooks.find((playbook) => playbook.id === item.playbookId)?.name || item.playbookId}</strong><small>Pinned to version {item.playbookVersion}</small></span>
-                  <span>›</span>
-                </button>
-                {item.saveState === "saving" && <div className="planner-series-save-warning" role="alert"><span><strong>Save interrupted</strong><small>Review this series and retry to finish creating every event and promotion.</small></span>{canEdit && <button className="planner-text-button" onClick={() => onEditSeries(item, upcoming)}>Review and retry</button>}</div>}
-                <button type="button" className="planner-series-expand" aria-expanded={expanded} onClick={() => setExpandedSeries((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}>{expanded ? "Hide event dates" : `Show ${occurrences.length} event date${occurrences.length === 1 ? "" : "s"}`}</button>
-                {expanded && <div className="planner-series-occurrences">{occurrences.map((campaign) => <button key={campaign.id} onClick={() => onOpenCampaign(campaign)}><time dateTime={campaign.eventDate}>{formatDate(campaign.eventDate)}</time><span>{campaign.status === "archived" ? "Skipped" : campaign.recurrenceException ? "Edited occurrence" : "Scheduled"}</span><i>›</i></button>)}</div>}
-              </div>;
-            })}
-            {oneOffs.map((campaign) => {
-              const conflicts = workspace.scheduledPlays.filter((play) => play.campaignId === campaign.id && play.status === "conflict").length;
-              return (
-                <button className="planner-campaign-row" key={campaign.id} onClick={() => onOpenCampaign(campaign)}>
-                  <span className="planner-campaign-title"><LevelBadge level={campaign.level} /><span><strong>{campaign.name}</strong><small>{isPromotionWindow(campaign) ? "General promotion" : titleCase(campaign.campaignType)}</small></span>{conflicts > 0 && <StatusBadge status="conflict">{conflicts} conflict{conflicts === 1 ? "" : "s"}</StatusBadge>}</span>
-                  <span><strong>{isPromotionWindow(campaign) ? "Through " : ""}{formatDate(campaignDisplayDate(campaign))}</strong><small>{campaign.currentWeek > 0 && campaign.currentWeek <= campaign.durationWeeks ? `Week ${campaign.currentWeek} of ${campaign.durationWeeks}` : "Upcoming"}</small></span>
-                  <span><strong>{workspace.playbooks.find((item) => item.id === campaign.playbookId)?.name || campaign.playbookId}</strong><small>Version {campaign.playbookVersion}</small></span>
-                  <span>›</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : <EmptyState title="No current campaigns" copy="Campaigns leave this list after their end date. Create a new campaign to plan upcoming promotions." action={canEdit && <button className="planner-button is-primary" onClick={onNewCampaign}>New campaign</button>} />}
-      </section>
-    </>
-  );
 }
 
 function contentFormFromSeries(campaign, plays) {
@@ -2860,7 +2795,7 @@ function PlannerApp({authState, theme, toggleTheme}) {
   if (activeView === "calendar") content = <CalendarView workspace={workspace} onRangeChange={setCalendarRange} canEdit={canEdit} onOpenCampaign={setSelectedCampaign} onOpenPlay={setSelectedPlay} onMovePlay={(play, scheduledDate) => updatePlay({...play, scheduledDate, status: "rescheduled", conflictState: "none", conflictReason: "", manuallyAdjusted: true}, "Promotion moved.")} />;
   else if (activeView === "timeline") content = <PromotionTimelineView workspace={workspace} today={today} onRangeChange={setTimelineRange} onOpenCampaign={setSelectedCampaign} onOpenGroup={(group) => { const campaign = workspace.campaigns.find((item) => item.id === group.campaignId); if (isStandaloneContent(group) && campaign) setSelectedCampaign(campaign); else setSelectedTimelineGroup(group); }} />;
   else if (activeView === "requests") content = <RequestsView workspace={workspace} canEdit={canEdit} onOpenRequest={setSelectedRequest} />;
-  else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} onEditSeries={(series, campaign) => setSeriesEditor({mode: "retry", series, campaign})} />;
+  else if (activeView === "campaigns") content = <CampaignsView workspace={workspace} today={today} canEdit={canEdit} onNewCampaign={() => setNewCampaignOpen(true)} onOpenCampaign={setSelectedCampaign} onEditSeries={(series, campaign) => setSeriesEditor({mode: "retry", series, campaign})} />;
   else if (activeView === "content") content = <ContentView workspace={workspace} canEdit={canEdit} onNewContent={() => setNewContentOpen(true)} onOpenContent={setSelectedCampaign} />;
   else if (activeView === "reports") content = <ReportsView workspace={workspace} onRangeChange={setReportRange} authState={authState} canEdit={canEdit} canEmail={canEmail} initialSetup={reportSetup} onEditBriefContent={setEditingBriefContent} onNotice={(nextMessage) => { setMessage(nextMessage); window.setTimeout(() => setMessage(""), 4000); }} onError={(nextError) => setError(nextError)} />;
   else if (activeView === "playbooks") content = <PlaybooksView workspace={workspace} canEdit={canEdit} onSave={async (playbook) => {

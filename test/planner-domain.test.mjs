@@ -56,68 +56,35 @@ function campaign(overrides = {}) {
   };
 }
 
-test("campaign expiry honors an explicit campaign end date over legacy scheduling fields", () => {
-  const value = campaign({
-    eventDate: "2026-10-17",
-    durationWeeks: 2,
-    campaignEndDate: "2026-10-31",
-  });
-
-  assert.equal(isCampaignExpired(value, new Date("2026-10-30T18:00:00-05:00")), false);
-  assert.equal(isCampaignExpired(value, new Date("2026-11-01T12:00:00-06:00")), true);
+test("campaign expiry follows the event date, even when a promotion end is stored", () => {
+  const value = campaign({eventDate: "2026-10-17", campaignEndDate: "2026-10-16"});
+  assert.equal(isCampaignExpired(value, new Date("2026-10-18T04:59:00Z")), false);
+  assert.equal(isCampaignExpired(value, new Date("2026-10-18T05:00:00Z")), true);
 });
 
-test("campaign expiry keeps campaigns visible through their end day in Chicago", () => {
-  const value = campaign({campaignEndDate: "2026-11-01"});
-
-  // The fall-back transition has already occurred: 05:59Z is 11:59 PM CST on Nov. 1.
-  assert.equal(isCampaignExpired(value, new Date("2026-11-02T05:59:00.000Z")), false);
-  assert.equal(isCampaignExpired(value, new Date("2026-11-02T06:00:00.000Z")), true);
-
-  const daylightValue = campaign({campaignEndDate: "2026-03-08"});
-  // The spring-forward transition has already occurred: 04:59Z is 11:59 PM CDT on Mar. 8.
-  assert.equal(isCampaignExpired(daylightValue, new Date("2026-03-09T04:59:00.000Z")), false);
-  assert.equal(isCampaignExpired(daylightValue, new Date("2026-03-09T05:00:00.000Z")), true);
+test("promotion window expiry uses the inclusive end date across Chicago DST", () => {
+  const value = campaign({scheduleMode: "promotion-window", campaignEndDate: "2026-11-01"});
+  assert.equal(isCampaignExpired(value, new Date("2026-11-02T05:59:00Z")), false);
+  assert.equal(isCampaignExpired(value, new Date("2026-11-02T06:00:00Z")), true);
+  const spring = campaign({scheduleMode: "promotion-window", campaignEndDate: "2026-03-08"});
+  assert.equal(isCampaignExpired(spring, new Date("2026-03-09T04:59:00Z")), false);
+  assert.equal(isCampaignExpired(spring, new Date("2026-03-09T05:00:00Z")), true);
 });
 
-test("campaign expiry falls back to the legacy event window when no end is stored", () => {
-  const legacyCampaign = campaign({
-    eventDate: "2026-10-17",
-    durationWeeks: 4,
-  });
-
-  assert.equal(isCampaignExpired(legacyCampaign, new Date("2026-10-16T12:00:00-05:00")), false);
-  assert.equal(isCampaignExpired(legacyCampaign, new Date("2026-10-17T12:00:00-05:00")), true);
-
-  const blankLegacyEnd = campaign({eventDate: "2026-10-17", campaignEndDate: ""});
-  assert.equal(isCampaignExpired(blankLegacyEnd, new Date("2026-10-17T12:00:00-05:00")), true);
-});
-
-test("campaign expiry ignores malformed or absent dates and leaves the campaign unchanged", () => {
-  const values = [
-    campaign({campaignEndDate: "not-a-date"}),
-    campaign({campaignEndDate: "2026-02-30"}),
-    campaign({campaignEndDate: "", eventDate: "not-a-date"}),
-    campaign({campaignEndDate: undefined, eventDate: "not-a-date"}),
-    campaign({campaignEndDate: undefined, eventDate: undefined}),
-  ];
-
-  values.forEach((value) => {
+test("campaign expiry leaves malformed and absent dates visible and unchanged", () => {
+  const values = [campaign({eventDate: "not-a-date"}), campaign({eventDate: "2026-02-30"}),
+    campaign({eventDate: undefined}), campaign({scheduleMode: "promotion-window", campaignEndDate: "bad"})];
+  for (const value of values) {
     const before = structuredClone(value);
-    assert.equal(isCampaignExpired(value, new Date("2026-12-01T12:00:00-06:00")), false);
+    assert.equal(isCampaignExpired(value, new Date("2026-12-01T18:00:00Z")), false);
     assert.deepEqual(value, before);
-  });
+  }
 });
 
-test("campaign expiry follows a recurrence's moved actual end rather than its immutable occurrence key", () => {
-  const movedOccurrence = campaign({
-    occurrenceKey: "2026-10-17",
-    eventDate: "2026-11-15",
-    campaignEndDate: "2026-11-14",
-  });
-
-  assert.equal(isCampaignExpired(movedOccurrence, new Date("2026-11-14T12:00:00-06:00")), false);
-  assert.equal(isCampaignExpired(movedOccurrence, new Date("2026-11-15T12:00:00-06:00")), true);
+test("campaign expiry follows a recurrence's moved event date", () => {
+  const value = campaign({occurrenceKey: "2026-10-17", eventDate: "2026-11-15", campaignEndDate: "2026-11-14"});
+  assert.equal(isCampaignExpired(value, "2026-11-15"), false);
+  assert.equal(isCampaignExpired(value, "2026-11-16"), true);
 });
 
 test("report date presets follow the current Monday through Sunday planning week", () => {
